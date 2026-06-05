@@ -2108,6 +2108,23 @@
         return `${mm}${dd}_${pName}_${cName}_${suffix}.pdf`;
     }
 
+    function abrirPDF(doc, filename) {
+        const blob = doc.output('blob');
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        // En móvil: abrir en nueva pestaña → visor nativo con botón compartir/guardar
+        // En desktop: también abre en pestaña, desde donde se puede guardar
+        a.href = url;
+        a.target = '_blank';
+        a.rel = 'noopener';
+        // Mantener el nombre sugerido para cuando el usuario guarde desde el visor
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        setTimeout(() => URL.revokeObjectURL(url), 60000);
+    }
+
     let _exportMode = 'artes'; // 'artes' | 'produccion' | 'todo'
 
     window.abrirModalExport = function() {
@@ -2221,7 +2238,7 @@
         // (delegamos a una versión que recibe el doc)
         await _exportItemsIntoDoc(doc, y, margin, pageW, usableW);
 
-        doc.save(getFileName("ORDEN_COMPLETA"));
+        abrirPDF(doc, getFileName("ORDEN_COMPLETA"));
     }
 
     async function _exportItemsIntoDoc(doc, y, margin, pageW, usableW) {
@@ -2410,7 +2427,7 @@
         if (itemsConArtes.length === 0) {
             doc.setTextColor(0,0,0); doc.setFontSize(11);
             doc.text(soloConImagen ? 'No hay artes con captura registrada.' : 'No hay artes registrados.', margin, y);
-            doc.save(getFileName("ORDEN_IMPRESION")); return;
+            abrirPDF(doc, getFileName("ORDEN_IMPRESION")); return;
         }
 
         // ── TABLA RESUMEN ──
@@ -2556,7 +2573,7 @@
         doc.setTextColor(255,255,255); doc.setFont(undefined,'bold'); doc.setFontSize(9);
         doc.text('TOTAL IMPRESIÓN: ' + totalM2Global.toFixed(2) + ' m²', margin + 3, y + 6);
 
-        doc.save(getFileName("ORDEN_IMPRESION"));
+        abrirPDF(doc, getFileName("ORDEN_IMPRESION"));
     }
 
 
@@ -3805,7 +3822,7 @@ INSTRUCCIONES:
             }
         }
 
-        doc.save(getFileName("ESTRUCTURAS"));
+        abrirPDF(doc, getFileName("ESTRUCTURAS"));
     }
 </script>
 
