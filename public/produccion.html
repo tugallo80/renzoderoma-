@@ -226,6 +226,10 @@
         #mobile-action-bar .m-act-btn.purple { color: var(--purple); }
         #mobile-action-bar .m-act-btn.green  { color: var(--green); }
         #mobile-action-bar .m-act-btn.red    { color: var(--red); }
+        @media (max-width: 899px) {
+            body[data-view="auto"] #mobile-action-bar { display: flex; }
+            body[data-view="auto"] { padding-bottom: 85px; }
+        }
 </style>
     <link rel="stylesheet" href="/css/responsive.css?v=1">
 </head>
