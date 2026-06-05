@@ -226,9 +226,23 @@
         #mobile-action-bar .m-act-btn.purple { color: var(--purple); }
         #mobile-action-bar .m-act-btn.green  { color: var(--green); }
         #mobile-action-bar .m-act-btn.red    { color: var(--red); }
-        @media (max-width: 899px) {
-            body[data-view="auto"] #mobile-action-bar { display: flex; }
-            body[data-view="auto"] { padding-bottom: 85px; }
+        body[data-view="auto"] #mobile-action-bar {
+            display: flex;
+            position: fixed;
+            bottom: 0; left: 0; right: 0;
+            background: var(--card);
+            border-top: 1px solid var(--border);
+            padding: 8px 4px;
+            padding-bottom: calc(8px + env(safe-area-inset-bottom));
+            z-index: 999;
+            justify-content: space-around;
+            align-items: center;
+            box-shadow: 0 -4px 20px rgba(0,0,0,0.12);
+        }
+        body[data-view="auto"] { padding-bottom: 85px; }
+        @media (min-width: 900px) {
+            body[data-view="auto"] #mobile-action-bar { display: none; }
+            body[data-view="auto"] { padding-bottom: 0; }
         }
 </style>
     <link rel="stylesheet" href="/css/responsive.css?v=1">
