@@ -2229,8 +2229,9 @@
                     });
                     y = doc.lastAutoTable.finalY + 4;
                 }
-            } else if (item.apu && item.apu.mat) {
-                const apuMats = Object.values(item.apu.mat).filter(m=>m.d && !isGraphicTarget(m.d,m.u));
+            } else if ((item.prod_apu && item.prod_apu.mat) || (item.apu && item.apu.mat)) {
+                const _mSrc2 = (item.prod_apu && item.prod_apu.mat && Object.keys(item.prod_apu.mat).length > 0) ? item.prod_apu.mat : item.apu.mat;
+                const apuMats = Object.values(_mSrc2).filter(m=>m.d && !isGraphicTarget(m.d,m.u));
                 if (apuMats.length > 0) {
                     const matRows = apuMats.map(m => [m.d, m.q + ' ' + (m.u||'')]);
                     doc.autoTable({
@@ -3663,11 +3664,13 @@ INSTRUCCIONES:
 
             let rightText = "MATERIALES REQUERIDOS:\n";
             let hasMats = false;
-            if(item.apu && item.apu.mat) {
-                let mats = getValidKeys(item.apu.mat);
+            const _matSrc = (item.prod_apu && item.prod_apu.mat && getValidKeys(item.prod_apu.mat).length > 0) ? item.prod_apu.mat : (item.apu && item.apu.mat ? item.apu.mat : null);
+            if(_matSrc) {
+                let mats = getValidKeys(_matSrc);
                 if(mats.length > 0) {
                     hasMats = true;
-                    mats.forEach(mIdx => { let m = item.apu.mat[mIdx]; if(m.d && !isGraphicTarget(m.d, m.u)) { rightText += `• ${m.d} : ${stripZeros(m.q)} ${m.u}\n`; } });
+                    mats.forEach(mIdx => { let m = _matSrc[mIdx]; if(m.d && !isGraphicTarget(m.d, m.u)) { rightText += `• ${m.d} : ${stripZeros(m.q)} ${m.u||''}
+`; } });
                 }
             }
             if(!hasMats) rightText += "Ninguno especificado.";
