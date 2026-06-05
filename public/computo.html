@@ -1,0 +1,505 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Cómputo Métrico Inteligente - Rubik OS</title>
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+    
+    <script src="https://www.gstatic.com/firebasejs/9.1.3/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.1.3/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.1.3/firebase-database-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.1.3/firebase-storage-compat.js"></script>
+    <script>
+        window._rubikFirebaseConfig = window._rubikFirebaseConfig || {
+            apiKey: "AIzaSyDXYlofy31cDP14xVAVxWo_7TqXdSgsIjA",
+            authDomain: "rubik-bolivia.firebaseapp.com",
+            databaseURL: "https://rubik-bolivia-default-rtdb.firebaseio.com",
+            projectId: "rubik-bolivia",
+            storageBucket: "rubik-bolivia.firebasestorage.app",
+            messagingSenderId: "4153087958",
+            appId: "1:4153087958:web:cf2dd16106580ed6437677"
+        };
+        if (!firebase.apps.length) firebase.initializeApp(window._rubikFirebaseConfig);
+    </script>
+    <script src="/js/firecache.js?v=1"></script>
+    <script src="/js/auth-guard.js?v=1"></script>
+
+    <style>
+        :root { --bg: #f4f4f7; --card: #fff; --text: #1a1a1a; --blue: #007aff; --green: #34c759; --orange: #ff9500; --red: #ff3b30; --gray: #8e8e93; --border: #d1d1d6; }
+        body.dark-mode { --bg: #000; --card: #1c1c1e; --text: #fff; --border: #333; }
+        body { font-family: -apple-system, sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 20px; padding-bottom: 120px; }
+        
+        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; background: var(--card); padding: 15px; border-radius: 12px; box-shadow: 0 2px 10px rgba(0,0,0,0.05);}
+        .btn-back { background: transparent; border: none; color: var(--blue); font-size: 16px; font-weight: bold; cursor: pointer; display: flex; align-items: center; gap: 5px; }
+        
+        .title-box { text-align: center; margin-bottom: 20px; }
+        .title-box h1 { margin: 0; font-size: 22px; font-weight: 900; color: var(--blue); }
+        .title-box p { margin: 5px 0 0 0; font-size: 14px; color: var(--gray); font-weight: bold; }
+
+        .tabs { display: flex; gap: 10px; margin-bottom: 20px; overflow-x: auto; padding-bottom: 5px; }
+        .tab-btn { flex: 1; min-width: 100px; padding: 12px; border: 1px solid var(--border); background: var(--card); border-radius: 10px; font-weight: bold; cursor: pointer; color: var(--text); display:flex; flex-direction:column; align-items:center; gap:5px;}
+        .tab-btn.active { background: var(--blue); color: white; border-color: var(--blue); }
+
+        .card { background: var(--card); padding: 20px; border-radius: 16px; margin-bottom: 20px; border: 1px solid var(--border); box-shadow: 0 4px 15px rgba(0,0,0,0.03); }
+        
+        .input-group { display: flex; gap: 10px; margin-bottom: 15px; align-items: center; }
+        .inp-calc { flex: 1; padding: 12px; border: 1px solid var(--border); border-radius: 8px; font-size: 16px; background: var(--bg); color: var(--text); outline: none; }
+        .lbl { font-size: 12px; font-weight: bold; color: var(--gray); text-transform: uppercase; width: 60px; }
+
+        .btn-add { background: var(--green); color: white; border: none; padding: 12px; border-radius: 8px; font-weight: bold; cursor: pointer; width: 100%; display: flex; justify-content: center; align-items: center; gap: 8px; font-size: 16px;}
+        
+        .list-items { margin-top: 20px; }
+        .item-row { display: flex; justify-content: space-between; align-items: center; padding: 12px; border-bottom: 1px dashed var(--border); font-size: 14px; font-weight: bold;}
+        .item-row i { color: var(--red); cursor: pointer; font-size: 18px; }
+
+        .result-box { background: rgba(0,122,255,0.1); border: 2px solid var(--blue); padding: 20px; border-radius: 16px; text-align: center; margin-bottom: 20px; }
+        .res-lbl { font-size: 14px; font-weight: bold; color: var(--blue); text-transform: uppercase; margin-bottom: 5px; }
+        .res-val { font-size: 36px; font-weight: 900; color: var(--text); }
+
+        .canvas-container { width: 100%; height: 300px; background: var(--bg); border: 1px solid var(--border); border-radius: 12px; position: relative; overflow: hidden; margin-top: 15px; display: none;}
+        #cut-canvas { width: 100%; height: 100%; }
+
+        .fixed-bottom { position: fixed; bottom: 0; left: 0; width: 100%; padding: 15px 20px; background: var(--card); border-top: 1px solid var(--border); box-sizing: border-box; z-index: 100; display:flex; justify-content: space-between; align-items: center; box-shadow: 0 -5px 15px rgba(0,0,0,0.05);}
+        .btn-save { background: var(--blue); color: white; border: none; padding: 15px 30px; border-radius: 12px; font-weight: 900; font-size: 16px; cursor: pointer; display:flex; gap:8px; align-items:center; }
+
+        /* Estilos IA Contextual */
+        .fab-ai-btn { position: fixed; bottom: 90px; right: 20px; width: 60px; height: 60px; border-radius: 50%; background: #000; box-shadow: 0 8px 25px rgba(0,122,255,0.4); cursor: pointer; z-index: 900; display: flex; align-items: center; justify-content: center; border: 2px solid var(--card); padding:0; -webkit-tap-highlight-color: transparent;}
+        .fab-ai-btn img { width: 100%; height: 100%; object-fit: cover; }
+        .chat-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #000000; z-index: 9500; flex-direction: column; }
+        .chat-header { background: #1c1c1e; padding: 15px 20px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #38383a; }
+        .chat-body { flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 15px; }
+        .msg { max-width: 85%; padding: 12px 16px; border-radius: 18px; font-size: 14px; line-height: 1.4; word-wrap: break-word; color:white;}
+        .msg-ai { background: #1c1c1e; border: 1px solid #38383a; align-self: flex-start; border-bottom-left-radius: 4px; }
+        .msg-user { background: var(--blue); align-self: flex-end; border-bottom-right-radius: 4px; }
+        .chat-footer { background: #1c1c1e; padding: 15px; border-top: 1px solid #38383a; display: flex; gap: 10px; align-items: flex-end; }
+        .chat-input { flex: 1; background: #000; border: 1px solid #38383a; color: white; padding: 12px; border-radius: 16px; font-size: 14px; outline: none; }
+        .btn-ai-action { background: var(--blue); color: white; border: none; width: 42px; height: 42px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 20px; cursor: pointer; flex-shrink:0; }
+        .typing-indicator { display: none; align-self: flex-start; background: #1c1c1e; padding: 12px 16px; border-radius: 20px; border-bottom-left-radius: 4px; border: 1px solid #38383a;}
+        .dot { height: 8px; width: 8px; background: #8e8e93; border-radius: 50%; display: inline-block; animation: blink 1.4s infinite both; margin: 0 2px;}
+        .dot:nth-child(2) { animation-delay: 0.2s; } .dot:nth-child(3) { animation-delay: 0.4s; }
+        @keyframes blink { 0% { opacity: 0.2; transform:scale(0.8);} 20% { opacity: 1; transform:scale(1);} 100% { opacity: 0.2; transform:scale(0.8); } }
+    </style>
+    <link rel="stylesheet" href="/css/responsive.css?v=1">
+</head>
+<body>
+
+    <div class="header">
+        <button class="btn-back" onclick="goBack()"><i class="ph-bold ph-caret-left"></i> Presupuesto</button>
+        <div style="font-weight: 900; font-size: 12px; background: var(--text); color: var(--bg); padding: 4px 10px; border-radius: 8px;">CÓMPUTOS</div>
+    </div>
+
+    <div class="title-box">
+        <h1 id="item-title">Cargando...</h1>
+        <p id="sub-title">Selecciona el método de cálculo</p>
+    </div>
+
+    <div class="tabs">
+        <div class="tab-btn active" onclick="setMode('lineal', this)"><i class="ph-fill ph-ruler"></i> Lineal (m)</div>
+        <div class="tab-btn" onclick="setMode('area', this)"><i class="ph-fill ph-squares-four"></i> Área (m2)</div>
+        <div class="tab-btn" onclick="setMode('plancha', this)"><i class="ph-fill ph-grid-nine"></i> Planchas</div>
+        <div class="tab-btn" onclick="setMode('barra', this)"><i class="ph-fill ph-line-segments"></i> Barras (6m)</div>
+        <div class="tab-btn" onclick="setMode('peso', this)"><i class="ph-fill ph-barbell"></i> Peso (kg)</div>
+        <div class="tab-btn" onclick="setMode('volumen', this)"><i class="ph-fill ph-cube"></i> Volumen (m3)</div>
+    </div>
+
+    <div class="card" id="input-card">
+        <div class="input-group" id="grp-cant">
+            <span class="lbl">CANT</span>
+            <input type="number" id="i-cant" class="inp-calc" placeholder="0" value="1">
+        </div>
+        <div class="input-group" id="grp-largo">
+            <span class="lbl">LARGO</span>
+            <input type="number" id="i-largo" class="inp-calc" placeholder="m">
+        </div>
+        <div class="input-group" id="grp-ancho" style="display: none;">
+            <span class="lbl">ANCHO</span>
+            <input type="number" id="i-ancho" class="inp-calc" placeholder="m">
+        </div>
+        <div class="input-group" id="grp-alto" style="display: none;">
+            <span class="lbl">ALTO</span>
+            <input type="number" id="i-alto" class="inp-calc" placeholder="m">
+        </div>
+        <div class="input-group" id="grp-peso" style="display: none;">
+            <span class="lbl">KG/m</span>
+            <input type="number" id="i-peso" class="inp-calc" placeholder="Factor kg/m">
+        </div>
+        
+        <div id="grp-plancha-settings" style="display: none; background:var(--bg); padding:10px; border-radius:8px; margin-bottom:15px; border:1px solid var(--border);">
+            <div style="font-size:11px; font-weight:bold; color:var(--gray); margin-bottom:10px; text-transform:uppercase;">Dimensiones de la Plancha / Material Base</div>
+            <div style="display:flex; gap:10px;">
+                <input type="number" id="p-largo" class="inp-calc" placeholder="Largo(m)" value="2.44">
+                <input type="number" id="p-ancho" class="inp-calc" placeholder="Ancho(m)" value="1.22">
+            </div>
+            <div style="font-size:10px; color:var(--orange); margin-top:5px;">*Por defecto formato estándar 2.44 x 1.22m</div>
+        </div>
+
+        <div class="input-group" id="grp-desc">
+            <span class="lbl">PARTE</span>
+            <input type="text" id="i-desc" class="inp-calc" placeholder="Nombre (ej: lateral izq., tapa, costilla 1...)">
+        </div>
+
+        <button class="btn-add" onclick="addMeasure()"><i class="ph-bold ph-plus"></i> Agregar Pieza</button>
+
+        <div class="list-items" id="measures-list"></div>
+    </div>
+
+    <div class="result-box">
+        <div class="res-lbl" id="res-lbl-txt">TOTAL REQUERIDO</div>
+        <div class="res-val" id="res-total">0.00 <span style="font-size:18px; color:var(--gray);">und</span></div>
+    </div>
+
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-top:20px; display:none;" id="opt-header">
+        <h3 style="margin:0; font-size:16px;">Plano de Corte (Optimización)</h3>
+    </div>
+    <div class="canvas-container" id="canvas-wrapper">
+        <canvas id="cut-canvas"></canvas>
+    </div>
+
+    <div class="fixed-bottom">
+        <div style="font-size:12px; font-weight:bold; color:var(--gray);">
+            Guardado Automático <br><span style="color:var(--text); font-size:14px;" id="bot-target">...</span>
+        </div>
+        <button class="btn-save" onclick="saveComputo()"><i class="ph-bold ph-floppy-disk"></i> Confirmar</button>
+    </div>
+
+    <button class="fab-ai-btn" onclick="openAIChat()">
+        <img loading="lazy" decoding="async" src="IA RUBIK BOTON.png" alt="Rubik IA">
+    </button>
+
+    <div class="chat-overlay" id="ai-chat-modal">
+        <div class="chat-header">
+            <div style="font-weight: 900; font-size: 15px; display: flex; align-items: center; gap: 8px; color:white;">
+                <img loading="lazy" decoding="async" src="IA RUBIK BOTON.png" style="width: 28px; border-radius: 50%;"> IA Optimizador
+            </div>
+            <button style="background:var(--card); color:var(--text); border:none; padding: 6px 12px; border-radius:8px; font-weight:bold; cursor:pointer; font-size:12px;" onclick="closeAIChat()">Cerrar</button>
+        </div>
+        <div class="chat-body" id="ai-chat-box">
+            <div class="msg msg-ai">Estoy leyendo el ítem actual. Puedo sugerirte precios, calcular desperdicios o recomendarte modulaciones. ¿Qué calculamos?</div>
+        </div>
+        <div class="typing-indicator" id="ai-typing" style="margin-left: 20px;"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div>
+        <div class="chat-footer">
+            <textarea id="ai-user-input" class="chat-input" rows="1" placeholder="Ej: ¿Qué porcentaje de merma sugieres para melamina?"></textarea>
+            <button class="btn-ai-action" onclick="sendAIMessage()"><i class="ph-bold ph-paper-plane-right"></i></button>
+        </div>
+    </div>
+
+    <script>
+        // Firebase ya inicializado en el <head>
+        if (!firebase.apps.length) firebase.initializeApp(window._rubikFirebaseConfig);
+        const db = firebase.database(); const storage = firebase.storage();
+        
+        const urlParams = new URLSearchParams(window.location.search);
+        const cid = urlParams.get('cid'); const pid = urlParams.get('pid'); const idx = urlParams.get('idx');
+        const apuType = urlParams.get('type'); const apuIdx = urlParams.get('apuIdx');
+        
+        let itemData = {}; let measures = []; let mode = 'lineal'; let targetName = ''; let finalTotalVal = 0;
+        let pWidth = 2.44; let pHeight = 1.22; let cutPlates = [];
+
+        window.onload = () => {
+            if(!cid || !pid || idx===null) { document.getElementById('item-title').innerText = "Error"; return; }
+            db.ref(`proyectos/${cid}/${pid}/presupuesto/items/${idx}`).once('value', snap => {
+                itemData = snap.val(); if(!itemData) return;
+                
+                if(apuType && apuIdx !== null) {
+                    let sub = itemData.apu[apuType][apuIdx];
+                    targetName = sub.d;
+                    document.getElementById('item-title').innerText = sub.d;
+                    if(sub.measures) measures = sub.measures;
+                } else {
+                    targetName = itemData.desc;
+                    document.getElementById('item-title').innerText = itemData.desc;
+                    if(itemData.measures) measures = itemData.measures;
+                }
+                document.getElementById('bot-target').innerText = targetName;
+                renderMeasures();
+            });
+        };
+
+        function setMode(m, btn) {
+            mode = m; document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active')); btn.classList.add('active');
+            document.getElementById('grp-ancho').style.display = (m==='area'||m==='plancha'||m==='volumen') ? 'flex' : 'none';
+            document.getElementById('grp-alto').style.display = (m==='volumen') ? 'flex' : 'none';
+            document.getElementById('grp-peso').style.display = (m==='peso') ? 'flex' : 'none';
+            document.getElementById('grp-plancha-settings').style.display = (m==='plancha'||m==='barra') ? 'block' : 'none';
+            
+            if(m==='barra') { document.getElementById('p-ancho').style.display='none'; document.getElementById('p-largo').value=6.00; }
+            else { document.getElementById('p-ancho').style.display='block'; document.getElementById('p-largo').value=2.44; }
+
+            document.getElementById('canvas-wrapper').style.display = 'none'; document.getElementById('opt-header').style.display = 'none';
+            measures = []; renderMeasures();
+        }
+
+        function addMeasure() {
+            let c = parseFloat(document.getElementById('i-cant').value)||1;
+            let l = parseFloat(document.getElementById('i-largo').value)||0;
+            let a = parseFloat(document.getElementById('i-ancho').value)||0;
+            let h = parseFloat(document.getElementById('i-alto').value)||0;
+            let p = parseFloat(document.getElementById('i-peso').value)||0;
+            let desc = (document.getElementById('i-desc').value||'').trim();
+
+            if(l===0) return;
+            measures.push({c, l, a, h, p, desc});
+            document.getElementById('i-largo').value='';
+            document.getElementById('i-ancho').value='';
+            document.getElementById('i-desc').value='';
+            document.getElementById('i-desc').focus();
+            renderMeasures();
+        }
+
+        function delMeasure(i) { measures.splice(i, 1); renderMeasures(); }
+
+        function updateMeasureDesc(i, val) {
+            if (measures[i]) measures[i].desc = val;
+        }
+
+        function renderMeasures() {
+            const list = document.getElementById('measures-list'); list.innerHTML = '';
+            let total = 0;
+
+            measures.forEach((m, i) => {
+                let txt = ''; let sub = 0;
+                if(mode==='lineal' || mode==='barra') { sub = m.c * m.l; txt = `${m.c} × ${m.l}m = ${sub.toFixed(2)}m`; }
+                if(mode==='area' || mode==='plancha') { sub = m.c * m.l * m.a; txt = `${m.c} × (${m.l}×${m.a}m) = ${sub.toFixed(2)}m²`; }
+                if(mode==='volumen') { sub = m.c * m.l * m.a * m.h; txt = `${m.c} × (${m.l}×${m.a}×${m.h}m) = ${sub.toFixed(2)}m³`; }
+                if(mode==='peso') { sub = m.c * m.l * m.p; txt = `${m.c} × ${m.l}m × ${m.p}kg/m = ${sub.toFixed(2)}kg`; }
+
+                total += sub;
+                const descVal = (m.desc||'').replace(/"/g,'&quot;');
+                list.innerHTML += `<div class="item-row" style="flex-direction:column;align-items:stretch;gap:4px;">
+                    <div style="display:flex;align-items:center;gap:8px;">
+                        <input type="text" value="${descVal}" placeholder="Nombre de la parte (ej: lateral izq.)"
+                            style="flex:1;padding:5px 8px;font-size:12px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text);"
+                            oninput="updateMeasureDesc(${i}, this.value)">
+                        <i class="ph-bold ph-trash" onclick="delMeasure(${i})" style="cursor:pointer;color:var(--red);font-size:16px;flex-shrink:0;"></i>
+                    </div>
+                    <span style="font-size:13px;font-weight:700;color:var(--blue);padding-left:4px;">${txt}</span>
+                </div>`;
+            });
+
+            finalTotalVal = total;
+            let unit = 'und';
+            if(mode==='lineal') unit='m'; if(mode==='area') unit='m2'; if(mode==='volumen') unit='m3'; if(mode==='peso') unit='kg';
+            
+            if(mode==='plancha' || mode==='barra') {
+                pWidth = parseFloat(document.getElementById('p-ancho').value)||1.22;
+                pHeight = parseFloat(document.getElementById('p-largo').value)||2.44;
+                unit = mode==='plancha' ? 'Planchas' : 'Barras';
+                runBinPacking();
+            } else {
+                document.getElementById('res-total').innerHTML = `${total.toFixed(2)} <span style="font-size:18px; color:var(--gray);">${unit}</span>`;
+            }
+        }
+
+        function runBinPacking() {
+            if(measures.length === 0) { document.getElementById('res-total').innerHTML = `0.00 <span style="font-size:18px; color:var(--gray);">Planchas</span>`; return; }
+            document.getElementById('canvas-wrapper').style.display = 'block'; document.getElementById('opt-header').style.display = 'flex';
+            
+            let rects = [];
+            measures.forEach(m => { for(let i=0; i<m.c; i++) { rects.push({ w: mode==='barra'? 0.1 : m.a, h: m.l }); } });
+            rects.sort((a,b) => Math.max(b.w, b.h) - Math.max(a.w, a.h));
+            
+            let bins = [];
+            rects.forEach(r => {
+                let placed = false;
+                for(let b of bins) {
+                    let node = findNode(b.root, r.w, r.h);
+                    if(node) { splitNode(node, r.w, r.h); placed = true; break; }
+                    let nodeRot = findNode(b.root, r.h, r.w);
+                    if(nodeRot && mode!=='barra') { splitNode(nodeRot, r.h, r.w); placed = true; break; }
+                }
+                if(!placed) {
+                    let newBin = { root: {x:0, y:0, w:pWidth, h:pHeight, used:false} };
+                    let node = findNode(newBin.root, r.w, r.h);
+                    if(node) splitNode(node, r.w, r.h);
+                    bins.push(newBin);
+                }
+            });
+
+            cutPlates = bins;
+            finalTotalVal = bins.length;
+            document.getElementById('res-total').innerHTML = `${bins.length} <span style="font-size:18px; color:var(--gray);">${mode==='plancha'?'Planchas':'Barras'}</span>`;
+            drawPlates();
+        }
+
+        function findNode(root, w, h) {
+            if(root.used) {
+                let rightNode = findNode(root.right, w, h); if(rightNode) return rightNode;
+                return findNode(root.down, w, h);
+            } else if((w <= root.w) && (h <= root.h)) { return root; }
+            return null;
+        }
+
+        function splitNode(node, w, h) {
+            node.used = true;
+            node.down = { x: node.x, y: node.y + h, w: node.w, h: node.h - h, used: false };
+            node.right = { x: node.x + w, y: node.y, w: node.w - w, h: h, used: false };
+        }
+
+        function drawPlates() {
+            const canvas = document.getElementById('cut-canvas'); const ctx = canvas.getContext('2d');
+            const cw = canvas.parentElement.clientWidth; const ch = canvas.parentElement.clientHeight;
+            canvas.width = cw; canvas.height = ch; ctx.clearRect(0,0,cw,ch);
+            
+            if(cutPlates.length === 0) return;
+            
+            const cols = Math.ceil(Math.sqrt(cutPlates.length)); const rows = Math.ceil(cutPlates.length/cols);
+            const pad = 10; const availW = (cw - pad*(cols+1)) / cols; const availH = (ch - pad*(rows+1)) / rows;
+            const scale = Math.min(availW / pWidth, availH / pHeight);
+
+            cutPlates.forEach((bin, i) => {
+                let r = Math.floor(i/cols); let c = i%cols;
+                let ox = pad + c*(availW+pad); let oy = pad + r*(availH+pad);
+                ctx.fillStyle = '#e5e5ea'; ctx.fillRect(ox, oy, pWidth*scale, pHeight*scale);
+                ctx.strokeStyle = '#8e8e93'; ctx.strokeRect(ox, oy, pWidth*scale, pHeight*scale);
+                drawNode(ctx, bin.root, ox, oy, scale);
+            });
+        }
+
+        function drawNode(ctx, node, ox, oy, scale) {
+            if(node.used) {
+                ctx.fillStyle = 'rgba(0,122,255,0.4)';
+                ctx.fillRect(ox + node.x*scale, oy + node.y*scale, (node.w + (node.right?node.right.w:0))*scale, (node.h + (node.down?node.down.h:0))*scale);
+                ctx.strokeStyle = '#007aff'; ctx.lineWidth = 1;
+                ctx.strokeRect(ox + node.x*scale, oy + node.y*scale, (node.w + (node.right?node.right.w:0))*scale, (node.h + (node.down?node.down.h:0))*scale);
+                
+                if(node.right) drawNode(ctx, node.right, ox, oy, scale);
+                if(node.down) drawNode(ctx, node.down, ox, oy, scale);
+            }
+        }
+
+        function generateMasterCanvasBase64() {
+            if(cutPlates.length === 0) return null;
+            const cols = 2; const rows = Math.ceil(cutPlates.length/cols);
+            const scale = 200; const pad = 30;
+            const cw = pad + cols*(pWidth*scale + pad); const ch = pad + rows*(pHeight*scale + pad);
+            
+            const tmpCanvas = document.createElement('canvas'); tmpCanvas.width = cw; tmpCanvas.height = ch;
+            const ctx = tmpCanvas.getContext('2d');
+            ctx.fillStyle = '#ffffff'; ctx.fillRect(0,0,cw,ch);
+
+            cutPlates.forEach((bin, i) => {
+                let r = Math.floor(i/cols); let c = i%cols;
+                let ox = pad + c*(pWidth*scale+pad); let oy = pad + r*(pHeight*scale+pad);
+                ctx.fillStyle = '#e5e5ea'; ctx.fillRect(ox, oy, pWidth*scale, pHeight*scale);
+                ctx.strokeStyle = '#000'; ctx.lineWidth = 2; ctx.strokeRect(ox, oy, pWidth*scale, pHeight*scale);
+                
+                ctx.fillStyle = '#1a1a1a'; ctx.font = '24px Arial'; ctx.fillText(`Placa ${i+1}`, ox, oy - 10);
+                drawNodeMaster(ctx, bin.root, ox, oy, scale);
+            });
+            return tmpCanvas.toDataURL('image/jpeg', 0.8);
+        }
+
+        function drawNodeMaster(ctx, node, ox, oy, scale) {
+            if(node.used) {
+                let pw = node.w + (node.right?node.right.w:0); let ph = node.h + (node.down?node.down.h:0);
+                ctx.fillStyle = 'rgba(0,122,255,0.2)'; ctx.fillRect(ox + node.x*scale, oy + node.y*scale, pw*scale, ph*scale);
+                ctx.strokeStyle = '#007aff'; ctx.lineWidth = 3; ctx.strokeRect(ox + node.x*scale, oy + node.y*scale, pw*scale, ph*scale);
+                
+                ctx.fillStyle = '#000'; ctx.font = 'bold 16px Arial'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+                if(pw*scale > 40 && ph*scale > 20) { ctx.fillText(`${pw.toFixed(2)}x${ph.toFixed(2)}`, ox + node.x*scale + (pw*scale)/2, oy + node.y*scale + (ph*scale)/2); }
+                
+                if(node.right) drawNodeMaster(ctx, node.right, ox, oy, scale);
+                if(node.down) drawNodeMaster(ctx, node.down, ox, oy, scale);
+            }
+        }
+
+        async function saveComputo() {
+            let cleanMeasures = measures.map(m => ({ c: m.c||0, l: m.l||0, a: m.a||0, h: m.h||0, p: m.p||0, desc: m.desc||'' }));
+            let b64Master = generateMasterCanvasBase64();
+            if((mode === 'plancha' || mode === 'barra') && b64Master) {
+                const snap = await storage.ref(`produccion/planos/${pid}_corte_GLOBAL_${Date.now()}.jpg`).putString(b64Master, 'data_url');
+                let planoUrl = await snap.ref.getDownloadURL();
+                await db.ref(`proyectos/${cid}/${pid}/diseno/planos`).push({ url: planoUrl, timestamp: Date.now(), desc: `Plano Corte Global: ${targetName}` });
+                if(apuType && apuIdx !== null) { itemData.apu[apuType][apuIdx].corte_url = planoUrl; }
+                else { if(!itemData.cortes) itemData.cortes = []; itemData.cortes.push(planoUrl); }
+            }
+
+            if(apuType && apuIdx !== null) { 
+                itemData.apu[apuType][apuIdx].measures = cleanMeasures; 
+                itemData.apu[apuType][apuIdx].q = finalTotalVal; 
+            } else { 
+                itemData.measures = cleanMeasures; 
+                itemData.cant = finalTotalVal; 
+            }
+
+            await db.ref(`proyectos/${cid}/${pid}/presupuesto/items/${idx}`).set(itemData);
+            window.location.href = `presupuesto.html?cid=${cid}&pid=${pid}`;
+        }
+        function goBack() { window.history.back(); }
+    </script>
+
+    <script>
+        window.openAIChat = function() { document.getElementById('ai-chat-modal').style.display = 'flex'; }
+        window.closeAIChat = function() { document.getElementById('ai-chat-modal').style.display = 'none'; }
+
+        window.sendAIMessage = async function() {
+            const input = document.getElementById('ai-user-input');
+            const text = input.value.trim();
+            if(!text) return;
+
+            const chatBox = document.getElementById('ai-chat-box');
+            const typing = document.getElementById('ai-typing');
+
+            const userMsg = document.createElement('div');
+            userMsg.className = 'msg msg-user'; userMsg.innerText = text;
+            chatBox.appendChild(userMsg);
+            input.value = ''; chatBox.scrollTop = chatBox.scrollHeight;
+            typing.style.display = 'block'; chatBox.appendChild(typing);
+
+            const contextData = JSON.stringify({
+                item_actual: targetName,
+                modo_calculo: mode,
+                medidas_ingresadas: measures,
+                total_calculado: finalTotalVal
+            });
+
+            const prompt = `Eres Rubik IA — calculista técnico experto de Rubik Bolivia (señalética, carpintería, metalmecánica, impresión gran formato, Santa Cruz).
+Estás en la herramienta de Cómputos Métricos, ayudando a calcular cantidades exactas para el APU del ítem.
+
+CAPACIDADES:
+- Geometría aplicada: áreas, volúmenes, desarrollos de chapa, cortes de tubería, tableros.
+- Mermas y optimización: kerf de sierra, pérdidas de corte, solapados de lona, traslapes de adhesivo.
+- Optimización de cortes: tableros MDF/melamina 1220×2440mm, barras/tubines 6m, planchas 1×2m.
+- Conversión de unidades: pies a metros, plg a cm, libras a kg, etc.
+- Verificación de cálculos: revisa el JSON adjunto y señalá errores concretos con corrección.
+
+REGLAS:
+1. Respuestas BREVES y precisas (máx 4 líneas salvo que se pida más detalle).
+2. Si el cálculo en el JSON está bien → confirmá con el valor correcto.
+3. Si hay error → señalá cuál es y dá el valor corregido con el cálculo visible.
+4. Sugiere mermas típicas: lona +5%, adhesivo +10%, madera +15%, metal +8%.
+5. NUNCA respondas con rodeos — directo al número o al procedimiento.
+
+DATOS EN TIEMPO REAL:
+${contextData}
+
+USUARIO DICE: ${text}`;
+
+            try {
+                const token = await firebase.auth().currentUser.getIdToken();
+                const resp = await fetch('/api/gemini', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+                    body: JSON.stringify({ prompt, model: 'gemini-2.5-flash' })
+                });
+                const data = await resp.json();
+                const aiText = (data.text || data.error || 'Sin respuesta').replace(/\*\*(.*?)\*\*/g, '<b>$1</b>');
+                typing.style.display = 'none';
+                const aiMsg = document.createElement('div');
+                aiMsg.className = 'msg msg-ai';
+                aiMsg.innerHTML = aiText.replace(/\n/g, '<br>');
+                chatBox.appendChild(aiMsg);
+                chatBox.scrollTop = chatBox.scrollHeight;
+            } catch (e) {
+                typing.style.display = 'none';
+                const errMsg = document.createElement('div');
+                errMsg.className = 'msg msg-ai';
+                errMsg.innerText = '🚧 Error: ' + e.message;
+                chatBox.appendChild(errMsg);
+            }
+        }
+    </script>
+    <script src="/js/viewmode.js?v=1"></script>
+</body>
+</html>

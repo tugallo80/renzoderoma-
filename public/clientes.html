@@ -1,0 +1,512 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>HUB Principal - Rubik</title>
+    
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.1.3/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.1.3/firebase-database-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.1.3/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.1.3/firebase-storage-compat.js"></script>
+    <script>
+        window._rubikFirebaseConfig = window._rubikFirebaseConfig || {
+            apiKey: "AIzaSyDXYlofy31cDP14xVAVxWo_7TqXdSgsIjA",
+            authDomain: "rubik-bolivia.firebaseapp.com",
+            databaseURL: "https://rubik-bolivia-default-rtdb.firebaseio.com",
+            projectId: "rubik-bolivia",
+            storageBucket: "rubik-bolivia.firebasestorage.app",
+            messagingSenderId: "4153087958",
+            appId: "1:4153087958:web:cf2dd16106580ed6437677"
+        };
+        if (!firebase.apps.length) firebase.initializeApp(window._rubikFirebaseConfig);
+    </script>
+    <script src="/js/firecache.js?v=1"></script>
+    <script src="/js/auth-guard.js?v=1"></script>
+
+    <style>
+        :root { --bg: #f4f4f7; --card: #fff; --text: #1a1a1a; --blue: #007aff; --green: #34c759; --red: #ff3b30; --gray: #8e8e93; --border: #d1d1d6; }
+        body.dark-mode { --bg: #000; --card: #1c1c1e; --text: #fff; --border: #333; }
+        body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 20px; padding-bottom: 100px; -webkit-tap-highlight-color: transparent;}
+        
+        .nav { display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px; }
+        .btn-nav { background: var(--card); border: 1px solid var(--border); padding: 8px 14px; border-radius: 20px; font-weight: 700; color: var(--blue); cursor: pointer; display: flex; align-items: center; gap: 5px; }
+        
+        .header-title { font-size: 26px; font-weight: 900; margin-bottom: 5px; letter-spacing: -0.5px;}
+        .header-sub { font-size: 13px; color: var(--gray); font-weight: 600; margin-bottom: 20px;}
+
+        .search-box { display: flex; background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 12px 15px; margin-bottom: 20px; align-items: center; gap: 10px; }
+        .search-box input { border: none; background: transparent; outline: none; width: 100%; font-size: 15px; color: var(--text); font-weight: 600; }
+
+        .client-card { background: var(--card); border: 1px solid var(--border); border-radius: 18px; padding: 15px; margin-bottom: 15px; display: flex; justify-content: space-between; align-items: center; cursor: pointer; transition: 0.2s;}
+        .client-card:active { transform: scale(0.98); background: var(--border); }
+        .client-info { display: flex; align-items: center; gap: 15px; flex-grow: 1; overflow: hidden;}
+        .client-logo { width: 50px; height: 50px; border-radius: 50%; object-fit: cover; background: #eee; border: 2px solid var(--border); flex-shrink: 0;}
+        .client-name { font-size: 16px; font-weight: 900; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;}
+        .client-sub { font-size: 12px; font-weight: 600; color: var(--gray); margin-top: 4px; display: flex; align-items: center; gap: 4px;}
+        
+        .action-btns { display: flex; gap: 8px; flex-shrink: 0; }
+        .btn-circle { width: 38px; height: 38px; border-radius: 50%; border: none; display: flex; align-items: center; justify-content: center; font-size: 20px; cursor: pointer; transition: 0.2s;}
+        .btn-circle:active { transform: scale(0.9); }
+        .btn-eye { background: rgba(0,122,255,0.1); color: var(--blue); }
+        .btn-wsp { background: rgba(52,199,89,0.1); color: var(--green); }
+        .btn-edit { background: rgba(255,149,0,0.1); color: var(--orange); }
+
+        .fab { position: fixed; bottom: 30px; right: 30px; width: 60px; height: 60px; border-radius: 50%; background: var(--text); color: var(--bg); display: flex; align-items: center; justify-content: center; font-size: 28px; box-shadow: 0 10px 20px rgba(0,0,0,0.2); border: none; cursor: pointer; z-index: 100; transition: 0.3s;}
+        .fab:active { transform: scale(0.9); }
+
+        .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 2000; display: none; align-items: flex-end; justify-content: center; backdrop-filter: blur(5px); }
+        .modal-content { background: var(--bg); width: 100%; max-width: 500px; border-radius: 24px 24px 0 0; padding: 25px; box-sizing: border-box; max-height: 90vh; overflow-y: auto; position: relative;}
+        
+        .inp-std { width: 100%; padding: 15px; border: 1px solid var(--border); background: var(--card); color: var(--text); border-radius: 14px; font-weight: 700; margin-bottom: 15px; box-sizing: border-box; outline:none; font-size: 15px;}
+        .btn-main { background: var(--text); color: var(--bg); border: none; padding: 16px; border-radius: 14px; font-weight: 900; font-size: 15px; cursor: pointer; width: 100%; margin-top: 10px; display:flex; justify-content:center; gap:8px;}
+        
+        .logo-upload-box { border: 2px dashed var(--border); background: var(--card); border-radius: 16px; padding: 20px; text-align: center; margin-bottom: 15px; cursor: pointer; color: var(--blue); font-weight: 800; font-size: 13px;}
+        .logo-preview { width: 80px; height: 80px; border-radius: 50%; object-fit: cover; margin: 10px auto 0; display: none; border: 2px solid var(--border);}
+
+        /* Cover / Timeline */
+        .cover-section-lbl { font-size: 11px; font-weight: 800; color: var(--gray); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; }
+        .cover-upload-box {
+            border: 2px dashed var(--border); background: var(--card); border-radius: 16px;
+            padding: 0; margin-bottom: 8px; overflow: hidden; position: relative;
+            min-height: 110px; display: flex; align-items: center; justify-content: center;
+            cursor: pointer;
+        }
+        .cover-upload-box .cover-placeholder {
+            display: flex; flex-direction: column; align-items: center; gap: 6px;
+            color: var(--blue); font-weight: 800; font-size: 13px; padding: 20px;
+        }
+        #cover-preview-img {
+            width: 100%; height: 140px; object-fit: cover; display: none; border-radius: 14px;
+        }
+        .cover-actions { display: flex; gap: 8px; margin-bottom: 15px; }
+        .btn-cover-opt {
+            flex: 1; padding: 10px 8px; border-radius: 12px; border: 1px solid var(--border);
+            background: var(--card); color: var(--text); font-weight: 700; font-size: 12px;
+            cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 5px;
+            transition: 0.15s;
+        }
+        .btn-cover-opt:hover { background: var(--border); }
+        .btn-cover-ia { background: linear-gradient(135deg, #af52de, #5e5ce6) !important; color: white !important; border: none !important; }
+        .cover-ia-spinner { display: none; width: 16px; height: 16px; border: 2px solid rgba(255,255,255,0.3); border-radius: 50%; border-top-color: #fff; animation: spin 0.8s linear infinite; }
+
+        .loader { display: none; width: 20px; height: 20px; border: 3px solid rgba(255,255,255,0.3); border-radius: 50%; border-top-color: #fff; animation: spin 1s ease-in-out infinite; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+    </style>
+    <link rel="stylesheet" href="/css/responsive.css?v=1">
+</head>
+<body>
+
+    <div class="nav">
+        <button class="btn-nav" onclick="location.href='index.html'"><i class="ph-bold ph-house"></i> Home</button>
+        <div style="display:flex; gap:10px;">
+            <button class="btn-nav" style="border:none; background:transparent;" onclick="document.body.classList.toggle('dark-mode')"><i class="ph-fill ph-moon"></i></button>
+            <button class="btn-nav" onclick="location.href='base_datos.html'"><i class="ph-bold ph-database"></i> DB Maestra</button>
+        </div>
+    </div>
+
+    <div>
+        <div class="header-title">Directorio de Clientes</div>
+        <div class="header-sub">Gestiona empresas y abre sus proyectos</div>
+    </div>
+
+    <!-- honeypot para evitar que Chrome autocomplete el buscador con credenciales -->
+    <input type="text" style="display:none" aria-hidden="true">
+    <input type="password" style="display:none" aria-hidden="true">
+    <div class="search-box">
+        <i class="ph-bold ph-magnifying-glass" style="color:var(--gray); font-size:20px;"></i>
+        <input type="search" id="search-input" placeholder="Buscar cliente..." oninput="filterClients()" autocomplete="off" autocorrect="off" autocapitalize="off">
+    </div>
+
+    <div id="clients-list">
+        <div style="text-align:center; padding:40px; color:var(--gray); font-weight:bold;">Cargando base de datos...</div>
+    </div>
+
+    <button class="fab" onclick="openAddModal()"><i class="ph-bold ph-plus"></i></button>
+
+    <div class="modal-overlay" id="modal-overlay" onclick="if(event.target===this) closeModal()">
+        <div class="modal-content">
+            <h2 style="margin-top:0; margin-bottom: 20px;" id="modal-title">Nuevo Cliente</h2>
+            
+            <div class="logo-upload-box" onclick="document.getElementById('inp-logo').click()">
+                <i class="ph-bold ph-upload-simple" style="font-size:24px; margin-bottom:5px; display:block;"></i>
+                <span>Subir Logo del Cliente (Opcional)</span>
+                <input type="file" id="inp-logo" accept="image/*" style="display:none;" onchange="previewLogo(this)">
+                <img loading="lazy" decoding="async" id="logo-preview" class="logo-preview" src="">
+            </div>
+
+            <input type="text" id="inp-nombre" class="inp-std" placeholder="Nombre de la Empresa o Cliente">
+            <input type="text" id="inp-rubro" class="inp-std" placeholder="Rubro (ej: Construcción, Retail...)">
+            <input type="number" id="inp-wsp" class="inp-std" placeholder="Número de WhatsApp">
+            <input type="email" id="inp-email" class="inp-std" placeholder="Correo Electrónico (Opcional)">
+
+            <!-- ── Cover / Timeline ── -->
+            <div class="cover-section-lbl"><i class="ph-fill ph-image"></i> Imagen de Portada (Timeline)</div>
+            <div class="cover-upload-box" id="cover-upload-box" onclick="document.getElementById('inp-cover').click()">
+                <div class="cover-placeholder" id="cover-placeholder">
+                    <i class="ph-bold ph-image" style="font-size:28px;"></i>
+                    <span>Subir imagen de portada</span>
+                    <span style="font-size:11px; font-weight:600; color:var(--gray);">Se verá como cover en el portal del cliente</span>
+                </div>
+                <img loading="lazy" decoding="async" id="cover-preview-img" src="">
+                <input type="file" id="inp-cover" accept="image/*" style="display:none;" onchange="previewCover(this)">
+            </div>
+            <div class="cover-actions">
+                <button class="btn-cover-opt" onclick="document.getElementById('inp-cover').click(); event.stopPropagation()">
+                    <i class="ph-bold ph-upload-simple"></i> Subir Foto
+                </button>
+                <button class="btn-cover-opt btn-cover-ia" id="btn-gen-cover" onclick="generarCoverIA(); event.stopPropagation()">
+                    <div class="cover-ia-spinner" id="cover-ia-spinner"></div>
+                    <i class="ph-fill ph-sparkle" id="cover-ia-icon"></i>
+                    <span id="cover-ia-txt">Generar con IA</span>
+                </button>
+                <button class="btn-cover-opt" style="max-width:44px; color:var(--red);" onclick="limpiarCover(); event.stopPropagation()" title="Quitar portada">
+                    <i class="ph-bold ph-trash"></i>
+                </button>
+            </div>
+            
+            <!-- ── PIN de acceso al portal del cliente ── -->
+            <div style="margin-top:18px; padding:14px; background:var(--bg); border-radius:12px; border:1px solid var(--border);">
+                <div style="font-size:12px; font-weight:800; color:var(--blue); text-transform:uppercase; margin-bottom:6px; display:flex; align-items:center; gap:6px;">
+                    <i class="ph-fill ph-lock-key"></i> PIN de Acceso al Portal
+                </div>
+                <div style="font-size:12px; color:var(--gray); margin-bottom:12px;">
+                    El cliente deberá ingresar este PIN cada vez que abra su link desde un nuevo navegador. Dejá vacío para acceso libre.
+                </div>
+                <!-- Dots visuales -->
+                <div style="display:flex; justify-content:center; gap:14px; margin-bottom:14px;">
+                    <div id="hpd0" style="width:16px;height:16px;border-radius:50%;border:2px solid var(--border);background:transparent;transition:0.2s;"></div>
+                    <div id="hpd1" style="width:16px;height:16px;border-radius:50%;border:2px solid var(--border);background:transparent;transition:0.2s;"></div>
+                    <div id="hpd2" style="width:16px;height:16px;border-radius:50%;border:2px solid var(--border);background:transparent;transition:0.2s;"></div>
+                    <div id="hpd3" style="width:16px;height:16px;border-radius:50%;border:2px solid var(--border);background:transparent;transition:0.2s;"></div>
+                </div>
+                <!-- Teclado numérico -->
+                <div style="display:grid; grid-template-columns:repeat(3,1fr); gap:8px; max-width:220px; margin:0 auto 10px;">
+                    <button type="button" onclick="_hubPinKey('1')" style="padding:14px;border-radius:12px;border:1px solid var(--border);background:var(--card);color:var(--text);font-size:18px;font-weight:700;cursor:pointer;">1</button>
+                    <button type="button" onclick="_hubPinKey('2')" style="padding:14px;border-radius:12px;border:1px solid var(--border);background:var(--card);color:var(--text);font-size:18px;font-weight:700;cursor:pointer;">2</button>
+                    <button type="button" onclick="_hubPinKey('3')" style="padding:14px;border-radius:12px;border:1px solid var(--border);background:var(--card);color:var(--text);font-size:18px;font-weight:700;cursor:pointer;">3</button>
+                    <button type="button" onclick="_hubPinKey('4')" style="padding:14px;border-radius:12px;border:1px solid var(--border);background:var(--card);color:var(--text);font-size:18px;font-weight:700;cursor:pointer;">4</button>
+                    <button type="button" onclick="_hubPinKey('5')" style="padding:14px;border-radius:12px;border:1px solid var(--border);background:var(--card);color:var(--text);font-size:18px;font-weight:700;cursor:pointer;">5</button>
+                    <button type="button" onclick="_hubPinKey('6')" style="padding:14px;border-radius:12px;border:1px solid var(--border);background:var(--card);color:var(--text);font-size:18px;font-weight:700;cursor:pointer;">6</button>
+                    <button type="button" onclick="_hubPinKey('7')" style="padding:14px;border-radius:12px;border:1px solid var(--border);background:var(--card);color:var(--text);font-size:18px;font-weight:700;cursor:pointer;">7</button>
+                    <button type="button" onclick="_hubPinKey('8')" style="padding:14px;border-radius:12px;border:1px solid var(--border);background:var(--card);color:var(--text);font-size:18px;font-weight:700;cursor:pointer;">8</button>
+                    <button type="button" onclick="_hubPinKey('9')" style="padding:14px;border-radius:12px;border:1px solid var(--border);background:var(--card);color:var(--text);font-size:18px;font-weight:700;cursor:pointer;">9</button>
+                    <button type="button" onclick="_hubPinClear()" style="padding:14px;border-radius:12px;border:1px solid var(--border);background:var(--card);color:var(--red);font-size:13px;font-weight:700;cursor:pointer;">Limpiar</button>
+                    <button type="button" onclick="_hubPinKey('0')" style="padding:14px;border-radius:12px;border:1px solid var(--border);background:var(--card);color:var(--text);font-size:18px;font-weight:700;cursor:pointer;">0</button>
+                    <button type="button" onclick="_hubPinDel()" style="padding:14px;border-radius:12px;border:1px solid var(--border);background:var(--card);color:var(--text);font-size:18px;font-weight:700;cursor:pointer;">⌫</button>
+                </div>
+                <div id="pin-status" style="font-size:11px; color:var(--gray); margin-top:4px; font-weight:600; text-align:center;"></div>
+                <button type="button" id="btn-clear-pin" onclick="clearClientPin()" style="display:none; margin-top:10px; background:rgba(255,59,48,0.1); color:var(--red); border:none; border-radius:10px; padding:9px 14px; font-size:12px; font-weight:700; cursor:pointer; width:100%;">
+                    <i class="ph-bold ph-lock-open"></i> Quitar PIN (acceso libre)
+                </button>
+            </div>
+
+            <button class="btn-main" id="btn-save" onclick="saveClient()">
+                <span id="save-text">Guardar Cliente</span>
+                <div class="loader" id="save-loader"></div>
+            </button>
+            <button id="btn-delete" class="btn-main" style="background:rgba(255,59,48,0.1); color:var(--red); margin-top:10px; display:none;" onclick="deleteCurrentClient()"><i class="ph-bold ph-trash"></i> Eliminar Cliente</button>
+        </div>
+    </div>
+
+<script>
+    // Firebase ya inicializado en el <head>
+    if (!firebase.apps.length) firebase.initializeApp(window._rubikFirebaseConfig);
+    const db = firebase.database();
+    const storage = firebase.storage();
+
+    let clients = []; let currentEditCid = null; let tempImgFile = null; let existingImgUrl = null; let actionData = null; let actionCid = null;
+    let tempCoverFile = null; let existingCoverUrl = null;
+    let _clientHasPin = false; // si el cliente ya tiene PIN guardado
+
+    async function _sha256(str) {
+        const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
+        return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2,'0')).join('');
+    }
+
+    // ── Teclado PIN del hub ──────────────────────────────────────
+    let _hubPinBuffer = '';
+
+    function _hubPinRender() {
+        for(let i=0;i<4;i++) {
+            const d = document.getElementById('hpd'+i);
+            if(d) { d.style.background = i < _hubPinBuffer.length ? 'var(--blue)' : 'transparent'; d.style.borderColor = i < _hubPinBuffer.length ? 'var(--blue)' : 'var(--border)'; }
+        }
+    }
+    function _hubPinKey(k) {
+        if(_hubPinBuffer.length >= 4) return;
+        _hubPinBuffer += k;
+        _hubPinRender();
+    }
+    function _hubPinDel() {
+        _hubPinBuffer = _hubPinBuffer.slice(0,-1);
+        _hubPinRender();
+    }
+    function _hubPinClear() {
+        _hubPinBuffer = '';
+        _hubPinRender();
+    }
+
+    function _resetPinUI(hasPinAlready) {
+        _clientHasPin = hasPinAlready;
+        _hubPinBuffer = '';
+        _hubPinRender();
+        const statusEl = document.getElementById('pin-status');
+        if(hasPinAlready) {
+            statusEl.innerHTML = '✅ <strong>PIN activo.</strong> Dejá el teclado vacío para mantenerlo, o ingresá 4 dígitos nuevos para cambiarlo.';
+            statusEl.style.color = 'var(--green)';
+        } else {
+            statusEl.innerHTML = 'Sin PIN — ingresá 4 dígitos para activarlo.';
+            statusEl.style.color = 'var(--gray)';
+        }
+        document.getElementById('btn-clear-pin').style.display = hasPinAlready ? 'block' : 'none';
+    }
+
+    async function clearClientPin() {
+        if(!currentEditCid) return;
+        if(!confirm('¿Quitar el PIN? El cliente podrá acceder sin contraseña.')) return;
+        await db.ref(`clientes/${currentEditCid}/pin_hash`).remove();
+        _resetPinUI(false);
+        document.getElementById('pin-status').innerText = '✅ PIN eliminado. Guardá para confirmar.';
+        document.getElementById('pin-status').style.color = 'var(--green)';
+    }
+
+    (function arrancarCarga() {
+        var auth = firebase.auth();
+        function cargar() {
+            db.ref('clientes').once('value', function(snap) {
+                clients = [];
+                if (snap.exists()) { snap.forEach(function(child) { clients.push(Object.assign({ id: child.key }, child.val())); }); }
+                renderClients(clients);
+            }).catch(function(e) {
+                console.error('[clientes] error:', e.message);
+                document.getElementById('clients-list').innerHTML = '<div style="text-align:center;color:var(--red);padding:40px;">Error al cargar: ' + e.message + '</div>';
+            });
+        }
+        if (auth.currentUser) { cargar(); return; }
+        var unsub = auth.onAuthStateChanged(function(user) {
+            unsub();
+            if (user) { cargar(); }
+            else { document.getElementById('clients-list').innerHTML = '<div style="text-align:center;color:var(--red);padding:40px;font-weight:600;">Sesión no detectada. <a href="/login.html" style="color:var(--blue)">Volver a ingresar</a></div>'; }
+        });
+    })();
+
+    function filterClients() {
+        const term = document.getElementById('search-input').value.toLowerCase();
+        const filtered = clients.filter(c => c.nombre.toLowerCase().includes(term));
+        renderClients(filtered);
+    }
+
+    function openProjects(cid, cname) {
+        localStorage.setItem('rubik_client_id', cid);
+        localStorage.setItem('rubik_client_name', cname);
+        window.location.href = 'proyectos-cliente.html';
+    }
+
+    function getBaseUrl() {
+        let current = window.location.href.split('?')[0];
+        if(current.includes('file://')) return "https://misistema-rubik.com";
+        return current.replace('/clientes.html', ''); 
+    }
+
+    function openClientPortal(cid) { window.open(`https://rubikbolivia.com/cliente-view.html?cid=${cid}`, '_blank'); }
+
+    function sendWsp(nombre, wsp, cid) {
+        if(!wsp) return alert("Este cliente no tiene WhatsApp registrado.");
+        const link = 'https://rubikbolivia.com/cliente-view.html?cid=' + cid;
+        const numero = wsp.replace(/\D/g, '');
+        const clientData = clients.find(function(c) { return c.id === cid; });
+        const tienePin = !!(clientData && clientData.pin_hash);
+        var msj = 'Hola ' + nombre + ' 👋\n\nTe compartimos el enlace a tu portal de seguimiento de proyecto en Rubik:\n' + link;
+        if (tienePin) msj += '\n\nPara ingresar necesitás tu PIN de acceso.';
+        const url = 'https://wa.me/' + numero + '?text=' + encodeURIComponent(msj);
+        window.open(url, '_blank');
+    }
+
+    function renderClients(data) {
+        const list = document.getElementById('clients-list');
+        list.innerHTML = '';
+        if(data.length === 0) { list.innerHTML = '<div style="text-align:center; color:var(--gray); padding:40px; font-weight:bold;">No se encontraron clientes.</div>'; return; }
+        
+        data.sort((a,b) => new Date(b.fecha_mod || b.fecha_creacion) - new Date(a.fecha_mod || a.fecha_creacion)).forEach(c => {
+            const logoSrc = c.logo || 'https://via.placeholder.com/150?text=' + c.nombre.charAt(0);
+            const safeName = c.nombre.replace(/'/g, "\\'");
+            const safeWsp = c.wsp || '';
+            const jsonStr = JSON.stringify(c).replace(/'/g, "&#39;");
+            list.innerHTML += `
+            <div class="client-card" onclick="openProjects('${c.id}', '${safeName}')">
+                <div class="client-info">
+                    <img class="client-logo" src="${logoSrc}" onerror="this.src='https://via.placeholder.com/150?text=${c.nombre.charAt(0)}'">
+                    <div>
+                        <div class="client-name">${c.nombre}</div>
+                        <div class="client-sub"><i class="ph-fill ph-buildings"></i>${c.rubro || 'Sin rubro'}</div>
+                    </div>
+                </div>
+                <div class="action-btns" onclick="event.stopPropagation()">
+                    <button class="btn-circle btn-eye" onclick="openClientPortal('${c.id}')" title="Ver portal cliente"><i class="ph-bold ph-eye"></i></button>
+                    <button class="btn-circle btn-wsp" onclick="sendWsp('${safeName}', '${safeWsp}', '${c.id}')" title="WhatsApp"><i class="ph-bold ph-whatsapp-logo"></i></button>
+                    <button class="btn-circle btn-edit" onclick="openEdit('${c.id}')" title="Editar"><i class="ph-bold ph-pencil-simple"></i></button>
+                </div>
+            </div>`;
+        });
+    }
+
+    function openEdit(cid) {
+        currentEditCid = cid;
+        const c = clients.find(x => x.id === cid);
+        if(!c) return;
+        document.getElementById('modal-title').innerText = 'Editar Cliente';
+        document.getElementById('inp-nombre').value = c.nombre || '';
+        document.getElementById('inp-rubro').value = c.rubro || '';
+        document.getElementById('inp-wsp').value = c.wsp || '';
+        document.getElementById('inp-email').value = c.email || '';
+        existingImgUrl = c.logo || null;
+        existingCoverUrl = c.cover || null;
+        tempImgFile = null; tempCoverFile = null;
+        const prev = document.getElementById('logo-preview');
+        if(existingImgUrl) { prev.src = existingImgUrl; prev.style.display = 'block'; }
+        else { prev.style.display = 'none'; }
+        const coverPrev = document.getElementById('cover-preview-img');
+        if(existingCoverUrl) { coverPrev.src = existingCoverUrl; coverPrev.style.display = 'block'; }
+        else { coverPrev.style.display = 'none'; }
+        document.getElementById('btn-delete').style.display = 'block';
+        document.getElementById('modal-overlay').style.display = 'flex';
+        // Cargar PIN status
+        db.ref(`clientes/${cid}/pin_hash`).once('value').then(s => {
+            _resetPinUI(s.exists() && !!s.val());
+        });
+    }
+
+    function openNew() {
+        currentEditCid = null; tempImgFile = null; tempCoverFile = null;
+        existingImgUrl = null; existingCoverUrl = null;
+        document.getElementById('modal-title').innerText = 'Nuevo Cliente';
+        document.getElementById('inp-nombre').value = '';
+        document.getElementById('inp-rubro').value = '';
+        document.getElementById('inp-wsp').value = '';
+        document.getElementById('inp-email').value = '';
+        document.getElementById('logo-preview').style.display = 'none';
+        document.getElementById('cover-preview-img').style.display = 'none';
+        document.getElementById('btn-delete').style.display = 'none';
+        document.getElementById('modal-overlay').style.display = 'flex';
+        _resetPinUI(false);
+    }
+
+    function closeModal() { document.getElementById('modal-overlay').style.display = 'none'; }
+
+    // Funciones de preview para los inputs de archivo
+    function previewLogo(input) {
+        if (!input.files[0]) return;
+        tempImgFile = input.files[0];
+        const r = new FileReader();
+        r.onload = function(ev) {
+            const p = document.getElementById('logo-preview');
+            p.src = ev.target.result;
+            p.style.display = 'block';
+        };
+        r.readAsDataURL(tempImgFile);
+    }
+    function previewCover(input) {
+        if (!input.files[0]) return;
+        tempCoverFile = input.files[0];
+        const r = new FileReader();
+        r.onload = function(ev) {
+            const p = document.getElementById('cover-preview-img');
+            p.src = ev.target.result;
+            p.style.display = 'block';
+        };
+        r.readAsDataURL(tempCoverFile);
+    }
+
+    async function generarCoverIA() {
+        const nombre = document.getElementById('inp-nombre').value.trim();
+        const rubro = document.getElementById('inp-rubro').value.trim();
+        if(!nombre) return alert('Ingresá el nombre del cliente primero.');
+        const btn = document.getElementById('btn-cover-ia');
+        const spinner = document.getElementById('cover-ia-spinner');
+        btn.disabled = true; spinner.style.display = 'inline-block';
+        try {
+            const token = await firebase.auth().currentUser.getIdToken();
+            const prompt = `Genera una imagen de portada profesional y moderna para una empresa llamada "${nombre}" del rubro "${rubro || 'empresarial'}". Estilo minimalista, colores corporativos, sin texto.`;
+            const resp = await fetch('/api/gemini', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+                body: JSON.stringify({ prompt, model: 'gemini-2.0-flash-exp', generateImage: true })
+            });
+            const data = await resp.json();
+            if(data.imageUrl) {
+                const coverPrev = document.getElementById('cover-preview-img');
+                coverPrev.src = data.imageUrl; coverPrev.style.display = 'block';
+                const r = await fetch(data.imageUrl);
+                const blob = await r.blob();
+                tempCoverFile = new File([blob], 'cover_ia.jpg', { type: 'image/jpeg' });
+            }
+        } catch(e) { alert('Error generando imagen: ' + e.message); }
+        finally { btn.disabled = false; spinner.style.display = 'none'; }
+    }
+
+    async function saveClient() {
+        const nombre = document.getElementById('inp-nombre').value.trim();
+        if(!nombre) return alert('El nombre es obligatorio.');
+        const btn = document.getElementById('btn-save');
+        const loader = document.getElementById('save-loader');
+        const text = document.getElementById('save-text');
+        btn.disabled = true; loader.style.display = 'block'; text.style.display = 'none';
+        try {
+            let logoUrl = existingImgUrl || null;
+            let coverUrl = existingCoverUrl || null;
+            if(tempImgFile) {
+                const ref = storage.ref(`logos/${Date.now()}_${tempImgFile.name}`);
+                await ref.put(tempImgFile);
+                logoUrl = await ref.getDownloadURL();
+            }
+            if(tempCoverFile) {
+                const ref = storage.ref(`covers/${Date.now()}_${tempCoverFile.name}`);
+                await ref.put(tempCoverFile);
+                coverUrl = await ref.getDownloadURL();
+            }
+            const payload = {
+                nombre,
+                rubro: document.getElementById('inp-rubro').value.trim(),
+                wsp: document.getElementById('inp-wsp').value.trim(),
+                email: document.getElementById('inp-email').value.trim(),
+                logo: logoUrl,
+                cover: coverUrl,
+                fecha_mod: new Date().toISOString()
+            };
+            // PIN
+            if(_hubPinBuffer.length === 4) {
+                payload.pin_hash = await _sha256(_hubPinBuffer);
+            }
+            if(currentEditCid) {
+                await db.ref(`clientes/${currentEditCid}`).update(payload);
+            } else {
+                payload.fecha_creacion = new Date().toISOString();
+                const newRef = db.ref('clientes').push();
+                await newRef.set(payload);
+            }
+            closeModal();
+            // Recargar
+            const snap = await db.ref('clientes').once('value');
+            clients = [];
+            if(snap.exists()) snap.forEach(child => clients.push({ id: child.key, ...child.val() }));
+            renderClients(clients);
+        } catch(e) { alert('Error al guardar: ' + e.message); }
+        finally { btn.disabled = false; loader.style.display = 'none'; text.style.display = 'inline'; }
+    }
+
+    async function deleteCurrentClient() {
+        if(!currentEditCid) return;
+        if(!confirm('¿Eliminar este cliente y todos sus proyectos? Esta acción no se puede deshacer.')) return;
+        await db.ref('clientes/' + currentEditCid).remove();
+        closeModal();
+        const snap = await db.ref('clientes').once('value');
+        clients = [];
+        if(snap.exists()) snap.forEach(child => clients.push({ id: child.key, ...child.val() }));
+        renderClients(clients);
+    }
+
+</script>
+</body>
+</html>

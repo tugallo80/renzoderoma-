@@ -1,0 +1,613 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Servicios Gráficos - Rubik</title>
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.1.3/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.1.3/firebase-database-compat.js"></script>
+    <script>
+        window._rubikFirebaseConfig = window._rubikFirebaseConfig || {
+            apiKey: "AIzaSyDXYlofy31cDP14xVAVxWo_7TqXdSgsIjA",
+            authDomain: "rubik-bolivia.firebaseapp.com",
+            databaseURL: "https://rubik-bolivia-default-rtdb.firebaseio.com",
+            projectId: "rubik-bolivia",
+            storageBucket: "rubik-bolivia.firebasestorage.app",
+            messagingSenderId: "4153087958",
+            appId: "1:4153087958:web:cf2dd16106580ed6437677"
+        };
+        if (!firebase.apps.length) firebase.initializeApp(window._rubikFirebaseConfig);
+    </script>
+    <script src="/js/firecache.js?v=1"></script>
+    <style>
+        :root { --bg:#f2f2f7; --card:#fff; --text:#1c1c1e; --blue:#007aff; --green:#34c759; --orange:#ff9500; --purple:#af52de; --red:#ff3b30; --gray:#8e8e93; --border:#e5e5ea; }
+        body { font-family:-apple-system,sans-serif; background:var(--bg); color:var(--text); margin:0; padding:20px; padding-bottom:120px; -webkit-tap-highlight-color:transparent; }
+        .header { text-align:center; margin-bottom:25px; }
+        .user-badge { background:var(--purple); color:white; padding:5px 15px; border-radius:20px; font-size:11px; font-weight:800; display:inline-block; margin-bottom:10px; text-transform:uppercase; }
+        .title { font-size:24px; font-weight:900; margin:0; }
+        .earnings-card { background:linear-gradient(135deg,#4b134f,#c94b4b); color:white; border-radius:20px; padding:25px 20px; margin-bottom:25px; text-align:center; box-shadow:0 10px 30px rgba(0,0,0,0.15); }
+        .e-lbl { font-size:12px; font-weight:800; color:rgba(255,255,255,0.7); text-transform:uppercase; letter-spacing:1px; margin-bottom:5px; }
+        .e-val { font-size:38px; font-weight:900; color:#fff; }
+        .section-title { font-size:16px; font-weight:900; margin-bottom:15px; display:flex; align-items:center; gap:8px; }
+        .card { background:var(--card); border-radius:18px; padding:18px; border:1px solid var(--border); margin-bottom:15px; box-shadow:0 4px 15px rgba(0,0,0,0.03); }
+        .p-name { font-size:16px; font-weight:900; margin-bottom:5px; }
+        .badge { font-size:10px; font-weight:800; padding:4px 8px; border-radius:6px; text-transform:uppercase; background:rgba(175,82,222,0.1); color:var(--purple); display:inline-block; margin-bottom:8px; }
+        .btn-main { background:var(--blue); color:white; border:none; padding:14px; border-radius:12px; font-weight:900; font-size:14px; width:100%; cursor:pointer; display:flex; justify-content:center; gap:8px; transition:0.2s; }
+        .btn-green { background:var(--green); }
+        .empty-msg { text-align:center; color:var(--gray); font-size:13px; padding:30px; font-weight:700; border:2px dashed var(--border); border-radius:16px; }
+        .slide-panel { position:fixed; top:100%; left:0; width:100%; height:100%; background:var(--bg); z-index:1000; transition:top 0.4s cubic-bezier(0.1,0.8,0.2,1); overflow-y:auto; padding:20px; box-sizing:border-box; padding-bottom:120px; }
+        .slide-panel.active { top:0; }
+        .nav-panel { display:flex; align-items:center; gap:10px; margin-bottom:20px; }
+        .btn-back { background:var(--card); border:1px solid var(--border); padding:10px 15px; border-radius:14px; font-weight:800; color:var(--text); cursor:pointer; display:flex; align-items:center; gap:5px; }
+        .tabs-mini { display:flex; background:var(--border); padding:4px; border-radius:12px; margin-bottom:15px; }
+        .t-btn { flex:1; padding:10px; font-size:11px; font-weight:800; border-radius:10px; border:none; background:transparent; color:var(--gray); cursor:pointer; }
+        .t-btn.active { background:var(--card); color:var(--text); box-shadow:0 2px 8px rgba(0,0,0,0.1); }
+        .sub-panel { display:none; } .sub-panel.active { display:block; }
+        .art-box { display:flex; gap:10px; margin-top:10px; background:var(--bg); padding:10px; border-radius:8px; border:1px solid var(--border); align-items:center; }
+        .art-img { width:50px; height:50px; object-fit:cover; border-radius:6px; cursor:pointer; border:1px solid var(--border); background:#fff; flex-shrink:0; }
+        .art-info { font-size:11px; color:var(--gray); flex-grow:1; line-height:1.4; }
+        .status-sel { background:var(--card); border:1px solid var(--border); font-size:11px; font-weight:800; padding:6px 10px; border-radius:8px; cursor:pointer; outline:none; }
+        .floating-total { position:fixed; bottom:0; left:0; width:100%; background:var(--card); border-top:1px solid var(--border); padding:15px 20px; box-sizing:border-box; box-shadow:0 -10px 20px rgba(0,0,0,0.05); z-index:1100; transition:bottom 0.4s; }
+        .photo-modal { display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.9); z-index:3000; flex-direction:column; }
+        .photo-nav { display:flex; justify-content:space-between; padding:20px; padding-top:40px; }
+        .btn-black { background:rgba(255,255,255,0.2); backdrop-filter:blur(10px); color:white; border:none; padding:10px 15px; border-radius:10px; font-weight:800; display:flex; gap:5px; cursor:pointer; }
+        .full-img { width:100%; height:100%; object-fit:contain; }
+        .inp-mat-pu { width:75px; padding:7px; border-radius:8px; border:1.5px solid var(--purple); text-align:right; font-weight:900; outline:none; font-size:14px; color:var(--purple); background:var(--bg); }
+    </style>
+    <link rel="stylesheet" href="/css/responsive.css?v=1">
+</head>
+<body>
+
+<div id="main-hub">
+    <div class="header">
+        <div class="user-badge"><i class="ph-bold ph-printer"></i> Industria Gráfica</div>
+        <h1 class="title" id="u-name">Cargando...</h1>
+    </div>
+    <div class="earnings-card">
+        <div class="e-lbl">Facturación Global Adjudicada</div>
+        <div class="e-val" id="total-ganancias">0.00 Bs</div>
+    </div>
+    <div class="section-title"><i class="ph-bold ph-bell-ringing" style="color:var(--orange);"></i> Licitaciones Pendientes</div>
+    <div id="pending-container"><div class="empty-msg">No hay órdenes de impresión nuevas.</div></div>
+    <div class="section-title" style="margin-top:25px;"><i class="ph-bold ph-buildings" style="color:var(--purple);"></i> Mis Proyectos Activos</div>
+    <div id="active-container"><div class="empty-msg">No tienes proyectos en ejecución.</div></div>
+</div>
+
+<div id="panel-obra" class="slide-panel">
+    <div class="nav-panel">
+        <button class="btn-back" onclick="cerrarPanel('panel-obra')"><i class="ph-bold ph-caret-down"></i> Volver</button>
+        <div style="font-size:16px; font-weight:900;" id="obra-p-name">Proyecto</div>
+    </div>
+    <div class="tabs-mini">
+        <button class="t-btn active" onclick="switchObraTab('artes',this)">Producción</button>
+        <button class="t-btn" onclick="switchObraTab('balance',this)">Saldos y Pagos</button>
+    </div>
+    <div id="ob-artes" class="sub-panel active">
+        <button class="btn-main" style="background:var(--purple); margin-bottom:15px;" onclick="generarPDFOperador()"><i class="ph-bold ph-file-pdf"></i> Descargar PDF para Máquina</button>
+        <div id="artes-list"></div>
+    </div>
+    <div id="ob-balance" class="sub-panel">
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:15px;">
+            <div style="background:var(--card); border:1px solid var(--border); padding:15px; border-radius:12px; text-align:center;">
+                <div style="font-size:10px; font-weight:800; color:var(--gray);">TOTAL CONTRATADO</div>
+                <div style="font-size:18px; font-weight:900;" id="bal-total">0.00 Bs</div>
+            </div>
+            <div style="background:var(--bg); border:1px solid var(--purple); padding:15px; border-radius:12px; text-align:center;">
+                <div style="font-size:10px; font-weight:800; color:var(--purple);">SALDO (DEUDA)</div>
+                <div style="font-size:18px; font-weight:900; color:var(--purple);" id="bal-saldo">0.00 Bs</div>
+            </div>
+        </div>
+        <h4 style="margin-bottom:10px; font-size:14px;">Historial de Pagos Recibidos</h4>
+        <div id="list-pagos"><div class="empty-msg">Aún no recibiste pagos en este proyecto.</div></div>
+    </div>
+</div>
+
+<div id="panel-cotizador" class="slide-panel">
+    <div class="nav-panel">
+        <button class="btn-back" onclick="cerrarPanel('panel-cotizador')"><i class="ph-bold ph-caret-down"></i> Volver</button>
+        <div style="font-size:16px; font-weight:900;" id="cot-p-name">Proyecto</div>
+    </div>
+    <div id="cot-items-container"></div>
+</div>
+
+<div id="float-footer" class="floating-total" style="bottom:-150px;"></div>
+
+<div id="modal-foto" class="photo-modal">
+    <div class="photo-nav"><button class="btn-black" onclick="document.getElementById('modal-foto').style.display='none'"><i class="ph-bold ph-caret-left"></i> Atrás</button></div>
+    <img loading="lazy" id="img-viewer" class="full-img" src="">
+</div>
+
+<script>
+    // Firebase ya inicializado en el <head>
+    if (!firebase.apps.length) firebase.initializeApp(window._rubikFirebaseConfig);
+    const db = firebase.database();
+
+    const urlParams = new URLSearchParams(window.location.search);
+    let workerId = urlParams.get('wid') || localStorage.getItem('rubik_graphic_wid');
+    if (workerId) {
+        localStorage.setItem('rubik_graphic_wid', workerId);
+        db.ref(`personal/${workerId}`).once('value', snap => {
+            if (snap.exists()) { document.getElementById('u-name').innerText = snap.val().nombre; iniciarEscuchaHub(); }
+            else alert("Usuario no encontrado.");
+        });
+    } else alert("Enlace inválido. Falta el identificador.");
+
+    let solicitudesGlobales = {};
+    let currentObraId = null, currentObraCid = null, activeLicIds = [];
+    let currentCotKey = null;
+
+    function fMoney(n) { return parseFloat(n||0).toLocaleString('es-BO',{minimumFractionDigits:2,maximumFractionDigits:2}); }
+    function getValidObjects(obj) { if(!obj) return []; return Object.values(obj).filter(x => x!=null && typeof x==='object'); }
+    function isGraphicLic(sol) { return sol && (sol.is_grafico===true || sol.is_grafico==='true'); }
+    function cerrarPanel(id) { document.getElementById(id).classList.remove('active'); document.getElementById('float-footer').style.bottom='-150px'; }
+    function switchObraTab(tab,btn) { document.querySelectorAll('.t-btn').forEach(b=>b.classList.remove('active')); btn.classList.add('active'); document.querySelectorAll('.sub-panel').forEach(p=>p.classList.remove('active')); document.getElementById('ob-'+tab).classList.add('active'); }
+    function verFoto(url) { document.getElementById('img-viewer').src=url; document.getElementById('modal-foto').style.display='flex'; }
+
+    // ── HUB PRINCIPAL ──
+    function iniciarEscuchaHub() {
+        db.ref(`personal/${workerId}/solicitudes`).on('value', snap => {
+            solicitudesGlobales = snap.val() || {};
+            const contPend = document.getElementById('pending-container');
+            const contAct  = document.getElementById('active-container');
+            contPend.innerHTML = ''; contAct.innerHTML = '';
+            let sumGanancias = 0, cPend = 0;
+            const proyectosActivos = {};
+
+            Object.keys(solicitudesGlobales).forEach(key => {
+                const sol = solicitudesGlobales[key];
+                if (!sol.pid || !sol.cid) return;
+                const aprobado = sol.estado==='adjudicado' || sol.estado==='aprobado' || sol.estado==='terminado';
+                if (aprobado) sumGanancias += parseFloat(sol.precio_final || sol.precio_propuesto || 0);
+
+                if (sol.estado==='enviado' || sol.estado==='contra_oferta') {
+                    cPend++;
+                    const isContra = sol.estado==='contra_oferta';
+                    const lbl = isContra ? '🔴 Contraoferta recibida' : (isGraphicLic(sol) ? '🎨 Orden de Impresión' : '🟢 Cotizar Trabajo');
+                    contPend.innerHTML += `<div class="card" style="${isContra?'border-color:var(--red);':''}">
+                        <div class="badge" style="${isContra?'color:var(--red);background:rgba(255,59,48,0.1);':''}">${lbl}</div>
+                        <div class="p-name">${sol.pName||'Proyecto'}</div>
+                        <div style="font-size:11px;color:var(--gray);margin-bottom:8px;">${Object.keys(sol.tareas||{}).length} ítem(s)</div>
+                        <button class="btn-main" style="background:var(--purple)" onclick="abrirCotizador('${key}')"><i class="ph-bold ph-pencil-simple"></i> Ver y Cotizar</button>
+                    </div>`;
+                }
+
+                if (aprobado) {
+                    if (!proyectosActivos[sol.pid]) proyectosActivos[sol.pid] = { cid:sol.cid, pid:sol.pid, nombre:sol.pName, montoTotal:0, pagadoTotal:0, lics:[] };
+                    proyectosActivos[sol.pid].montoTotal += parseFloat(sol.precio_final || sol.precio_propuesto || 0);
+                    if (sol.pagos) Object.values(sol.pagos).forEach(p => { proyectosActivos[sol.pid].pagadoTotal += parseFloat(p.monto||0); });
+                    proyectosActivos[sol.pid].lics.push(key);
+                }
+            });
+
+            Object.values(proyectosActivos).forEach(p => {
+                const saldo = p.montoTotal - p.pagadoTotal;
+                contAct.innerHTML += `<div class="card" style="border-left:5px solid var(--purple);">
+                    <div class="p-name">${p.nombre}</div>
+                    <div style="display:flex;gap:8px;margin-bottom:10px;">
+                        <div style="flex:1;background:rgba(175,82,222,0.08);border-radius:10px;padding:8px;text-align:center;">
+                            <div style="font-size:9px;font-weight:800;color:var(--gray);">ADJUDICADO</div>
+                            <div style="font-size:14px;font-weight:900;color:var(--purple);">${fMoney(p.montoTotal)} Bs</div>
+                        </div>
+                        <div style="flex:1;background:rgba(52,199,89,0.08);border-radius:10px;padding:8px;text-align:center;">
+                            <div style="font-size:9px;font-weight:800;color:var(--gray);">PAGADO</div>
+                            <div style="font-size:14px;font-weight:900;color:var(--green);">${fMoney(p.pagadoTotal)} Bs</div>
+                        </div>
+                        <div style="flex:1;background:rgba(255,149,0,0.08);border-radius:10px;padding:8px;text-align:center;">
+                            <div style="font-size:9px;font-weight:800;color:var(--gray);">SALDO</div>
+                            <div style="font-size:14px;font-weight:900;color:${saldo>0?'var(--orange)':'var(--green)'};">${fMoney(saldo)} Bs</div>
+                        </div>
+                    </div>
+                    <button class="btn-main" style="background:var(--purple)" onclick="abrirObraGrafica('${p.cid}','${p.pid}','${p.nombre}','${p.lics.join(',')}')"><i class="ph-bold ph-printer"></i> Ver Artes y Balance</button>
+                </div>`;
+            });
+
+            document.getElementById('total-ganancias').innerText = fMoney(sumGanancias) + ' Bs';
+            if (cPend===0) contPend.innerHTML = '<div class="empty-msg">No hay órdenes pendientes.</div>';
+            if (contAct.innerHTML==='') contAct.innerHTML = '<div class="empty-msg">No tienes proyectos en ejecución.</div>';
+        });
+    }
+
+    // ── COTIZADOR ──
+    function abrirCotizador(key) {
+        currentCotKey = key;
+        const sol = solicitudesGlobales[key];
+        const esGrafico = isGraphicLic(sol);
+        document.getElementById('cot-p-name').innerText = sol.pName || 'Proyecto';
+        const cont = document.getElementById('cot-items-container');
+        cont.innerHTML = '';
+
+        if (esGrafico) {
+            // ── Agrupar TODO por material ──
+            const matMap = {};  // { materialName: { pu, m2Total, arts:[...] } }
+            Object.values(sol.tareas||{}).forEach(t => {
+                const mat = t.material || 'Lona';
+                const m2 = ((parseFloat(t.base_cm)||0)/100)*((parseFloat(t.altura_cm)||0)/100)*(parseFloat(t.cantidad_piezas)||1);
+                if (!matMap[mat]) matMap[mat] = { pu: t.pu||0, m2Total: 0, arts: [] };
+                matMap[mat].m2Total += m2;
+                matMap[mat].arts.push({ ...t, _m2: m2 });
+            });
+
+            // Colores por material
+            const matColor = {
+                'Lona':'#007aff','Lona Mate':'#5856d6','Lona Backlight':'#ff9500','Lona Mesh':'#34c759',
+                'Adhesivo Vinílico':'#ff3b30','Adhesivo Mate':'#af52de','Adhesivo Transparente':'#64d2ff',
+                'Banner':'#ff6b00','Microperforado':'#30b0c7','Tela Sublimada':'#e91e8c',
+                'PVC Foam':'#8e8e93','Otro':'#636366'
+            };
+
+            // Por cada material: header con precio + lista de artes
+            Object.keys(matMap).forEach(mat => {
+                const info = matMap[mat];
+                const col = matColor[mat] || '#af52de';
+                const subtotalMat = info.m2Total * (info.pu || 0);
+
+                cont.innerHTML += `
+                <div style="border-radius:14px;border:2px solid ${col}22;margin-bottom:14px;overflow:hidden;">
+                    <!-- Header material -->
+                    <div style="background:${col}18;padding:12px 14px;border-bottom:1px solid ${col}22;">
+                        <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;">
+                            <div>
+                                <span style="font-size:13px;font-weight:900;color:${col};">${mat}</span>
+                                <span style="font-size:10px;color:var(--gray);margin-left:8px;font-weight:700;">${info.m2Total.toFixed(2)} m² total</span>
+                            </div>
+                            <div style="display:flex;align-items:center;gap:5px;">
+                                <input type="number" class="inp-mat-pu" data-mat="${mat}"
+                                    value="${info.pu||''}" placeholder="0" min="0" oninput="calcTotalCot()"
+                                    style="width:80px;padding:7px 10px;border-radius:10px;border:2px solid ${col};
+                                           text-align:right;font-weight:900;font-size:15px;color:${col};
+                                           background:var(--bg);outline:none;">
+                                <span style="font-size:10px;font-weight:900;color:${col};">Bs/m²</span>
+                            </div>
+                        </div>
+                        <div style="margin-top:6px;font-size:11px;color:var(--gray);text-align:right;">
+                            Subtotal: <b style="color:${col};" id="sub-mat-${mat.replace(/\s/g,'_')}">${subtotalMat.toFixed(2)} Bs</b>
+                        </div>
+                    </div>
+                    <!-- Artes de este material -->
+                    <div style="padding:8px;">`;
+
+                info.arts.forEach(t => {
+                    const tieneImg = t.img && (t.img.startsWith('http') || t.img.startsWith('data:'));
+                    const imgHtml = tieneImg
+                        ? `<img loading="lazy" src="${t.img}" onclick="verFoto('${t.img}')"
+                               style="width:52px;height:52px;border-radius:8px;object-fit:cover;border:1px solid ${col}33;flex-shrink:0;cursor:pointer;">`
+                        : `<div style="width:52px;height:52px;border-radius:8px;border:1.5px dashed ${col}55;
+                                       flex-shrink:0;display:flex;align-items:center;justify-content:center;
+                                       font-size:20px;color:${col}55;"><i class="ph-bold ph-image"></i></div>`;
+                    const parentBadge = t.parent_desc
+                        ? `<span style="font-size:9px;font-weight:800;color:var(--gray);text-transform:uppercase;">${t.parent_desc}</span><br>`
+                        : '';
+                    cont.innerHTML += `
+                        <div style="display:flex;align-items:center;gap:10px;padding:8px 6px;
+                                    border-bottom:1px solid var(--border);margin-bottom:4px;">
+                            ${imgHtml}
+                            <div style="flex:1;min-width:0;">
+                                ${parentBadge}
+                                <span style="font-size:12px;font-weight:900;color:var(--text);">${t.task_name||t.desc||'Arte'}</span><br>
+                                <span style="font-size:10px;color:var(--gray);">${t.base_cm||0} × ${t.altura_cm||0} cm &nbsp;·&nbsp; ${t.cantidad_piezas||1} pza(s)</span>
+                            </div>
+                            <div style="text-align:right;flex-shrink:0;">
+                                <span style="font-size:12px;font-weight:900;color:${col};">${t._m2.toFixed(2)} m²</span>
+                            </div>
+                        </div>`;
+                });
+
+                cont.innerHTML += `</div></div>`; // cierre artes + tarjeta material
+            });
+        } else {
+            // Modo normal
+            Object.keys(sol.tareas||{}).forEach(tk => {
+                const t = sol.tareas[tk];
+                let artesHtml = '';
+                getValidObjects(t.measures).forEach(m => {
+                    if (!m.d && !m.b && !m.c) return;
+                    const imgH = m.img ? `<img loading="lazy" src="${m.img}" class="art-img" onclick="verFoto('${m.img}')">` : `<div class="art-img" style="display:flex;align-items:center;justify-content:center;font-size:10px;color:var(--gray);">Sin IMG</div>`;
+                    artesHtml += `<div class="art-box">${imgH}<div class="art-info"><b>${m.d||'Arte'}</b><br>${m.b}x${m.h}cm (Cant:${m.c})</div></div>`;
+                });
+                if (t.apu) ['mat','sub'].forEach(type => getValidObjects(t.apu[type]).forEach(a => getValidObjects(a.measures).forEach(m => {
+                    if (!m.d && !m.b && !m.c) return;
+                    const imgH = m.img ? `<img loading="lazy" src="${m.img}" class="art-img" onclick="verFoto('${m.img}')">` : `<div class="art-img" style="display:flex;align-items:center;justify-content:center;font-size:10px;color:var(--gray);">Sin IMG</div>`;
+                    artesHtml += `<div class="art-box">${imgH}<div class="art-info"><b style="color:var(--purple);">${a.d}</b><br>${m.d||''} | ${m.b}x${m.h}cm (Cant:${m.c})</div></div>`;
+                })));
+                cont.innerHTML += `<div class="card">
+                    <div style="font-size:14px;font-weight:900;margin-bottom:5px;">${t.desc} <span style="color:var(--gray);font-weight:normal;">(${t.cant} ${t.und})</span></div>
+                    ${artesHtml}
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-top:12px;border-top:1px dashed var(--border);padding-top:10px;">
+                        <span style="font-size:10px;font-weight:800;color:var(--gray);">PRECIO TOTAL ÍTEM (Bs)</span>
+                        <input type="number" class="inp-pu" data-idx="${tk}" value="${t.subtotal||''}" placeholder="0.00"
+                            style="width:90px;padding:8px;border-radius:8px;border:1px solid var(--border);text-align:right;font-weight:800;outline:none;" oninput="calcTotalCot()">
+                    </div>
+                </div>`;
+            });
+        }
+
+        const footer = document.getElementById('float-footer');
+        if (sol.estado==='contra_oferta') {
+            footer.innerHTML = `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;"><span style="font-size:12px;font-weight:800;color:var(--gray);">OFERTA MATRIZ:</span><span style="font-size:24px;font-weight:900;color:var(--purple);">${fMoney(sol.precio_propuesto)} Bs</span></div><button class="btn-main btn-green" onclick="aceptarOferta(${sol.precio_propuesto})"><i class="ph-bold ph-check-circle"></i> Aceptar Trabajo</button>`;
+        } else {
+            footer.innerHTML = `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;"><span style="font-size:14px;font-weight:800;">MI OFERTA TOTAL:</span><span id="tot-calc" style="font-size:24px;font-weight:900;color:var(--purple);">0.00 Bs</span></div><button class="btn-main" style="background:var(--purple);" onclick="enviarCotizacion()"><i class="ph-bold ph-paper-plane-right"></i> Enviar Cotización</button>`;
+            calcTotalCot();
+        }
+        document.getElementById('panel-cotizador').classList.add('active');
+        footer.style.bottom = '0px';
+    }
+
+    function calcTotalCot() {
+        const sol = solicitudesGlobales[currentCotKey];
+        if (!sol) return;
+        const esGrafico = isGraphicLic(sol);
+        let total = 0;
+        if (esGrafico) {
+            const matPrices = {};
+            document.querySelectorAll('.inp-mat-pu').forEach(inp => { matPrices[inp.getAttribute('data-mat')] = parseFloat(inp.value)||0; });
+            const matM2 = {};
+            Object.values(sol.tareas||{}).forEach(t => {
+                const mat = t.material || 'Lona';
+                const m2 = ((parseFloat(t.base_cm)||0)/100)*((parseFloat(t.altura_cm)||0)/100)*(parseFloat(t.cantidad_piezas)||1);
+                matM2[mat] = (matM2[mat]||0) + m2;
+                total += m2 * (matPrices[mat]||0);
+            });
+            // Actualizar subtotales por material en tiempo real
+            Object.keys(matM2).forEach(mat => {
+                const subEl = document.getElementById('sub-mat-' + mat.replace(/\s/g,'_'));
+                if (subEl) subEl.innerText = ((matM2[mat]||0) * (matPrices[mat]||0)).toFixed(2) + ' Bs';
+            });
+        } else {
+            document.querySelectorAll('.inp-pu').forEach(i => total += parseFloat(i.value)||0);
+        }
+        const el = document.getElementById('tot-calc');
+        if (el) el.innerText = fMoney(total) + ' Bs';
+    }
+
+    function enviarCotizacion() {
+        const sol = solicitudesGlobales[currentCotKey];
+        const esGrafico = isGraphicLic(sol);
+        let total = 0;
+        const tareasUpdate = JSON.parse(JSON.stringify(sol.tareas||{}));
+
+        if (esGrafico) {
+            const matPrices = {};
+            document.querySelectorAll('.inp-mat-pu').forEach(inp => { matPrices[inp.getAttribute('data-mat')] = parseFloat(inp.value)||0; });
+            Object.keys(tareasUpdate).forEach(tk => {
+                const t = tareasUpdate[tk];
+                const m2 = ((parseFloat(t.base_cm)||0)/100)*((parseFloat(t.altura_cm)||0)/100)*(parseFloat(t.cantidad_piezas)||1);
+                t.pu = matPrices[t.material||'Lona']||0;
+                t.subtotal = m2 * t.pu;
+                total += t.subtotal;
+            });
+            const matPricesObj = {};
+            document.querySelectorAll('.inp-mat-pu').forEach(inp => { matPricesObj[inp.getAttribute('data-mat')] = parseFloat(inp.value)||0; });
+            db.ref(`proyectos/${sol.cid}/${sol.pid}/licitaciones/${currentCotKey}/mat_prices`).update(matPricesObj);
+        } else {
+            document.querySelectorAll('.inp-pu').forEach(inp => {
+                const sub = parseFloat(inp.value)||0; const tk = inp.getAttribute('data-idx');
+                total += sub; tareasUpdate[tk].subtotal = sub;
+                tareasUpdate[tk].pu = sub / (parseFloat(tareasUpdate[tk].cant)||1);
+            });
+        }
+
+        if (total<=0) return alert("Ingresa precios para cotizar.");
+        const payload = { estado:'revisado', precio_propuesto:total, tareas:tareasUpdate };
+        db.ref(`personal/${workerId}/solicitudes/${currentCotKey}`).update(payload);
+        db.ref(`proyectos/${sol.cid}/${sol.pid}/licitaciones/${currentCotKey}`).update(payload);
+        alert("¡Cotización enviada!"); cerrarPanel('panel-cotizador');
+    }
+
+    function aceptarOferta(total) {
+        const sol = solicitudesGlobales[currentCotKey];
+        const payload = { estado:'aprobado', precio_propuesto:total };
+        db.ref(`personal/${workerId}/solicitudes/${currentCotKey}`).update(payload);
+        db.ref(`proyectos/${sol.cid}/${sol.pid}/licitaciones/${currentCotKey}`).update(payload);
+        alert("¡Trabajo Aceptado!"); cerrarPanel('panel-cotizador');
+    }
+
+    // ── PANEL OBRA Y BALANCE (lee pagos directamente desde Firebase) ──
+    async function abrirObraGrafica(cId, pId, pName, licIdsStr) {
+        currentObraCid = cId; currentObraId = pId;
+        activeLicIds = licIdsStr.split(',');
+        document.getElementById('obra-p-name').innerText = pName;
+        document.getElementById('panel-obra').classList.add('active');
+        document.getElementById('artes-list').innerHTML = '<div class="empty-msg">Cargando...</div>';
+        document.getElementById('list-pagos').innerHTML  = '<div class="empty-msg">Cargando...</div>';
+
+        let totAdjudicado = 0, totPagado = 0, pagosHtml = '', artesHtml = '';
+
+        for (const lId of activeLicIds) {
+            const licSnap = await db.ref(`proyectos/${cId}/${pId}/licitaciones/${lId}`).once('value');
+            const lic = licSnap.val();
+            if (!lic) continue;
+            totAdjudicado += parseFloat(lic.precio_final || lic.precio_propuesto || 0);
+
+            // Pagos reales desde Firebase (Tesorería escribe aquí)
+            if (lic.pagos) Object.values(lic.pagos).forEach(p => {
+                const monto = parseFloat(p.monto||0);
+                totPagado += monto;
+                const rec = p.comprobante ? `<a href="${p.comprobante}" target="_blank" style="color:var(--blue);font-size:10px;font-weight:bold;text-decoration:none;"><i class="ph-bold ph-receipt"></i> Ver Comprobante</a>` : '';
+                pagosHtml += `<div class="card" style="padding:12px;display:flex;justify-content:space-between;align-items:center;">
+                    <div><div style="font-size:12px;font-weight:800;">${p.nota||'Anticipo'}</div><div style="font-size:10px;color:var(--gray);">${p.fecha||''} ${rec}</div></div>
+                    <div style="font-size:16px;font-weight:900;color:var(--green);">+${fMoney(monto)} Bs</div>
+                </div>`;
+            });
+
+            const esGrafico = lic.is_grafico===true || lic.is_grafico==='true';
+            Object.keys(lic.tareas||{}).forEach(tk => {
+                const t = lic.tareas[tk];
+                if (esGrafico && t.originType==='art') {
+                    const tieneImg = t.img && (t.img.startsWith('http') || t.img.startsWith('data:'));
+                    const imgHtml = tieneImg
+                        ? `<img loading="lazy" src="${t.img}" class="art-img" onclick="verFoto('${t.img}')" style="width:60px;height:60px;">`
+                        : `<div class="art-img" style="width:60px;height:60px;display:flex;align-items:center;justify-content:center;font-size:22px;color:var(--gray);"><i class="ph-bold ph-image"></i></div>`;
+                    const m2 = ((parseFloat(t.base_cm)||0)/100)*((parseFloat(t.altura_cm)||0)/100)*(parseFloat(t.cantidad_piezas)||1);
+                    const st = t.print_status||'recibido';
+                    artesHtml += `<div class="card" style="border-left:4px solid var(--purple);padding:10px;margin-bottom:8px;">
+                        <div style="font-size:9px;font-weight:900;color:var(--gray);text-transform:uppercase;margin-bottom:4px;">${t.parent_desc||''}</div>
+                        <div class="art-box" style="background:rgba(175,82,222,0.04);border-color:rgba(175,82,222,0.25);">
+                            ${imgHtml}
+                            <div class="art-info">
+                                <b style="color:var(--purple);font-size:13px;">${t.task_name||t.desc}</b><br>
+                                ${t.base_cm||0} × ${t.altura_cm||0} cm · Cant: ${t.cantidad_piezas||1}<br>
+                                <span style="font-size:10px;background:rgba(175,82,222,0.1);color:var(--purple);padding:2px 6px;border-radius:5px;font-weight:800;">${t.material||'—'}</span>
+                                <span style="font-size:11px;color:var(--blue);font-weight:800;margin-left:6px;">${m2.toFixed(2)} m²</span>
+                            </div>
+                        </div>
+                        <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px;background:var(--bg);padding:6px 10px;border-radius:8px;">
+                            <span style="font-size:10px;font-weight:800;color:var(--gray);">ESTADO:</span>
+                            <select class="status-sel" onchange="updateArtStatusGrafico('${lId}','${tk}',this.value)">
+                                <option value="recibido" ${st==='recibido'?'selected':''}>📥 Recibido</option>
+                                <option value="cola" ${st==='cola'?'selected':''}>⏳ En Cola</option>
+                                <option value="impreso" ${st==='impreso'?'selected':''}>✅ IMPRESO</option>
+                            </select>
+                        </div>
+                    </div>`;
+                } else if (!esGrafico) {
+                    let itemHtml = `<div class="card" style="border-left:4px solid var(--purple);margin-bottom:10px;"><div style="font-size:14px;font-weight:900;margin-bottom:8px;">${t.desc}</div>`;
+                    let found = false;
+                    const renderPiezas = (measuresRaw, apuName) => {
+                        getValidObjects(measuresRaw).forEach((m,mIdx) => {
+                            if (!m.d && !m.b && !m.c) return; found = true;
+                            const st = m.status||'recibido';
+                            const imgH = m.img ? `<img loading="lazy" src="${m.img}" class="art-img" onclick="verFoto('${m.img}')">` : `<div class="art-img" style="display:flex;align-items:center;justify-content:center;font-size:10px;color:var(--gray);">Sin IMG</div>`;
+                            const drvH = m.drive ? `<a href="${m.drive}" target="_blank" style="color:var(--blue);font-size:10px;font-weight:bold;">📁 Drive</a>` : '';
+                            itemHtml += `<div class="art-box">${imgH}<div class="art-info"><b style="color:var(--purple);">${apuName?apuName+' › ':''}${m.d||'Arte'}</b><br>${m.b}x${m.h}cm (Cant:${m.c})<br>${drvH}</div></div>
+                            <div style="display:flex;justify-content:space-between;align-items:center;margin:5px 0 10px;background:var(--bg);padding:5px 10px;border-radius:8px;">
+                                <span style="font-size:10px;font-weight:800;color:var(--gray);">ESTADO:</span>
+                                <select class="status-sel" onchange="updateArtStatus('${lId}','${tk}','${apuName||'main'}',${mIdx},this.value)">
+                                    <option value="recibido" ${st==='recibido'?'selected':''}>📥 Recibido</option>
+                                    <option value="cola" ${st==='cola'?'selected':''}>⏳ En Cola</option>
+                                    <option value="impreso" ${st==='impreso'?'selected':''}>✅ IMPRESO</option>
+                                </select>
+                            </div>`;
+                        });
+                    };
+                    renderPiezas(t.measures, null);
+                    if (t.apu) ['mat','sub'].forEach(type => { if (t.apu[type]) getValidObjects(t.apu[type]).forEach(a => renderPiezas(a.measures, a.d)); });
+                    if (found) artesHtml += itemHtml + '</div>';
+                }
+            });
+        }
+
+        const saldo = totAdjudicado - totPagado;
+        document.getElementById('bal-total').innerText = fMoney(totAdjudicado) + ' Bs';
+        document.getElementById('bal-saldo').innerText  = fMoney(saldo) + ' Bs';
+        document.getElementById('bal-saldo').style.color = saldo>0 ? 'var(--orange)' : 'var(--green)';
+
+        const resumenPagos = `<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;">
+            <div style="background:rgba(52,199,89,0.08);border:1px solid rgba(52,199,89,0.2);border-radius:10px;padding:10px;text-align:center;">
+                <div style="font-size:9px;font-weight:800;color:var(--gray);">TOTAL PAGADO</div>
+                <div style="font-size:16px;font-weight:900;color:var(--green);">${fMoney(totPagado)} Bs</div>
+            </div>
+            <div style="background:rgba(255,149,0,0.08);border:1px solid rgba(255,149,0,0.2);border-radius:10px;padding:10px;text-align:center;">
+                <div style="font-size:9px;font-weight:800;color:var(--gray);">DEUDA RESTANTE</div>
+                <div style="font-size:16px;font-weight:900;color:${saldo>0?'var(--orange)':'var(--green)'};">${fMoney(saldo)} Bs</div>
+            </div>
+        </div>`;
+        document.getElementById('list-pagos').innerHTML = resumenPagos + (pagosHtml || '<div class="empty-msg">Sin pagos registrados.</div>');
+        document.getElementById('artes-list').innerHTML = artesHtml || '<div class="empty-msg">No hay artes cargados.</div>';
+    }
+
+    function updateArtStatusGrafico(licId, tk, status) {
+        db.ref(`personal/${workerId}/solicitudes/${licId}/tareas/${tk}/print_status`).set(status);
+        db.ref(`proyectos/${currentObraCid}/${currentObraId}/licitaciones/${licId}/tareas/${tk}/print_status`).set(status);
+        const sol = solicitudesGlobales[licId];
+        if (sol && sol.tareas && sol.tareas[tk] && sol.tareas[tk].originIdx !== undefined) {
+            db.ref(`proyectos/${currentObraCid}/${currentObraId}/presupuesto/items/${sol.tareas[tk].originIdx}/print_status`).set(status==='impreso'?'terminado':'proceso');
+        }
+    }
+
+    function updateArtStatus(licId, tIdx, apuRef, mIdx, status) {
+        const sol = solicitudesGlobales[licId];
+        const task = sol.tareas[tIdx];
+        if (apuRef==='main') { const rootM = getValidObjects(task.measures); rootM[mIdx].status=status; task.measures=rootM; }
+        else ['mat','sub'].forEach(type => { if (task.apu && task.apu[type]) { const al = getValidObjects(task.apu[type]); al.forEach(a => { if(a.d===apuRef){const am=getValidObjects(a.measures); am[mIdx].status=status; a.measures=am;} }); task.apu[type]=al; } });
+        db.ref(`personal/${workerId}/solicitudes/${licId}/tareas`).set(sol.tareas);
+        db.ref(`proyectos/${currentObraCid}/${currentObraId}/licitaciones/${licId}/tareas`).set(sol.tareas);
+        db.ref(`proyectos/${currentObraCid}/${currentObraId}/presupuesto/items/${tIdx}/print_status`).set(status==='impreso'?'terminado':'proceso');
+    }
+
+    // ── PDF OPERADOR ──
+    function getBase64ImageFromUrl(url) {
+        return new Promise(resolve => {
+            const img = new Image(); img.crossOrigin='Anonymous';
+            const t = setTimeout(()=>resolve(null), 5000);
+            img.onload = () => { clearTimeout(t); try { const c=document.createElement('canvas'); c.width=img.width; c.height=img.height; c.getContext('2d').drawImage(img,0,0); resolve(c.toDataURL('image/jpeg',0.6)); } catch(e){resolve(null);} };
+            img.onerror = () => { clearTimeout(t); resolve(null); };
+            img.src = url;
+        });
+    }
+
+    async function generarPDFOperador() {
+        const btn = document.querySelector('#ob-artes .btn-main');
+        if (btn) btn.innerText = 'Generando PDF...';
+        try {
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF('l','mm','a4');
+            doc.setFontSize(18); doc.setFont(undefined,'bold');
+            doc.text('ORDEN DE CORTE E IMPRESIÓN', 14, 20);
+            doc.setFontSize(11); doc.setFont(undefined,'normal');
+            doc.text('PROYECTO: ' + document.getElementById('obra-p-name').innerText, 14, 28);
+
+            const tableData = [];
+            for (const lId of activeLicIds) {
+                const licSnap = await db.ref(`proyectos/${currentObraCid}/${currentObraId}/licitaciones/${lId}`).once('value');
+                const lic = licSnap.val();
+                if (!lic || !lic.tareas) continue;
+                const esGrafico = lic.is_grafico===true || lic.is_grafico==='true';
+                for (const t of Object.values(lic.tareas)) {
+                    if (esGrafico && t.originType==='art') {
+                        const m2 = ((parseFloat(t.base_cm)||0)/100)*((parseFloat(t.altura_cm)||0)/100)*(parseFloat(t.cantidad_piezas)||1);
+                        let b64=null; if(t.img){try{b64=await getBase64ImageFromUrl(t.img);}catch(e){}}
+                        tableData.push([t.parent_desc||'Ítem', t.task_name||t.desc, `${t.base_cm||0}×${t.altura_cm||0}cm`, t.cantidad_piezas||1, m2.toFixed(2)+' m²', b64]);
+                    } else {
+                        const addRow = async (m, prefix) => {
+                            if (!m.d && !m.b && !m.c) return;
+                            let b64=null; if(m.img){try{b64=await getBase64ImageFromUrl(m.img);}catch(e){}}
+                            tableData.push([t.desc, prefix+(m.d||'Arte'), `${m.b}×${m.h}cm`, m.c||1, '—', b64]);
+                        };
+                        for (const m of getValidObjects(t.measures)) await addRow(m,'');
+                        if (t.apu) for (const type of ['mat','sub']) if(t.apu[type]) for(const a of getValidObjects(t.apu[type])) for(const m of getValidObjects(a.measures)) await addRow(m, a.d+' › ');
+                    }
+                }
+            }
+
+            if (tableData.length===0) return alert('No hay artes para exportar.');
+
+            doc.autoTable({
+                startY:35,
+                head:[['Ítem','Arte/Detalle','Medidas','Cant','m²','Imagen']],
+                body:tableData.map(r=>[r[0],r[1],r[2],r[3],r[4],'']),
+                columnStyles:{0:{cellWidth:45},1:{cellWidth:58},2:{cellWidth:28},3:{cellWidth:12,halign:'center'},4:{cellWidth:20,halign:'right'},5:{cellWidth:36,minCellHeight:30}},
+                headStyles:{fillColor:[175,82,222]},
+                didDrawCell(data) {
+                    if (data.column.index===5 && data.cell.section==='body') {
+                        const b64 = tableData[data.row.index][5];
+                        if (b64 && b64.startsWith('data:image')) {
+                            try {
+                                const fmt = b64.startsWith('data:image/png')?'PNG':'JPEG';
+                                const cW=32, cH=26;
+                                const props = doc.getImageProperties(b64);
+                                if (props && props.width && props.height) {
+                                    const scale = Math.min(cW/props.width, cH/props.height);
+                                    const w=props.width*scale, h=props.height*scale;
+                                    doc.addImage(b64,fmt, data.cell.x+2+(cW-w)/2, data.cell.y+2+(cH-h)/2, w, h);
+                                }
+                            } catch(e){}
+                        }
+                    }
+                }
+            });
+
+            const name = 'OrdenImpresion_'+Date.now()+'.pdf';
+            try {
+                if (window.showSaveFilePicker) { const h=await window.showSaveFilePicker({suggestedName:name}); const w=await h.createWritable(); await w.write(doc.output('blob')); await w.close(); }
+                else doc.save(name);
+            } catch(err) { if(err.name!=='AbortError') doc.save(name); }
+        } catch(e) { console.error(e); alert('Error generando PDF: '+e.message); }
+        finally { if(btn) btn.innerHTML='<i class="ph-bold ph-file-pdf"></i> Descargar PDF para Máquina'; }
+    }
+</script>
+    <script src="/js/viewmode.js?v=1"></script>
+</body>
+</html>

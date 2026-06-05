@@ -1,0 +1,1282 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Requerimiento Asistido - Rubik</title>
+
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+    <!-- Exportar PDF -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <!-- Exportar Excel -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.1.3/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.1.3/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.1.3/firebase-database-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.1.3/firebase-storage-compat.js"></script>
+    <script>
+        // Inicializar Firebase lo antes posible — antes que auth-guard
+        window._rubikFirebaseConfig = {
+            apiKey: "AIzaSyDXYlofy31cDP14xVAVxWo_7TqXdSgsIjA",
+            authDomain: "rubik-bolivia.firebaseapp.com",
+            databaseURL: "https://rubik-bolivia-default-rtdb.firebaseio.com",
+            projectId: "rubik-bolivia",
+            storageBucket: "rubik-bolivia.firebasestorage.app",
+            messagingSenderId: "4153087958",
+            appId: "1:4153087958:web:cf2dd16106580ed6437677"
+        };
+        if (typeof firebase !== 'undefined' && !firebase.apps.length) {
+            firebase.initializeApp(window._rubikFirebaseConfig);
+        }
+    </script>
+    <script src="/js/firecache.js?v=1"></script>
+    <script src="/js/auth-guard.js?v=1"></script>
+
+    <style>
+        :root {
+            --bg: #f4f4f7; --card: #fff; --text: #1a1a1a;
+            --blue: #007aff; --green: #34c759; --red: #ff3b30;
+            --orange: #ff9500; --gray: #8e8e93; --border: #d1d1d6;
+            --purple: #bf5af2;
+        }
+        body.dark-mode { --bg: #000; --card: #1c1c1e; --text: #fff; --border: #333; }
+        body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 20px; padding-bottom: 120px; -webkit-tap-highlight-color: transparent; }
+
+        .nav { display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px; flex-wrap: wrap; gap: 10px; }
+        .btn-nav { background: var(--card); border: 1px solid var(--border); padding: 8px 14px; border-radius: 20px; font-weight: 700; color: var(--blue); cursor: pointer; display: flex; align-items: center; gap: 5px; font-size: 13px; }
+
+        .header-title { font-size: 24px; font-weight: 900; margin-bottom: 4px; letter-spacing: -0.5px; }
+        .header-sub { font-size: 12px; color: var(--gray); font-weight: 700; text-transform: uppercase; margin-bottom: 20px; }
+
+        /* ── Estado chip ── */
+        .status-chip { display: inline-flex; align-items: center; gap: 6px; padding: 6px 14px; border-radius: 20px; font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 20px; }
+        .chip-borrador { background: rgba(142,142,147,0.15); color: var(--gray); }
+        .chip-enviado { background: rgba(0,122,255,0.12); color: var(--blue); }
+        .chip-medidas_recibidas { background: rgba(255,149,0,0.12); color: var(--orange); }
+        .chip-aprobado { background: rgba(52,199,89,0.12); color: var(--green); }
+
+        /* ── Cards de ítems ── */
+        .item-card {
+            background: var(--card); border: 1px solid var(--border); border-radius: 18px;
+            padding: 18px; margin-bottom: 14px; position: relative;
+        }
+        .item-card.ia-procesando { border-color: var(--purple); box-shadow: 0 0 0 2px rgba(191,90,242,0.15); }
+        .item-card.ia-listo { border-color: var(--green); }
+
+        .item-num { font-size: 10px; font-weight: 800; color: var(--gray); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; }
+        .item-desc { font-size: 15px; font-weight: 900; color: var(--text); margin-bottom: 4px; }
+        .item-apu-resumen { font-size: 12px; color: var(--gray); font-weight: 600; line-height: 1.5; }
+
+        /* Imagen miniatura */
+        .item-img-thumb { width: 60px; height: 60px; border-radius: 10px; object-fit: cover; border: 1px solid var(--border); flex-shrink: 0; }
+
+        /* Medidas del cliente */
+        .medidas-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin-top: 10px; }
+        .medida-box { background: var(--bg); border: 1px solid var(--border); border-radius: 10px; padding: 10px; }
+        .medida-lbl { font-size: 10px; font-weight: 800; color: var(--gray); text-transform: uppercase; margin-bottom: 2px; }
+        .medida-val { font-size: 16px; font-weight: 900; color: var(--blue); }
+        .medida-val.vacio { color: var(--gray); font-weight: 600; font-size: 12px; }
+
+        /* Precio IA */
+        .precio-ia { background: rgba(52,199,89,0.08); border: 1px solid rgba(52,199,89,0.25); border-radius: 12px; padding: 10px 14px; margin-top: 10px; display: flex; justify-content: space-between; align-items: center; }
+        .precio-ia-lbl { font-size: 11px; font-weight: 800; color: var(--green); text-transform: uppercase; }
+        .precio-ia-val { font-size: 18px; font-weight: 900; color: var(--green); }
+
+        /* ── Modal agregar ítem ── */
+        .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.55); z-index: 2000; display: none; align-items: flex-end; justify-content: center; backdrop-filter: blur(6px); }
+        .modal-content { background: var(--bg); width: 100%; max-width: 520px; border-radius: 28px 28px 0 0; padding: 26px; box-sizing: border-box; max-height: 92vh; overflow-y: auto; }
+
+        .inp-lbl { font-size: 10px; font-weight: 800; color: var(--gray); text-transform: uppercase; display: block; margin-bottom: 6px; margin-top: 14px; }
+        .inp-std { width: 100%; padding: 14px; border: 1px solid var(--border); background: var(--card); color: var(--text); border-radius: 13px; font-size: 14px; box-sizing: border-box; font-weight: 600; outline: none; }
+        textarea.inp-std { min-height: 90px; resize: vertical; font-family: inherit; }
+        .inp-std:focus { border-color: var(--blue); }
+
+        /* Uploader foto */
+        .foto-box { border: 2px dashed var(--border); border-radius: 14px; min-height: 110px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; cursor: pointer; overflow: hidden; position: relative; background: var(--card); }
+        .foto-box img.foto-loaded { width: 100%; max-height: 220px; object-fit: cover; display: block; border-radius: 12px; }
+        .foto-box .foto-hint { font-size: 13px; font-weight: 700; color: var(--blue); display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 20px; text-align: center; }
+
+        /* Dimensiones a pedir */
+        .dims-selector { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
+        .dim-chip { padding: 8px 14px; border-radius: 20px; border: 1.5px solid var(--border); background: var(--card); font-size: 12px; font-weight: 700; cursor: pointer; transition: 0.15s; color: var(--text); }
+        .dim-chip.sel { background: var(--blue); color: #fff; border-color: var(--blue); }
+
+        .btn-main { background: var(--text); color: var(--bg); border: none; padding: 16px; border-radius: 14px; font-weight: 900; font-size: 15px; cursor: pointer; width: 100%; margin-top: 12px; display: flex; align-items: center; justify-content: center; gap: 8px; }
+        .btn-main:disabled { opacity: 0.5; cursor: not-allowed; }
+        .btn-purple { background: var(--purple); color: #fff; }
+        .btn-green { background: var(--green); color: #fff; }
+        .btn-outline { background: transparent; border: 1.5px solid var(--border); color: var(--text); }
+
+        /* ── Botón agregar ── */
+        .fab { position: fixed; bottom: 100px; right: 25px; width: 58px; height: 58px; border-radius: 50%; background: var(--blue); color: white; display: flex; align-items: center; justify-content: center; font-size: 26px; box-shadow: 0 8px 24px rgba(0,122,255,0.38); border: none; cursor: pointer; z-index: 100; transition: 0.2s; }
+        .fab:active { transform: scale(0.9); }
+        /* Cuando NO hay bottom-bar, el FAB baja */
+        .fab.fab-solo { bottom: 30px; }
+
+        /* ── Spinner IA ── */
+        .ia-spin { width: 18px; height: 18px; border: 2.5px solid rgba(191,90,242,0.3); border-top-color: var(--purple); border-radius: 50%; animation: spin 0.8s linear infinite; display: inline-block; flex-shrink: 0; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* ── Barra de acciones inferior ── */
+        .bottom-bar { position: fixed; bottom: 0; left: 0; right: 0; background: var(--card); border-top: 1px solid var(--border); padding: 14px 20px; display: flex; gap: 10px; z-index: 500; box-shadow: 0 -4px 20px rgba(0,0,0,0.08); }
+
+        /* ── Sección IA generó precios ── */
+        .ia-output-block { background: rgba(191,90,242,0.06); border: 1px solid rgba(191,90,242,0.2); border-radius: 13px; padding: 12px 14px; margin-top: 10px; font-size: 12px; color: var(--text); white-space: pre-wrap; line-height: 1.6; }
+
+        /* Estado vacío */
+        .empty-state { text-align: center; padding: 50px 30px; color: var(--gray); }
+        .empty-state i { font-size: 48px; margin-bottom: 14px; display: block; }
+        .empty-state p { font-size: 14px; font-weight: 600; line-height: 1.5; }
+
+        /* Loader global */
+        #global-loader { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 9000; align-items: center; justify-content: center; flex-direction: column; gap: 16px; }
+        #global-loader .spin-big { width: 48px; height: 48px; border: 4px solid rgba(255,255,255,0.2); border-top-color: #fff; border-radius: 50%; animation: spin 1s linear infinite; }
+        #global-loader p { color: #fff; font-size: 15px; font-weight: 700; }
+    </style>
+    <link rel="stylesheet" href="/css/responsive.css?v=1">
+</head>
+<body>
+
+<div id="global-loader">
+    <div class="spin-big"></div>
+    <p id="loader-msg">Procesando con IA...</p>
+</div>
+
+<div class="nav">
+    <div style="display:flex; gap:8px; align-items:center;">
+        <button class="btn-nav" onclick="location.href='index.html'"><i class="ph-bold ph-house"></i></button>
+        <button class="btn-nav" id="btn-back" onclick="volver()"><i class="ph-bold ph-caret-left"></i> Volver</button>
+    </div>
+    <div style="display:flex; gap:8px; flex-wrap:wrap;">
+        <button class="btn-nav" onclick="document.body.classList.toggle('dark-mode')"><i class="ph-fill ph-moon"></i></button>
+        <button class="btn-nav" id="btn-export-pdf" onclick="exportarPDF()" style="background:rgba(255,59,48,0.1); color:var(--red); border-color:rgba(255,59,48,0.3); display:none;" title="Exportar PDF">
+            <i class="ph-bold ph-file-pdf"></i> PDF
+        </button>
+        <button class="btn-nav" id="btn-export-excel" onclick="exportarExcel()" style="background:rgba(52,199,89,0.1); color:var(--green); border-color:rgba(52,199,89,0.3); display:none;" title="Exportar Excel">
+            <i class="ph-bold ph-microsoft-excel-logo"></i> Excel
+        </button>
+        <button class="btn-nav" id="btn-notif" onclick="enviarNotifCliente()" style="background:var(--blue); color:#fff; border-color:var(--blue); display:none;">
+            <i class="ph-bold ph-paper-plane-tilt"></i> Enviar al Cliente
+        </button>
+    </div>
+</div>
+
+<div>
+    <div class="header-title" id="txt-pname">Cargando...</div>
+    <div class="header-sub">Requerimiento Asistido por IA</div>
+</div>
+
+<div id="status-area" style="margin-bottom: 16px;"></div>
+
+<!-- Info requerimiento -->
+<div style="background:var(--card); border:1px solid var(--border); border-radius:16px; padding:16px; margin-bottom:20px;" id="req-info-card">
+    <div style="font-size:11px; font-weight:800; color:var(--gray); text-transform:uppercase; margin-bottom:8px;">Título del Requerimiento</div>
+    <input type="text" id="inp-req-titulo" class="inp-std" style="margin:0;" placeholder="Ej: Señalética para local Cochabamba...">
+    <div style="font-size:11px; font-weight:800; color:var(--gray); text-transform:uppercase; margin-bottom:8px; margin-top:12px;">Nota para el cliente (opcional)</div>
+    <textarea id="inp-req-nota" class="inp-std" style="min-height:60px;" placeholder="Indicaciones generales para el cliente..."></textarea>
+</div>
+
+<!-- Lista de ítems -->
+<div id="items-list"></div>
+
+<!-- Barra inferior: solo Aprobar e inyectar -->
+<div class="bottom-bar" id="bottom-bar" style="display:none;">
+    <button class="btn-main btn-green" id="btn-inyectar" onclick="aprobarEInyectar()" style="flex:1;">
+        <i class="ph-bold ph-arrow-square-in"></i> Aprobar e Inyectar en Presupuesto
+    </button>
+</div>
+
+<!-- FAB agregar ítem -->
+<button class="fab" id="fab-add" onclick="abrirModalItem()" title="Agregar ítem">
+    <i class="ph-bold ph-plus"></i>
+</button>
+
+<!-- ══════════════════════════════════════════════
+     MODAL: Agregar / Editar ítem
+══════════════════════════════════════════════ -->
+<div class="modal-overlay" id="modal-item" onclick="if(event.target===this) cerrarModal()">
+    <div class="modal-content">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:18px;">
+            <h2 style="margin:0; font-size:20px; font-weight:900;" id="modal-item-title">Nuevo Ítem</h2>
+            <button onclick="cerrarModal()" style="background:none; border:none; font-size:24px; cursor:pointer; color:var(--gray);">✕</button>
+        </div>
+
+        <!-- Foto del ítem -->
+        <div id="foto-box" style="border:2px dashed var(--border); border-radius:14px; min-height:110px; background:var(--card); overflow:hidden; position:relative; margin-bottom:12px;">
+            <!-- Preview de imagen cargada -->
+            <img id="foto-preview" style="width:100%; max-height:240px; object-fit:cover; display:none; border-radius:12px;">
+            <!-- Placeholder con botones integrados -->
+            <div id="foto-hint" style="display:flex; flex-direction:column; align-items:center; justify-content:center; padding:20px; gap:10px; text-align:center;">
+                <i class="ph-bold ph-image" style="font-size:36px; color:var(--border);"></i>
+                <span style="font-size:13px; font-weight:700; color:var(--gray);">Foto de referencia / render</span>
+                <div style="display:flex; gap:8px; width:100%; max-width:260px;">
+                    <button type="button" onclick="document.getElementById('inp-foto').click()" style="flex:1; padding:10px 8px; border-radius:12px; border:1.5px solid var(--blue); background:rgba(0,122,255,0.08); color:var(--blue); font-size:12px; font-weight:800; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:5px;">
+                        <i class="ph-bold ph-upload-simple"></i> Subir
+                    </button>
+                    <button type="button" onclick="pegarDesdePortapapeles()" style="flex:1; padding:10px 8px; border-radius:12px; border:1.5px solid var(--purple); background:rgba(191,90,242,0.08); color:var(--purple); font-size:12px; font-weight:800; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:5px;">
+                        <i class="ph-bold ph-clipboard"></i> Pegar
+                    </button>
+                </div>
+                <span style="font-size:10px; color:var(--gray); font-weight:600;">También Ctrl+V</span>
+            </div>
+            <!-- Botón quitar (esquina, visible solo con imagen) -->
+            <button id="btn-quitar-foto" onclick="quitarFoto(event)" style="display:none; position:absolute; top:8px; right:8px; background:rgba(255,59,48,0.9); color:#fff; border:none; border-radius:50%; width:30px; height:30px; font-size:15px; cursor:pointer; align-items:center; justify-content:center; font-weight:900; box-shadow:0 2px 8px rgba(0,0,0,0.3);">✕</button>
+        </div>
+        <input type="file" id="inp-foto" accept="image/*" style="display:none" onchange="onFotoChange(this)">
+
+        <!-- Nombre visible para el cliente -->
+        <label class="inp-lbl">Nombre del ítem (lo ve el cliente)</label>
+        <input type="text" id="inp-nombre" class="inp-std" placeholder="Ej: Letras corpóreas fachada, Vinilo ventana, Banner impreso...">
+
+        <!-- Descripción / prompt interno -->
+        <label class="inp-lbl">Descripción técnica (prompt para la IA — no lo ve el cliente)</label>
+        <textarea id="inp-desc" class="inp-std" placeholder="Ej: Letras corpóreas 3D en acrílico blanco con iluminación LED, logo empresa, para fachada exterior..."></textarea>
+
+        <!-- Dimensiones a solicitar al cliente -->
+        <label class="inp-lbl">¿Qué dimensiones necesitás que el cliente mida?</label>
+        <div class="dims-selector" id="dims-selector">
+            <div class="dim-chip sel" data-dim="ancho">Ancho</div>
+            <div class="dim-chip sel" data-dim="alto">Alto</div>
+            <div class="dim-chip" data-dim="profundidad">Profundidad</div>
+            <div class="dim-chip sel" data-dim="cantidad">Cantidad</div>
+            <div class="dim-chip" data-dim="metros_lineales">Metros lineales</div>
+            <div class="dim-chip" data-dim="diametro">Diámetro</div>
+            <div class="dim-chip" data-dim="area">Área m²</div>
+        </div>
+
+        <!-- Nota interna -->
+        <label class="inp-lbl">Nota interna (no la ve el cliente)</label>
+        <input type="text" id="inp-nota-interna" class="inp-std" placeholder="Ej: Confirmar si van con caja o sin caja trasera">
+
+        <button class="btn-main btn-purple" onclick="procesarItemConIA()" id="btn-procesar-ia" style="margin-top:18px;">
+            <i class="ph-fill ph-sparkle"></i> Estructurar con IA
+        </button>
+        <button class="btn-main btn-outline" onclick="guardarItemSinIA()" style="margin-top:8px;">
+            Guardar sin IA (manual)
+        </button>
+    </div>
+</div>
+
+<script>
+    // Firebase ya inicializado en el <head> — solo obtener las instancias
+    if (!firebase.apps.length) firebase.initializeApp(window._rubikFirebaseConfig);
+    const db = firebase.database();
+    const storage = firebase.storage();
+
+    // ── Parámetros de sesión ──────────────────────────────────────────
+    const cid  = localStorage.getItem('rubik_client_id');
+    const pid  = localStorage.getItem('rubik_current_pid');
+    const pname = localStorage.getItem('rubik_current_pname');
+    const cname = localStorage.getItem('rubik_client_name') || 'Cliente';
+
+    if (!cid || !pid) { location.href = 'clientes.html'; }
+    document.getElementById('txt-pname').innerText = pname || 'Proyecto';
+
+    // ── Estado ──────────────────────────────────────────────────────
+    let reqId = localStorage.getItem(`rubik_req_id_${cid}_${pid}`) || null;
+    let reqData = null;            // datos completos del requerimiento
+    let items = [];                // array de ítems
+    let editingItemIdx = null;     // índice en edición (null = nuevo)
+    let tempFotoFile = null;       // foto pendiente de subir
+    let tempFotoDataUrl = null;    // preview local
+
+    // ── Volver ──────────────────────────────────────────────────────
+    function volver() {
+        const ref = localStorage.getItem('rubik_req_backref') || 'dashboard-proyecto.html';
+        location.href = ref;
+    }
+
+    // ── Cargar o crear requerimiento ─────────────────────────────────
+    // Mostrar spinner mientras carga
+    document.getElementById('items-list').innerHTML = `<div style="text-align:center;padding:40px;color:var(--gray);"><div style="width:32px;height:32px;border:3px solid rgba(0,122,255,0.2);border-top-color:var(--blue);border-radius:50%;animation:spin 0.8s linear infinite;margin:0 auto 12px;"></div><div style="font-size:13px;font-weight:600;">Cargando...</div></div>`;
+
+    let _reqAuthSettled = false;
+
+    function _cargarDesdeSnap(snap) {
+        reqData = snap.val();
+        items = reqData.items || [];
+        const key = snap.key || reqId;
+        localStorage.setItem(`rubik_req_id_${cid}_${pid}`, key);
+        reqId = key;
+        document.getElementById('inp-req-titulo').value = reqData.titulo || '';
+        document.getElementById('inp-req-nota').value = reqData.nota_cliente || '';
+        renderEstado(reqData.estado);
+        renderItems();
+    }
+
+    function _iniciarVacio() {
+        reqData = { estado: 'borrador', items: [] };
+        renderEstado('borrador');
+        renderItems();
+    }
+
+    function _buscarEnFirebase() {
+        db.ref(`requerimientos_asistidos/${cid}/${pid}`)
+          .orderByKey().limitToLast(1)
+          .once('value')
+          .then(snap => {
+              if (snap.exists()) {
+                  snap.forEach(child => { _cargarDesdeSnap(child); });
+              } else {
+                  _iniciarVacio();
+              }
+          })
+          .catch(err => {
+              console.error('[req] buscar error:', err);
+              _iniciarVacio();
+          });
+    }
+
+    function _iniciarCarga(user) {
+        if (_reqAuthSettled) return;
+        if (!user || user.isAnonymous) return;
+        _reqAuthSettled = true;
+
+        if (reqId) {
+            db.ref(`requerimientos_asistidos/${cid}/${pid}/${reqId}`)
+              .once('value')
+              .then(snap => {
+                  if (snap.exists()) {
+                      _cargarDesdeSnap(snap);
+                  } else {
+                      reqId = null;
+                      localStorage.removeItem(`rubik_req_id_${cid}_${pid}`);
+                      _buscarEnFirebase();
+                  }
+              })
+              .catch(() => _buscarEnFirebase());
+        } else {
+            _buscarEnFirebase();
+        }
+    }
+
+    // rubikAuthReady resuelve cuando el usuario está autenticado
+    (function arrancarCarga() {
+        var auth = firebase.auth();
+        if (auth.currentUser) { _iniciarCarga(auth.currentUser); return; }
+        var unsub = auth.onAuthStateChanged(function(user) {
+            unsub();
+            if (user) { _iniciarCarga(user); }
+            else { window.location.href = 'login.html'; }
+        });
+    })();
+
+    // ── Renderizar estado ─────────────────────────────────────────────
+    const estadoLabel = { borrador: 'Borrador', enviado: 'Enviado al cliente', medidas_recibidas: 'Medidas recibidas ✓', aprobado: 'Aprobado e inyectado ✓' };
+    const estadoClass = { borrador: 'chip-borrador', enviado: 'chip-enviado', medidas_recibidas: 'chip-medidas_recibidas', aprobado: 'chip-aprobado' };
+
+    function renderEstado(estado) {
+        const area = document.getElementById('status-area');
+        const e = estado || 'borrador';
+        const btnReabrir = (e !== 'borrador' && e !== 'aprobado')
+            ? `<button onclick="reabrirBorrador()" style="margin-left:10px; padding:5px 12px; border-radius:20px; border:1px solid var(--border); background:var(--card); color:var(--gray); font-size:11px; font-weight:700; cursor:pointer;"><i class="ph-bold ph-pencil-simple"></i> Editar</button>` : '';
+        area.innerHTML = `<span class="status-chip ${estadoClass[e] || 'chip-borrador'}"><i class="ph-fill ph-circle" style="font-size:8px;"></i>${estadoLabel[e] || e}</span>${btnReabrir}`;
+
+        // Mostrar/ocultar botones según estado
+        const tieneItems = items.length > 0;
+        document.getElementById('btn-notif').style.display = (e === 'borrador' && tieneItems) ? 'flex' : 'none';
+        const fabAdd = document.getElementById('fab-add');
+        fabAdd.style.display = (e === 'borrador' || !e) ? 'flex' : 'none';
+        document.getElementById('req-info-card').style.opacity = (e !== 'borrador') ? '0.6' : '1';
+
+        // Botones de exportar en nav: visibles si hay ítems (cualquier estado)
+        const dispExport = tieneItems ? 'flex' : 'none';
+        document.getElementById('btn-export-pdf').style.display = dispExport;
+        document.getElementById('btn-export-excel').style.display = dispExport;
+
+        // Barra inyectar: visible si hay ítems con precio IA generado
+        const hayPrecios = items.some(it => it.precio_ia && it.precio_ia > 0);
+        const bottomBar = document.getElementById('bottom-bar');
+        bottomBar.style.display = (e === 'medidas_recibidas' && hayPrecios) ? 'flex' : 'none';
+        // FAB sube cuando la bottom-bar está visible, baja cuando no
+        fabAdd.classList.toggle('fab-solo', bottomBar.style.display === 'none');
+    }
+
+    // ── Reabrir como borrador ────────────────────────────────────────
+    async function reabrirBorrador() {
+        if (!reqId) return;
+        if (!confirm('¿Volver el requerimiento a borrador? Podrás agregar o editar ítems.')) return;
+        await db.ref(`requerimientos_asistidos/${cid}/${pid}/${reqId}`).update({ estado: 'borrador' });
+        reqData.estado = 'borrador';
+        renderEstado('borrador');
+    }
+
+    // ── Renderizar lista de ítems ─────────────────────────────────────
+    function renderItems() {
+        const list = document.getElementById('items-list');
+        if (items.length === 0) {
+            list.innerHTML = `<div class="empty-state"><i class="ph-bold ph-ruler"></i><p>Aún no hay ítems.<br>Presioná <strong>+</strong> para agregar el primer elemento a medir.</p></div>`;
+            return;
+        }
+
+        list.innerHTML = '';
+        items.forEach((it, i) => {
+            const tieneImg = !!it.img_url;
+            const tieneIA  = !!it.apu_desc;
+            const tienePrecio = it.precio_ia > 0;
+            const estadoChip = tieneIA ? `<span style="background:rgba(191,90,242,0.1);color:var(--purple);font-size:10px;font-weight:800;padding:3px 10px;border-radius:10px;">IA ✓</span>` : '';
+            const precioChip = tienePrecio ? `<span style="background:rgba(52,199,89,0.1);color:var(--green);font-size:10px;font-weight:800;padding:3px 10px;border-radius:10px;">Bs ${it.precio_ia.toFixed(2)}</span>` : '';
+
+            // Medidas del cliente
+            let medidasHtml = '';
+            const dimsReq = it.dims_requeridas || ['ancho','alto','cantidad'];
+            const medidas = it.medidas_cliente || {};
+            const todosLlenados = dimsReq.every(d => medidas[d]);
+            if (reqData && reqData.estado !== 'borrador') {
+                medidasHtml = `<div class="medidas-grid">` +
+                    dimsReq.map(d => {
+                        const val = medidas[d];
+                        return `<div class="medida-box"><div class="medida-lbl">${dimLabel(d)}</div><div class="medida-val ${val ? '' : 'vacio'}">${val ? val + ' ' + dimUnidad(d) : '—'}</div></div>`;
+                    }).join('') +
+                    `</div>`;
+            } else {
+                // En borrador: mostrar qué se pedirá
+                medidasHtml = `<div style="margin-top:8px; font-size:11px; color:var(--gray); font-weight:600;">Se pedirá: ${dimsReq.map(dimLabel).join(' · ')}</div>`;
+            }
+
+            // Precio IA
+            let precioHtml = '';
+            if (tienePrecio) {
+                precioHtml = `<div class="precio-ia"><span class="precio-ia-lbl">💰 Precio IA estimado</span><span class="precio-ia-val">Bs ${it.precio_ia.toFixed(2)}</span></div>`;
+            } else if (it.medidas_cliente && todosLlenados && !tienePrecio) {
+                precioHtml = `<button onclick="generarPrecioIA(${i})" style="margin-top:8px;background:rgba(191,90,242,0.1);color:var(--purple);border:1px solid rgba(191,90,242,0.3);border-radius:10px;padding:8px 14px;font-size:12px;font-weight:800;cursor:pointer;width:100%;"><i class="ph-fill ph-sparkle"></i> Generar precio con IA</button>`;
+            }
+
+            // APU descripción
+            let apuHtml = '';
+            if (it.apu_desc) {
+                apuHtml = `<div class="ia-output-block" style="margin-top:8px; font-size:11px; display:none;" id="apu-detail-${i}">${it.apu_desc}</div>
+                <button onclick="toggleApuDetail(${i})" style="background:none;border:none;color:var(--purple);font-size:11px;font-weight:700;cursor:pointer;margin-top:4px;padding:0;" id="btn-apu-${i}">▸ Ver detalle APU</button>`;
+            }
+
+            const card = document.createElement('div');
+            card.className = `item-card ${tieneIA ? 'ia-listo' : ''}`;
+            card.innerHTML = `
+                <div style="display:flex; gap:12px; align-items:flex-start;">
+                    ${tieneImg ? `<img src="${it.img_url}" class="item-img-thumb">` : `<div style="width:60px;height:60px;border-radius:10px;background:var(--bg);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;flex-shrink:0;"><i class="ph-bold ph-image" style="font-size:22px;color:var(--border);"></i></div>`}
+                    <div style="flex:1; min-width:0;">
+                        <div class="item-num">Ítem ${i + 1} ${estadoChip} ${precioChip}</div>
+                        <div class="item-desc">${it.nombre || it.desc || 'Sin nombre'}</div>
+                        ${it.desc ? `<div style="font-size:11px;color:var(--gray);font-weight:500;margin-top:2px;line-height:1.4;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;">${it.desc}</div>` : ''}
+                        ${it.nota_interna ? `<div style="font-size:11px;color:var(--orange);font-weight:600;margin-top:2px;"><i class="ph-bold ph-note"></i> ${it.nota_interna}</div>` : ''}
+                    </div>
+                    ${(reqData && reqData.estado === 'borrador') ? `<button onclick="editarItem(${i})" style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:8px;cursor:pointer;flex-shrink:0;"><i class="ph-bold ph-pencil-simple" style="font-size:16px;color:var(--gray);"></i></button>` : ''}
+                </div>
+                ${medidasHtml}
+                ${apuHtml}
+                ${precioHtml}
+                ${(reqData && reqData.estado === 'borrador') ? `<button onclick="eliminarItem(${i})" style="margin-top:10px;background:rgba(255,59,48,0.07);color:var(--red);border:none;border-radius:8px;padding:6px 12px;font-size:11px;font-weight:700;cursor:pointer;"><i class="ph-bold ph-trash"></i> Eliminar</button>` : ''}
+            `;
+            list.appendChild(card);
+        });
+
+        renderEstado(reqData ? reqData.estado : 'borrador');
+    }
+
+    function toggleApuDetail(i) {
+        const el = document.getElementById(`apu-detail-${i}`);
+        const btn = document.getElementById(`btn-apu-${i}`);
+        if (!el) return;
+        const vis = el.style.display !== 'none';
+        el.style.display = vis ? 'none' : 'block';
+        btn.innerText = vis ? '▸ Ver detalle APU' : '▾ Ocultar APU';
+    }
+
+    function dimLabel(d) {
+        const m = { ancho:'Ancho', alto:'Alto', profundidad:'Prof.', cantidad:'Cantidad', metros_lineales:'Ml', diametro:'Diámetro', area:'Área m²' };
+        return m[d] || d;
+    }
+    function dimUnidad(d) {
+        const m = { ancho:'m', alto:'m', profundidad:'m', cantidad:'u', metros_lineales:'ml', diametro:'m', area:'m²' };
+        return m[d] || '';
+    }
+
+    // ── Helpers foto ────────────────────────────────────────────────
+    function _mostrarFotoPreview(dataUrl) {
+        const prev = document.getElementById('foto-preview');
+        const hint = document.getElementById('foto-hint');
+        const btn  = document.getElementById('btn-quitar-foto');
+        prev.src = dataUrl;
+        prev.style.display = 'block';
+        hint.style.display = 'none';
+        if (btn) { btn.style.display = 'flex'; }
+    }
+    function _ocultarFotoPreview() {
+        const prev = document.getElementById('foto-preview');
+        const hint = document.getElementById('foto-hint');
+        const btn  = document.getElementById('btn-quitar-foto');
+        prev.src = '';
+        prev.style.display = 'none';
+        hint.style.display = 'flex';
+        if (btn) { btn.style.display = 'none'; }
+        tempFotoFile = null; tempFotoDataUrl = null;
+    }
+
+    function quitarFoto(ev) {
+        if (ev) ev.stopPropagation();
+        _ocultarFotoPreview();
+        document.getElementById('inp-foto').value = '';
+    }
+
+    // ── Modal: abrir / cerrar ────────────────────────────────────────
+    function abrirModalItem(idx) {
+        editingItemIdx = (idx !== undefined) ? idx : null;
+        document.getElementById('modal-item-title').innerText = editingItemIdx !== null ? 'Editar Ítem' : 'Nuevo Ítem';
+        document.getElementById('inp-nombre').value = '';
+        document.getElementById('inp-desc').value = '';
+        document.getElementById('inp-nota-interna').value = '';
+        document.getElementById('inp-foto').value = '';
+        _ocultarFotoPreview();
+        tempFotoFile = null; tempFotoDataUrl = null;
+
+        // Reset dims a los predeterminados
+        document.querySelectorAll('.dim-chip').forEach(c => {
+            const dflt = ['ancho','alto','cantidad'];
+            c.classList.toggle('sel', dflt.includes(c.dataset.dim));
+        });
+
+        if (editingItemIdx !== null) {
+            const it = items[editingItemIdx];
+            document.getElementById('inp-nombre').value = it.nombre || '';
+            document.getElementById('inp-desc').value = it.desc || '';
+            document.getElementById('inp-nota-interna').value = it.nota_interna || '';
+            if (it.img_url) { _mostrarFotoPreview(it.img_url); }
+            const dims = it.dims_requeridas || ['ancho','alto','cantidad'];
+            document.querySelectorAll('.dim-chip').forEach(c => {
+                c.classList.toggle('sel', dims.includes(c.dataset.dim));
+            });
+        }
+
+        document.getElementById('modal-item').style.display = 'flex';
+    }
+
+    function editarItem(i) { abrirModalItem(i); }
+
+    function cerrarModal() {
+        document.getElementById('modal-item').style.display = 'none';
+        editingItemIdx = null;
+    }
+
+    // ── Toggle dims ──────────────────────────────────────────────────
+    document.getElementById('dims-selector').addEventListener('click', e => {
+        const chip = e.target.closest('.dim-chip');
+        if (chip) chip.classList.toggle('sel');
+    });
+
+    // ── Foto: subir desde archivo ────────────────────────────────────
+    function onFotoChange(input) {
+        if (!input.files || !input.files[0]) return;
+        tempFotoFile = input.files[0];
+        const reader = new FileReader();
+        reader.onload = e => { tempFotoDataUrl = e.target.result; _mostrarFotoPreview(e.target.result); };
+        reader.readAsDataURL(tempFotoFile);
+    }
+
+    // ── Foto: pegar desde portapapeles (botón explícito) ─────────────
+    async function pegarDesdePortapapeles() {
+        try {
+            const items = await navigator.clipboard.read();
+            for (const item of items) {
+                const imgType = item.types.find(t => t.startsWith('image/'));
+                if (imgType) {
+                    const blob = await item.getType(imgType);
+                    tempFotoFile = new File([blob], 'pegado.png', { type: imgType });
+                    const reader = new FileReader();
+                    reader.onload = e => { tempFotoDataUrl = e.target.result; _mostrarFotoPreview(e.target.result); };
+                    reader.readAsDataURL(tempFotoFile);
+                    return;
+                }
+            }
+            alert('No hay imagen en el portapapeles. Copiá una imagen primero (Ctrl+C sobre la imagen).');
+        } catch(e) {
+            // Fallback: instrucciones para Ctrl+V dentro del área
+            alert('Hacé clic dentro del área de foto y usá Ctrl+V para pegar la imagen.');
+        }
+    }
+
+    // Soporte Ctrl+V nativo dentro del modal
+    document.addEventListener('paste', e => {
+        if (document.getElementById('modal-item').style.display !== 'flex') return;
+        const clipItems = e.clipboardData && e.clipboardData.items;
+        if (!clipItems) return;
+        for (let i = 0; i < clipItems.length; i++) {
+            if (clipItems[i].type.startsWith('image/')) {
+                tempFotoFile = clipItems[i].getAsFile();
+                const reader = new FileReader();
+                reader.onload = ev => { tempFotoDataUrl = ev.target.result; _mostrarFotoPreview(ev.target.result); };
+                reader.readAsDataURL(tempFotoFile);
+                break;
+            }
+        }
+    });
+
+    // ── Subir foto a Storage ──────────────────────────────────────────
+    async function subirFoto(file) {
+        const ext = file.type.includes('png') ? 'png' : 'jpg';
+        const ref = storage.ref(`requerimientos/${cid}/${pid}/${Date.now()}.${ext}`);
+        const snap = await ref.put(file);
+        return await snap.ref.getDownloadURL();
+    }
+
+    // ── Guardar requerimiento base en Firebase ────────────────────────
+    async function ensureReq() {
+        const titulo = document.getElementById('inp-req-titulo').value.trim() || `Requerimiento ${new Date().toLocaleDateString('es-BO')}`;
+        const nota = document.getElementById('inp-req-nota').value.trim();
+        if (!reqId) {
+            const ref = db.ref(`requerimientos_asistidos/${cid}/${pid}`).push();
+            reqId = ref.key;
+            localStorage.setItem(`rubik_req_id_${cid}_${pid}`, reqId);
+            reqData = { titulo, nota_cliente: nota, estado: 'borrador', fecha_creacion: new Date().toISOString(), items: [] };
+            await ref.set(reqData);
+        } else {
+            // Actualizar título/nota si cambiaron
+            await db.ref(`requerimientos_asistidos/${cid}/${pid}/${reqId}`).update({ titulo, nota_cliente: nota });
+            if (!reqData) reqData = { estado: 'borrador', items: [] };
+            reqData.titulo = titulo;
+            reqData.nota_cliente = nota;
+        }
+    }
+
+    // ── Obtener dims seleccionadas ────────────────────────────────────
+    function getDimsSeleccionadas() {
+        return Array.from(document.querySelectorAll('.dim-chip.sel')).map(c => c.dataset.dim);
+    }
+
+    // ── Procesar ítem con IA ─────────────────────────────────────────
+    async function procesarItemConIA() {
+        const desc = document.getElementById('inp-desc').value.trim();
+        if (!desc) return alert('Escribí una descripción del ítem primero.');
+
+        const dims = getDimsSeleccionadas();
+        const btn = document.getElementById('btn-procesar-ia');
+        btn.disabled = true;
+        btn.innerHTML = '<div style="width:18px;height:18px;border:2.5px solid rgba(255,255,255,0.3);border-top-color:#fff;border-radius:50%;animation:spin 0.8s linear infinite;"></div> Procesando...';
+
+        try {
+            await ensureReq();
+
+            // Subir foto si hay
+            let imgUrl = null;
+            if (editingItemIdx !== null && items[editingItemIdx] && items[editingItemIdx].img_url && !tempFotoFile) {
+                imgUrl = items[editingItemIdx].img_url;
+            }
+            if (tempFotoFile) {
+                setLoader(true, 'Subiendo imagen...');
+                imgUrl = await subirFoto(tempFotoFile);
+                setLoader(false);
+            }
+
+            // Llamar a IA para estructurar el ítem
+            setLoader(true, 'Analizando con IA...');
+            const token = await firebase.auth().currentUser.getIdToken();
+            const prompt = buildPromptIA(desc, dims, imgUrl);
+
+            let apuDesc = '';
+            let imgBase64 = null;
+            if (tempFotoDataUrl) {
+                imgBase64 = tempFotoDataUrl.split(',')[1];
+            } else if (imgUrl) {
+                // Si solo tenemos URL, mandamos sin imagen (IA usa descripción)
+            }
+
+            const body = { model: 'gemini-2.5-flash', text: prompt };
+            if (imgBase64) body.image = imgBase64;
+
+            const res = await fetch('/api/gemini', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+                body: JSON.stringify(body)
+            });
+            const json = await res.json();
+            apuDesc = json.text || json.candidates?.[0]?.content?.parts?.[0]?.text || '';
+
+            setLoader(false);
+
+            // Guardar ítem
+            const nombreIngresado = document.getElementById('inp-nombre').value.trim();
+            const nuevoItem = {
+                nombre: nombreIngresado || desc.substring(0, 60),
+                desc,
+                img_url: imgUrl || null,
+                dims_requeridas: dims,
+                nota_interna: document.getElementById('inp-nota-interna').value.trim(),
+                apu_desc: apuDesc,
+                medidas_cliente: {},
+                precio_ia: 0,
+                fecha_creacion: new Date().toISOString()
+            };
+
+            if (editingItemIdx !== null) {
+                items[editingItemIdx] = { ...items[editingItemIdx], ...nuevoItem };
+            } else {
+                items.push(nuevoItem);
+            }
+
+            await db.ref(`requerimientos_asistidos/${cid}/${pid}/${reqId}/items`).set(items);
+            if (!reqData) reqData = { estado: 'borrador' };
+            reqData.items = items;
+            cerrarModal();
+            renderItems();
+
+        } catch (e) {
+            setLoader(false);
+            alert('Error al procesar con IA: ' + e.message);
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="ph-fill ph-sparkle"></i> Estructurar con IA';
+        }
+    }
+
+    // ── Guardar sin IA ────────────────────────────────────────────────
+    async function guardarItemSinIA() {
+        const desc = document.getElementById('inp-desc').value.trim();
+        if (!desc) return alert('Escribí una descripción del ítem.');
+        const dims = getDimsSeleccionadas();
+
+        try {
+            await ensureReq();
+            let imgUrl = null;
+            if (editingItemIdx !== null && items[editingItemIdx] && items[editingItemIdx].img_url && !tempFotoFile) {
+                imgUrl = items[editingItemIdx].img_url;
+            }
+            if (tempFotoFile) {
+                setLoader(true, 'Subiendo imagen...');
+                imgUrl = await subirFoto(tempFotoFile);
+                setLoader(false);
+            }
+
+            const nombreIngresado2 = document.getElementById('inp-nombre').value.trim();
+            const nuevoItem = {
+                nombre: nombreIngresado2 || desc.substring(0, 60),
+                desc,
+                img_url: imgUrl || null,
+                dims_requeridas: dims,
+                nota_interna: document.getElementById('inp-nota-interna').value.trim(),
+                apu_desc: null,
+                medidas_cliente: {},
+                precio_ia: 0,
+                fecha_creacion: new Date().toISOString()
+            };
+
+            if (editingItemIdx !== null) {
+                items[editingItemIdx] = { ...items[editingItemIdx], ...nuevoItem };
+            } else {
+                items.push(nuevoItem);
+            }
+
+            await db.ref(`requerimientos_asistidos/${cid}/${pid}/${reqId}/items`).set(items);
+            if (!reqData) reqData = { estado: 'borrador' };
+            reqData.items = items;
+            cerrarModal();
+            renderItems();
+        } catch(e) {
+            setLoader(false);
+            alert('Error: ' + e.message);
+        }
+    }
+
+    // ── Eliminar ítem ─────────────────────────────────────────────────
+    async function eliminarItem(i) {
+        if (!confirm('¿Eliminar este ítem?')) return;
+        items.splice(i, 1);
+        await db.ref(`requerimientos_asistidos/${cid}/${pid}/${reqId}/items`).set(items);
+        reqData.items = items;
+        renderItems();
+    }
+
+    // ── Prompt para la IA ─────────────────────────────────────────────
+    function buildPromptIA(desc, dims, imgUrl) {
+        const dimsTexto = dims.map(dimLabel).join(', ');
+        return `Sos un experto en señalética, publicidad exterior e impresión gráfica de Bolivia (Rubik Studio).
+El operador describe un ítem que necesita cotizar. Tu tarea es estructurar la información como si fuera un APU (Análisis de Precio Unitario) profesional pero en texto legible, que luego el cliente completará con medidas.
+
+DESCRIPCIÓN DEL ÍTEM:
+"${desc}"
+
+DIMENSIONES QUE SE SOLICITARÁN AL CLIENTE: ${dimsTexto}
+
+Por favor respondé con:
+1. NOMBRE TÉCNICO DEL ÍTEM (conciso, profesional)
+2. CARACTERÍSTICAS TÉCNICAS (materiales, acabados, proceso, especificaciones clave, en lista)
+3. COMPONENTES APU (materiales base, mano de obra, equipos, subcontratos — lista con unidad)
+4. NOTA PARA EL CLIENTE (instrucción breve sobre cómo medir correctamente este tipo de ítem)
+
+Sé preciso, profesional y breve. Usá terminología de la industria publicitaria boliviana.`;
+    }
+
+    // ── Generar precio IA cuando hay medidas ─────────────────────────
+    async function generarPrecioIA(i) {
+        const it = items[i];
+        if (!it.medidas_cliente) return;
+
+        setLoader(true, 'Calculando precio con IA...');
+        try {
+            const token = await firebase.auth().currentUser.getIdToken();
+            const medidasTexto = Object.entries(it.medidas_cliente).map(([k, v]) => `${dimLabel(k)}: ${v} ${dimUnidad(k)}`).join(', ');
+
+            const prompt = `Sos un cotizador experto de Rubik Studio (señalética y publicidad, Bolivia).
+Calculá el precio unitario total en bolivianos (Bs) para el siguiente ítem:
+
+ÍTEM: ${it.desc}
+APU: ${it.apu_desc || 'No disponible'}
+MEDIDAS DEL CLIENTE: ${medidasTexto}
+
+Calculá el precio total considerando:
+- Materiales con precios de mercado boliviano
+- Mano de obra local
+- Overhead 10%, utilidad 15%
+- Precio en Bs (bolivianos)
+
+IMPORTANTE: Respondé ÚNICAMENTE con un JSON: {"precio_total": 1234.56, "detalle": "explicación breve de 1-2 líneas"}
+No incluyas texto adicional fuera del JSON.`;
+
+            const res = await fetch('/api/gemini', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+                body: JSON.stringify({ model: 'gemini-2.5-flash', text: prompt })
+            });
+            const json = await res.json();
+            let texto = json.text || json.candidates?.[0]?.content?.parts?.[0]?.text || '{}';
+            texto = texto.replace(/```json|```/g, '').trim();
+            const parsed = JSON.parse(texto);
+            items[i].precio_ia = parsed.precio_total || 0;
+            items[i].detalle_precio = parsed.detalle || '';
+
+            await db.ref(`requerimientos_asistidos/${cid}/${pid}/${reqId}/items`).set(items);
+            reqData.items = items;
+            renderItems();
+
+        } catch(e) {
+            alert('Error generando precio: ' + e.message);
+        } finally {
+            setLoader(false);
+        }
+    }
+
+    // ── Enviar notificación al cliente ────────────────────────────────
+    async function enviarNotifCliente() {
+        if (items.length === 0) return alert('Agregá al menos un ítem antes de enviar.');
+        const titulo = document.getElementById('inp-req-titulo').value.trim() || 'Requerimiento de medidas';
+        if (!confirm(`¿Enviar al cliente "${cname}" la solicitud de medidas?\n\nRecordá que recibirá una notificación en su portal.`)) return;
+
+        setLoader(true, 'Enviando notificación...');
+        try {
+            await ensureReq();
+            // Actualizar estado a 'enviado'
+            await db.ref(`requerimientos_asistidos/${cid}/${pid}/${reqId}`).update({
+                estado: 'enviado',
+                titulo: titulo,
+                nota_cliente: document.getElementById('inp-req-nota').value.trim(),
+                items,
+                fecha_envio: new Date().toISOString()
+            });
+            reqData.estado = 'enviado';
+
+            // Notificación en /notificaciones/clientes/{cid}
+            await db.ref(`notificaciones/clientes/${cid}`).push({
+                tipo: 'requerimiento_medidas',
+                req_id: reqId,
+                pid: pid,
+                titulo: `📐 ${titulo}`,
+                mensaje: `Rubik Studio te pide que ingreses las medidas de ${items.length} ítem${items.length > 1 ? 's' : ''} para preparar tu cotización.`,
+                fecha: new Date().toISOString(),
+                leida: false
+            });
+
+            // Notificación en hub
+            await db.ref('notificaciones/hub').push({
+                tipo: 'requerimiento_enviado',
+                cid, pid, req_id: reqId,
+                msg: `Requerimiento "${titulo}" enviado a ${cname}`,
+                fecha: new Date().toISOString()
+            });
+
+            renderEstado('enviado');
+            renderItems();
+            alert(`✅ Notificación enviada a ${cname}. El cliente verá el formulario de medidas en su portal.`);
+
+        } catch(e) {
+            alert('Error al enviar: ' + e.message);
+        } finally {
+            setLoader(false);
+        }
+    }
+
+    // ── Aprobar e inyectar en Presupuesto ─────────────────────────────
+    async function aprobarEInyectar() {
+        const itemsConPrecio = items.filter(it => it.precio_ia > 0);
+        if (itemsConPrecio.length === 0) return alert('Ningún ítem tiene precio IA generado todavía.');
+        if (!confirm(`¿Inyectar ${itemsConPrecio.length} ítem(s) en el Presupuesto del proyecto "${pname}"?\n\nSe agregarán como ítems nuevos al final del presupuesto.`)) return;
+
+        setLoader(true, 'Inyectando en presupuesto...');
+        try {
+            // Leer presupuesto actual
+            const snap = await db.ref(`proyectos/${cid}/${pid}/presupuesto`).once('value');
+            const ppto = snap.val() || {};
+            let pptoItems = ppto.items || [];
+
+            // Agregar capítulo separador
+            pptoItems.push({ type: 'chapter', name: `REQUERIMIENTO ASISTIDO — ${reqData.titulo || new Date().toLocaleDateString('es-BO')}`, collapsed: false });
+
+            // Agregar cada ítem
+            itemsConPrecio.forEach(it => {
+                const medidasTexto = it.medidas_cliente ? Object.entries(it.medidas_cliente).map(([k,v]) => `${dimLabel(k)}: ${v}`).join(' | ') : '';
+                pptoItems.push({
+                    type: 'item',
+                    desc: it.desc + (medidasTexto ? ` [${medidasTexto}]` : ''),
+                    und: 'glb',
+                    cant: parseFloat(it.medidas_cliente?.cantidad) || 1,
+                    pu: parseFloat(it.precio_ia) || 0,
+                    feat: it.apu_desc || '',
+                    apu: { mat: [], mo: [], eq: [], sub: [] }
+                });
+            });
+
+            await db.ref(`proyectos/${cid}/${pid}/presupuesto`).set({ ...ppto, items: pptoItems });
+
+            // Marcar requerimiento como aprobado
+            await db.ref(`requerimientos_asistidos/${cid}/${pid}/${reqId}`).update({ estado: 'aprobado', fecha_aprobacion: new Date().toISOString() });
+            reqData.estado = 'aprobado';
+            renderEstado('aprobado');
+            renderItems();
+
+            alert(`✅ ${itemsConPrecio.length} ítem(s) inyectados en Presupuesto.\n\nPodés revisarlos en presupuesto.html`);
+            setTimeout(() => { location.href = 'presupuesto.html'; }, 800);
+
+        } catch(e) {
+            alert('Error al inyectar: ' + e.message);
+        } finally {
+            setLoader(false);
+        }
+    }
+
+    // ── Loader global ─────────────────────────────────────────────────
+    function setLoader(on, msg) {
+        document.getElementById('global-loader').style.display = on ? 'flex' : 'none';
+        if (msg) document.getElementById('loader-msg').innerText = msg;
+    }
+
+    // ── Helpers para exportación ──────────────────────────────────────
+    function _getTitulo() {
+        return (reqData && reqData.titulo) || document.getElementById('inp-req-titulo').value.trim() || 'Requerimiento Asistido';
+    }
+
+    function _buildFilaNombre(it, i) {
+        return `Ítem ${i + 1}: ${it.desc || 'Sin descripción'}`;
+    }
+
+    function _buildMedidasTexto(it) {
+        if (!it.medidas_cliente || !Object.keys(it.medidas_cliente).length) return '—';
+        return Object.entries(it.medidas_cliente)
+            .map(([k, v]) => `${dimLabel(k)}: ${v} ${dimUnidad(k)}`)
+            .join(' | ');
+    }
+
+    function _buildDimsReqTexto(it) {
+        const dims = it.dims_requeridas || ['ancho', 'alto', 'cantidad'];
+        return dims.map(dimLabel).join(', ');
+    }
+
+    // ── Exportar PDF — Formulario para el cliente ─────────────────────
+    async function exportarPDF() {
+        if (!items || items.length === 0) return alert('No hay ítems para exportar.');
+        if (typeof window.jspdf === 'undefined') return alert('La librería PDF aún está cargando, intentá de nuevo en unos segundos.');
+
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+
+        const titulo = _getTitulo();
+        const fecha = new Date().toLocaleDateString('es-BO', { day: '2-digit', month: 'long', year: 'numeric' });
+        const W = 210;
+        const margin = 14;
+
+        // ── Helper: encabezado de página ──────────────────────────────
+        function paginaEncabezado() {
+            doc.setFillColor(191, 90, 242);
+            doc.rect(0, 0, W, 13, 'F');
+            doc.setTextColor(255, 255, 255);
+            doc.setFontSize(8.5);
+            doc.setFont('helvetica', 'bold');
+            doc.text('RUBIK STUDIO', margin, 8.5);
+            doc.setFont('helvetica', 'normal');
+            doc.text('Formulario de Medidas — ' + titulo, margin + 28, 8.5);
+            doc.text(fecha, W - margin, 8.5, { align: 'right' });
+        }
+
+        // ── Primera página: portada / instrucciones ───────────────────
+        paginaEncabezado();
+        let y = 22;
+
+        doc.setTextColor(30, 30, 30);
+        doc.setFontSize(20);
+        doc.setFont('helvetica', 'bold');
+        const tituloLines = doc.splitTextToSize(titulo, W - margin * 2);
+        doc.text(tituloLines, margin, y);
+        y += tituloLines.length * 9 + 2;
+
+        doc.setFontSize(10);
+        doc.setFont('helvetica', 'normal');
+        doc.setTextColor(100, 100, 100);
+        doc.text(`Cliente: ${cname}   |   Proyecto: ${pname}`, margin, y);
+        y += 7;
+
+        if (reqData && reqData.nota_cliente) {
+            doc.setFillColor(245, 235, 255);
+            const notaLines = doc.splitTextToSize(reqData.nota_cliente, W - margin * 2 - 8);
+            doc.rect(margin, y - 3, W - margin * 2, notaLines.length * 5 + 5, 'F');
+            doc.setTextColor(120, 50, 180);
+            doc.setFontSize(8);
+            doc.setFont('helvetica', 'bold');
+            doc.text('INSTRUCCIÓN:', margin + 3, y + 1);
+            doc.setFont('helvetica', 'normal');
+            doc.text(notaLines, margin + 3, y + 6);
+            y += notaLines.length * 5 + 10;
+        }
+
+        // Instrucción genérica
+        doc.setDrawColor(191, 90, 242);
+        doc.setLineWidth(0.4);
+        doc.line(margin, y, W - margin, y);
+        y += 6;
+        doc.setFontSize(9);
+        doc.setTextColor(60, 60, 60);
+        doc.setFont('helvetica', 'normal');
+        const instruccion = 'Por favor complete las medidas de cada ítem en los recuadros correspondientes. Indique la unidad de medida utilizada (metros, centímetros, unidades, etc.). Ante cualquier duda, consulte la foto de referencia al final de cada ítem.';
+        const instrLines = doc.splitTextToSize(instruccion, W - margin * 2);
+        doc.text(instrLines, margin, y);
+        y += instrLines.length * 5 + 8;
+
+        // Resumen de ítems
+        doc.setFontSize(8);
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(191, 90, 242);
+        doc.text(`Este formulario contiene ${items.length} ítem${items.length > 1 ? 's' : ''} para medir.`, margin, y);
+        y += 14;
+
+        // ── Un bloque por ítem (con foto al final) ────────────────────
+        for (let i = 0; i < items.length; i++) {
+            const it = items[i];
+            const dims = it.dims_requeridas || ['ancho', 'alto', 'cantidad'];
+            const descLines = doc.splitTextToSize(it.desc || 'Sin descripción', W - margin * 2 - 6);
+
+            // Calcular altura total del bloque
+            const fotoH = it.img_url ? 55 : 0;
+            const headerH = 10;
+            const descH = descLines.length * 5 + 4;
+            const dimsH = dims.length * 14 + 6; // cada campo = 14mm
+            const totalH = headerH + descH + dimsH + fotoH + 10;
+
+            // Salto de página si no entra
+            if (y + totalH > 282) {
+                doc.addPage();
+                paginaEncabezado();
+                y = 20;
+            }
+
+            // ── Tarjeta del ítem ──
+            // Borde exterior
+            doc.setDrawColor(191, 90, 242);
+            doc.setLineWidth(0.6);
+            doc.roundedRect(margin, y, W - margin * 2, totalH, 3, 3, 'S');
+
+            // Header morado del ítem
+            doc.setFillColor(191, 90, 242);
+            doc.roundedRect(margin, y, W - margin * 2, headerH, 3, 3, 'F');
+            // Tapar esquinas inferiores redondeadas del header
+            doc.setFillColor(191, 90, 242);
+            doc.rect(margin, y + 6, W - margin * 2, 4, 'F');
+
+            doc.setTextColor(255, 255, 255);
+            doc.setFontSize(10);
+            doc.setFont('helvetica', 'bold');
+            doc.text(`ÍTEM ${i + 1}`, margin + 4, y + 7);
+            y += headerH + 2;
+
+            // Descripción
+            doc.setTextColor(30, 30, 30);
+            doc.setFontSize(9);
+            doc.setFont('helvetica', 'bold');
+            doc.text(descLines, margin + 4, y + 4);
+            y += descH + 2;
+
+            // Separador
+            doc.setDrawColor(220, 210, 235);
+            doc.setLineWidth(0.3);
+            doc.line(margin + 4, y, W - margin - 4, y);
+            y += 5;
+
+            // Instrucción por ítem
+            doc.setFontSize(7.5);
+            doc.setFont('helvetica', 'italic');
+            doc.setTextColor(130, 100, 160);
+            doc.text('Completar las medidas del ítem (indicar unidad utilizada):', margin + 4, y);
+            y += 5;
+
+            // Campos de medida — uno por línea con recuadro para escribir
+            const campoAncho = W - margin * 2 - 8; // ancho disponible para el campo
+            const lblAncho = 40;
+            const inputAncho = campoAncho - lblAncho - 4;
+
+            dims.forEach(d => {
+                // Etiqueta
+                doc.setFontSize(9);
+                doc.setFont('helvetica', 'bold');
+                doc.setTextColor(60, 60, 60);
+                doc.text(dimLabel(d).toUpperCase(), margin + 4, y + 7);
+
+                // Recuadro vacío para escribir
+                doc.setDrawColor(180, 160, 210);
+                doc.setLineWidth(0.5);
+                doc.setFillColor(252, 250, 255);
+                doc.rect(margin + 4 + lblAncho, y + 1, inputAncho, 9, 'FD');
+
+                // Línea punteada dentro (guía de escritura)
+                doc.setDrawColor(210, 195, 230);
+                doc.setLineWidth(0.2);
+                doc.line(margin + 4 + lblAncho + 3, y + 7.5, margin + 4 + lblAncho + inputAncho - 3, y + 7.5);
+
+                y += 12;
+            });
+
+            y += 4;
+
+            // Foto de referencia
+            if (it.img_url) {
+                // Intentar cargar imagen
+                try {
+                    await new Promise((resolve) => {
+                        const img = new Image();
+                        img.crossOrigin = 'anonymous';
+                        img.onload = function() {
+                            try {
+                                // Calcular dimensiones manteniendo ratio
+                                const maxW = W - margin * 2 - 8;
+                                const maxH = 50;
+                                let iw = img.width, ih = img.height;
+                                const ratio = Math.min(maxW / iw, maxH / ih);
+                                const fw = iw * ratio;
+                                const fh = ih * ratio;
+                                const fx = margin + 4 + (maxW - fw) / 2; // centrada
+
+                                // Etiqueta foto
+                                doc.setFontSize(7);
+                                doc.setFont('helvetica', 'bold');
+                                doc.setTextColor(130, 100, 160);
+                                doc.text('FOTO DE REFERENCIA:', margin + 4, y + 4);
+                                y += 6;
+
+                                // Dibujar imagen
+                                const canvas = document.createElement('canvas');
+                                canvas.width = img.width; canvas.height = img.height;
+                                canvas.getContext('2d').drawImage(img, 0, 0);
+                                const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
+                                doc.addImage(dataUrl, 'JPEG', fx, y, fw, fh);
+                                y += fh + 4;
+                            } catch(e) { /* imagen no pudo incrustarse */ }
+                            resolve();
+                        };
+                        img.onerror = resolve;
+                        img.src = it.img_url;
+                    });
+                } catch(e) { /* skip */ }
+            }
+
+            y += 8; // espacio entre ítems
+        }
+
+        // ── Firma al final ────────────────────────────────────────────
+        if (y + 25 > 282) { doc.addPage(); paginaEncabezado(); y = 20; }
+        y += 4;
+        doc.setDrawColor(191, 90, 242);
+        doc.setLineWidth(0.4);
+        doc.line(margin, y, W - margin, y);
+        y += 8;
+        doc.setFontSize(8.5);
+        doc.setFont('helvetica', 'normal');
+        doc.setTextColor(80, 80, 80);
+        doc.text('Firma y aclaración: ___________________________________', margin, y);
+        doc.text('Fecha: ___________________', W - margin - 60, y);
+
+        // ── Pie de página en todas las hojas ─────────────────────────
+        const totalPags = doc.getNumberOfPages();
+        for (let p = 1; p <= totalPags; p++) {
+            doc.setPage(p);
+            doc.setFontSize(7);
+            doc.setTextColor(160, 160, 160);
+            doc.setFont('helvetica', 'normal');
+            doc.text(`Rubik Studio — ${fecha} — Pág. ${p} de ${totalPags}`, W / 2, 293, { align: 'center' });
+        }
+
+        const nombreArchivo = `Formulario_Medidas_${titulo.replace(/\s+/g, '_').substring(0, 30)}_${new Date().toISOString().split('T')[0]}.pdf`;
+        doc.save(nombreArchivo);
+    }
+
+    // ── Exportar Excel — Formulario para el cliente ───────────────────
+    function exportarExcel() {
+        if (!items || items.length === 0) return alert('No hay ítems para exportar.');
+        if (typeof XLSX === 'undefined') return alert('La librería Excel aún está cargando, intentá de nuevo en unos segundos.');
+
+        const titulo = _getTitulo();
+        const fecha = new Date().toLocaleDateString('es-BO');
+        const wb = XLSX.utils.book_new();
+        const ws = XLSX.utils.json_to_sheet([]);
+
+        // ── Encabezado ──
+        XLSX.utils.sheet_add_aoa(ws, [
+            ['RUBIK STUDIO — FORMULARIO DE MEDIDAS'],
+            ['Título:', titulo],
+            ['Cliente:', cname],
+            ['Proyecto:', pname],
+            ['Fecha:', fecha],
+            []
+        ], { origin: 'A1' });
+
+        let fila = 7; // fila base (0-indexed = 6)
+        const merges = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 4 } }]; // merge título
+
+        items.forEach((it, i) => {
+            const dims = it.dims_requeridas || ['ancho', 'alto', 'cantidad'];
+
+            // Fila de ítem: nombre en bold
+            XLSX.utils.sheet_add_aoa(ws, [
+                [`ÍTEM ${i + 1}: ${it.desc || 'Sin descripción'}`]
+            ], { origin: { r: fila, c: 0 } });
+            merges.push({ s: { r: fila, c: 0 }, e: { r: fila, c: 4 } });
+            fila++;
+
+            // Header de columnas
+            XLSX.utils.sheet_add_aoa(ws, [
+                ['Dimensión', 'Medida del cliente', 'Unidad', 'Observaciones', 'Foto de referencia']
+            ], { origin: { r: fila, c: 0 } });
+            fila++;
+
+            // Una fila por dimensión, celdas vacías para completar
+            dims.forEach(d => {
+                XLSX.utils.sheet_add_aoa(ws, [
+                    [dimLabel(d), '', dimUnidad(d) || 'm / cm / u', '']
+                ], { origin: { r: fila, c: 0 } });
+                fila++;
+            });
+
+            // Fila vacía entre ítems
+            fila++;
+        });
+
+        // Anchos de columna
+        ws['!cols'] = [
+            { wch: 20 }, // Dimensión
+            { wch: 25 }, // Medida (el cliente completa)
+            { wch: 15 }, // Unidad
+            { wch: 30 }, // Observaciones
+            { wch: 30 }, // Foto ref (no se puede incrustar en xlsx desde JS, se deja como nota)
+        ];
+
+        ws['!merges'] = merges;
+
+        XLSX.utils.book_append_sheet(wb, ws, 'Medidas');
+        XLSX.writeFile(wb, `Medidas_${(reqData && reqData.titulo) ? reqData.titulo.replace(/[^a-zA-Z0-9]/g,'_') : 'Requerimiento'}.xlsx`);
+    }
+
+</script>
+</body>
+</html>

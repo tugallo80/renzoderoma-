@@ -1,0 +1,1092 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rubik OS - Cronograma Gantt Maestro</title>
+    
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.1.3/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.1.3/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.1.3/firebase-database-compat.js"></script>
+    <script>
+        window._rubikFirebaseConfig = window._rubikFirebaseConfig || {
+            apiKey: "AIzaSyDXYlofy31cDP14xVAVxWo_7TqXdSgsIjA",
+            authDomain: "rubik-bolivia.firebaseapp.com",
+            databaseURL: "https://rubik-bolivia-default-rtdb.firebaseio.com",
+            projectId: "rubik-bolivia",
+            storageBucket: "rubik-bolivia.firebasestorage.app",
+            messagingSenderId: "4153087958",
+            appId: "1:4153087958:web:cf2dd16106580ed6437677"
+        };
+        if (!firebase.apps.length) firebase.initializeApp(window._rubikFirebaseConfig);
+    </script>
+    <script src="/js/firecache.js?v=1"></script>
+    <script src="/js/auth-guard.js?v=1"></script>
+
+    <style>
+        :root {
+            --bg: #f4f4f7; --card: #ffffff; --text: #1a1a1a; --text-secondary: #8e8e93;
+            --blue: #007aff; --blue-light: rgba(0, 122, 255, 0.1); --green: #34c759; --red: #ff3b30;
+            --gray: #d1d1d6; --gray-light: #f2f2f7; --gray-border: #e5e5ea;
+            --border-radius-lg: 16px; --border-radius-md: 12px; --border-radius-sm: 8px;
+            --shadow: 0 4px 12px rgba(0, 0, 0, 0.05); --modal-shadow: 0 20px 40px rgba(0,0,0,0.2);
+            --font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            --purple: #af52de; --orange: #ff9500;
+        }
+
+        .dark-mode {
+            --bg: #000000; --card: #1c1c1e; --text: #f2f2f7; --text-secondary: #aeaeb2;
+            --blue: #0a84ff; --blue-light: rgba(10, 132, 255, 0.2); --green: #30d158; --red: #ff453a;
+            --gray: #3a3a3c; --gray-light: #1c1c1e; --gray-border: #2c2c2e;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: var(--font-family); }
+        body { background-color: var(--bg); color: var(--text); padding: 20px; transition: 0.3s; margin: 0; }
+
+        .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 10px 16px; border: none; border-radius: 20px; font-size: 14px; font-weight: 600; cursor: pointer; transition: 0.2s ease; white-space: nowrap; }
+        .btn:active { transform: scale(0.96); }
+        .btn-outline { background: transparent; border: 1px solid var(--gray); color: var(--text); }
+        .btn-outline-green { background: transparent; border: 1px solid var(--green); color: var(--green); }
+        .btn-outline-red { background: transparent; border: 1px solid var(--red); color: var(--red); }
+        .btn-primary { background: var(--blue); color: white; box-shadow: var(--shadow); }
+        .btn-success { background: var(--blue); color: white; width: 100%; padding: 12px;}
+        .btn-icon { padding: 10px; border-radius: 50%; background: var(--card); border: 1px solid var(--gray-border); color: var(--text); }
+        
+        .top-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; gap: 20px; }
+        
+        .pdf-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 24px; }
+        .brand-logo { max-height: 50px; border-radius: var(--border-radius-sm); object-fit: contain; }
+        .header-title h1 { font-size: 24px; font-weight: 900; letter-spacing: -0.5px; margin-bottom: 4px; color: var(--text);}
+        .header-title p { font-size: 13px; color: var(--text-secondary); text-transform: uppercase; font-weight: bold;}
+
+        .cards-grid { display: flex; gap: 16px; margin-bottom: 16px; flex-wrap: wrap; }
+        .card { background: var(--card); border: 1px solid var(--gray-border); border-radius: var(--border-radius-lg); padding: 16px; flex: 1; min-width: 200px; box-shadow: var(--shadow); }
+        .card-label { font-size: 11px; font-weight: 800; color: var(--blue); text-transform: uppercase; margin-bottom: 8px; display: block; }
+        .date-input { width: 100%; padding: 10px; border: 1px solid var(--gray-border); border-radius: var(--border-radius-sm); background: var(--bg); color: var(--text); outline: none; font-weight: bold; cursor:pointer;}
+        
+        .progress-card { background: var(--blue); color: white; border: none; display: flex; flex-direction: column; justify-content: center; position: relative;}
+        .progress-card .card-label { color: rgba(255,255,255,0.8); }
+        .progress-value { font-size: 36px; font-weight: 900; }
+        .btn-photo-gallery { position: absolute; right: 16px; top: 50%; transform: translateY(-50%); background: rgba(255,255,255,0.2); border: 1px solid rgba(255,255,255,0.5); color: white; padding: 10px 16px; border-radius: 12px; font-weight: bold; cursor: pointer; display: flex; align-items: center; gap: 6px; }
+
+        .gantt-container {
+            width: 100%; max-height: 60vh; overflow: auto; background: var(--card); 
+            border: 1px solid var(--gray-border); border-radius: var(--border-radius-lg);
+            box-shadow: var(--shadow); position: relative;
+        }
+
+        .gantt-header {
+            display: flex; position: sticky; top: 0; z-index: 100; background: var(--card);
+            border-bottom: 2px solid var(--gray-border);
+        }
+
+        .gantt-row {
+            display: flex; border-bottom: 1px solid var(--gray-border); position: relative;
+            background: var(--card); transition: background 0.1s;
+            width: max-content; min-width: 100%;
+        }
+        .gantt-row:hover { background-color: var(--gray-light); }
+
+        .col-sidebar {
+            width: 320px; flex-shrink: 0; position: sticky; left: 0; z-index: 50;
+            background: inherit; 
+            border-right: 2px solid var(--gray-border); display: flex; align-items: center; justify-content: space-between;
+            padding: 0 16px; min-height: 60px;
+        }
+        .gantt-header .col-sidebar {
+            z-index: 150; height: 50px; min-height: 50px; font-size: 11px; font-weight: 900; color: var(--text-secondary); text-transform: uppercase; background: var(--bg);
+        }
+        
+        .task-row .col-sidebar { padding-left: 36px; cursor: pointer; }
+        .col-timeline { display: flex; flex-grow: 1; position: relative; min-width: var(--timeline-width); }
+        
+        :root { --day-w: 45px; }
+        .day-cell, .grid-col {
+            flex: 0 0 var(--day-w); width: var(--day-w);
+            border-right: 1px dashed var(--gray-border); text-align: center;
+            display: flex; justify-content: center; align-items: center; flex-direction: column;
+            box-sizing: border-box;
+        }
+        .day-cell { height: 50px; font-size: 10px; font-weight: 800; color: var(--text-secondary); border-right: 1px solid var(--gray-border); background: var(--bg);}
+        .day-cell.active-month { background: var(--blue); color: white; border-right: none;}
+        
+        .grid-col { border-right: 1px dashed var(--gray-border); cursor: cell; transition: 0.1s; z-index: 1;}
+        .grid-col:hover { background-color: rgba(0, 122, 255, 0.15) !important; box-shadow: inset 0 0 0 1px var(--blue);}
+        .weekend-bg { background-color: rgba(0,0,0,0.03); }
+        .feriado-bg { background-color: rgba(255,59,48,0.08) !important; border-right: 1px solid rgba(255,59,48,0.2) !important; }
+
+        .item-info { display: flex; align-items: center; gap: 8px; max-width: 80%; }
+        .item-info span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 11px; font-weight: 800;}
+        .chevron { color: var(--blue); cursor: pointer; padding: 5px; transition: transform 0.2s;}
+        
+        .item-actions { display: flex; align-items: center; gap: 8px; }
+        .btn-small { padding: 4px 8px; font-size: 12px; border-radius: 12px; background: var(--gray-border); color: var(--text); border: none; cursor: pointer; display: none; font-weight: 900;}
+        .gantt-row:hover .btn-small { display: inline-flex; }
+        .worker-badge { background: var(--gray-border); color: var(--text); padding: 4px 8px; border-radius: 4px; font-size: 9px; font-weight: bold; pointer-events: none;}
+
+        .gantt-bar {
+            position: absolute; top: 15px; height: 30px; border-radius: 6px; 
+            display: flex; align-items: center; padding: 0 8px; font-size: 10px; font-weight: 800; 
+            white-space: nowrap; overflow: hidden; box-shadow: 0 2px 6px rgba(0,0,0,0.15); 
+            z-index: 10; transition: transform 0.1s; cursor: pointer;
+        }
+        .gantt-bar:hover { transform: scale(1.02); filter: brightness(0.9); z-index: 20;}
+        .bar-item { background: var(--blue-light); border: 1px dashed var(--blue); color: var(--blue); pointer-events: none;}
+        .bar-task { background: var(--blue); color: white; top: 15px; }
+
+        .overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); backdrop-filter: blur(4px); display: none; justify-content: center; align-items: center; z-index: 9999; }
+        .modal { background: var(--card); border-radius: var(--border-radius-lg); padding: 24px; width: 400px; box-shadow: var(--modal-shadow); border: 1px solid var(--gray-border); max-height: 90vh; overflow-y: auto;}
+        .modal-large { width: 800px; max-width: 95%; }
+        .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; font-weight: bold; font-size: 18px;}
+        .modal-close { cursor: pointer; color: var(--text-secondary); font-size: 20px;}
+        .input-group { margin-bottom: 16px; }
+        .input-group label { display: block; font-size: 12px; font-weight: 600; margin-bottom: 6px; color: var(--text-secondary); }
+        .input-group input { width: 100%; padding: 12px; border: 1px solid var(--gray-border); border-radius: var(--border-radius-md); background: var(--bg); color: var(--text); outline: none; font-size: 14px; font-weight: 600;}
+        #loader { color: white; font-weight: bold; font-size: 18px; flex-direction: column; gap: 10px; z-index: 100000; }
+        .gallery-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 16px; margin-top: 15px; }
+        .gallery-item { background: var(--bg); border: 1px solid var(--gray-border); border-radius: 12px; overflow: hidden; }
+        .gallery-item img { width: 100%; height: 160px; object-fit: cover; cursor: pointer; transition: 0.2s; }
+        .gallery-info { padding: 12px; }
+
+        /* ========================================================= */
+        /* VISTA MÓVIL — body[data-view="mobile"]                   */
+        /* ========================================================= */
+        body[data-view="mobile"] { padding: 10px; padding-bottom: 85px; }
+
+        /* --- Ocultar top-bar completa: botones están en barra inferior --- */
+        body[data-view="mobile"] #no-print-bar { display: none !important; }
+        body[data-view="mobile"] .btn-photo-gallery { display: none !important; }
+        body[data-view="mobile"] .btn-pdf-hide { display: none !important; }
+
+        /* --- Cards de fechas y progreso: apiladas y full-width en portrait --- */
+        body[data-view="mobile"] .cards-grid { flex-direction: column; gap: 10px; }
+        body[data-view="mobile"] .card { min-width: unset; width: 100%; }
+        body[data-view="mobile"] .progress-value { font-size: 26px; }
+
+        /* --- En portrait: ocultar gantt, mostrar lista de tarjetas + aviso --- */
+        body[data-view="mobile"] #gantt-container { display: none !important; }
+        body[data-view="mobile"] #rotate-hint { display: flex; }
+
+        /* --- En landscape: mostrar gantt real, ocultar lista y aviso --- */
+        @media (orientation: landscape) {
+            body[data-view="mobile"] #gantt-container {
+                display: block !important;
+                width: 100% !important;
+                max-width: 100vw !important;
+                height: calc(100vh - 70px) !important;
+                max-height: none !important;
+                overflow: auto !important;
+                border-radius: 0 !important;
+                border-left: none !important;
+                border-right: none !important;
+                box-sizing: border-box;
+            }
+            body[data-view="mobile"] #mobile-gantt-list { display: none !important; }
+            body[data-view="mobile"] #rotate-hint { display: none !important; }
+            body[data-view="mobile"] .cards-grid { display: none !important; }
+            body[data-view="mobile"] { padding: 0 !important; padding-bottom: 70px !important; }
+            body[data-view="mobile"] #pdf-content { padding: 0 !important; }
+            /* En landscape reducir sidebar para dar más espacio al timeline */
+            body[data-view="mobile"] .col-sidebar { width: 160px !important; font-size: 10px !important; padding: 0 8px !important; }
+            body[data-view="mobile"] .gantt-header .col-sidebar { font-size: 9px !important; }
+            body[data-view="mobile"] .item-info span { font-size: 9px !important; }
+        }
+
+        /* --- Aviso de girar --- */
+        #rotate-hint {
+            display: none;
+            flex-direction: column; align-items: center; justify-content: center;
+            gap: 10px; padding: 20px; margin: 12px 0; text-align: center;
+            background: rgba(0,122,255,0.07); border: 1px dashed var(--blue);
+            border-radius: 16px; cursor: pointer;
+        }
+        #rotate-hint i { font-size: 38px; color: var(--blue); animation: rotate-anim 2s ease-in-out infinite; }
+        #rotate-hint p { margin: 0; font-size: 13px; font-weight: 700; color: var(--blue); line-height: 1.5; }
+        #rotate-hint small { font-size: 11px; color: var(--text-secondary); font-weight: 500; }
+        @keyframes rotate-anim { 0%,100% { transform: rotate(0deg); } 50% { transform: rotate(90deg); } }
+
+        /* --- Lista de tarjetas portrait --- */
+        #mobile-gantt-list { display: none; }
+        body[data-view="mobile"] #mobile-gantt-list { display: block; }
+
+        .m-item-card { background: var(--card); border: 1px solid var(--gray-border); border-radius: 14px; margin-bottom: 10px; overflow: hidden; box-shadow: var(--shadow); }
+        .m-item-header { background: var(--blue); color: white; padding: 11px 13px; display: flex; justify-content: space-between; align-items: center; cursor: pointer; }
+        .m-item-title { font-size: 13px; font-weight: 800; flex: 1; line-height: 1.3; }
+        .m-item-pct { font-size: 12px; font-weight: 900; margin-left: 8px; background: rgba(255,255,255,0.2); padding: 3px 8px; border-radius: 8px; white-space: nowrap; }
+        .m-item-body { padding: 10px 13px; }
+
+        .m-task-row { display: flex; flex-direction: column; gap: 3px; padding: 9px 0; border-bottom: 1px solid var(--gray-border); cursor: pointer; }
+        .m-task-row:last-child { border-bottom: none; }
+        .m-task-name { font-size: 13px; font-weight: 700; color: var(--text); display: flex; align-items: center; gap: 6px; }
+        .m-task-meta { font-size: 11px; color: var(--text-secondary); display: flex; gap: 10px; flex-wrap: wrap; margin-top: 2px; }
+        .m-task-meta span { display: flex; align-items: center; gap: 3px; }
+        .m-prog-bar { height: 4px; background: var(--gray-border); border-radius: 4px; margin-top: 5px; overflow: hidden; }
+        .m-prog-fill { height: 100%; background: var(--green); border-radius: 4px; transition: width 0.3s; }
+        .m-btn-add { width: 100%; padding: 9px; background: rgba(0,122,255,0.08); border: 1px dashed var(--blue); border-radius: 10px; color: var(--blue); font-weight: 800; font-size: 13px; cursor: pointer; margin-top: 8px; display: flex; align-items: center; justify-content: center; gap: 6px; }
+        .m-btn-add:active { transform: scale(0.97); }
+        .m-empty { text-align: center; color: var(--text-secondary); font-size: 12px; padding: 14px; border: 1px dashed var(--gray-border); border-radius: 10px; margin-bottom: 8px; }
+
+        /* --- Barra inferior --- */
+        #mobile-fab-bar { display: none; }
+        body[data-view="mobile"] #mobile-fab-bar {
+            display: flex; position: fixed; bottom: 0; left: 0; right: 0;
+            background: var(--card); border-top: 1px solid var(--gray-border);
+            padding: 6px 4px;
+            padding-bottom: max(6px, env(safe-area-inset-bottom));
+            z-index: 500;
+            justify-content: space-around; align-items: center;
+        }
+        #mobile-fab-bar .m-fab-btn {
+            display: flex; flex-direction: column; align-items: center; gap: 1px;
+            background: none; border: none; color: var(--blue);
+            font-size: 9px; font-weight: 800; cursor: pointer;
+            padding: 4px 6px; border-radius: 8px; min-width: 44px; transition: 0.15s;
+        }
+        #mobile-fab-bar .m-fab-btn i { font-size: 20px; }
+        #mobile-fab-bar .m-fab-btn:active { background: var(--gray-light); transform: scale(0.9); }
+        #mobile-fab-bar .m-fab-btn.purple { color: var(--purple); }
+        #mobile-fab-bar .m-fab-btn.orange { color: var(--orange); }
+        #mobile-fab-bar .m-fab-btn.green  { color: var(--green); }
+        #mobile-fab-bar .m-fab-btn.red    { color: var(--red); }
+        #mobile-fab-bar .m-fab-btn.blue   { color: var(--blue); background: var(--blue); color: white; border-radius: 10px; }
+
+        /* ========= CORRECCIÓN PDF PERFECTO ========= */
+        @media print {
+            @page { size: A3 landscape; margin: 10mm; }
+            body { background: white !important; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+            
+            /* Ocultamos la barra de botones y modales */
+            #no-print-bar, #loader, .overlay, .btn-photo-gallery { display: none !important; }
+            
+            /* El contenedor principal debe ser visible */
+            #main-ui-wrapper { display: block !important; width: 100% !important; }
+            
+            /* Expande el Gantt completamente para que Chrome lo pagine natural */
+            .gantt-container { 
+                max-height: none !important; 
+                overflow: visible !important; 
+                border: none !important; 
+                box-shadow: none !important; 
+            }
+            
+            /* Evita que una tarea quede cortada a la mitad en el salto de página */
+            .gantt-row { 
+                page-break-inside: avoid !important; 
+                break-inside: avoid !important; 
+            }
+            
+            /* CORRECIÓN DE ENCABEZADO Y BARRA LATERAL (Elimina el overlap en el PDF) */
+            .gantt-header { position: static !important; border-bottom: 2px solid black !important; }
+            .col-sidebar { position: static !important; }
+        }
+    </style>
+    <link rel="stylesheet" href="/css/responsive.css?v=1">
+</head>
+<body>
+
+    <div class="overlay" id="loader"><i class="ph ph-spinner-gap ph-spin" style="font-size: 48px;"></i><span id="loader-text">Cargando...</span></div>
+
+    <div class="overlay" id="feriados-modal">
+        <div class="modal">
+            <div class="modal-header">
+                <span><i class="ph-bold ph-calendar-x" style="color:var(--red);"></i> Configurar Días Libres</span>
+                <i class="ph ph-x modal-close" onclick="closeModal('feriados-modal')"></i>
+            </div>
+            <div class="input-group">
+                <label>Añadir Feriado o Día No Laborable</label>
+                <div style="display:flex; gap:10px;">
+                    <input type="date" id="new-feriado-date" style="flex:1;">
+                    <button class="btn btn-primary" onclick="addFeriado()"><i class="ph-bold ph-plus"></i></button>
+                </div>
+            </div>
+            <div id="feriados-list" style="margin-top:15px; display:flex; flex-direction:column; gap:8px;"></div>
+            <div style="margin-top: 20px; font-size: 11px; color: var(--text-secondary); line-height:1.4;">
+                * Los fines de semana (Sábados y Domingos) se omiten automáticamente si marcas la casilla al crear tareas o al usar la Planificación IA.
+            </div>
+        </div>
+    </div>
+
+    <div class="overlay" id="task-modal">
+        <div class="modal">
+            <div class="modal-header">
+                <span id="modal-title">Nueva Tarea</span>
+                <i class="ph ph-x modal-close" onclick="closeModal('task-modal')"></i>
+            </div>
+            <input type="hidden" id="modal-item-index">
+            <input type="hidden" id="modal-task-id"> 
+            
+            <div class="input-group">
+                <label>Nombre de la Tarea</label>
+                <input type="text" id="modal-task-name" placeholder="Ej: Pintado y Limpieza" autocomplete="off">
+            </div>
+            <div style="display: flex; gap: 10px; align-items: flex-end;">
+                <div class="input-group" style="flex:1;">
+                    <label>Fecha de Inicio</label>
+                    <input type="date" id="modal-task-start" onchange="autoCalcEndDate()">
+                </div>
+                <div class="input-group" style="width: 80px;">
+                    <label>Días</label>
+                    <input type="number" id="modal-task-duration" value="1" min="1" oninput="autoCalcEndDate()" style="text-align: center;">
+                </div>
+            </div>
+            <div class="input-group">
+                <label>Fecha de Fin Calculada</label>
+                <input type="date" id="modal-task-end" onchange="autoCalcDuration()">
+            </div>
+            
+            <div style="margin-top: -5px; margin-bottom: 20px; display: flex; align-items: center; gap: 8px;">
+                <input type="checkbox" id="modal-skip-holidays" checked onchange="autoCalcEndDate()" style="width: 16px; height: 16px; cursor: pointer;">
+                <label for="modal-skip-holidays" style="font-size: 11px; font-weight: 800; margin: 0; color:var(--text); cursor:pointer;">Omitir Fines de semana y Feriados</label>
+            </div>
+
+            <div class="input-group">
+                <label>Responsable(s) - Separar por coma</label>
+                <input type="text" id="modal-task-worker" list="dl-workers" placeholder="Ej: Juan, Pedro..." autocomplete="off">
+                <datalist id="dl-workers"></datalist>
+            </div>
+            <div style="display: flex; gap: 10px; margin-top: 24px;">
+                <button class="btn btn-outline-red" id="btn-delete-task" style="display: none;" onclick="deleteTask()"><i class="ph ph-trash"></i></button>
+                <button class="btn btn-success" style="flex: 1;" onclick="saveTask()"><i class="ph ph-check-circle"></i> Guardar Asignación</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="overlay" id="gallery-modal">
+        <div class="modal modal-large">
+            <div class="modal-header">
+                <span><i class="ph-bold ph-camera" style="color:var(--blue);"></i> Registro Fotográfico de Obra</span>
+                <i class="ph ph-x modal-close" onclick="closeModal('gallery-modal')"></i>
+            </div>
+            <div class="gallery-grid" id="gallery-grid-container"></div>
+        </div>
+    </div>
+
+    <div class="overlay" id="ia-diagnostic-modal">
+        <div class="modal" style="max-width: 500px; border-top: 4px solid var(--orange);">
+            <div class="modal-header">
+                <span><i class="ph-bold ph-warning-circle" style="color:var(--orange);"></i> Análisis de Operaciones</span>
+                <i class="ph ph-x modal-close" onclick="closeModal('ia-diagnostic-modal')"></i>
+            </div>
+            <div id="ia-diagnostic-content" style="padding:15px; font-size:14px; color:var(--text); white-space:pre-wrap; line-height:1.5;"></div>
+            <button class="btn btn-primary" style="width:100%; margin-top:15px;" onclick="closeModal('ia-diagnostic-modal')">Cerrar</button>
+        </div>
+    </div>
+
+    <div id="main-ui-wrapper">
+        <div class="top-bar" id="no-print-bar">
+            <button class="btn btn-outline" onclick="window.history.back()"><i class="ph ph-caret-left"></i> Atrás</button>
+            
+            <div style="display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end;">
+                <button class="btn btn-outline" style="color:var(--red); border-color:var(--red);" onclick="openFeriadosModal()"><i class="ph-bold ph-calendar-x"></i> Días Libres</button>
+
+                <button class="btn btn-outline" style="color:var(--purple); border-color:var(--purple);" onclick="armarGanttIA()"><i class="ph-bold ph-magic-wand"></i> Armado IA</button>
+                <button class="btn btn-outline" style="color:var(--orange); border-color:var(--orange);" onclick="diagnosticarGanttIA()"><i class="ph-bold ph-warning-circle"></i> Diagnóstico IA</button>
+                <button class="btn btn-outline-green" onclick="forceSyncAll()"><i class="ph-bold ph-arrows-clockwise"></i> Sincronizar</button>
+                
+                <button class="btn btn-outline btn-pdf-hide" onclick="exportSmartPDF()"><i class="ph-bold ph-printer"></i> PDF Resumen</button>
+                <button class="btn btn-primary btn-pdf-hide" onclick="exportExpandedPDF()"><i class="ph-bold ph-list-numbers"></i> PDF Detallado</button>
+                
+                <button class="btn btn-icon" onclick="toggleDarkMode()"><i class="ph ph-moon"></i></button>
+            </div>
+        </div>
+
+        <div id="pdf-content">
+            <div class="pdf-header">
+                <div class="header-title">
+                    <h1 id="ui-project-name">Cargando Proyecto...</h1>
+                    <p>Cronograma de Ejecución (GANTT)</p>
+                </div>
+                <img loading="lazy" decoding="async" src="logo.jpg" alt="Logo" class="brand-logo" onerror="this.style.display='none'">
+            </div>
+
+            <div class="cards-grid">
+                <div class="card" style="flex:0.5;">
+                    <span class="card-label">Inicio Proyecto</span>
+                    <input type="date" class="date-input" id="ui-start-date" onchange="updateProjectDates()">
+                </div>
+                <div class="card" style="flex:0.5;">
+                    <span class="card-label">Fin Proyecto</span>
+                    <input type="date" class="date-input" id="ui-end-date" onchange="updateProjectDates()">
+                </div>
+                <div class="card progress-card" style="flex: 1.5;">
+                    <div>
+                        <span class="card-label">Avance Global del Proyecto</span>
+                        <div class="progress-value" id="ui-global-progress">0%</div>
+                    </div>
+                    <button class="btn-photo-gallery" onclick="abrirGaleriaFotos()"><i class="ph-bold ph-images"></i> Evidencia Fotográfica</button>
+                </div>
+            </div>
+
+            <div class="gantt-container" id="gantt-container"></div>
+        </div>
+
+        <!-- ===== VISTA MÓVIL: lista de tarjetas ===== -->
+        <div id="mobile-gantt-list"></div>
+    </div>
+
+    <!-- Rotate hint (portrait mobile) — toca para girar -->
+    <div id="rotate-hint" onclick="tryLockLandscape()">
+        <i class="ph ph-device-rotate"></i>
+        <p>Girá el teléfono para<br>ver el Gantt completo</p>
+        <small>o toca aquí para rotar automáticamente</small>
+    </div>
+
+    <!-- FAB bar acciones móvil -->
+    <div id="mobile-fab-bar">
+        <button class="m-fab-btn" onclick="window.history.back()"><i class="ph ph-caret-left"></i><span>Atrás</span></button>
+        <button class="m-fab-btn red" onclick="openFeriadosModal()"><i class="ph ph-calendar-x"></i><span>Días Libres</span></button>
+        <button class="m-fab-btn purple" onclick="armarGanttIA()"><i class="ph-bold ph-magic-wand"></i><span>Armado IA</span></button>
+        <button class="m-fab-btn orange" onclick="diagnosticarGanttIA()"><i class="ph-bold ph-warning-circle"></i><span>Diagnóstico</span></button>
+        <button class="m-fab-btn green" onclick="forceSyncAll()"><i class="ph-bold ph-arrows-clockwise"></i><span>Sincronizar</span></button>
+        <button class="m-fab-btn" onclick="exportSmartPDF()"><i class="ph ph-printer"></i><span>PDF</span></button>
+        <button class="m-fab-btn blue" onclick="exportExpandedPDF()"><i class="ph ph-list-numbers"></i><span>PDF Det.</span></button>
+    </div>
+
+    <script>
+        const firebaseConfig = {
+        apiKey: "AIzaSyDXYlofy31cDP14xVAVxWo_7TqXdSgsIjA",
+        authDomain: "rubik-bolivia.firebaseapp.com",
+        databaseURL: "https://rubik-bolivia-default-rtdb.firebaseio.com",
+        projectId: "rubik-bolivia",
+        storageBucket: "rubik-bolivia.firebasestorage.app",
+        messagingSenderId: "4153087958",
+        appId: "1:4153087958:web:cf2dd16106580ed6437677"
+    };
+        if (!firebase.apps.length) { firebase.initializeApp(firebaseConfig); }
+        const db = firebase.database();
+
+        let projectInfo = { name: "Cargando...", start: "", end: "", progress: 0, items: [] };
+        let globalMinDate = null;
+        let timelineDaysTotal = 30;
+        let currentCid = "";
+        let currentPid = "";
+        let globalDaysArray = [];
+        let workerSyncMap = {}; 
+        let expandedItems = new Set(); 
+        
+        let feriadosGlobales = [];
+
+        function getParams() {
+            const params = new URLSearchParams(window.location.search);
+            currentCid = params.get('cid') || localStorage.getItem('rubik_client_id');
+            currentPid = params.get('pid') || localStorage.getItem('rubik_current_pid');
+        }
+
+        async function initApp() {
+            showLoader("Descargando Matriz...");
+            getParams();
+            await loadWorkersDataList(); 
+            await loadProjectData(); 
+        }
+
+        async function loadWorkersDataList() {
+            try {
+                const snap = await db.ref('personal').once('value');
+                const datalist = document.getElementById('dl-workers');
+                datalist.innerHTML = '';
+                if(snap.exists()) {
+                    snap.forEach(child => {
+                        const trueDbId = child.key; 
+                        const friendlyName = child.val().nombre || trueDbId;
+                        workerSyncMap[friendlyName.toUpperCase()] = trueDbId;
+                        let opt = document.createElement('option');
+                        opt.value = friendlyName; 
+                        datalist.appendChild(opt);
+                    });
+                }
+            } catch(e) { console.error(e); }
+        }
+
+        async function loadProjectData() {
+            try {
+                const snapshot = await db.ref(`proyectos/${currentCid}/${currentPid}`).once('value');
+                const data = snapshot.val();
+                if(!data) { alert("Proyecto no encontrado."); hideLoader(); return; }
+
+                projectInfo.name = data.nombre || "Proyecto sin nombre";
+                projectInfo.start = data.gantt_config?.start || "";
+                projectInfo.end = data.gantt_config?.end || "";
+                
+                feriadosGlobales = data.gantt_config?.feriados || [];
+
+                projectInfo.items = []; 
+                let sumGlobalProgress = 0, countGlobalTasks = 0;
+                
+                if (data.presupuesto && data.presupuesto.items) {
+                    data.presupuesto.items.forEach((pItem, index) => {
+                        if (!pItem || !pItem.desc || pItem.type === 'chapter') return; 
+
+                        let parsedItem = { index: index, id: `item_${index}`, name: pItem.desc, start: null, end: null, progress: 0, tasks: [] };
+                        let sumItemProgress = 0, countItemTasks = 0;
+                        let minStartObj = null; let maxEndObj = null;
+
+                        if (data.gantt && data.gantt.items && data.gantt.items[index] && data.gantt.items[index].subtasks) {
+                            const subs = data.gantt.items[index].subtasks;
+                            for (const key in subs) {
+                                const subtask = subs[key];
+                                const subProgress = parseInt(subtask.progress) || 0;
+                                parsedItem.tasks.push({ id: key, name: subtask.name, start: subtask.start, end: subtask.end, progress: subProgress, worker: subtask.worker || "", photos: subtask.photos || {} });
+                                if(subtask.start && subtask.end) {
+                                    let sd = new Date(subtask.start + 'T12:00:00'); let ed = new Date(subtask.end + 'T12:00:00');
+                                    if(!minStartObj || sd < minStartObj) { minStartObj = sd; parsedItem.start = subtask.start; }
+                                    if(!maxEndObj || ed > maxEndObj) { maxEndObj = ed; parsedItem.end = subtask.end; }
+                                }
+                                sumItemProgress += subProgress; countItemTasks++; sumGlobalProgress += subProgress; countGlobalTasks++;
+                            }
+                        }
+                        if (countItemTasks > 0) { parsedItem.progress = Math.round(sumItemProgress / countItemTasks); }
+                        projectInfo.items.push(parsedItem);
+                    });
+                }
+
+                projectInfo.progress = countGlobalTasks > 0 ? Math.round(sumGlobalProgress / countGlobalTasks) : 0;
+                document.getElementById('ui-project-name').innerText = projectInfo.name;
+                document.getElementById('ui-start-date').value = projectInfo.start;
+                document.getElementById('ui-end-date').value = projectInfo.end;
+                document.getElementById('ui-global-progress').innerText = `${projectInfo.progress}%`;
+
+                renderGanttWeb();
+                renderMobileGantt();
+                hideLoader();
+            } catch (error) { console.error(error); hideLoader(); }
+        }
+
+        async function updateProjectDates() {
+            const newStart = document.getElementById('ui-start-date').value;
+            const newEnd = document.getElementById('ui-end-date').value;
+            if(!newStart || !newEnd) return;
+            showLoader("Reprogramando...");
+            await db.ref(`proyectos/${currentCid}/${currentPid}/gantt_config`).update({ start: newStart, end: newEnd });
+            loadProjectData();
+        }
+
+        function calculateDiffDays(d1, d2) {
+            const date1 = new Date(d1 + "T12:00:00");
+            const date2 = new Date(d2 + "T12:00:00");
+            return Math.round((date2 - date1) / (1000 * 60 * 60 * 24));
+        }
+
+        function renderGanttWeb() {
+            const container = document.getElementById('gantt-container');
+            container.innerHTML = '';
+            if(!projectInfo.start || !projectInfo.end) {
+                container.innerHTML = "<div style='padding:20px; font-weight:bold;'>Configura fechas arriba.</div>";
+                return;
+            }
+            globalMinDate = projectInfo.start;
+            timelineDaysTotal = calculateDiffDays(globalMinDate, projectInfo.end) + 1; 
+            if(timelineDaysTotal < 1) timelineDaysTotal = 1;
+
+            // Calcular ancho de columna dinámico según días y espacio disponible
+            const sidebarW = window.innerWidth < 800 ? 160 : 320;
+            const availableW = container.clientWidth > 0 ? container.clientWidth - sidebarW : window.innerWidth - sidebarW;
+            const minDayW = 32;   // mínimo legible
+            const maxDayW = 90;   // máximo cómodo
+            // Intentar que todos los días quepan en pantalla, pero respetando mínimo
+            let dayW = Math.floor(availableW / timelineDaysTotal);
+            dayW = Math.max(minDayW, Math.min(maxDayW, dayW));
+            container.style.setProperty('--day-w', `${dayW}px`);
+            container.style.setProperty('--timeline-width', `calc(${timelineDaysTotal} * ${dayW}px)`);
+
+            globalDaysArray = [];
+            let tempDate = new Date(globalMinDate + "T12:00:00");
+            let daysHtml = '';
+            
+            for (let i = 0; i < timelineDaysTotal; i++) {
+                const isW = (tempDate.getDay() === 0 || tempDate.getDay() === 6); 
+                let dStr = tempDate.toISOString().split('T')[0];
+                let isFeriado = feriadosGlobales.includes(dStr);
+                let isNonWorking = isW || isFeriado;
+                
+                globalDaysArray.push({ dateStr: dStr, isWeekend: isW, isFeriado: isFeriado, isNonWorking: isNonWorking });
+                
+                let extraClass = isNonWorking ? 'weekend-bg' : '';
+                if(isFeriado) extraClass += ' feriado-bg'; 
+                
+                daysHtml += `<div class="day-cell ${i===0?'active-month':''} ${extraClass}" title="${isFeriado ? 'Día Libre / Feriado' : ''}">${String(tempDate.getDate()).padStart(2,'0')}/${String(tempDate.getMonth()+1).padStart(2,'0')}</div>`;
+                tempDate.setDate(tempDate.getDate() + 1);
+            }
+
+            let html = `<div class="gantt-header"><div class="col-sidebar">Ítems de Producción</div><div class="col-timeline">${daysHtml}</div></div>`;
+            projectInfo.items.forEach(item => {
+                const hasTasks = item.tasks && item.tasks.length > 0;
+                let isExpanded = expandedItems.has(item.id);
+                let chevRot = isExpanded ? 'rotate(0deg)' : 'rotate(-90deg)';
+                let chev = hasTasks ? `<i class="ph-bold ph-caret-down chevron" id="icon-${item.id}" onclick="toggleChildRows('${item.id}')" style="transform:${chevRot};"></i>` : `<i class="ph-bold ph-minus" style="color:var(--gray); padding:5px;"></i>`;
+                let gridsPadre = createGridBackground(item.index, '');
+                let barPadre = createBarHTML(item.start, item.end, item.progress, 'bar-item', '');
+                html += `
+                    <div class="gantt-row item-row">
+                        <div class="col-sidebar" ${hasTasks ? `onclick="toggleChildRows('${item.id}')"` : ''}>
+                            <div class="item-info">${chev} <span title="${item.name}">${item.name}</span></div>
+                            <div class="item-actions"><span style="color:var(--blue); font-size:11px; font-weight:800;">${item.progress}%</span><button class="btn-small" onclick="openCreateModal('${item.index}', '${globalMinDate}')"><i class="ph-bold ph-plus"></i></button></div>
+                        </div>
+                        <div class="col-timeline">${gridsPadre}${barPadre}</div>
+                    </div>`;
+                if (hasTasks) {
+                    let displayStyle = isExpanded ? 'flex' : 'none';
+                    item.tasks.forEach(task => {
+                        // LÓGICA DE RESPONSABLES MULTIPLES
+                        let wTag = '';
+                        if(task.worker) {
+                            wTag = task.worker.split(',').filter(w => w.trim() !== '').map(w => `<span class="worker-badge" style="margin-right:2px;"><i class="ph-fill ph-user"></i> ${w.trim()}</span>`).join('');
+                        }
+                        
+                        let onEdit = `onclick="openEditModal('${item.index}', '${task.id}', '${task.name}', '${task.start}', '${task.end}', '${task.worker}')"`;
+                        let gridsHijo = createGridBackground(item.index, onEdit);
+                        let barHijo = createBarHTML(task.start, task.end, task.progress, 'bar-task', onEdit);
+                        html += `
+                            <div class="gantt-row task-row child-of-${item.id}" style="display: ${displayStyle};">
+                                <div class="col-sidebar" ${onEdit}><div class="item-info"><i class="ph-bold ph-arrow-elbow-down-right" style="color:var(--gray);"></i> <span title="${task.name}">${task.name}</span></div>${wTag}</div>
+                                <div class="col-timeline">${gridsHijo}${barHijo}</div>
+                            </div>`;
+                    });
+                }
+            });
+            container.innerHTML = html;
+        }
+
+        // ====================================================
+        // RENDER MÓVIL: lista de tarjetas por ítem
+        // ====================================================
+        function renderMobileGantt() {
+            const mList = document.getElementById('mobile-gantt-list');
+            if (!mList) return;
+            if (projectInfo.items.length === 0) {
+                mList.innerHTML = '<div class="m-empty">No hay ítems en este proyecto.</div>';
+                return;
+            }
+            let html = '';
+            projectInfo.items.forEach(item => {
+                let tasksHtml = '';
+                if (item.tasks && item.tasks.length > 0) {
+                    item.tasks.forEach(task => {
+                        const workerTag = task.worker ? `<span><i class="ph-fill ph-user"></i> ${task.worker}</span>` : '';
+                        const dateTag = task.start ? `<span><i class="ph-fill ph-calendar"></i> ${task.start} → ${task.end}</span>` : '<span style="color:var(--orange)"><i class="ph-bold ph-warning"></i> Sin fechas</span>';
+                        tasksHtml += `
+                        <div class="m-task-row" onclick="openEditModal('${item.index}', '${task.id}', '${task.name}', '${task.start||''}', '${task.end||''}', '${task.worker||''}')">
+                            <div class="m-task-name"><i class="ph-bold ph-arrow-elbow-down-right" style="color:var(--gray); font-size:12px;"></i> ${task.name}</div>
+                            <div class="m-task-meta">${dateTag}${workerTag}</div>
+                            <div class="m-prog-bar"><div class="m-prog-fill" style="width:${task.progress}%;"></div></div>
+                        </div>`;
+                    });
+                } else {
+                    tasksHtml = '<div class="m-empty">Sin tareas asignadas.</div>';
+                }
+                html += `
+                <div class="m-item-card">
+                    <div class="m-item-header" onclick="this.nextElementSibling.style.display = this.nextElementSibling.style.display==='none' ? 'block' : 'none'">
+                        <div class="m-item-title">${item.name}</div>
+                        <div class="m-item-pct">${item.progress}%</div>
+                    </div>
+                    <div class="m-item-body">
+                        ${tasksHtml}
+                        <button class="m-btn-add" onclick="openCreateModal('${item.index}', '${globalMinDate || ''}')">
+                            <i class="ph-bold ph-plus"></i> Agregar Tarea
+                        </button>
+                    </div>
+                </div>`;
+            });
+            mList.innerHTML = html;
+        }
+
+        function createGridBackground(itemIndex, clickEventSiEsTarea) {
+            let grids = '';
+            for(let i=0; i<timelineDaysTotal; i++) {
+                let d = globalDaysArray[i];
+                let clickEv = clickEventSiEsTarea !== '' ? clickEventSiEsTarea : `onclick="openCreateModal('${itemIndex}', '${d.dateStr}')"`;
+                let extraClass = d.isNonWorking ? 'weekend-bg' : '';
+                grids += `<div class="grid-col ${extraClass}" ${clickEv}></div>`;
+            }
+            return `<div style="display:flex; width:100%; height:100%; position:absolute; top:0; left:0; z-index:1;">${grids}</div>`;
+        }
+
+        function createBarHTML(start, end, progress, barClass, clickEvent) {
+            if(!start || !end) return '';
+            const offsetDays = calculateDiffDays(globalMinDate, start);
+            const durationDays = calculateDiffDays(start, end) + 1;
+            let visibleOffset = offsetDays < 0 ? 0 : offsetDays;
+            let visibleDuration = durationDays;
+            if (visibleOffset + visibleDuration > timelineDaysTotal) visibleDuration = timelineDaysTotal - visibleOffset;
+            if (visibleDuration <= 0) return '';
+            let leftPct = (visibleOffset / timelineDaysTotal) * 100;
+            let widthPct = (visibleDuration / timelineDaysTotal) * 100;
+            return `<div class="gantt-bar ${barClass}" style="left: ${leftPct}%; width: ${widthPct}%;" ${clickEvent}>Avance: ${progress}%</div>`;
+        }
+
+        function toggleChildRows(itemId) {
+            if(event) event.stopPropagation();
+            let icon = document.getElementById(`icon-${itemId}`);
+            let isExpanded = !expandedItems.has(itemId);
+            if(isExpanded) expandedItems.add(itemId); else expandedItems.delete(itemId);
+            document.querySelectorAll(`.child-of-${itemId}`).forEach(el => { el.style.display = isExpanded ? 'flex' : 'none'; });
+            if(icon) icon.style.transform = isExpanded ? 'rotate(0deg)' : 'rotate(-90deg)';
+        }
+
+        function autoCalcEndDate() {
+            let start = document.getElementById('modal-task-start').value;
+            let days = parseInt(document.getElementById('modal-task-duration').value) || 1;
+            let skipHolidays = document.getElementById('modal-skip-holidays').checked;
+            
+            if(start) {
+                let d = new Date(start + "T12:00:00");
+                let added = 0;
+                while(added < days - 1) {
+                    d.setDate(d.getDate() + 1);
+                    let isWeekend = d.getDay() === 0 || d.getDay() === 6;
+                    let dStr = d.toISOString().split('T')[0];
+                    let isFeriado = feriadosGlobales.includes(dStr);
+                    
+                    if(skipHolidays && (isWeekend || isFeriado)) {
+                        
+                    } else {
+                        added++;
+                    }
+                }
+                document.getElementById('modal-task-end').value = d.toISOString().split('T')[0];
+            }
+        }
+        
+        function autoCalcDuration() {
+            let start = document.getElementById('modal-task-start').value;
+            let end = document.getElementById('modal-task-end').value;
+            let skipHolidays = document.getElementById('modal-skip-holidays').checked;
+            
+            if(start && end) {
+                let d1 = new Date(start + "T12:00:00");
+                let d2 = new Date(end + "T12:00:00");
+                let count = 0;
+                let cur = new Date(d1);
+                
+                while(cur <= d2) {
+                    let isW = cur.getDay() === 0 || cur.getDay() === 6;
+                    let curStr = cur.toISOString().split('T')[0];
+                    let isF = feriadosGlobales.includes(curStr);
+                    
+                    if(skipHolidays && (isW || isF)) {
+                        
+                    } else {
+                        count++;
+                    }
+                    cur.setDate(cur.getDate() + 1);
+                }
+                document.getElementById('modal-task-duration').value = count > 0 ? count : 1;
+            }
+        }
+
+        function openFeriadosModal() {
+            renderFeriadosList();
+            document.getElementById('feriados-modal').style.display = 'flex';
+        }
+
+        async function addFeriado() {
+            let dateVal = document.getElementById('new-feriado-date').value;
+            if(!dateVal) return;
+            if(!feriadosGlobales.includes(dateVal)) {
+                feriadosGlobales.push(dateVal);
+                feriadosGlobales.sort(); 
+                await db.ref(`proyectos/${currentCid}/${currentPid}/gantt_config/feriados`).set(feriadosGlobales);
+                renderFeriadosList();
+                renderGanttWeb(); 
+            }
+            document.getElementById('new-feriado-date').value = '';
+        }
+
+        async function removeFeriado(dateVal) {
+            feriadosGlobales = feriadosGlobales.filter(d => d !== dateVal);
+            await db.ref(`proyectos/${currentCid}/${currentPid}/gantt_config/feriados`).set(feriadosGlobales);
+            renderFeriadosList();
+            renderGanttWeb();
+        }
+
+        function renderFeriadosList() {
+            let html = '';
+            feriadosGlobales.forEach(d => {
+                html += `<div style="display:flex; justify-content:space-between; align-items:center; padding:10px 12px; background:var(--gray-light); border-radius:8px;">
+                    <span style="font-size:13px; font-weight:800; color:var(--text);"><i class="ph-bold ph-calendar"></i> ${d}</span>
+                    <button class="btn-outline-red" style="border:none; padding:5px; border-radius:6px; cursor:pointer;" onclick="removeFeriado('${d}')"><i class="ph-bold ph-trash"></i></button>
+                </div>`;
+            });
+            if(feriadosGlobales.length === 0) html = '<div style="font-size:12px; color:var(--text-secondary); text-align:center; padding:15px; border:1px dashed var(--gray-border); border-radius:8px;">No hay feriados registrados.</div>';
+            document.getElementById('feriados-list').innerHTML = html;
+        }
+
+        function openCreateModal(itemIndex, prefillDate) {
+            if(event) event.stopPropagation();
+            document.getElementById('modal-title').innerText = "Nueva Tarea";
+            document.getElementById('modal-item-index').value = itemIndex;
+            document.getElementById('modal-task-id').value = ''; 
+            document.getElementById('modal-task-name').value = '';
+            document.getElementById('modal-task-start').value = prefillDate || globalMinDate;
+            document.getElementById('modal-task-duration').value = 1; autoCalcEndDate();
+            document.getElementById('modal-task-worker').value = '';
+            document.getElementById('btn-delete-task').style.display = 'none';
+            document.getElementById('task-modal').style.display = 'flex';
+        }
+
+        function openEditModal(itemIndex, taskId, taskName, taskStart, taskEnd, taskWorker) {
+            if(event) event.stopPropagation();
+            document.getElementById('modal-title').innerText = "Editar Tarea";
+            document.getElementById('modal-item-index').value = itemIndex;
+            document.getElementById('modal-task-id').value = taskId; 
+            document.getElementById('modal-task-name').value = taskName;
+            document.getElementById('modal-task-start').value = taskStart;
+            document.getElementById('modal-task-end').value = taskEnd; autoCalcDuration();
+            document.getElementById('modal-task-worker').value = taskWorker; 
+            document.getElementById('btn-delete-task').style.display = 'flex';
+            document.getElementById('task-modal').style.display = 'flex';
+        }
+
+        function closeModal(modalId) { document.getElementById(modalId).style.display = 'none'; }
+
+        async function saveTask() {
+            const index = document.getElementById('modal-item-index').value;
+            const taskId = document.getElementById('modal-task-id').value;
+            const name = document.getElementById('modal-task-name').value;
+            const start = document.getElementById('modal-task-start').value;
+            const end = document.getElementById('modal-task-end').value;
+            const workerInput = document.getElementById('modal-task-worker').value.trim();
+
+            if(!name || !start || !end) return alert("Completa los campos.");
+            closeModal('task-modal'); showLoader("Guardando...");
+            
+            try {
+                const nodePath = `proyectos/${currentCid}/${currentPid}/gantt/items/${index}/subtasks`;
+                if(taskId) await db.ref(`${nodePath}/${taskId}`).update({ name, start, end, worker: workerInput });
+                else await db.ref(nodePath).push({ name, start, end, worker: workerInput, progress: 0 });
+                loadProjectData();
+            } catch(e) { console.error(e); hideLoader(); }
+        }
+
+        async function deleteTask() {
+            const index = document.getElementById('modal-item-index').value;
+            const taskId = document.getElementById('modal-task-id').value;
+            if(!confirm("¿Eliminar?")) return;
+            closeModal('task-modal'); showLoader("Eliminando...");
+            try {
+                await db.ref(`proyectos/${currentCid}/${currentPid}/gantt/items/${index}/subtasks/${taskId}`).remove();
+                loadProjectData();
+            } catch(e) { console.error(e); hideLoader(); }
+        }
+
+        async function forceSyncAll() {
+            showLoader("Sincronizando...");
+            await loadProjectData();
+        }
+
+        function abrirGaleriaFotos() {
+            const modal = document.getElementById('gallery-modal');
+            const grid = document.getElementById('gallery-grid-container');
+            grid.innerHTML = '<div style="padding:20px; color:var(--text-secondary);">Cargando fotos...</div>';
+            modal.style.display = 'flex';
+            let photosHtml = '';
+            projectInfo.items.forEach(item => {
+                item.tasks && item.tasks.forEach(task => {
+                    if(task.photos) {
+                        Object.entries(task.photos).forEach(([pKey, url]) => {
+                            photosHtml += `<div class="gallery-item">
+                                <img loading="lazy" decoding="async" src="${url}" onclick="window.open('${url}','_blank')" crossorigin="anonymous">
+                                <div class="gallery-info" style="font-size:11px; font-weight:600;">${task.name}</div>
+                            </div>`;
+                        });
+                    }
+                });
+            });
+            grid.innerHTML = photosHtml || '<div style="padding:20px; color:var(--text-secondary);">Sin fotos registradas.</div>';
+        }
+
+        function toggleDarkMode() { document.body.classList.toggle('dark-mode'); }
+        function showLoader(t) { document.getElementById('loader-text').innerText = t; document.getElementById('loader').style.display = 'flex'; }
+        function hideLoader() { document.getElementById('loader').style.display = 'none'; }
+        function exportSmartPDF() { window.print(); }
+        function exportExpandedPDF() {
+            projectInfo.items.forEach(item => { if (item.tasks && item.tasks.length > 0) expandedItems.add(item.id); });
+            renderGanttWeb();
+            setTimeout(() => { window.print(); }, 500);
+        }
+
+        document.addEventListener('DOMContentLoaded', initApp);
+
+        // ─── Rotación a landscape en modo móvil ───
+        // Screen Orientation API requiere gesto del usuario en iOS/Safari
+        // La función tryLockLandscape() se llama desde el botón del rotate-hint
+        window.tryLockLandscape = function() {
+            try {
+                if (screen.orientation && screen.orientation.lock) {
+                    screen.orientation.lock('landscape').catch(function() {});
+                }
+            } catch(e) {}
+        };
+        // En Android Chrome/Firefox el lock funciona sin gesto, intentamos directo
+        document.addEventListener('DOMContentLoaded', function() {
+            if (document.body.getAttribute('data-view') === 'mobile') {
+                setTimeout(function() { window.tryLockLandscape(); }, 300);
+            }
+        });
+        // Re-render del gantt al girar pantalla para recalcular dayWidth
+        window.addEventListener('orientationchange', function() {
+            setTimeout(function() {
+                if (typeof renderGanttWeb === 'function' && projectInfo && projectInfo.start) {
+                    renderGanttWeb();
+                }
+            }, 350); // esperar que el viewport se actualice
+        });
+        window.addEventListener('resize', function() {
+            clearTimeout(window._ganttResizeTimer);
+            window._ganttResizeTimer = setTimeout(function() {
+                if (typeof renderGanttWeb === 'function' && projectInfo && projectInfo.start) {
+                    renderGanttWeb();
+                }
+            }, 400);
+        });
+    </script>
+
+    <script>
+        // Helper: llamar al proxy /api/gemini autenticado
+        async function _llamarGeminiGantt(promptText) {
+            // Esperar hasta 5s a que Firebase Auth esté listo
+            let user = firebase.auth().currentUser;
+            if (!user) {
+                user = await new Promise((resolve) => {
+                    const unsub = firebase.auth().onAuthStateChanged(u => { unsub(); resolve(u); });
+                    setTimeout(() => resolve(null), 5000);
+                });
+            }
+            if (!user) throw new Error('No autenticado');
+            const token = await user.getIdToken();
+            const resp = await fetch('/api/gemini', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+                body: JSON.stringify({ model: 'gemini-2.5-flash', text: promptText })
+            });
+            if (!resp.ok) throw new Error('Error API Gemini: ' + resp.status);
+            const data = await resp.json();
+            return data.text || '';
+        }
+
+        function parseIA(txt) {
+            let clean = txt.replace(/```json/gi, '').replace(/```/g, '').trim();
+            const start = clean.indexOf('['); const end = clean.lastIndexOf(']');
+            if (start !== -1 && end !== -1) return JSON.parse(clean.substring(start, end + 1));
+            throw new Error("Respuesta inválida");
+        }
+
+        async function aplicarEtiquetasPersonalizadas(promptText) {
+            try {
+                let snap = await firebase.database().ref('config_ia/custom_tags').once('value');
+                if(snap.exists()) {
+                    const tags = snap.val();
+                    for (const key in tags) {
+                        const regex = new RegExp('\\[' + key + '\\]', 'g');
+                        promptText = promptText.replace(regex, tags[key]);
+                    }
+                }
+            } catch(e) {}
+            return promptText;
+        }
+
+        window.armarGanttIA = async function() {
+            if(!globalMinDate || !projectInfo.end) return alert("Define fechas primero.");
+            showLoader("IA planificando cronograma optimizado...");
+            try {
+                const snap = await firebase.database().ref(`proyectos/${currentCid}/${currentPid}/presupuesto/items`).once('value');
+                const items = snap.val() || [];
+                let promptData = Object.keys(items).map(k => ({ id: k, d: items[k].desc, type: items[k].type })).filter(i => i.d && i.type !== 'chapter');
+
+                let sysPrompt = `Eres el Director de Producción de Rubik Bolivia. Desglosa estos ítems en tareas (Ej: Compra, Corte, Armado, Instalación). 
+Rango estricto: ${globalMinDate} a ${projectInfo.end}.
+REGLA CRÍTICA DE TIEMPOS: Las tareas PUEDEN Y DEBEN SOLAPARSE para optimizar el tiempo de entrega.
+REGLA DE DÍAS HÁBILES: NO asignes tareas en fines de semana.
+DEVUELVE SOLO JSON: [{"id":"original_id", "tareas":[{"name":"...", "start":"YYYY-MM-DD", "end":"YYYY-MM-DD"}]}]`;
+
+                try {
+                    let snapPrompt = await firebase.database().ref('config_ia/prompts/gantt_armado').once('value');
+                    if(snapPrompt.exists() && snapPrompt.val() !== "") {
+                        sysPrompt = snapPrompt.val().replace('[FECHA_INICIO]', globalMinDate).replace('[FECHA_FIN]', projectInfo.end);
+                    }
+                } catch(e) {}
+
+                sysPrompt = await aplicarEtiquetasPersonalizadas(sysPrompt);
+                if(feriadosGlobales.length > 0) sysPrompt += "\nFeriados a omitir: " + feriadosGlobales.join(', ');
+
+                const rawText = await _llamarGeminiGantt(sysPrompt + `\n Items: ${JSON.stringify(promptData)}`);
+                const dataIA = parseIA(rawText);
+
+                let updates = {};
+                dataIA.forEach(item => {
+                    // item.id es el índice numérico del array de presupuesto
+                    const idx = item.id;
+                    if(item.tareas) {
+                        let subtasks = {};
+                        item.tareas.forEach(t => {
+                            let key = firebase.database().ref().push().key;
+                            subtasks[key] = { name: t.name, start: t.start, end: t.end, progress: 0, worker: "" };
+                        });
+                        updates[`proyectos/${currentCid}/${currentPid}/gantt/items/${idx}/subtasks`] = subtasks;
+                    }
+                });
+
+                await db.ref().update(updates);
+                alert("✅ Gantt actualizado con IA correctamente.");
+                // Recargar datos para que el render muestre las nuevas tareas
+                await loadProjectData();
+            } catch(e) {
+                console.error(e);
+                alert("Error IA: " + e.message);
+            } finally {
+                hideLoader();
+            }
+        };
+
+        window.diagnosticarGanttIA = async function() {
+            const btn = document.getElementById('btn-ia-diagnostico');
+            const originalText = btn ? btn.innerHTML : '';
+            if(btn) { btn.disabled = true; btn.innerHTML = '<i class="ph ph-spinner"></i> Analizando...'; }
+            showLoader("IA analizando cronograma...");
+            try {
+                const snap = await db.ref(`gantt/${currentCid}/${currentPid}`).once('value');
+                const data = snap.val() || {};
+                const items = Object.values(data.items || {}).map(it => ({
+                    name: it.name,
+                    start: it.start,
+                    end: it.end,
+                    progress: it.progress || 0,
+                    tareas: Object.values(it.tareas || {}).map(t => ({ name: t.name, start: t.start, end: t.end, done: t.done || 0 }))
+                }));
+
+                const sysPrompt = `Eres un experto en gestión de proyectos de construcción e ingeniería. 
+Analiza el siguiente Gantt del proyecto "${data.name || 'Sin nombre'}" y proporciona:
+1. Estado general del proyecto
+2. Tareas atrasadas o en riesgo
+3. Recomendaciones específicas para mejorar el avance
+4. Alerta de cuellos de botella
+Responde en español, de forma clara y concisa.
+
+Datos del Gantt: ${JSON.stringify({ items, feriados: feriadosGlobales })}`;
+
+                const texto = await _llamarGeminiGantt(sysPrompt);
+
+                const modal = document.createElement('div');
+                modal.style.cssText = 'position:fixed;inset:0;background:#0009;display:flex;align-items:center;justify-content:center;z-index:9999;padding:16px;';
+                modal.innerHTML = `
+                    <div style="background:var(--card);border-radius:18px;padding:24px;max-width:600px;width:100%;max-height:80vh;overflow-y:auto;">
+                        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+                            <h3 style="margin:0;font-size:16px;"><i class="ph-bold ph-warning-circle" style="color:var(--orange);"></i> Diagnóstico IA</h3>
+                            <button onclick="this.closest('div[style]').remove()" style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--text);">✕</button>
+                        </div>
+                        <div style="white-space:pre-wrap;font-size:14px;line-height:1.6;">${texto.replace(/</g,'&lt;')}</div>
+                    </div>`;
+                document.body.appendChild(modal);
+            } catch(e) {
+                console.error(e);
+                alert("Error diagnóstico IA: " + e.message);
+            } finally {
+                hideLoader();
+                if(btn) { btn.disabled = false; btn.innerHTML = originalText; }
+            }
+        };
+    </script>
+    <script src="/js/viewmode.js?v=1"></script>
+</body>
+</html>

@@ -1,0 +1,1615 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Rubik Supervisor Pro - Trabajador</title>
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.1.3/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.1.3/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.1.3/firebase-database-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.1.3/firebase-storage-compat.js"></script>
+    <script>
+        window._rubikFirebaseConfig = window._rubikFirebaseConfig || {
+            apiKey: "AIzaSyDXYlofy31cDP14xVAVxWo_7TqXdSgsIjA",
+            authDomain: "rubik-bolivia.firebaseapp.com",
+            databaseURL: "https://rubik-bolivia-default-rtdb.firebaseio.com",
+            projectId: "rubik-bolivia",
+            storageBucket: "rubik-bolivia.firebasestorage.app",
+            messagingSenderId: "4153087958",
+            appId: "1:4153087958:web:cf2dd16106580ed6437677"
+        };
+        if (!firebase.apps.length) firebase.initializeApp(window._rubikFirebaseConfig);
+    </script>
+    <script src="/js/firecache.js?v=1"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
+    <style>
+        :root { --bg: #f2f2f7; --card: #ffffff; --text: #1c1c1e; --blue: #007aff; --green: #34c759; --orange: #ff9500; --red: #ff3b30; --gold: #f1c40f; --purple: #5856d6; --gray: #8e8e93; --border: #e5e5ea; }
+        body.dark-mode { --bg: #000000; --card: #1c1c1e; --text: #ffffff; --border: #38383a; }
+        body { font-family: -apple-system, sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 15px; padding-bottom: 90px; -webkit-tap-highlight-color: transparent; overflow-x: hidden; }
+        
+        .nav-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; }
+        .user-info { display: flex; align-items: center; gap: 10px; }
+        .avatar { width: 40px; height: 40px; border-radius: 50%; background: linear-gradient(135deg, var(--purple), #8e54e9); color: white; display: flex; align-items: center; justify-content: center; font-size: 18px; font-weight: 900; }
+        
+        .grid-main-apps { display: grid; grid-template-columns: 1fr; gap: 12px; margin-bottom: 20px; }
+        .main-app-btn { border-radius: 20px; padding: 20px; color: white; text-decoration: none; display: flex; align-items: center; gap: 15px; position:relative; overflow:hidden; transition:0.2s; box-shadow: 0 5px 15px rgba(0,0,0,0.1); cursor:pointer; border:none; width: 100%; text-align: left;}
+        .main-app-btn:active { transform: scale(0.97); }
+        .main-app-btn i.main-ic { font-size: 36px; }
+        .main-app-btn div.texts-btn { flex:1; z-index: 2; }
+        .main-app-btn span.title { font-weight: 900; font-size: 16px; display:block; margin-bottom:2px;}
+        .main-app-btn span.desc { font-weight: 600; font-size: 12px; opacity:0.8; display:block; }
+        .main-app-btn i.bg-ic { position: absolute; right: -10px; bottom: -10px; font-size: 90px; color: rgba(255,255,255,0.08); z-index: 1;}
+
+        .b-tareas { background: linear-gradient(135deg, #1c1c1e, #333); }
+        .b-gold { background: linear-gradient(135deg, #f39c12, #f1c40f); color: #000; } 
+        .b-super-ia { background: linear-gradient(135deg, var(--purple), #8e54e9); } 
+        
+        .tabs-wrap { background: var(--border); padding: 4px; border-radius: 14px; display: flex; margin-bottom: 15px; position: sticky; top: 10px; z-index: 100; box-shadow:0 4px 10px rgba(0,0,0,0.05); }
+        body.dark-mode .tabs-wrap { background: #1c1c1e; }
+        .tab-btn { flex: 1; padding: 10px; border: none; background: transparent; font-weight: 800; font-size: 10px; border-radius: 10px; color: var(--gray); cursor: pointer; display:flex; flex-direction:column; align-items:center; gap:4px; transition:0.2s;}
+        .tab-btn i { font-size: 16px; }
+        .tab-btn.active { background: var(--card); color: var(--text); box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+        body.dark-mode .tab-btn.active { background: var(--purple); color: white; }
+
+        .panel-content { display: none; }
+        .panel-content.active { display: block; }
+        .week-scroll { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 5px; margin-bottom: 15px; scrollbar-width: none; }
+        .week-scroll::-webkit-scrollbar { display: none; }
+        .day-card { background: var(--card); border: 1px solid var(--border); border-radius: 14px; min-width: 55px; padding: 10px 3px; text-align: center; cursor: pointer; transition: 0.2s; flex-shrink: 0;}
+        .day-card.active { background: var(--text); color: var(--bg); border-color: var(--text); box-shadow: 0 4px 10px rgba(0,0,0,0.1); transform: scale(1.03);}
+        .day-name { font-size: 10px; font-weight: 800; text-transform: uppercase; color: var(--gray); margin-bottom: 2px; }
+        .day-num { font-size: 20px; font-weight: 900; }
+
+        .card-list { background: var(--card); border-radius: 16px; border: 1px solid var(--border); padding: 15px; margin-bottom: 10px; box-shadow: 0 3px 8px rgba(0,0,0,0.02);}
+        .title-txt { font-size: 14px; font-weight: 900; color: var(--text); line-height: 1.2; }
+        .sub-txt { font-size: 11px; color: var(--gray); font-weight: 600; margin-top: 2px; }
+        
+        .btn-main { background: var(--blue); color: white; border: none; padding: 14px; border-radius: 12px; font-weight: 900; font-size: 13px; cursor: pointer; width: 100%; display: flex; justify-content: center; align-items: center; gap: 7px; transition: 0.2s; outline:none; }
+        .btn-main:active { transform: scale(0.98); opacity: 0.9; }
+        
+        .inp-lbl { font-size: 10px; font-weight: 800; color: var(--gray); text-transform: uppercase; margin-bottom: 3px; display: block; margin-top: 8px;}
+        .inp-std { width: 100%; padding: 12px; border: 1px solid var(--border); background: var(--card); color: var(--text); border-radius: 10px; font-weight: 700; box-sizing: border-box; outline:none; font-size:13px; transition: 0.2s;}
+        
+        .loader-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); z-index: 20000; display: none; flex-direction: column; align-items: center; justify-content: center; color: white; font-weight: 800; backdrop-filter: blur(5px);}
+        .spinner { width: 35px; height: 35px; border: 4px solid rgba(255,255,255,0.2); border-top: 4px solid white; border-radius: 50%; animation: spin 0.8s linear infinite; margin-bottom: 12px; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+        .super-modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #000; z-index: 10000; flex-direction: column; overflow: hidden; animation: slideUp 0.3s ease-out; }
+        @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+        
+        .super-header { background: #1c1c1e; padding: 12px 15px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #38383a; position: sticky; top: 0; z-index: 100; }
+        .super-title { font-weight: 900; font-size: 15px; display: flex; align-items: center; gap: 8px; color:white; }
+        .super-title img { width: 26px; height: 26px; border-radius: 50%; border: 1px solid rgba(255,255,255,0.2); }
+        .close-super { background: rgba(255,255,255,0.1); color: white; border: none; padding: 6px 12px; font-size: 11px; border-radius: 8px; font-weight: 800; cursor: pointer; }
+
+        .super-tabs { display: flex; background: #2c2c2e; padding: 3px; border-radius: 10px; margin: 10px 15px; }
+        .super-tab-btn { flex: 1; padding: 8px; border: none; background: transparent; color: #a1a1a6; font-weight: 800; font-size: 10px; border-radius: 8px; cursor: pointer; display:flex; align-items:center; justify-content:center; gap:5px;}
+        .super-tab-btn.active { background: #3a3a3c; color: white; box-shadow: 0 2px 5px rgba(0,0,0,0.2); }
+
+        .super-body { flex: 1; overflow-y: auto; display: none; padding: 0 15px; padding-bottom: 80px; }
+        .super-body.active { display: block; }
+        
+        .chat-container { display: flex; flex-direction: column; gap: 12px; padding-top: 10px; }
+        .msg { max-width: 85%; padding: 10px 14px; border-radius: 16px; font-size: 13px; line-height: 1.4; word-wrap: break-word; font-weight: 600; }
+        .msg-ai { background: #2c2c2e; color: #ffffff; border: 1px solid #38383a; align-self: flex-start; border-bottom-left-radius: 4px; }
+        .msg-user { background: var(--purple); color: white; align-self: flex-end; border-bottom-right-radius: 4px; }
+        .msg-img { max-width: 100px; border-radius: 10px; cursor:pointer; border:1px solid #38383a; margin-top:5px;}
+        
+        .super-footer { background: #1c1c1e; padding: 10px; border-top: 1px solid #38383a; display: flex; gap: 8px; align-items: flex-end; position: fixed; bottom: 0; width: 100%; box-sizing: border-box; }
+        .chat-input { flex: 1; background: #000; border: 1px solid #38383a; color: white; padding: 10px; border-radius: 14px; font-size: 13px; outline: none; resize: none; max-height: 80px; font-family: inherit; font-weight:600;}
+        .btn-ai-action { background: var(--purple); color: white; border: none; width: 38px; height: 38px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 18px; cursor: pointer; flex-shrink:0; }
+        .btn-ai-action.cam { background: #2c2c2e; color: #a1a1a6; border: 1px solid #38383a; }
+        .btn-ai-action.mic { background: var(--red); display: none; } 
+        .btn-ai-action.mic.recording { animation: pulseMic 1.5s infinite; }
+        @keyframes pulseMic { 0% { box-shadow: 0 0 0 0 rgba(255,59,48,0.7); } 70% { box-shadow: 0 0 0 10px rgba(255,59,48,0); } 100% { box-shadow: 0 0 0 0 rgba(255,59,48,0); } }
+
+        .chat-previews-container { display:flex; gap:5px; padding:0 15px; position:fixed; bottom:65px; z-index:10001; }
+        .chat-img-prev-wrap { position:relative; }
+        .chat-img-preview { width:50px; height:50px; object-fit:cover; border-radius:8px; border:2px solid #38383a; }
+        .chat-img-remove { position:absolute; top:-6px; right:-6px; background:var(--red); color:white; border-radius:50%; width:18px; height:18px; text-align:center; line-height:18px; cursor:pointer; font-size:10px; font-weight:bold; }
+
+        .typing-indicator { display: none; align-self: flex-start; background: #2c2c2e; padding: 10px 14px; border-radius: 16px; border-bottom-left-radius: 4px; border: 1px solid #38383a; margin-top:10px;}
+        .dot { height: 6px; width: 6px; background: #a1a1a6; border-radius: 50%; display: inline-block; animation: blink 1.4s infinite both; margin: 0 1px;}
+        .dot:nth-child(2) { animation-delay: 0.2s; } .dot:nth-child(3) { animation-delay: 0.4s; }
+        
+        .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 2000; align-items: flex-end; justify-content: center; backdrop-filter: blur(5px); }
+        .modal-box { background: var(--bg); width: 100%; max-width: 500px; border-radius: 24px 24px 0 0; padding: 25px; box-sizing: border-box; max-height: 90vh; overflow-y: auto;}
+        
+        .photo-viewer { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.98); z-index: 50000; flex-direction: column; align-items:center; justify-content:center; backdrop-filter:blur(10px); }
+        .pv-nav { display: flex; justify-content: space-between; align-items:center; padding: 14px; padding-top: max(14px, env(safe-area-inset-top)); position: absolute; top:0; left:0; right:0; box-sizing: border-box; z-index: 50010; background: linear-gradient(to bottom, rgba(0,0,0,0.65), transparent);}
+        .pv-nav-actions { display:flex; gap:8px; }
+        .btn-pv { background: rgba(255,255,255,0.18); backdrop-filter: blur(10px); color: white; border: none; padding: 10px 14px; border-radius: 12px; font-weight: 800; font-size:13px; cursor: pointer; display:flex; gap:6px; align-items:center; -webkit-tap-highlight-color:transparent;}
+        .btn-pv.green { background: rgba(52,199,89,0.35); }
+        .btn-pv.whatsapp { background: rgba(37,211,102,0.35); }
+        .pv-img { width: 100%; height: 100%; object-fit: contain; touch-action: none; cursor: grab; will-change: transform; }
+
+        .saldo-card { background: linear-gradient(135deg, var(--green), #2ecc71); color: white; padding: 20px; border-radius: 18px; margin-bottom: 12px; text-align: center; box-shadow: 0 8px 20px rgba(52,199,89,0.25); }
+        .saldo-title { font-size: 11px; font-weight: 800; text-transform: uppercase; margin-bottom: 5px; opacity: 0.9; }
+        .saldo-amount { font-size: 38px; font-weight: 900; }
+        
+        .bat-container { background: var(--card); border: 1px solid var(--border); border-radius: 16px; padding: 18px; margin-bottom: 15px; box-shadow:0 4px 10px rgba(0,0,0,0.02); }
+        .bat-bar-bg { height: 12px; background: var(--border); border-radius: 10px; overflow: hidden; margin-top: 12px; position: relative; }
+        .bat-bar-fill { height: 100%; background: var(--blue); width: 0%; transition: width 0.6s ease-out; }
+        
+        .mat-req-row { display: grid; grid-template-columns: 3fr 1fr auto; gap: 8px; align-items: center; border-bottom: 1px solid var(--border); padding: 10px 0; }
+        .ia-sug-box { background: rgba(255,149,0,0.1); border: 1px solid var(--orange); border-radius: 10px; padding: 12px; color: var(--text); font-size: 12px; font-weight: 600; margin-top: 10px; }
+        
+        .chapter-header { background: var(--blue); padding: 12px 15px; border-radius: 8px; font-weight: 900; font-size: 13px; margin-bottom: 10px; text-transform: uppercase; color: white; cursor: pointer; display: flex; justify-content: space-between; align-items: center; margin-top:15px;}
+        .empty-msg { text-align: center; color: var(--gray); font-size: 13px; font-weight: 600; padding: 40px 20px; }
+    </style>
+    <link rel="stylesheet" href="/css/responsive.css?v=1">
+</head>
+<body>
+
+    <div id="loader-overlay" class="loader-overlay" style="display:flex;">
+        <div class="spinner"></div>
+        <div id="loader-txt">Iniciando Rubik Pro...</div>
+    </div>
+
+    <div id="app-view">
+        <div class="nav-top">
+            <div class="user-info">
+                <div class="avatar" id="avatar-letter">R</div>
+                <div>
+                    <div id="u-name" class="title-txt">Cargando Operario...</div>
+                    <div class="sub-txt">Rubik Ingeniería Interna</div>
+                </div>
+            </div>
+            <div style="display:flex; gap:10px; align-items:center;">
+                <i class="ph-bold ph-moon-stars" style="color:var(--gray); font-size:20px; cursor:pointer;" onclick="toggleDarkMode()"></i>
+                <i class="ph-bold ph-sign-out" style="color:var(--red); font-size:22px; cursor:pointer;" onclick="salirApp()"></i>
+            </div>
+        </div>
+
+        <div id="alertas-prioritarias-container"></div>
+
+        <div class="grid-main-apps">
+            <button class="main-app-btn b-super-ia" onclick="openSuperAI()">
+                <img loading="lazy" decoding="async" src="../IA RUBIK BOTON.png" style="width: 40px; height: 40px; border-radius: 50%; object-fit: cover; border: 2px solid rgba(255,255,255,0.3); flex-shrink:0;" onerror="this.src='https://rubikbolivia.com/IA%20RUBIK%20BOTON.png'">
+                <div class="texts-btn">
+                    <span class="title">SUPERVISOR RUBIK IA</span>
+                    <span class="desc">Asistente Técnico, Inventario y Solicitudes</span>
+                </div>
+                <i class="ph-fill ph-robot bg-ic"></i>
+            </button>
+
+            <button class="main-app-btn b-tareas" onclick="cambiarTab('agenda')">
+                <i class="ph-fill ph-chart-polar main-ic" style="color:#5ac8fa;"></i>
+                <div class="texts-btn">
+                    <span class="title">MI AGENDA</span>
+                    <span class="desc">Tareas, Avance Diario y Planos</span>
+                </div>
+                <i class="ph-fill ph-fire bg-ic"></i>
+                <span class="badge-num" id="badge-tasks" style="display:none;">0</span>
+            </button>
+            
+            <button class="main-app-btn b-gold" onclick="abrirModalProduccion()">
+                <i class="ph-fill ph-trend-up main-ic"></i>
+                <div class="texts-btn">
+                    <span class="title">MI PRODUCCIÓN</span>
+                    <span class="desc">Sueldo, Cancheos y Saldos</span>
+                </div>
+                <i class="ph-fill ph-trophy bg-ic" style="color:rgba(0,0,0,0.08);"></i>
+            </button>
+        </div>
+
+        <div class="tabs-wrap">
+            <button class="tab-btn active" id="tab-agenda" onclick="cambiarTab('agenda')"><i class="ph-bold ph-calendar-check"></i> Agenda</button>
+            <button class="tab-btn" id="tab-proyectos" onclick="cambiarTab('proyectos')"><i class="ph-bold ph-buildings"></i> Proyectos</button>
+            <button class="tab-btn" id="tab-balance" onclick="cambiarTab('balance')"><i class="ph-bold ph-wallet"></i> Caja Chica</button>
+            <button class="tab-btn" id="tab-inv" onclick="abrirEscanerInventario()"><i class="ph-bold ph-scan"></i> Inventario IA</button> 
+        </div>
+
+        <div id="panel-agenda" class="panel-content active">
+            <h2 style="font-size:16px; font-weight:900; margin-top:0; color:var(--text);" id="txt-fecha-literal">Cargando fecha...</h2>
+            <div class="week-scroll" id="week-calendar"></div>
+            <div id="lista-agenda"></div>
+        </div>
+        
+        <div id="panel-proyectos" class="panel-content"><div id="lista-proyectos"></div></div>
+        
+        <div id="panel-balance" class="panel-content">
+            <div class="saldo-card">
+                <div class="saldo-title">Saldo de Caja Chica</div>
+                <div class="saldo-amount" id="caja-saldo">0.00 Bs</div>
+            </div>
+            <button class="btn-main" style="margin-top:0; background:var(--text); color:var(--bg);" onclick="abrirRendicionManual()"><i class="ph-bold ph-receipt"></i> Rendir Gasto Extra (Manual)</button>
+            <h4 style="margin-top:20px; margin-bottom:10px; font-size:14px;">Historial de Movimientos</h4>
+            <div id="lista-comprobantes"></div>
+        </div>
+    </div>
+
+    <div id="mod-super-ai" class="super-modal-overlay">
+        <div class="super-header">
+            <div class="super-title">
+                <img loading="lazy" decoding="async" src="../IA RUBIK BOTON.png" onerror="this.src='https://rubikbolivia.com/IA%20RUBIK%20BOTON.png'"> Rubik Supervisor IA
+            </div>
+            <button class="close-super" onclick="closeSuperAI()">Cerrar</button>
+        </div>
+
+        <div class="super-tabs">
+            <button class="super-tab-btn active" id="tab-ia-chat" onclick="switchSuperTab('chat')"><i class="ph-bold ph-chat-centered-text"></i> Técnico</button>
+            <button class="super-tab-btn" id="tab-ia-req" onclick="switchSuperTab('req')"><i class="ph-bold ph-shopping-cart"></i> Pedir Mat.</button>
+            <button class="super-tab-btn" id="tab-ia-inv" onclick="switchSuperTab('inv')"><i class="ph-bold ph-scan"></i> Escáner</button>
+        </div>
+
+        <div id="body-ia-chat" class="super-body chat-container active">
+            <div class="chat-body" id="ai-chat-box">
+                <div class="msg msg-ai">¡Hola compañero! 🛠️ Soy el Cerebro de Rubik. <br>Pídeme consejos técnicos, planos, o adjunta la foto de tu factura para registrar el gasto de tu caja chica.</div>
+            </div>
+            <div class="typing-indicator" id="ai-typing"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div>
+        </div>
+
+        <div id="body-ia-req" class="super-body">
+            <div style="padding-top:10px;">
+                <label class="inp-lbl">1. Seleccionar Proyecto Destino</label>
+                <select id="req-proy-select" class="inp-std" style="padding:10px; font-weight:bold; border-color:var(--purple);"></select>
+                
+                <label class="inp-lbl">2. Lista de Materiales y Cantidad</label>
+                <div id="req-mat-list-container" style="background:var(--card); border-radius:12px; padding:10px; border:1px solid var(--border);"></div>
+                
+                <button class="btn-main" style="background:transparent; color:var(--purple); border:1px dashed var(--purple); padding:8px; font-size:11px; margin-top:5px;" onclick="addReqMatRow()"><i class="ph-bold ph-plus"></i> Añadir Material</button>
+                
+                <div id="ia-verification-box" style="display:none;"></div>
+                
+                <div id="req-actions-area" style="margin-top:15px; display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+                    <button class="btn-main" id="btn-ia-verify" style="background:var(--purple);" onclick="verifyRequestWithIA()"><i class="ph-bold ph-robot"></i> Verificar con Cerebro</button>
+                    <button class="btn-main" id="btn-req-send" style="background:var(--green); display:none;" onclick="finalGenerateReqPDF()"><i class="ph-bold ph-download-simple"></i> Descargar PDF y Enviar</button>
+                </div>
+            </div>
+        </div>
+
+        <div id="body-ia-inv" class="super-body">
+            <div style="padding-top:10px; text-align:center;">
+                <i class="ph-bold ph-scan" style="font-size:50px; color:var(--purple); margin-bottom:10px;"></i>
+                <h3 style="margin:0; margin-bottom:5px;">Escáner de Activos</h3>
+                <p style="font-size:12px; color:var(--gray); margin-bottom:20px;">Toma una foto de cualquier herramienta de la empresa o material sobrante. La IA lo guardará en la Bodega Central.</p>
+                
+                <div style="border:2px dashed var(--purple); border-radius:16px; padding:30px; cursor:pointer; background:rgba(88,86,214,0.05);" onclick="document.getElementById('inv-file-upload').click()">
+                    <i class="ph-bold ph-camera" style="font-size:40px; color:var(--purple); display:block; margin-bottom:10px;"></i>
+                    <span style="font-weight:800; color:var(--purple);">TOMAR FOTO</span>
+                </div>
+                <input type="file" id="inv-file-upload" accept="image/*" multiple style="display:none" onchange="uploadAndScanInventario(this)">
+                
+                <div id="inv-result-box" style="margin-top:20px; text-align:left;"></div>
+            </div>
+        </div>
+
+        <div id="chat-previews-container" class="chat-previews-container" style="display:none;"></div>
+        <div id="chat-footer-unified" class="super-footer">
+            <button class="btn-ai-action cam" id="btn-ai-file" onclick="document.getElementById('ai-file-upload').click()"><i class="ph-bold ph-paperclip"></i></button>
+            <input type="file" id="ai-file-upload" accept="image/*,application/pdf" multiple style="display:none" onchange="handleAIFile(this)">
+            <textarea id="ai-user-input" class="chat-input" rows="1" placeholder="Pregunta, adjunta factura..."></textarea>
+            <button class="btn-ai-action mic" id="btn-ai-mic" onclick="toggleAudioRecording()"><i class="ph-bold ph-microphone"></i></button>
+            <button class="btn-ai-action" id="btn-ai-send" onclick="sendAIMessage()"><i class="ph-bold ph-paper-plane-right"></i></button>
+        </div>
+    </div>
+
+    <div id="view-items" style="display:none;">
+        <div class="nav-top" style="position:sticky; top:0; background:var(--bg); z-index:100; padding-bottom:10px; margin-bottom:10px;">
+            <button class="btn-main" style="background:var(--card); border:1px solid var(--border); padding:8px 12px; border-radius:12px; color:var(--text); width:auto;" onclick="cerrarVistas()"><i class="ph-bold ph-caret-left"></i> Volver</button>
+            <div style="font-weight:900; font-size:11px; color:var(--gray);">ÍTEMS DEL PROYECTO</div>
+        </div>
+        <h1 style="font-size:20px; font-weight:900; color:var(--blue); margin-top:0; margin-bottom:12px;" id="vi-title">Proyecto</h1>
+        <!-- Sub-pestañas -->
+        <div style="display:flex; background:var(--border); padding:3px; border-radius:12px; margin-bottom:15px;">
+            <button id="vi-tab-prod" onclick="switchViTab('prod')" style="flex:1; padding:9px 5px; border:none; background:var(--card); color:var(--text); font-weight:900; font-size:11px; border-radius:9px; cursor:pointer; box-shadow:0 2px 6px rgba(0,0,0,0.1);">
+                <i class="ph-bold ph-package"></i> Producción
+            </button>
+            <button id="vi-tab-mios" onclick="switchViTab('mios')" style="flex:1; padding:9px 5px; border:none; background:transparent; color:var(--gray); font-weight:900; font-size:11px; border-radius:9px; cursor:pointer;">
+                <i class="ph-bold ph-user"></i> Mis Ítems
+            </button>
+            <button id="vi-tab-chat" onclick="switchViTab('chat')" style="flex:1; padding:9px 5px; border:none; background:transparent; color:var(--gray); font-weight:900; font-size:11px; border-radius:9px; cursor:pointer; position:relative;">
+                <i class="ph-bold ph-chat-dots"></i> Chat
+                <span id="vi-chat-badge" style="display:none; position:absolute; top:3px; right:6px; width:7px; height:7px; background:var(--red); border-radius:50%;"></span>
+            </button>
+        </div>
+        <!-- Panel Chat Supervisor -->
+        <div id="vi-container-chat" style="display:none; flex-direction:column; height:calc(100dvh - 240px);">
+            <div id="vi-chat-messages" style="flex:1; overflow-y:auto; display:flex; flex-direction:column; gap:10px; padding-bottom:10px;"></div>
+            <div style="border-top:1px solid var(--border); padding-top:12px; display:flex; gap:8px; align-items:flex-end;">
+                <textarea id="vi-chat-inp" placeholder="Escribir a Rubik..." style="flex:1; padding:10px 12px; border:1px solid var(--border); border-radius:12px; font-size:13px; font-family:inherit; resize:none; outline:none; background:var(--card); color:var(--text); min-height:42px; max-height:100px;"
+                    oninput="this.style.height='auto';this.style.height=this.scrollHeight+'px'"
+                    onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();enviarChatSupervisor();}"></textarea>
+                <button onclick="enviarChatSupervisor()" style="background:var(--purple); color:white; border:none; width:42px; height:42px; border-radius:12px; font-size:18px; cursor:pointer; display:flex; align-items:center; justify-content:center; flex-shrink:0;">
+                    <i class="ph-bold ph-paper-plane-tilt"></i>
+                </button>
+            </div>
+        </div>
+        <div id="vi-container-prod"></div>
+        <div id="vi-container-mios" style="display:none;"></div>
+    </div>
+
+    <div id="view-gantt" style="display:none;">
+        <div class="nav-top" style="position:sticky; top:0; background:var(--bg); z-index:100; padding-bottom:10px; margin-bottom:10px;">
+            <button class="btn-main" style="background:var(--card); border:1px solid var(--border); padding:8px 12px; border-radius:12px; color:var(--text); width:auto;" onclick="cerrarVistas()"><i class="ph-bold ph-caret-left"></i> Volver</button>
+            <div style="font-weight:900; font-size:11px; color:var(--gray);">CRONOGRAMA GANTT</div>
+        </div>
+        <h1 style="font-size:22px; font-weight:900; color:var(--blue); margin-top:0; margin-bottom:20px;" id="vg-title">Proyecto</h1>
+        <div id="vg-container"></div>
+        <input type="file" id="vg-file" style="display:none" accept="image/*" capture="environment" onchange="processGanttPhoto(this)">
+    </div>
+
+    <div class="modal-overlay" id="mod-produccion" style="display:none; align-items:flex-end;" onclick="if(event.target===this) this.style.display='none'">
+        <div class="modal-content modal-box" style="max-height:92vh; display:flex; flex-direction:column;">
+            <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:2px solid var(--border); padding-bottom:10px; margin-bottom:12px;">
+                <h3 style="margin:0;"><i class="ph-bold ph-trend-up"></i> Mi Producción</h3>
+                <i class="ph-bold ph-x" style="font-size:24px; color:var(--red); cursor:pointer;" onclick="document.getElementById('mod-produccion').style.display='none'"></i>
+            </div>
+            <div style="display:flex; gap:8px; align-items:center; margin-bottom:12px;">
+                <div style="flex:1;">
+                    <div style="font-size:10px; font-weight:800; color:var(--gray); text-transform:uppercase; margin-bottom:4px;">Mes</div>
+                    <input type="month" id="prod-mes-filter" style="width:100%; padding:8px 10px; border:1px solid var(--border); background:var(--card); color:var(--text); border-radius:8px; font-weight:700; font-size:14px;" onchange="renderProduccionUI()">
+                </div>
+            </div>
+            <div class="bat-container" style="background:var(--card);">
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <div style="font-size:11px; font-weight:800; color:var(--gray); text-transform:uppercase;">Meta: Sueldo Base</div>
+                    <div style="font-size:16px; font-weight:900; color:var(--text);" id="prod-sueldo">0.00 Bs</div>
+                </div>
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-top:5px;">
+                    <div style="font-size:11px; font-weight:800; color:var(--purple); text-transform:uppercase;">Producción del Mes</div>
+                    <div style="font-size:22px; font-weight:900; color:var(--purple);" id="prod-acum">0.00 Bs</div>
+                </div>
+                <div class="bat-bar-bg"><div class="bat-bar-fill" id="prod-fill"></div></div>
+                <div style="margin-top:10px; text-align:center; font-size:13px;" id="prod-info"></div>
+            </div>
+            <div id="list-produccion-items" style="flex:1; overflow-y:auto; padding:5px 2px 15px 2px;"></div>
+        </div>
+    </div>
+
+    <div class="modal-overlay" id="mod-gasto-manual" style="display:none; align-items:flex-end;" onclick="if(event.target===this) this.style.display='none'">
+        <div class="modal-content modal-box">
+            <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:2px solid var(--border); padding-bottom:10px; margin-bottom:15px;">
+                <h3 style="margin:0;"><i class="ph-bold ph-receipt"></i> Rendición Manual</h3>
+                <i class="ph-bold ph-x" style="font-size:24px; color:var(--red); cursor:pointer;" onclick="document.getElementById('mod-gasto-manual').style.display='none'"></i>
+            </div>
+            <label class="inp-lbl">Proyecto</label>
+            <select id="m-proy" class="inp-std"></select>
+            <label class="inp-lbl">Monto Gastado (Bs)</label>
+            <input type="number" id="m-monto" class="inp-std" placeholder="0.00">
+            <label class="inp-lbl">Detalle</label>
+            <input type="text" id="m-desc" class="inp-std" placeholder="Pasajes, comida...">
+            <button class="btn-main" onclick="guardarGastoManual()"><i class="ph-bold ph-check"></i> Descontar de mi Caja</button>
+        </div>
+    </div>
+
+    <div id="photo-viewer" class="photo-viewer">
+        <div class="pv-nav">
+            <button class="btn-pv" onclick="cerrarVisorFotos()"><i class="ph-bold ph-caret-left"></i> Atrás</button>
+            <div class="pv-nav-actions">
+                <button class="btn-pv green" onclick="guardarFotoTrabajador()"><i class="ph-bold ph-download-simple"></i> Guardar</button>
+                <button class="btn-pv whatsapp" onclick="compartirFotoTrabajador()"><i class="ph-bold ph-whatsapp-logo"></i> Enviar</button>
+                <button class="btn-pv" id="btn-del-foto" style="background:rgba(255,59,48,0.35); display:none;" onclick="eliminarFotoGantt()"><i class="ph-bold ph-trash"></i></button>
+            </div>
+        </div>
+        <img loading="lazy" decoding="async" id="pv-img" class="pv-img">
+    </div>
+
+<script>
+    // Firebase ya inicializado en el <head>
+    if (!firebase.apps.length) firebase.initializeApp(window._rubikFirebaseConfig);
+    const db = firebase.database(); const storage = firebase.storage();
+    
+    let currentUser = null; let trueWorkerId = null; 
+    let projectCache = {}; let asignacionesInternas = []; let chapterStates = {};
+    let dbProveedoresGlobal = {}; // Cache de proveedores para IA
+    let currentGanttTarget = null;
+    let todayObj = new Date(); 
+    let selectedDateStr = `${todayObj.getFullYear()}-${String(todayObj.getMonth()+1).padStart(2,'0')}-${String(todayObj.getDate()).padStart(2,'0')}`;
+    let localTodayStr = selectedDateStr;
+
+    window.jsPDF = window.jspdf.jsPDF;
+
+    window.onload = () => {
+        const params = new URLSearchParams(window.location.search);
+        currentUser = params.get('user') || localStorage.getItem('rubik_internal_user');
+        if(!currentUser) { document.body.innerHTML = "<h2 style='text-align:center; padding:50px;'>Usa tu link de acceso.</h2>"; return; }
+        localStorage.setItem('rubik_internal_user', currentUser);
+        iniciarNucleoApp();
+    };
+
+    function setLoader(txt, show) { 
+        document.getElementById('loader-txt').innerText = txt; 
+        document.getElementById('loader-overlay').style.display = show ? 'flex' : 'none'; 
+    }
+    function fMoney(num) { return parseFloat(num||0).toLocaleString('es-BO', {minimumFractionDigits:2}); }
+    
+    window.toggleDarkMode = function() { document.body.classList.toggle('dark-mode'); localStorage.setItem('rubik_dark', document.body.classList.contains('dark-mode')); };
+    if(localStorage.getItem('rubik_dark')==='true') document.body.classList.add('dark-mode');
+    
+    window.salirApp = function() { if(confirm("¿Cerrar Sesión?")) { localStorage.removeItem('rubik_internal_user'); window.location.reload(); } };
+    window.irAInventario = function() { window.location.href = 'inventario.html'; };
+    
+    window.cambiarTab = function(tab) {
+        document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+        document.querySelectorAll('.panel-content').forEach(p=>p.classList.remove('active'));
+        let tBtn = document.getElementById('tab-'+tab); if(tBtn) tBtn.classList.add('active');
+        let pnl = document.getElementById('panel-'+tab); if(pnl) pnl.classList.add('active');
+    };
+
+    window.abrirModalProduccion = function() { document.getElementById('mod-produccion').style.display = 'flex'; };
+
+    window.abrirRendicionManual = function() {
+        window.poblarSelectProyectos();
+        document.getElementById('m-monto').value = ''; document.getElementById('m-desc').value = '';
+        document.getElementById('mod-gasto-manual').style.display = 'flex';
+    };
+
+    window.poblarSelectProyectos = function() {
+        const selects = ['req-proy-select', 'm-proy'];
+        selects.forEach(sid => {
+            const el = document.getElementById(sid); if(!el) return;
+            el.innerHTML = '<option value="GENERAL|GENERAL|Taller (Gastos Grales)">Gastos Generales / Taller</option>';
+            Object.keys(projectCache).forEach(pid => {
+                const p = projectCache[pid];
+                el.innerHTML += `<option value="${p.cid}|${pid}|${p.pName}">${p.pName}</option>`;
+            });
+        });
+    };
+
+    async function iniciarNucleoApp() {
+        setLoader("Conectando Matriz...", true);
+        document.getElementById('u-name').innerText = currentUser;
+        document.getElementById('avatar-letter').innerText = currentUser.charAt(0).toUpperCase();
+
+        try {
+            const snap = await db.ref('personal').once('value');
+            if(snap.exists()) {
+                snap.forEach(child => { if(child.val().nombre?.trim().toLowerCase() === currentUser.trim().toLowerCase()) trueWorkerId = child.key; });
+            }
+            if(!trueWorkerId) trueWorkerId = currentUser.replace(/\s/g, '_');
+
+            // Cargar Proveedores para la IA
+            db.ref('base_datos/proveedores').once('value').then(s => { if(s.exists()) dbProveedoresGlobal = s.val(); });
+
+            await cargarAsignacionesYProyectos();
+            cargarFinanzas();
+            poblarWeekCalendar();
+            if(window.inicializarHistorialIA) window.inicializarHistorialIA();
+        } catch(e) { console.error(e); alert("Error al conectar."); } 
+        finally { setLoader("", false); }
+    }
+
+    async function cargarAsignacionesYProyectos() {
+        return new Promise(resolve => {
+            db.ref(`personal/${trueWorkerId}/solicitudes`).on('value', async snap => {
+                asignacionesInternas = [];
+                let pidsToLoad = {};
+                if(snap.exists()){
+                    snap.forEach(child => {
+                        let sol = child.val(); sol.key = child.key;
+                        if(sol.is_internal_assignment && (sol.estado === 'adjudicado' || sol.estado === 'aprobado' || sol.estado === 'terminado' || sol.estado === 'pagado' || sol.estado === 'liquidado')){
+                            sol.cid = sol.cliente_id || sol.cid; sol.pid = sol.proyecto_id || sol.pid; sol.pName = sol.p_name || sol.pName || 'Proyecto';
+                            asignacionesInternas.push(sol);
+                            if(sol.cid && sol.pid) pidsToLoad[sol.pid] = {cid: sol.cid, pName: sol.pName};
+                        }
+                    });
+                }
+                
+                const pidsKeys = Object.keys(pidsToLoad);
+                if(pidsKeys.length === 0) { checkAndRender(); resolve(); return; }
+
+                pidsKeys.forEach(pid => {
+                    let info = pidsToLoad[pid];
+                    if(!projectCache[pid]) projectCache[pid] = { cid: info.cid, pid: pid, gantt:{}, presupuesto:{}, licitaciones:{}, pName: info.pName };
+                    
+                    db.ref(`proyectos/${info.cid}/${pid}/p_name`).once('value').then(n => { if(n.exists()) projectCache[pid].pName = n.val(); checkAndRender(); });
+                    db.ref(`proyectos/${info.cid}/${pid}/gantt/items`).on('value', g => { projectCache[pid].gantt = g.val() || {}; checkAndRender(); });
+                    db.ref(`proyectos/${info.cid}/${pid}/presupuesto/items`).on('value', p => { projectCache[pid].presupuesto = p.val() || {}; checkAndRender(); });
+                    db.ref(`proyectos/${info.cid}/${pid}/licitaciones`).on('value', l => { projectCache[pid].licitaciones = l.val() || {}; checkAndRender(); });
+                    db.ref(`proyectos/${info.cid}/${pid}/diseno`).once('value', d => { if(d.exists()) { let dis = d.val(); let arr = []; ['renders','fotos','planos'].forEach(cat => { if(dis[cat]) Object.values(dis[cat]).forEach(x => { if(x.url) arr.push({tipo:cat, url:x.url, nombre:x.nombre||cat}); }); }); projectCache[pid].disenos = arr; } });
+                });
+                resolve();
+            });
+            
+            db.ref(`personal/${trueWorkerId}/sueldo`).on('value', snap => { 
+                window.workerSueldo = parseFloat(snap.val()) || 0; renderProduccionUI(); 
+            });
+        });
+    }
+
+    function checkAndRender() { renderProyectos(); renderAgenda(); renderProduccionUI(); window.poblarSelectProyectos(); }
+
+    function cargarFinanzas() {
+        db.ref(`personal/${trueWorkerId}/pagos`).on('value', pSnap => {
+            window.pagosHistoricos = 0; window.pagosSueldoMes = 0;
+            window.historialPagosGlobal = []; // para la IA
+            let cMonth = new Date().getMonth(); let cYear = new Date().getFullYear();
+            if(pSnap.exists()) {
+                pSnap.forEach(pChild => {
+                    let pagoVal = pChild.val(); let monto = parseFloat(pagoVal.monto || 0);
+                    window.pagosHistoricos += monto;
+                    window.historialPagosGlobal.push({ monto, fecha: pagoVal.fecha || '', concepto: pagoVal.concepto || pagoVal.nota || 'Pago', nota: pagoVal.nota || '' });
+                    let pd = new Date(pagoVal.fecha || pagoVal.timestamp || Date.now());
+                    if(pd.getMonth() === cMonth && pd.getFullYear() === cYear) window.pagosSueldoMes += monto;
+                });
+            }
+            if(asignacionesInternas.length > 0) renderProduccionUI();
+        });
+
+        db.ref(`caja_chica/${trueWorkerId}`).on('value', snap => { window.cajaChicaGlobal = 0;
+            const lComp = document.getElementById('lista-comprobantes'); if(!lComp) return;
+            lComp.innerHTML = ""; let saldo = 0; let count = 0;
+            if(snap.exists()) {
+                let data = snap.val(); let hist = [];
+                if(data.gastos) Object.values(data.gastos).forEach(g => { saldo -= parseFloat(g.monto_total || g.monto || 0); hist.push({type:'gasto', ...g}); });
+                if(data.depositos) Object.values(data.depositos).forEach(d => { saldo += parseFloat(d.monto||0); hist.push({type:'deposito', ...d}); });
+                window.cajaChicaGlobal = saldo;
+                hist.sort((a,b) => new Date(b.fecha) - new Date(a.fecha)).forEach(item => {
+                    count++; let dateStr = new Date(item.fecha).toLocaleDateString();
+                    if(item.type === 'gasto') {
+                        let totalMonto = parseFloat(item.monto_total || item.monto || 0); let detailsHtml = '';
+                        if(item.items) { item.items.forEach(it => { detailsHtml += `<div style="font-size:10px; color:var(--gray); margin-top:2px;">- ${it.cant} ${it.und} ${it.desc} (${it.monto} Bs)</div>`; }); } else { detailsHtml = `<div style="font-size:10px; color:var(--gray); margin-top:2px;">- ${item.cant||1} ${item.und||''} ${item.concepto||item.desc||'Gasto'}</div>`; }
+                        let fotosHtml = ''; if(item.fotos) { item.fotos.forEach((f, i) => fotosHtml += `<a href="${f}" target="_blank" style="color:var(--text); font-size:16px; background:var(--bg); padding:4px; border-radius:6px; border:1px solid var(--border);"><i class="ph-bold ph-receipt"></i></a>`); }
+                        lComp.innerHTML += `<div class="card-list" style="display:flex; align-items:flex-start; gap:12px;"><div style="background:rgba(255,59,48,0.1); color:var(--red); width:35px; height:35px; border-radius:8px; display:flex; align-items:center; justify-content:center; font-size:18px; flex-shrink:0;"><i class="ph-bold ph-arrow-down-right"></i></div><div style="flex-grow:1;"><div class="title-txt">${item.proveedor || item.concepto || 'Rendición'}</div><div class="sub-txt">${item.proyecto || 'General'} | ${dateStr}</div>${detailsHtml}</div><div style="display:flex; flex-direction:column; align-items:flex-end; gap:5px;"><span style="font-weight:900; color:var(--red);">- ${totalMonto.toFixed(2)}</span><div style="display:flex; gap:4px; margin-top:5px; flex-wrap:wrap; justify-content:flex-end;">${fotosHtml}</div></div></div>`;
+                    } else {
+                        lComp.innerHTML += `<div class="card-list" style="display:flex; align-items:center; gap:12px; border-color:var(--green); background:rgba(52,199,89,0.05);"><div style="background:var(--green); color:white; width:35px; height:35px; border-radius:8px; display:flex; align-items:center; justify-content:center; font-size:18px; flex-shrink:0;"><i class="ph-bold ph-arrow-up-right"></i></div><div style="flex-grow:1;"><div class="title-txt" style="color:var(--green);">${item.nota || 'Abono a Caja'}</div><div class="sub-txt">${item.proyecto || 'Fondo General'} | ${dateStr}</div></div><div style="display:flex; flex-direction:column; align-items:flex-end; gap:5px;"><span style="font-weight:900; color:var(--green);">+ ${parseFloat(item.monto).toFixed(2)}</span></div></div>`;
+                    }
+                });
+            }
+            let elSaldo = document.getElementById('caja-saldo');
+            if(elSaldo) { elSaldo.innerText = saldo.toFixed(2) + ' Bs'; elSaldo.style.color = saldo < 0 ? 'var(--red)' : 'white'; }
+            if(count===0 && lComp) lComp.innerHTML = '<div class="empty-msg">Tu caja chica está en cero. Registra un gasto o espera un depósito.</div>'; 
+        });
+    }
+
+    function poblarWeekCalendar() {
+        const cal = document.getElementById('week-calendar'); if(!cal) return; cal.innerHTML = '';
+        let anchor = new Date(); anchor.setHours(12,0,0,0);
+        for(let i = -7; i <= 21; i++){
+            let d = new Date(anchor); d.setDate(anchor.getDate() + i);
+            let dStr = d.toISOString().split('T')[0];
+            let active = dStr === selectedDateStr ? 'active' : '';
+            cal.innerHTML += `<div class="day-card ${active}" onclick="seleccionarFechaAgenda('${dStr}')" id="cal-${dStr}"><div class="day-name">${d.toLocaleDateString('es', {weekday:'short'})}</div><div class="day-num">${d.getDate()}</div></div>`;
+        }
+        actualizarFechaLiteralAgenda();
+        setTimeout(() => { let el = document.getElementById(`cal-${selectedDateStr}`); if(el) el.scrollIntoView({behavior: "smooth", inline: "center", block: "nearest"}); }, 200);
+    }
+    
+    window.seleccionarFechaAgenda = function(dStr) { 
+        selectedDateStr = dStr; document.querySelectorAll('.day-card').forEach(c => c.classList.remove('active')); 
+        let el = document.getElementById(`cal-${dStr}`); if(el) el.classList.add('active'); 
+        actualizarFechaLiteralAgenda(); renderAgenda(); 
+    }
+    
+    function actualizarFechaLiteralAgenda() {
+        let parts = selectedDateStr.split('-'); let d = new Date(parts[0], parts[1]-1, parts[2], 12,0,0);
+        let texto = d.toLocaleDateString('es-ES', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }).replace(/^./, str => str.toUpperCase());
+        if(selectedDateStr === localTodayStr) texto = "Hoy, " + texto;
+        document.getElementById('txt-fecha-literal').innerText = texto;
+    }
+
+    function renderAgenda() {
+        const lAg = document.getElementById('lista-agenda'); if(!lAg) return;
+        lAg.innerHTML = ""; let tasksCount = 0;
+        let safeUser = String(currentUser).trim().toLowerCase();
+        let safeWorkerId = String(trueWorkerId).trim().toLowerCase();
+
+        Object.keys(projectCache).forEach(pid => {
+            let cache = projectCache[pid]; let gItems = cache.gantt || {}; let pItems = cache.presupuesto || {};
+            Object.keys(gItems).forEach(k => {
+                let g = gItems[k]; if(!g || !g.subtasks) return;
+                Object.keys(g.subtasks).forEach(subKey => {
+                    let sub = g.subtasks[subKey];
+                    let safeWorker = String(sub.worker || "").trim().toLowerCase();
+                    if(safeWorker === safeUser || safeWorker === safeWorkerId || safeWorker.replace(/\s+/g, '_') === safeWorkerId) {
+                        if(parseInt(sub.progress||0) < 100 && selectedDateStr >= sub.start) {
+                            tasksCount++;
+                            lAg.innerHTML += `
+                            <div class="card-list" style="border-left: 4px solid var(--orange); cursor:pointer;" onclick="abrirVistaGantt('${cache.cid}', '${pid}', '${cache.pName}')">
+                                <div style="font-size:10px; color:var(--orange); font-weight:800; margin-bottom:3px;"><i class="ph-fill ph-fire"></i> TAREA ACTIVA</div>
+                                <div class="title-txt">${cache.pName}</div>
+                                <div class="sub-txt"><b>${sub.name}</b><br><span style="font-size:11px; color:var(--gray);">${pItems[k]?.desc || 'Ítem General'}</span></div>
+                                <div style="font-size:10px; color:var(--blue); background:rgba(0,122,255,0.1); padding:3px 6px; border-radius:4px; display:inline-block; margin-top:8px;">Toca para reportar avance en Gantt</div>
+                            </div>`;
+                        }
+                    }
+                });
+            });
+        });
+
+        if(tasksCount===0) lAg.innerHTML = '<div class="empty-msg">¡Todo libre! No tienes tareas pendientes para esta fecha.</div>';
+        let badge = document.getElementById('badge-tasks');
+        if(badge) { badge.innerText = tasksCount; badge.style.display = (selectedDateStr === localTodayStr && tasksCount > 0) ? 'block' : 'none'; }
+    }
+
+    function renderProyectos() {
+        const lProy = document.getElementById('lista-proyectos'); if(!lProy) return;
+        lProy.innerHTML = ""; let cProy = 0;
+        Object.keys(projectCache).forEach(pid => {
+            let cache = projectCache[pid];
+            let solAsignada = asignacionesInternas.find(s => s.pid === pid &&
+                (s.estado === 'aprobado' || s.estado === 'adjudicado' || s.estado === 'enviado'));
+            if(solAsignada) {
+                cProy++;
+                // Calcular monto total del contrato y anticipos recibidos
+                const trueSol = cache.licitaciones?.[solAsignada.key] || solAsignada;
+                const montoContrato = parseFloat(trueSol.precio_final || trueSol.precio_propuesto || 0);
+                let anticiposPagados = 0;
+                if (trueSol.pagos) Object.values(trueSol.pagos).forEach(p => { anticiposPagados += parseFloat(p.monto || 0); });
+                const saldoPend = montoContrato - anticiposPagados;
+
+                lProy.innerHTML += `
+                <div class="card-list">
+                    <div style="font-size:10px; font-weight:800; color:var(--bg); background:var(--blue); padding:4px 8px; border-radius:6px; display:inline-block; margin-bottom:8px;">PROYECTO ASIGNADO</div>
+                    <div class="title-txt">${cache.pName}</div>
+                    <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:6px; margin-top:10px; background:var(--bg); border-radius:10px; padding:10px; text-align:center;">
+                        <div>
+                            <div style="font-size:9px; font-weight:800; color:var(--gray); text-transform:uppercase; margin-bottom:2px;">Mi Contrato</div>
+                            <div style="font-size:14px; font-weight:900; color:var(--blue);">${fMoney(montoContrato)} Bs</div>
+                        </div>
+                        <div>
+                            <div style="font-size:9px; font-weight:800; color:var(--gray); text-transform:uppercase; margin-bottom:2px;">Recibido</div>
+                            <div style="font-size:14px; font-weight:900; color:var(--green);">${fMoney(anticiposPagados)} Bs</div>
+                        </div>
+                        <div>
+                            <div style="font-size:9px; font-weight:800; color:var(--gray); text-transform:uppercase; margin-bottom:2px;">Pendiente</div>
+                            <div style="font-size:14px; font-weight:900; color:${saldoPend > 0 ? 'var(--orange)' : 'var(--green)'};">${fMoney(saldoPend)} Bs</div>
+                        </div>
+                    </div>
+                    <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:5px; margin-top:8px;">
+                        <button style="background:var(--blue); border:none; padding:10px; border-radius:8px; font-weight:800; color:white; cursor:pointer; font-size:11px;" onclick="abrirVistaItems('${cache.cid}','${pid}','${cache.pName}')"><i class="ph-bold ph-layout"></i> Proyecto</button>
+                        <button style="background:var(--bg); border:none; padding:10px; border-radius:8px; font-weight:800; color:var(--blue); cursor:pointer; font-size:11px;" onclick="abrirVistaGantt('${cache.cid}','${pid}','${cache.pName}')"><i class="ph-bold ph-calendar"></i> Gantt</button>
+                        <button style="background:var(--bg); border:none; padding:10px; border-radius:8px; font-weight:800; color:#af52de; cursor:pointer; font-size:11px;" onclick="abrirChatSupervisor('${cache.cid}','${pid}','${cache.pName}')"><i class="ph-bold ph-chat-dots"></i> Chat</button>
+                    </div>
+                </div>`;
+            }
+        });
+        if(cProy === 0) lProy.innerHTML = '<div class="empty-msg">No tienes proyectos asignados actualmente.</div>';
+    }
+
+    function renderProduccionUI() {
+        // Mes seleccionado (default = mes actual)
+        const filtroEl = document.getElementById('prod-mes-filter');
+        const hoy = new Date();
+        const mesActualStr = hoy.getFullYear() + '-' + String(hoy.getMonth() + 1).padStart(2, '0');
+        let mesStr = (filtroEl && filtroEl.value) ? filtroEl.value : mesActualStr;
+        if (filtroEl && !filtroEl.value) filtroEl.value = mesActualStr;
+        const [yearSel, monthSel] = mesStr.split('-').map(Number);
+        const cMonth = monthSel - 1, cYear = yearSel;
+
+        let totalProdHistorica = 0, totalPagadoHistorico = 0, produccionMes = 0, pagadoMes = 0;
+        const proyectosDelMes = {}; // { pName: { contratos: [...], subTotal, subAnticipos } }
+
+        asignacionesInternas.forEach(sol => {
+            let trueSol = projectCache[sol.pid]?.licitaciones[sol.key] || sol;
+            // Usar campo `periodo` si fue editado desde Tesorería (mismo criterio que tesoreria.html)
+            const fechaPeriodo = (trueSol.periodo || trueSol.fecha_envio || trueSol.fecha || sol.fecha_envio || sol.timestamp || '').toString().substring(0, 7);
+            let isSelMonth = fechaPeriodo === mesStr;
+            let price = parseFloat(trueSol.precio_final || trueSol.precio_propuesto || 0);
+
+            totalProdHistorica += price;
+            if (isSelMonth) produccionMes += price;
+
+            let pagadoHist = 0; let pagadoMesSol = 0; let pagosDet = []; let pagosOtrosMeses = [];
+            if (trueSol.pagos) {
+                Object.values(trueSol.pagos).forEach(p => {
+                    let pAmt = parseFloat(p.monto || 0); pagadoHist += pAmt;
+                    let pDate = new Date(p.fecha || p.timestamp || Date.now());
+                    const esMesActual = pDate.getMonth() === cMonth && pDate.getFullYear() === cYear;
+                    if (esMesActual) {
+                        pagadoMesSol += pAmt;
+                        pagosDet.push({ monto: pAmt, fecha: p.fecha || '', nota: p.nota || 'Anticipo', esMesActual: true });
+                    } else {
+                        pagosOtrosMeses.push({ monto: pAmt, fecha: p.fecha || '', nota: p.nota || 'Anticipo', esMesActual: false });
+                    }
+                });
+                pagosDet.sort((a, b) => (b.fecha || '').localeCompare(a.fecha || ''));
+                pagosOtrosMeses.sort((a, b) => (b.fecha || '').localeCompare(a.fecha || ''));
+            }
+            if ((trueSol.estado === 'pagado' || trueSol.estado === 'liquidado') && pagadoHist === 0) {
+                pagadoHist = price; if (isSelMonth) pagadoMesSol = price;
+            }
+            totalPagadoHistorico += pagadoHist; pagadoMes += pagadoMesSol;
+
+            // Incluir contrato si es del mes actual O si tiene anticipos pagados en el mes actual
+            const tieneAnticiposMes = pagosDet.length > 0;
+            if (!isSelMonth && !tieneAnticiposMes) return;
+
+            // Construir detalle de tareas
+            const tareasRaw = Array.isArray(trueSol.tareas) ? trueSol.tareas
+                : (trueSol.tareas && typeof trueSol.tareas === 'object' ? Object.values(trueSol.tareas) : []);
+            const tareasDet = tareasRaw.filter(Boolean).map(t => ({
+                parent: t.parent_desc || '',
+                name: t.task_name || t.desc || 'Tarea',
+                cant: parseFloat(t.cant) || 0,
+                und: t.und || '',
+                pu: parseFloat(t.pu) || 0,
+                subtotal: parseFloat(t.subtotal) || ((parseFloat(t.cant) || 0) * (parseFloat(t.pu) || 0))
+            }));
+
+            const pName = trueSol.pName || 'Proyecto';
+            if (!proyectosDelMes[pName]) proyectosDelMes[pName] = { contratos: [], subTotal: 0, subAnticipos: 0 };
+            proyectosDelMes[pName].contratos.push({
+                tareasDet, pagosDet, pagosOtrosMeses,
+                monto: isSelMonth ? price : 0,   // Solo suma al total si es del mes
+                anticipos: pagadoHist,
+                anticiposMes: pagadoMesSol,
+                estado: trueSol.estado || 'aprobado',
+                esMesActual: isSelMonth
+            });
+            if (isSelMonth) proyectosDelMes[pName].subTotal += price;
+            proyectosDelMes[pName].subAnticipos += pagadoMesSol; // Solo anticipos del mes
+        });
+
+        // Render del listado detallado
+        let htmlList = '';
+        Object.entries(proyectosDelMes).forEach(([pName, data]) => {
+            const saldoProy = data.subTotal - data.subAnticipos;
+            const contratosHtml = data.contratos.map(c => {
+                const tareasPorParent = {};
+                c.tareasDet.forEach(t => {
+                    const p = t.parent || 'ítem';
+                    if (!tareasPorParent[p]) tareasPorParent[p] = [];
+                    tareasPorParent[p].push(t);
+                });
+                const detalleHtml = Object.entries(tareasPorParent).map(([parent, ts]) => `
+                    <div style="margin:6px 0;">
+                        <div style="font-size:10px;font-weight:900;color:var(--purple);text-transform:uppercase;letter-spacing:0.3px;margin-bottom:3px;">${parent}</div>
+                        ${ts.map(t => `
+                            <div style="display:flex;justify-content:space-between;align-items:center;padding:5px 8px;background:rgba(255,255,255,0.04);border-radius:6px;margin-bottom:2px;font-size:11px;">
+                                <div style="flex:1;min-width:0;">
+                                    <div style="font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${t.name}</div>
+
+                                </div>
+                                <div style="font-weight:900;color:var(--purple);margin-left:8px;white-space:nowrap;">${fMoney(t.subtotal)} Bs</div>
+                            </div>
+                        `).join('')}
+                    </div>
+                `).join('') || `<div style="font-size:11px;color:var(--gray);padding:4px;">Sin tareas.</div>`;
+
+                // Anticipos pagados en el mes seleccionado
+                const anticiposMesHtml = (c.pagosDet && c.pagosDet.length > 0) ? `
+                    <div style="margin-top:6px;padding:6px 8px;background:rgba(255,149,0,0.1);border-left:3px solid var(--orange);border-radius:4px;">
+                        <div style="font-size:10px;font-weight:900;color:var(--orange);text-transform:uppercase;margin-bottom:3px;">Anticipos de este mes</div>
+                        ${c.pagosDet.map(p => `
+                            <div style="display:flex;justify-content:space-between;font-size:10px;padding:2px 0;">
+                                <div style="flex:1;min-width:0;overflow:hidden;"><span style="color:var(--gray);font-weight:700;">${p.fecha || 's/f'}</span> · ${p.nota}</div>
+                                <span style="font-weight:900;color:var(--orange);margin-left:6px;">-${fMoney(p.monto)} Bs</span>
+                            </div>
+                        `).join('')}
+                    </div>` : '';
+
+                // Anticipos de meses anteriores (saldo arrastrado)
+                const anticiposAntHtml = (!c.esMesActual || (c.pagosOtrosMeses && c.pagosOtrosMeses.length > 0)) ? `
+                    ${(c.pagosOtrosMeses && c.pagosOtrosMeses.length > 0) ? `
+                    <div style="margin-top:6px;padding:6px 8px;background:rgba(88,86,214,0.08);border-left:3px solid var(--purple);border-radius:4px;">
+                        <div style="font-size:10px;font-weight:900;color:var(--purple);text-transform:uppercase;margin-bottom:3px;">Anticipos de otros meses</div>
+                        ${c.pagosOtrosMeses.map(p => `
+                            <div style="display:flex;justify-content:space-between;font-size:10px;padding:2px 0;">
+                                <div style="flex:1;min-width:0;overflow:hidden;"><span style="color:var(--gray);font-weight:700;">${p.fecha || 's/f'}</span> · ${p.nota}</div>
+                                <span style="font-weight:900;color:var(--purple);margin-left:6px;">-${fMoney(p.monto)} Bs</span>
+                            </div>
+                        `).join('')}
+                    </div>` : ''}` : '';
+
+                const etiquetaContrato = c.esMesActual
+                    ? `Contrato · ${c.estado}`
+                    : `Contrato de otro mes · anticipos pendientes`;
+
+                return `
+                    <div style="padding:8px 0;border-bottom:1px dashed rgba(255,255,255,0.08);">
+                        <div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:4px;">
+                            <span style="color:${c.esMesActual ? 'var(--gray)' : 'var(--purple)'};font-weight:800;text-transform:uppercase;">${etiquetaContrato}</span>
+                            ${c.esMesActual ? `<span style="font-weight:900;color:var(--purple);">${fMoney(c.monto)} Bs</span>` : ''}
+                        </div>
+                        ${c.esMesActual ? detalleHtml : '<div style="font-size:11px;color:var(--gray);padding:3px 0;">Contrato generado en otro período.</div>'}
+                        ${anticiposMesHtml}
+                        ${anticiposAntHtml}
+                    </div>`;
+            }).join('');
+
+            htmlList += `
+                <div style="background:var(--card);border-radius:10px;padding:10px;margin-bottom:8px;border-left:3px solid var(--purple);">
+                    <div style="font-weight:900;font-size:13px;margin-bottom:6px;">📁 ${pName}</div>
+                    ${contratosHtml}
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:8px;padding-top:6px;border-top:1px solid var(--border);">
+                        <div style="font-size:10px;font-weight:800;color:var(--gray);">Contrato del mes<div style="font-size:13px;font-weight:900;color:var(--purple);">${fMoney(data.subTotal)} Bs</div></div>
+                        <div style="font-size:10px;font-weight:800;color:var(--gray);text-align:right;">Anticipos del mes<div style="font-size:13px;font-weight:900;color:${saldoProy > 0 ? 'var(--orange)' : 'var(--green)'};">${fMoney(data.subAnticipos)} Bs pagados · saldo ${fMoney(saldoProy)} Bs</div></div>
+                    </div>
+                </div>`;
+        });
+
+        let listProd = document.getElementById('list-produccion-items');
+        if(listProd) listProd.innerHTML = htmlList || `<div class="empty-msg">Sin producción registrada para ${mesStr}.</div>`;
+        
+        // Saldo real = producción total histórica MENOS anticipos/pagos registrados en licitaciones
+        // NO se descuenta window.pagosHistoricos (personal/pagos) porque esos son pagos de sueldo
+        // directo separados — ya están contabilizados dentro de licitaciones/pagos cuando corresponde
+        let saldoReal = totalProdHistorica - totalPagadoHistorico;
+        if(saldoReal < 0) saldoReal = 0;
+
+        let elSueldo = document.getElementById('prod-sueldo'); if(elSueldo) elSueldo.innerText = fMoney(window.workerSueldo) + ' Bs'; 
+        let elAcum = document.getElementById('prod-acum'); if(elAcum) elAcum.innerText = fMoney(produccionMes) + ' Bs';
+        let fill = document.getElementById('prod-fill'); let info = document.getElementById('prod-info');
+        
+        if(fill && info) {
+            if(window.workerSueldo === 0) { 
+                fill.style.width = '100%'; info.innerHTML = `Saldo a Pagar: <b>${fMoney(saldoReal)} Bs</b>`; 
+            } else {
+                let pct = (produccionMes / window.workerSueldo) * 100;
+                if(pct >= 100) { 
+                    fill.style.width = '100%'; fill.style.background = 'var(--gold)'; 
+                    info.innerHTML = `<b style="color:var(--gold)">¡Meta Cumplida!</b><br>Saldo Acumulado: ${fMoney(saldoReal)} Bs`; 
+                } else { 
+                    fill.style.width = pct + '%'; fill.style.background = 'var(--purple)'; 
+                    info.innerHTML = `Faltan ${fMoney(window.workerSueldo - produccionMes)} Bs para la meta.<br>Saldo Acumulado: ${fMoney(saldoReal)} Bs`; 
+                }
+            }
+        }
+        window.produccionMesGlobal = produccionMes; window.saldoHistoricoReal = saldoReal; window.sueldoFijoGlobal = window.workerSueldo;
+    }
+
+    window.cerrarVistas = function() {
+        if (_viChatListener) { db.ref(_viChatListener).off(); _viChatListener = null; }
+        document.getElementById('view-items').style.display = 'none';
+        document.getElementById('view-gantt').style.display = 'none';
+        document.getElementById('app-view').style.display = 'block';
+    }
+
+    let _viChatCid = null, _viChatPid = null, _viChatListener = null;
+
+    window.switchViTab = function(tab) {
+        const tabs = ['prod', 'mios', 'chat'];
+        tabs.forEach(t => {
+            const btn = document.getElementById('vi-tab-' + t);
+            const cont = document.getElementById('vi-container-' + t);
+            if (!btn || !cont) return;
+            if (t === tab) {
+                btn.style.background = 'var(--card)'; btn.style.color = 'var(--text)'; btn.style.boxShadow = '0 2px 6px rgba(0,0,0,0.1)';
+                cont.style.display = t === 'chat' ? 'flex' : 'block';
+                if (t === 'chat') {
+                    document.getElementById('vi-chat-badge').style.display = 'none';
+                    _suscribirChatSupervisor();
+                }
+            } else {
+                btn.style.background = 'transparent'; btn.style.color = 'var(--gray)'; btn.style.boxShadow = 'none';
+                cont.style.display = 'none';
+            }
+        });
+    };
+
+    window.abrirChatSupervisor = function(cid, pid, pName) {
+        // Abrir view-items directamente en tab chat
+        document.getElementById('app-view').style.display = 'none';
+        document.getElementById('view-items').style.display = 'block';
+        document.getElementById('vi-title').innerText = pName;
+        _viChatCid = cid; _viChatPid = pid;
+        window.scrollTo(0, 0);
+        // Renderizar producción por si acaso
+        window.abrirVistaItems && (document.getElementById('vi-container-prod').innerHTML = '');
+        switchViTab('chat');
+    };
+
+    function _suscribirChatSupervisor() {
+        if (!_viChatCid || !_viChatPid) return;
+        if (_viChatListener) { db.ref(_viChatListener).off(); }
+        _viChatListener = `proyectos/${_viChatCid}/${_viChatPid}/chat`;
+        const box = document.getElementById('vi-chat-messages');
+        db.ref(_viChatListener).orderByChild('ts').on('value', snap => {
+            box.innerHTML = '';
+            if (snap.exists()) {
+                snap.forEach(ch => {
+                    const m = ch.val();
+                    // Supervisor ve: mensajes de rubik a la izquierda, los suyos a la derecha
+                    const isMine = m.from === 'supervisor' || m.from === 'trabajador';
+                    const time = m.ts ? new Date(m.ts).toLocaleTimeString('es-BO', {hour:'2-digit',minute:'2-digit'}) : '';
+                    box.innerHTML += `<div style="max-width:80%; padding:10px 13px; border-radius:16px; font-size:13px; line-height:1.5; align-self:${isMine ? 'flex-end' : 'flex-start'}; background:${isMine ? 'var(--purple)' : 'var(--card)'}; color:${isMine ? 'white' : 'var(--text)'}; border:${isMine ? 'none' : '1px solid var(--border)'}; ${isMine ? 'border-radius:16px 16px 4px 16px;' : 'border-radius:16px 16px 16px 4px;'}">
+                        <div>${(m.text||'').replace(/\n/g,'<br>')}</div>
+                        <div style="font-size:10px; opacity:0.6; margin-top:4px;">${m.fromLabel||''} · ${time}</div>
+                    </div>`;
+                });
+                box.scrollTop = box.scrollHeight;
+            } else {
+                box.innerHTML = '<div style="text-align:center; color:var(--gray); font-size:13px; padding:30px;">Sin mensajes aún.<br>Escribe a Rubik directamente aquí.</div>';
+            }
+        });
+    }
+
+    window.enviarChatSupervisor = function() {
+        if (!_viChatCid || !_viChatPid) return;
+        const inp = document.getElementById('vi-chat-inp');
+        const text = inp.value.trim();
+        if (!text) return;
+        inp.value = ''; inp.style.height = 'auto';
+        const nombre = document.getElementById('u-name')?.innerText || 'Supervisor';
+        const ts = new Date().toISOString();
+        const msg = { text, from: 'supervisor', fromLabel: nombre, destino: 'rubik', ts };
+        db.ref(`proyectos/${_viChatCid}/${_viChatPid}/chat`).push(msg);
+        // Notificar al hub de Rubik
+        db.ref('notificaciones/hub').push({
+            title: `🔧 Mensaje del Supervisor`,
+            body: `${nombre}: ${text.substring(0, 100)}`,
+            date: ts, read: false,
+            cid: _viChatCid, pid: _viChatPid, tipo: 'chat_supervisor'
+        });
+    };
+
+    window.abrirVistaItems = function(cid, pid, pName) {
+        document.getElementById('app-view').style.display = 'none';
+        document.getElementById('view-items').style.display = 'block';
+        document.getElementById('vi-title').innerText = pName;
+        _viChatCid = cid; _viChatPid = pid;
+        window.scrollTo(0, 0);
+        switchViTab('prod');
+
+        // ── Pestaña PRODUCCIÓN: todos los ítems del presupuesto del proyecto (sin precios) ──
+        const contProd = document.getElementById('vi-container-prod');
+        contProd.innerHTML = '';
+        const pItems = projectCache[pid]?.presupuesto || {};
+        let currentChap = 'General'; let chapHtml = {};
+        const itemKeys = Object.keys(pItems);
+        if (itemKeys.length === 0) {
+            contProd.innerHTML = '<div class="empty-msg">No hay ítems en el presupuesto.</div>';
+        } else {
+            itemKeys.forEach(k => {
+                const it = pItems[k]; if (!it) return;
+                if (it.type === 'chapter') { currentChap = it.name || it.desc || 'Capítulo'; return; }
+                if (!chapHtml[currentChap]) chapHtml[currentChap] = '';
+                // Buscar si este ítem tiene planos/cortes
+                const tieneCortes = it.cortes && Object.keys(it.cortes).length > 0;
+                const planosIcon = tieneCortes ? `<span style="color:var(--blue); font-size:10px; font-weight:800;"><i class="ph-bold ph-image"></i> Plano</span>` : '';
+                chapHtml[currentChap] += `
+                <div class="task-card" style="margin-bottom:8px;">
+                    <div class="t-name">${it.desc || 'Ítem'}</div>
+                    <div class="t-metrics" style="margin-top:6px;">
+                        <span>Cant: <b>${it.cant || 0} ${it.und || ''}</b></span>
+                        ${planosIcon}
+                    </div>
+                </div>`;
+            });
+            let html = '';
+            Object.entries(chapHtml).forEach(([chap, items]) => {
+                html += `<div style="font-size:11px; font-weight:900; color:var(--gray); text-transform:uppercase; margin:12px 0 6px; padding-left:4px;">${chap}</div>${items}`;
+            });
+            contProd.innerHTML = html || '<div class="empty-msg">Sin ítems registrados.</div>';
+        }
+
+        // ── Pestaña MIS ÍTEMS: solo las tareas asignadas a este trabajador (sin precios) ──
+        const contMios = document.getElementById('vi-container-mios');
+        contMios.innerHTML = '';
+        let hasMios = false;
+        // Agrupar por ítem padre
+        const miosGrupo = {};
+        asignacionesInternas.forEach(sol => {
+            if (sol.pid !== pid) return;
+            const tareasRaw = sol.tareas
+                ? (Array.isArray(sol.tareas) ? sol.tareas : Object.values(sol.tareas))
+                : [];
+            tareasRaw.filter(Boolean).forEach(t => {
+                hasMios = true;
+                const parent = t.parent_desc || 'ÍTEM ASIGNADO';
+                if (!miosGrupo[parent]) miosGrupo[parent] = [];
+                miosGrupo[parent].push(t);
+            });
+        });
+        if (!hasMios) {
+            contMios.innerHTML = '<div class="empty-msg">No tienes tareas asignadas en este proyecto.</div>';
+        } else {
+            let html = '';
+            Object.entries(miosGrupo).forEach(([parent, tareas]) => {
+                html += `<div style="font-size:11px; font-weight:900; color:var(--gray); text-transform:uppercase; margin:12px 0 6px; padding-left:4px;">${parent}</div>`;
+                tareas.forEach(t => {
+                    html += `
+                    <div class="task-card" style="margin-bottom:8px;">
+                        <div class="t-name">${t.task_name || t.desc || 'Tarea'}</div>
+                        <div class="t-metrics" style="margin-top:6px;">
+                            <span>Cantidad: <b>${t.cant || 0} ${t.und || ''}</b></span>
+                        </div>
+                    </div>`;
+                });
+            });
+            contMios.innerHTML = html;
+        }
+    }
+
+    window.toggleChapter = function(id) {
+        let el = document.getElementById(id); let icon = document.getElementById('icon-' + id);
+        if(el.style.display === 'none') { el.style.display = 'block'; icon.style.transform = 'rotate(0deg)'; chapterStates[id] = 'block'; } 
+        else { el.style.display = 'none'; icon.style.transform = 'rotate(-90deg)'; chapterStates[id] = 'none'; }
+    }
+
+    window.abrirVistaGantt = function(cid, pid, pName) {
+        document.getElementById('app-view').style.display = 'none'; document.getElementById('view-gantt').style.display = 'block';
+        document.getElementById('vg-title').innerText = pName; window.scrollTo(0,0);
+        const cont = document.getElementById('vg-container'); cont.innerHTML = '';
+        let hasGantt = false; let ganttGroup = {};
+        let safeWorkerId = String(trueWorkerId).trim().toLowerCase();
+
+        if(projectCache[pid] && projectCache[pid].gantt) {
+            let ganttData = projectCache[pid].gantt; let pItems = projectCache[pid].presupuesto || {}; 
+            Object.keys(ganttData).forEach(itemIdx => {
+                let gItem = ganttData[itemIdx]; let parentDesc = pItems[itemIdx] ? pItems[itemIdx].desc : 'ÍTEM GENERAL';
+                if(gItem && gItem.subtasks) {
+                    Object.keys(gItem.subtasks).forEach(sKey => {
+                        let sub = gItem.subtasks[sKey];
+                        if(String(sub.worker||"").trim().toLowerCase().replace(/\s+/g,'_') === safeWorkerId) {
+                            hasGantt = true; if(!ganttGroup[parentDesc]) ganttGroup[parentDesc] = []; ganttGroup[parentDesc].push({sKey, sub, itemIdx});
+                        }
+                    });
+                }
+            });
+        }
+        if(!hasGantt) { cont.innerHTML = '<div class="empty-msg">No tienes tareas en este Gantt.</div>'; return; }
+
+        let html = '';
+        Object.keys(ganttGroup).forEach((parent, i) => {
+            let hId = `chap-vg-${i}`; let disp = chapterStates[hId] === 'none' ? 'none' : 'block'; let rot = chapterStates[hId] === 'none' ? 'rotate(-90deg)' : 'rotate(0deg)';
+            html += `<div class="chapter-header" onclick="toggleChapter('${hId}')"><span>${parent}</span><i class="ph-bold ph-caret-down" id="icon-${hId}" style="transition:0.3s; transform:${rot};"></i></div><div id="${hId}" style="display:${disp}; margin-bottom:15px;">`;
+            ganttGroup[parent].forEach(g => {
+                let sub = g.sub; let photosHtml = '';
+                if(sub.photos) Object.entries(sub.photos).forEach(([pKey, p]) => { photosHtml += `<img loading="lazy" decoding="async" src="${p.url}" style="width:50px; height:50px; object-fit:cover; border-radius:8px; cursor:pointer;" onclick="verImagenGantt('${p.url}', '${cid}', '${pid}', '${g.itemIdx}', '${g.sKey}', '${pKey}')">`; });
+                html += `
+                <div class="task-card">
+                    <div class="t-name">${sub.name}</div>
+                    <div style="font-size:10px; color:var(--gray); margin-bottom:10px;">Límite: ${sub.end || 'Sin fecha'}</div>
+                    <div style="display:flex; align-items:center; gap:10px; background:var(--bg); padding:10px; border-radius:8px; margin-bottom:10px;">
+                        <input type="range" min="0" max="100" value="${sub.progress || 0}" style="flex:1;" onchange="updateGanttProgress('${cid}','${pid}','${g.itemIdx}', '${g.sKey}', this.value)">
+                        <span id="lbl-prog-${g.sKey}" style="font-weight:900; font-size:14px; color:var(--blue); width:40px; text-align:right;">${sub.progress || 0}%</span>
+                    </div>
+                    <div style="display:flex; gap:5px; overflow-x:auto; margin-bottom:10px;">${photosHtml}</div>
+                    <button class="btn-main" style="padding:10px; font-size:11px; background:var(--card); color:var(--blue); border:1px dashed var(--blue);" onclick="triggerGanttUpload('${cid}','${pid}','${g.itemIdx}', '${g.sKey}')"><i class="ph-bold ph-camera"></i> Foto Avance</button>
+                </div>`;
+            });
+            html += `</div>`;
+        });
+        cont.innerHTML = html;
+    }
+
+    window.updateGanttProgress = function(c, p, iIdx, sKey, val) { let l = document.getElementById(`lbl-prog-${sKey}`); if(l) l.innerText = val + '%'; db.ref(`proyectos/${c}/${p}/gantt/items/${iIdx}/subtasks/${sKey}/progress`).set(val); }
+    window.triggerGanttUpload = function(c, p, iIdx, sKey) { currentGanttTarget = {c, p, iIdx, sKey}; document.getElementById('vg-file').click(); }
+    
+    window.processGanttPhoto = async function(inp) {
+        if(inp.files[0] && currentGanttTarget) {
+            setLoader("Subiendo foto...", true);
+            try {
+                const snap = await storage.ref(`avances/${currentGanttTarget.p}/${trueWorkerId}_${Date.now()}.jpg`).put(inp.files[0]);
+                const url = await snap.ref.getDownloadURL();
+                await db.ref(`proyectos/${currentGanttTarget.c}/${currentGanttTarget.p}/gantt/items/${currentGanttTarget.iIdx}/subtasks/${currentGanttTarget.sKey}/photos`).push({ url: url, timestamp: Date.now() });
+                abrirVistaGantt(currentGanttTarget.c, currentGanttTarget.p, document.getElementById('vg-title').innerText);
+            } catch(e) { alert("Error subiendo foto."); } finally { setLoader("", false); inp.value = ''; currentGanttTarget = null; }
+        }
+    }
+
+    window.guardarGastoManual = async function() {
+        let monto = parseFloat(document.getElementById('m-monto').value); let desc = document.getElementById('m-desc').value;
+        if(!monto || !desc) return alert("Llena todos los campos");
+        let [cid, pid, pName] = document.getElementById('m-proy').value.split('|');
+        setLoader("Guardando Gasto...", true);
+        try {
+            await db.ref(`caja_chica/${trueWorkerId}/gastos`).push({ proyecto: pName, concepto: desc, monto: monto, fecha: new Date().toISOString().split('T')[0], type: 'gasto' });
+            if(pid !== 'GENERAL') {
+                let snap = await db.ref(`proyectos/${cid}/${pid}/gasto_total`).once('value');
+                await db.ref(`proyectos/${cid}/${pid}/gasto_total`).set((parseFloat(snap.val())||0) + monto);
+            }
+            document.getElementById('mod-gasto-manual').style.display = 'none'; alert("Gasto descontado de tu caja chica.");
+        } catch(e) { alert("Error"); } finally { setLoader("", false); }
+    }
+
+    window.verImagenFullNormal = function(url) { document.getElementById('pv-img').src = url; document.getElementById('btn-del-foto').style.display = 'none'; document.getElementById('photo-viewer').style.display = 'flex'; }
+    window.verImagenGantt = function(url, c, p, itemIdx, sKey, pKey) { document.getElementById('pv-img').src = url; window.currentPhotoDeleteTarget = { c, p, itemIdx, sKey, pKey }; document.getElementById('btn-del-foto').style.display = 'flex'; document.getElementById('photo-viewer').style.display = 'flex'; }
+    window.cerrarVisorFotos = function() { document.getElementById('photo-viewer').style.display = 'none'; document.getElementById('pv-img').src = ''; window.currentPhotoDeleteTarget = null; _resetZoomTrab(false); }
+    // ── Zoom + pan para el visor de trabajador ────────────────────────────────
+    (function() {
+        const img = document.getElementById('pv-img');
+        const overlay = document.getElementById('photo-viewer');
+        let scale = 1, lastScale = 1, translateX = 0, translateY = 0;
+        let startX = 0, startY = 0, startTX = 0, startTY = 0;
+        let isPinching = false, lastTap = 0, pinchDist = 0;
+        const MAX = 6, MIN = 1;
+
+        function applyT(anim) {
+            img.style.transition = anim ? 'transform 0.25s ease' : 'none';
+            img.style.transform = `translate(${translateX}px,${translateY}px) scale(${scale})`;
+        }
+        window._resetZoomTrab = function(anim) { scale=1; translateX=0; translateY=0; applyT(anim); };
+        function clamp() {
+            const r = img.getBoundingClientRect();
+            const mx = Math.max(0,(r.width-overlay.clientWidth)/2);
+            const my = Math.max(0,(r.height-overlay.clientHeight)/2);
+            translateX = Math.min(mx,Math.max(-mx,translateX));
+            translateY = Math.min(my,Math.max(-my,translateY));
+        }
+
+        img.addEventListener('touchstart', e => {
+            if (e.touches.length === 2) {
+                isPinching = true; lastScale = scale;
+                pinchDist = Math.hypot(e.touches[1].clientX-e.touches[0].clientX, e.touches[1].clientY-e.touches[0].clientY);
+            } else if (e.touches.length === 1) {
+                isPinching = false;
+                startX = e.touches[0].clientX; startY = e.touches[0].clientY;
+                startTX = translateX; startTY = translateY;
+                const now = Date.now();
+                if (now - lastTap < 280) { e.preventDefault(); scale > 1 ? window._resetZoomTrab(true) : (scale=2.5, applyT(true)); }
+                lastTap = now;
+            }
+        }, { passive: false });
+
+        img.addEventListener('touchmove', e => {
+            e.preventDefault();
+            if (e.touches.length === 2 && isPinching) {
+                const d = Math.hypot(e.touches[1].clientX-e.touches[0].clientX, e.touches[1].clientY-e.touches[0].clientY);
+                scale = Math.min(MAX, Math.max(MIN, lastScale*(d/pinchDist))); applyT(false);
+            } else if (e.touches.length === 1 && !isPinching && scale > 1) {
+                translateX = startTX + e.touches[0].clientX - startX;
+                translateY = startTY + e.touches[0].clientY - startY;
+                clamp(); applyT(false);
+            }
+        }, { passive: false });
+
+        img.addEventListener('touchend', () => {
+            if (scale < 1.05) { window._resetZoomTrab(true); return; }
+            clamp(); applyT(true);
+        }, { passive: true });
+    })();
+
+    window.guardarFotoTrabajador = async function() {
+        const url = document.getElementById('pv-img').src; if(!url) return;
+        try {
+            const blob = await fetch(url).then(r => r.blob());
+            const file = new File([blob], 'Rubik_Foto_' + Date.now() + '.jpg', { type: blob.type });
+            if(navigator.canShare && navigator.canShare({ files: [file] })) { await navigator.share({ files: [file], title: 'Foto - Rubik OS' }); return; }
+            const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = file.name;
+            document.body.appendChild(a); a.click(); URL.revokeObjectURL(a.href); a.remove();
+        } catch(e) { if(e.name !== 'AbortError') window.open(url, '_blank'); }
+    }
+    window.compartirFotoTrabajador = async function() {
+        const url = document.getElementById('pv-img').src; if(!url) return;
+        try {
+            const blob = await fetch(url).then(r => r.blob());
+            const file = new File([blob], 'Rubik_Foto_' + Date.now() + '.jpg', { type: blob.type });
+            if(navigator.canShare && navigator.canShare({ files: [file] })) { await navigator.share({ files: [file], title: 'Foto de obra', text: '📸 Foto desde Rubik OS' }); return; }
+            window.open('https://wa.me/?text=' + encodeURIComponent('📸 Foto Rubik OS: ' + url), '_blank');
+        } catch(e) { if(e.name !== 'AbortError') window.open('https://wa.me/?text=' + encodeURIComponent('📸 Foto Rubik OS: ' + url), '_blank'); }
+    }
+    window.eliminarFotoGantt = function() {
+        if(!window.currentPhotoDeleteTarget) return;
+        if(!confirm("¿Seguro que deseas eliminar esta foto?")) return;
+        let {c, p, itemIdx, sKey, pKey} = window.currentPhotoDeleteTarget;
+        db.ref(`proyectos/${c}/${p}/gantt/items/${itemIdx}/subtasks/${sKey}/photos/${pKey}`).remove().then(() => { cerrarVisorFotos(); abrirVistaGantt(c, p, document.getElementById('vg-title').innerText); });
+    }
+</script>
+
+<script type="module">
+    import { GoogleGenerativeAI, typewriterAppend } from "/js/gemini-client.js?v=2";
+
+    // Modelos instanciados UNA sola vez para toda la sesión
+    const _trabModelFast = new GoogleGenerativeAI("").getGenerativeModel({ model: "gemini-2.0-flash" });
+    const _trabModelSmart = new GoogleGenerativeAI("").getGenerativeModel({ model: "gemini-2.5-flash" });
+
+    // ── Auth anónimo para que el proxy pueda obtener ID token ──────────────
+    // La app del trabajador no usa login con email, así que hacemos
+    // signInAnonymously al cargar — da un token válido para el Cloud Function.
+    (async function ensureAuth() {
+        try {
+            await new Promise(resolve => {
+                const check = () => {
+                    if (window.firebase && window.firebase.auth) resolve();
+                    else setTimeout(check, 80);
+                };
+                check();
+            });
+            const auth = window.firebase.auth();
+            if (!auth.currentUser) {
+                await auth.signInAnonymously();
+            }
+        } catch(e) {
+            console.warn('[IA] Auth anónimo falló:', e.message);
+        }
+    })();
+
+    window.aiChatFilesStore = []; window.chatHistory = [];
+
+    window.openSuperAI = function() { document.getElementById('mod-super-ai').style.display = 'flex'; document.querySelector('.tabs-wrap').style.visibility = 'hidden'; switchSuperTab('chat'); window.poblarSelectProyectos(); }
+    window.closeSuperAI = function() { document.getElementById('mod-super-ai').style.display = 'none'; document.querySelector('.tabs-wrap').style.visibility = 'visible'; }
+    window.switchSuperTab = function(tab) {
+        document.querySelectorAll('.super-tab-btn').forEach(b=>b.classList.remove('active'));
+        document.querySelectorAll('.super-body').forEach(b=>b.classList.remove('active'));
+        document.getElementById('tab-ia-'+tab).classList.add('active');
+        document.getElementById('body-ia-'+tab).classList.add('active');
+        const footer = document.getElementById('chat-footer-unified');
+        if(tab === 'chat') { footer.style.display = 'flex'; window.scrollAIChatDown(); } 
+        else { footer.style.display = 'none'; }
+    }
+
+    // --- PESTAÑA INVENTARIO IA ---
+    window.abrirEscanerInventario = function() { openSuperAI(); switchSuperTab('inv'); }
+    
+    // ── PROMPT QUIRÚRGICO PARA EL ESCÁNER ──────────────────────────
+    const INV_SCAN_PROMPT = `Eres el Ojo Birónico de Bodega de Rubik Bolivia — empresa que fabrica señalética, letreros, stands, toldos, estructuras metálicas, acrílicos, lonas y publicidad física.
+
+MISIÓN: Identifica con PRECISIÓN ABSOLUTA el objeto en la imagen. Tu diagnóstico va directo a la base de datos; no hay humano que lo revise.
+
+CONTEXTO DEL TALLER (objetos comunes que verás):
+- Herramientas eléctricas: taladros, rotomartillos, amoladoras (amoladora = grinder de disco), caladora, sierra circular, pistola de calor, compresor de aire, pistola de pintura/aerógrafo, router CNC, soldadora MIG/TIG/electrodo, dobladora, troqueladora.
+- Herramientas manuales: martillo, llave inglesa, alicate, pinza, destornillador, espátula, prensa/clamp, nivel, cinta métrica, escuadra.
+- Materiales: plancha de acero/aluminio, tubo redondo/cuadrado, perfil L/C/U, lámina de acrílico, lona vinílica/mesh, PVC espumado, MDF, trupán, foam board, banner, vinil adhesivo.
+- Equipos: compresor (tanque cilíndrico con motor — NO confundir con cables), cables eléctricos (son cables, NO herramientas), extintor, transformador.
+
+REGLAS CRÍTICAS:
+1. Mira el objeto PRINCIPAL en primer plano. Si hay varios, identifica el más prominente.
+2. Observa la FORMA, COLOR y CONTEXTO antes de nombrar. Un cilindro metálico grande con motor = compresor. Un cilindro rojo = extintor.
+3. Si ves cables enredados = "cables eléctricos". Si ves un tanque con manómetro = "compresor de aire".
+4. NUNCA inventes. Si la imagen es borrosa o el objeto no es claro, usa nombre "Objeto no identificado".
+5. El estado físico: Bueno (sin daños visibles), Regular (uso pero funcional), Malo (roto/oxidado/dañado).
+6. Responde ÚNICAMENTE con este JSON, sin markdown ni texto extra:
+{"tipo":"herramienta_electrica","nombre":"Nombre exacto y específico","descripcion":"Características físicas visibles y estado","estado_estimado":"Bueno","cantidad_estimada":1,"und":"pza"}
+
+TIPOS VÁLIDOS: herramienta_electrica, herramienta_manual, material_metal, material_madera, material_acrilico, material_lona, material_pintura, equipo_soldadura, equipo_corte, equipo_aire, consumible, cable_electrico, otro`;
+
+    window.uploadAndScanInventario = async function(inp) {
+        if(!inp.files || inp.files.length === 0) return;
+        const files = Array.from(inp.files);
+        const resultBox = document.getElementById('inv-result-box');
+        
+        // Mostrar preview inmediato de todas las fotos
+        resultBox.innerHTML = `<div style="color:var(--purple); font-weight:800; margin-bottom:10px;"><i class="ph-bold ph-spinner"></i> Escaneando ${files.length} foto(s) en segundo plano...</div><div id="inv-cards-container" style="display:flex; flex-direction:column; gap:8px;"></div>`;
+        
+        // Ocultar loader — el trabajador puede seguir usando la app
+        document.getElementById('loader-overlay').style.display = 'none';
+        inp.value = '';
+
+        // Procesar todas las fotos EN PARALELO
+        const container = document.getElementById('inv-cards-container');
+        
+        const procesarFoto = async (file, index) => {
+            // Tarjeta placeholder mientras procesa
+            const cardId = `inv-card-${index}`;
+            container.innerHTML += `<div id="${cardId}" style="background:var(--card); border:1px solid var(--border); padding:12px; border-radius:14px; font-size:12px; color:var(--gray);"><i class="ph-bold ph-circle-notch" style="animation:spin 1s linear infinite;"></i> Analizando foto ${index+1}...</div>`;
+            
+            try {
+                const b64 = await new Promise(res => { const r = new FileReader(); r.onload = e => res(e.target.result); r.readAsDataURL(file); });
+                
+                const result = await _trabModelFast.generateContent([
+                    { text: INV_SCAN_PROMPT },
+                    { inlineData: { data: b64.split(',')[1], mimeType: file.type || "image/jpeg" } }
+                ]);
+                
+                let parsed = JSON.parse(result.response.text().replace(/```json/gi,'').replace(/```/g,'').trim());
+                
+                // Subir foto a Storage en background
+                const storageRef = firebase.storage().ref(`inventario/${Date.now()}_${index}.jpg`);
+                const uploadTask = storageRef.putString(b64, 'data_url');
+                
+                // Guardar en DB inmediato con URL temporal, luego actualizar
+                const dbRef = await firebase.database().ref('base_datos/inventario').push({
+                    ...parsed,
+                    fotoUrl: '',
+                    fecha_ingreso: new Date().toISOString(),
+                    trabajador: currentUser,
+                    subiendo: true
+                });
+                
+                // Actualizar tarjeta con resultado IA
+                const card = document.getElementById(cardId);
+                if(card) card.innerHTML = `
+                    <div style="color:var(--green); font-weight:900; font-size:11px; margin-bottom:6px;"><i class="ph-bold ph-check-circle"></i> GUARDADO · <span style="color:var(--gray); font-weight:600;">${parsed.nombre}</span></div>
+                    <img loading="lazy" decoding="async" src="${b64}" style="width:60px; height:60px; border-radius:8px; float:right; object-fit:cover; margin-left:8px;">
+                    <div style="font-size:11px; line-height:1.5;"><b>Tipo:</b> ${parsed.tipo}<br><b>Estado:</b> ${parsed.estado_estimado}<br><b>Desc:</b> ${parsed.descripcion}</div>
+                    <div style="clear:both; font-size:10px; color:var(--gray); margin-top:4px;"><i class="ph ph-cloud-arrow-up"></i> Subiendo foto...</div>`;
+                
+                // Completar subida en background y actualizar URL
+                uploadTask.then(async snap => {
+                    const url = await snap.ref.getDownloadURL();
+                    await dbRef.update({ fotoUrl: url, subiendo: false });
+                    const card2 = document.getElementById(cardId);
+                    if(card2) {
+                        card2.querySelector('img').src = url;
+                        const hint = card2.querySelector('div:last-child');
+                        if(hint) hint.innerHTML = '<i class="ph-bold ph-cloud-check" style="color:var(--green);"></i> Foto guardada en bodega';
+                    }
+                });
+                
+            } catch(e) {
+                const card = document.getElementById(cardId);
+                if(card) card.innerHTML = `<div style="color:var(--red); font-size:11px;"><i class="ph-bold ph-warning"></i> Error foto ${index+1}: ${e.message}</div>`;
+            }
+        };
+
+        // Lanzar todas en paralelo
+        Promise.all(files.map((f, i) => procesarFoto(f, i)));
+    }
+
+    // --- PESTAÑA REQUERIMIENTOS CON AUTO-PDF DESCARGABLE Y PROVEEDORES ---
+    window.reqMatItems = [];
+    window.addReqMatRow = function() { window.reqMatItems.push({ mat: '', cant: '', proveedor_sugerido: 'No asignado', key: Date.now() }); window.renderReqMatList(); }
+    window.renderReqMatList = function() {
+        const cont = document.getElementById('req-mat-list-container'); cont.innerHTML = '';
+        window.reqMatItems.forEach((item, index) => {
+            cont.innerHTML += `<div class="mat-req-row"><input type="text" class="inp-std" placeholder="Acrílico 3mm..." value="${item.mat}" oninput="window.reqMatItems[${index}].mat=this.value" style="padding:10px; margin:0;"><input type="text" class="inp-std" placeholder="Cant" value="${item.cant}" oninput="window.reqMatItems[${index}].cant=this.value" style="padding:10px; text-align:center; margin:0;">${index > 0 ? `<i class="ph-bold ph-trash" style="color:var(--red); font-size:18px; cursor:pointer;" onclick="window.reqMatItems.splice(${index}, 1); window.renderReqMatList();"></i>` : '<div></div>'}</div>`;
+        });
+    }
+    setTimeout(window.addReqMatRow, 1000);
+    
+    window.verifyRequestWithIA = async function() {
+        const pVal = document.getElementById('req-proy-select').value;
+        const validMats = window.reqMatItems.filter(i => i.mat.trim() !== '' && i.cant.trim() !== '');
+        if(validMats.length === 0) return alert("Llena un material.");
+        
+        document.getElementById('loader-txt').innerText = "Cruzando con BD de Proveedores..."; 
+        document.getElementById('loader-overlay').style.display = 'flex';
+        
+        try {
+            // Pasar la base de datos de proveedores a la IA
+            const prompt = `Eres el IA de Compras de Rubik. 
+            El trabajador pide estos materiales: ${JSON.stringify(validMats)}.
+            Base de datos de proveedores histórica: ${JSON.stringify(window.dbProveedoresGlobal)}.
+            
+            TAREA:
+            1. Cruza cada material pedido con la base de datos para sugerir el proveedor. Si no hay, pon "No tenemos proveedor".
+            2. Evalúa si el pedido es lógico para el proyecto.
+            
+            DEBES DEVOLVER ESTE JSON EXACTO, SIN NADA MÁS:
+            {
+              "mensaje_para_trabajador": "Todo parece correcto... o Ojo, estás pidiendo mucho...",
+              "lista_actualizada": [
+                { "mat": "Nombre", "cant": "Cant", "proveedor_sugerido": "Nombre Proveedor o No tenemos proveedor" }
+              ]
+            }`;
+            
+            const result = await _trabModelSmart.generateContent(prompt);
+            let jsonClean = result.response.text().replace(/```json/gi, '').replace(/```/g, '').trim();
+            let parsed = JSON.parse(jsonClean);
+            
+            window.reqMatItems = parsed.lista_actualizada || validMats;
+            
+            document.getElementById('ia-verification-box').innerHTML = `
+                <div class="ia-sug-box"><b>Cerebro IA dice:</b><br>${parsed.mensaje_para_trabajador}</div>
+                <div style="font-size:11px; margin-top:10px; color:var(--purple);">* Se han asignado proveedores a la lista de impresión.</div>
+                <label class="inp-lbl">Tu explicación (Opcional)</label>
+                <textarea id="req-worker-note" class="inp-std" rows="2" placeholder="Ej: Se rompieron las planchas..."></textarea>
+            `;
+            document.getElementById('ia-verification-box').style.display = 'block'; 
+            document.getElementById('btn-req-send').style.display = 'block'; 
+            document.getElementById('btn-ia-verify').style.display = 'none';
+        } catch(e) { alert("Error verificando: " + e.message); } 
+        finally { document.getElementById('loader-overlay').style.display = 'none'; }
+    }
+
+    window.finalGenerateReqPDF = async function() {
+        if(!confirm("¿Descargar PDF y Enviar por WhatsApp?")) return;
+        document.getElementById('loader-txt').innerText = "Generando Documento Profesional..."; 
+        document.getElementById('loader-overlay').style.display = 'flex';
+        
+        try {
+            const doc = new jsPDF(); 
+            const pName = document.getElementById('req-proy-select').value.split('|')[2];
+            const nota = document.getElementById('req-worker-note')?.value || 'Sin aclaración adicional.';
+            
+            doc.setFontSize(16); doc.text("REQUERIMIENTO OFICIAL DE COMPRAS", 105, 20, {align: 'center'}); 
+            doc.setFontSize(10); doc.text(`PROYECTO: ${pName}`, 20, 35); 
+            doc.text(`TRABAJADOR: ${currentUser}`, 20, 42);
+            doc.text(`FECHA: ${new Date().toLocaleDateString()}`, 20, 49);
+            
+            doc.text(`ACLARACIÓN DEL TRABAJADOR:`, 20, 60);
+            doc.setFontSize(9); doc.text(nota, 20, 65, {maxWidth: 170});
+
+            // Generar Tabla Profesional con AutoTable
+            const tableData = window.reqMatItems.map((m, i) => [i+1, m.mat, m.cant, m.proveedor_sugerido]);
+            doc.autoTable({
+                startY: 75,
+                head: [['N°', 'Material Solicitado', 'Cantidad', 'Proveedor Sugerido IA']],
+                body: tableData,
+                theme: 'striped',
+                headStyles: { fillColor: [88, 86, 214] },
+                styles: { fontSize: 9 }
+            });
+            
+            // 1. FORZAR DESCARGA AL DISPOSITIVO (Para que lo envíe por WhatsApp)
+            const fileName = `Req_${pName.substring(0,10)}_${Date.now()}.pdf`;
+            doc.save(fileName);
+
+            // 2. ENVIAR WHATSAPP (SIN LINK DE FIREBASE, INDICANDO QUE ADJUNTE EL ARCHIVO)
+            const waMsg = encodeURIComponent(`🛠️ *NUEVO REQUERIMIENTO*\n👤 ${currentUser}\n🏗️ ${pName}\n💬 *Nota:* ${nota}\n\n_Te adjunto el documento PDF descargado a continuación:_`);
+            setTimeout(() => { window.open(`https://wa.me/?text=${waMsg}`, '_blank'); }, 1000);
+            
+            window.reqMatItems = []; document.getElementById('req-mat-list-container').innerHTML = ''; window.addReqMatRow(); document.getElementById('ia-verification-box').style.display='none'; document.getElementById('btn-req-send').style.display='none'; document.getElementById('btn-ia-verify').style.display='block'; window.closeSuperAI();
+        } catch(e) { alert("Error PDF: " + e.message); } 
+        finally { document.getElementById('loader-overlay').style.display = 'none'; }
+    }
+
+    // --- PESTAÑA CHAT & FACTURAS ---
+    window.handleAIFile = function(inp) {
+        if (inp.files) { Array.from(inp.files).forEach(f => { if(f.type.indexOf('image')!==-1) { const r = new FileReader(); r.onload = e => { window.aiChatFilesStore.push({ data: e.target.result, file: f }); window.renderAIPreviews(); }; r.readAsDataURL(f); }});}
+        inp.value = '';
+    }
+    
+    window.renderAIPreviews = function() {
+        const c = document.getElementById('chat-previews-container'); c.innerHTML = '';
+        if(window.aiChatFilesStore.length === 0) { c.style.display = 'none'; return; }
+        c.style.display = 'flex'; window.aiChatFilesStore.forEach((f, idx) => { c.innerHTML += `<div class="chat-img-prev-wrap"><img loading="lazy" decoding="async" src="${f.data}" class="chat-img-preview"><span class="chat-img-remove" onclick="window.aiChatFilesStore.splice(${idx},1); window.renderAIPreviews();">X</span></div>`; });
+    }
+    
+    window.pendingFacturaData = null; // Para guardar la factura si la IA no encuentra el proyecto
+    
+    window.sendAIMessage = async function() {
+        const input = document.getElementById('ai-user-input');
+        const text = input.value.trim();
+        const files = [...window.aiChatFilesStore];
+        if(!text && files.length === 0) return;
+
+        const cb  = document.getElementById('ai-chat-box');
+        const btn = document.getElementById('btn-ai-send');
+        if (btn) btn.disabled = true;
+
+        // Mensaje del usuario
+        let uHtml = '';
+        files.forEach(f => uHtml += `<img loading="lazy" decoding="async" src="${f.data}" class="msg-img"> `);
+        if (text) uHtml += (uHtml ? '<br>' : '') + text.replace(/\n/g, '<br>');
+        const uMsg = document.createElement('div'); uMsg.className = 'msg msg-user'; uMsg.innerHTML = uHtml;
+        cb.appendChild(uMsg);
+        input.value = ''; window.aiChatFilesStore = []; window.renderAIPreviews(); window.scrollAIChatDown();
+
+        // Typing indicator dentro del chat box con puntos animados + texto giratorio
+        const PROC_FRASES = ['Consultando la base de datos…', 'Analizando tu solicitud…', 'Procesando con IA…', 'Revisando tus proyectos…'];
+        let _pfIdx = 0;
+        const tyEl = document.createElement('div');
+        tyEl.className = 'msg msg-ai';
+        tyEl.id = '__ai_typing_bubble';
+        tyEl.style.cssText = 'display:flex; align-items:center; gap:10px; opacity:0.85;';
+        tyEl.innerHTML = `
+            <span style="display:flex;gap:3px;align-items:center;">
+                <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+            </span>
+            <span id="__ai_typing_text" style="font-size:12px;color:#8e8e93;font-style:italic;">${PROC_FRASES[0]}</span>`;
+        cb.appendChild(tyEl);
+        window.scrollAIChatDown();
+        const _pfTimer = setInterval(() => {
+            _pfIdx = (_pfIdx + 1) % PROC_FRASES.length;
+            const el = document.getElementById('__ai_typing_text');
+            if (el) el.textContent = PROC_FRASES[_pfIdx];
+        }, 2200);
+
+        // ── Construir contexto completo del trabajador ──────────────
+        const misObras = Object.entries(projectCache).map(([pid, p]) => {
+            const tareas = Object.values(p.gantt || {}).map(it => it.name).join(', ');
+            const presup = Object.values(p.presupuesto || {}).map(it => it.desc).filter(Boolean).slice(0,5).join(', ');
+            return `• ${p.pName || pid} (ID:${pid}) — Tareas: ${tareas || 'sin datos'} — Ítems presupuesto: ${presup || 'sin datos'}`;
+        }).join('\n');
+
+        // Recolectar fotos de diseños de los proyectos asignados
+        let fotosDisenos = [];
+        for(const [pid, p] of Object.entries(projectCache)) {
+            if(p.disenos) {
+                Object.values(p.disenos).forEach(d => {
+                    if(d.url) fotosDisenos.push({ pid, pName: p.pName, url: d.url, tipo: d.tipo || 'diseño' });
+                });
+            }
+        }
+
+        // Historial de pagos para razonamiento financiero
+        const misPagos = window.historialPagosGlobal || [];
+        const pagosTexto = misPagos.slice(-10).map(p =>
+            `${p.fecha || '?'}: ${p.concepto || 'Pago'} = ${p.monto > 0 ? '+' : ''}${p.monto} Bs ${p.nota ? '('+p.nota+')' : ''}`
+        ).join('\n') || 'Sin historial de pagos';
+
+        const sueldo = window.sueldoFijoGlobal || 0;
+        const saldo = window.saldoHistoricoReal || 0;
+        const cajaChica = window.cajaChicaGlobal || 0;
+
+        const SYSTEM_PROMPT = `Eres el CEREBRO IA de Rubik Bolivia — el compañero inteligente de los trabajadores del taller.
+
+TRABAJADOR: ${currentUser || 'Compañero'}
+FECHA HOY: ${new Date().toLocaleDateString('es-BO', {weekday:'long', year:'numeric', month:'long', day:'numeric'})}
+
+═══ FINANZAS DEL TRABAJADOR ═══
+Sueldo fijo mensual: ${sueldo} Bs
+Saldo a favor acumulado: ${saldo} Bs
+Caja chica disponible: ${cajaChica} Bs
+Últimos movimientos:
+${pagosTexto}
+
+═══ PROYECTOS ASIGNADOS ═══
+${misObras || 'Sin proyectos asignados aún.'}
+
+═══ PERSONALIDAD Y TONO ═══
+- Habla como un compañero de trabajo inteligente, cálido y directo. No eres un robot.
+- Cuando expliques finanzas, hazlo como si le explicaras a un amigo: simple, claro, con ejemplos concretos.
+- Si el trabajador está confundido con su pago, explícale el MOTIVO específico mirando su historial real.
+- NUNCA desanimes, criticas ni bajonees. Si hubo un descuento, explica por qué de forma positiva y motivadora.
+- Si preguntan por un proyecto, da detalles reales de sus tareas e ítems.
+- Si piden ver fotos/diseños de su proyecto, indica las URLs disponibles mostrándolas como imágenes.
+- Si suben una foto de factura/recibo, detecta automáticamente y devuelve el bloque JSON.
+
+═══ REGLA DISEÑOS ═══
+Si el trabajador pide ver diseños, renders o fotos de sus proyectos, responde con las URLs disponibles en este formato:
+[DISEÑO: url_aqui | Descripción]
+La app las convertirá en imágenes automáticamente.
+Diseños disponibles: ${fotosDisenos.length > 0 ? fotosDisenos.map(d => `${d.pName}: ${d.url} (${d.tipo})`).join(' | ') : 'No hay diseños cargados aún.'}
+
+═══ REGLA FACTURAS/RECIBOS ═══
+Si ves imagen con montos, fecha e ítems = es factura. Evalúala automáticamente.
+Al final de tu respuesta agrega EXACTAMENTE:
+---FACTURA_DETECTADA---
+{"es_factura_legal":true/false,"nit":"NIT o S/N","proveedor":"Nombre","total":0.0,"proyecto_id_sugerido":"ID_o_null"}`;
+
+        let parts = [{ text: SYSTEM_PROMPT }];
+        // Agregar historial de conversación (últimos 6 turnos para contexto)
+        window.chatHistory.slice(-6).forEach(h => parts.push({ text: h }));
+        files.forEach(f => parts.push({ inlineData: { data: f.data.split(',')[1], mimeType: f.file?.type || "image/jpeg" } }));
+        parts.push({ text: `TRABAJADOR DICE: ${text || "Revisa esto."}` });
+
+        try {
+            // gemini-2.0-flash primero (más rápido), el proxy reintenta automáticamente si hay 503
+            let aiText;
+            try {
+                aiText = (await _trabModelFast.generateContent(parts)).response.text();
+            } catch(e503) {
+                if(e503.message && (e503.message.includes('503') || e503.message.includes('unavailable') || e503.message.includes('high demand'))) {
+                    aiText = (await _trabModelSmart.generateContent(parts)).response.text();
+                } else { throw e503; }
+            }
+
+            // Guardar en historial multi-turn (máx 12 turnos)
+            window.chatHistory.push(`TRABAJADOR: ${text || '[archivo]'}`);
+            window.chatHistory.push(`IA: ${aiText.replace(/---FACTURA_DETECTADA---[\s\S]*/,'').trim().substring(0, 500)}`);
+            if (window.chatHistory.length > 12) window.chatHistory = window.chatHistory.slice(-12);
+
+            let displayHtml = '';
+
+            // ── Detectar facturas ──
+            if(aiText.includes('---FACTURA_DETECTADA---')) {
+                const [textoParte, jsonParte] = aiText.split('---FACTURA_DETECTADA---');
+                displayHtml = textoParte.replace(/\n/g,'<br>').replace(/\*\*(.*?)\*\*/g,'<b>$1</b>');
+                try {
+                    let factData = JSON.parse(jsonParte.trim().replace(/```json|```/g,'').trim());
+                    window.pendingFacturaData = factData;
+                    displayHtml += `<div style="margin-top:12px; padding-top:10px; border-top:1px solid rgba(255,255,255,0.15);">
+                        <div style="font-size:11px; color:#8e8e93; margin-bottom:8px;">📄 FACTURA DETECTADA</div>
+                        <div style="font-size:12px; color:white; margin-bottom:10px;">
+                            <b>Proveedor:</b> ${factData.proveedor||'N/D'}<br>
+                            <b>Total:</b> ${factData.total||0} Bs<br>
+                            <b>NIT:</b> ${factData.nit||'S/N'}
+                        </div>
+                        <button onclick="window.registrarFacturaDetectada()" style="background:var(--green);color:white;border:none;padding:10px 16px;border-radius:10px;font-weight:bold;cursor:pointer;width:100%;">
+                            ✅ Registrar como Gasto
+                        </button>
+                    </div>`;
+                } catch(e) { console.warn("Parse factura:", e); }
+            } else {
+                // ── Detectar links de diseños [DISEÑO: url | desc] ──
+                displayHtml = aiText
+                    .replace(/\[DISEÑO:\s*(https?:\/\/[^\s|\]]+)\s*\|?\s*([^\]]*)?\]/g,
+                        (_, url, desc) => `<br><img loading="lazy" src="${url}" style="max-width:100%;border-radius:10px;margin:6px 0;" onclick="window.verImagenFullNormal('${url}')"><br><span style="font-size:10px;color:#8e8e93;">${desc||'Diseño'}</span>`)
+                    .replace(/\n/g,'<br>')
+                    .replace(/\*\*(.*?)\*\*/g,'<b>$1</b>');
+            }
+
+            clearInterval(_pfTimer);
+            document.getElementById('__ai_typing_bubble')?.remove();
+            const aiMsg = document.createElement('div'); aiMsg.className = 'msg msg-ai';
+            cb.appendChild(aiMsg);
+            window.scrollAIChatDown();
+            // Typewriter para respuestas normales; facturas usan innerHTML directo (tienen botones)
+            if (aiText.includes('---FACTURA_DETECTADA---')) {
+                aiMsg.innerHTML = displayHtml;
+            } else {
+                await typewriterAppend(aiMsg, displayHtml, 10);
+            }
+            window.scrollAIChatDown();
+
+        } catch(e) {
+            console.error("Error IA Chat:", e);
+            clearInterval(_pfTimer);
+            document.getElementById('__ai_typing_bubble')?.remove();
+            const errMsg = document.createElement('div'); errMsg.className = 'msg msg-ai';
+            errMsg.style.color = 'var(--red)';
+            errMsg.innerText = "⚠️ " + (e.message?.includes('autenticado') ? 'Sesión no iniciada. Recargá la página.' : (e.message || 'Error al conectar con la IA'));
+            cb.appendChild(errMsg); window.scrollAIChatDown();
+        } finally {
+            if (btn) btn.disabled = false;
+        }
+    }
+
+    window.registrarFacturaDetectada = function() {
+        const f = window.pendingFacturaData;
+        if (!f) return alert("No hay factura pendiente.");
+        alert("Factura de " + (f.proveedor||'?') + " por " + (f.total||0) + " Bs detectada. Registra el gasto en el módulo de compras.");
+    }
+
+</script>
+</body>
+</html>

@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Rubik - Panel de Control</title>
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+    <style>
+        :root { --bg: #f2f2f7; --card: #ffffff; --blue: #007aff; --text: #1c1c1e; }
+        body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; background: var(--bg); margin: 0; padding: 25px; padding-bottom: 60px; display: flex; flex-direction: column; align-items: center; min-height: 100vh; -webkit-tap-highlight-color: transparent;}
+        
+        .logo-area { margin-bottom: 40px; margin-top: 20px; text-align: center; }
+        .logo-img { height: 60px; border-radius: 12px; }
+        .welcome { font-size: 22px; font-weight: 900; color: var(--text); margin-top: 15px; letter-spacing: -0.5px;}
+        
+        .grid-menu { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; width: 100%; max-width: 400px; position: relative; z-index: 10;}
+        
+        .card-btn { background: var(--card); border: none; padding: 25px 15px; border-radius: 25px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.03); cursor: pointer; transition: transform 0.1s; text-decoration: none; color: var(--text); border: 1px solid rgba(0,0,0,0.05); }
+        .card-btn:active { transform: scale(0.96); }
+        
+        .icon-box { width: 55px; height: 55px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 26px; color: white; box-shadow: 0 4px 10px rgba(0,0,0,0.1);}
+        .lbl { font-size: 14px; font-weight: 800; text-align: center; line-height: 1.2; }
+
+        /* Colores Apple-Style */
+        .ic-users { background: linear-gradient(135deg, #007aff, #5ac8fa); }   
+        .ic-db { background: linear-gradient(135deg, #5856d6, #af52de); }      
+        .ic-pay { background: linear-gradient(135deg, #34c759, #30d158); }  
+        .ic-rrhh { background: linear-gradient(135deg, #ff2d55, #ff375f); } /* NUEVO COLOR PARA RRHH */
+        .ic-internal { background: linear-gradient(135deg, #1c1c1e, #48484a); }
+
+        .version { position: fixed; bottom: 20px; font-size: 11px; font-weight: 600; color: #8e8e93; z-index: 1;}
+    </style>
+    <link rel="apple-touch-icon" href="logo.jpg">
+    <link rel="stylesheet" href="/css/responsive.css?v=1">
+</head>
+<body>
+
+    <div class="logo-area">
+        <img loading="lazy" decoding="async" src="logo.jpg" class="logo-img" onerror="this.src='https://placehold.co/100x100/000/FFF?text=R'">
+        <div class="welcome">Hola, Renzo</div>
+    </div>
+
+    <div class="grid-menu">
+        <a href="clientes.html" class="card-btn" style="grid-column: span 2;">
+            <div class="icon-box ic-users" style="width:65px; height:65px; font-size:32px;">
+                <i class="ph-fill ph-users-three"></i>
+            </div>
+            <div class="lbl" style="font-size:18px;">CARTERA DE CLIENTES</div>
+            <span style="font-size:12px; color:#8e8e93; font-weight:600; text-align:center;">Proyectos, Cotizaciones y Avances</span>
+        </a>
+
+        <a href="base_datos.html" class="card-btn">
+            <div class="icon-box ic-db"><i class="ph-fill ph-database"></i></div>
+            <div class="lbl">Base de<br>Datos</div>
+        </a>
+
+        <a href="tesoreria.html" class="card-btn">
+            <div class="icon-box ic-pay"><i class="ph-fill ph-wallet"></i></div>
+            <div class="lbl">Tesorería y<br>Pagos</div>
+        </a>
+
+        <a href="rrhh-planillas.html" class="card-btn" style="grid-column: span 2;">
+            <div class="icon-box ic-rrhh" style="width:60px; height:60px; font-size:30px;">
+                <i class="ph-fill ph-identification-card"></i>
+            </div>
+            <div class="lbl" style="font-size:16px;">RRHH Y PLANILLAS</div>
+            <span style="font-size:11px; color:#8e8e93; font-weight:600; text-align:center;">Rendimiento, Avances Fotográficos y Sueldos</span>
+        </a>
+
+        <a href="interno/dashboard.html" class="card-btn" style="grid-column: span 2; border: 2px solid rgba(0,0,0,0.05);">
+            <div class="icon-box ic-internal" style="width:55px; height:55px; font-size:28px;">
+                <i class="ph-fill ph-cpu"></i>
+            </div>
+            <div class="lbl" style="font-size:16px;">RUBIK INTERNO</div>
+            <span style="font-size:11px; color:#8e8e93; font-weight:600; text-align:center;">Centro de Operaciones y KPIs</span>
+        </a>
+    </div>
+
+    <div class="version">Rubik OS v2.4</div>
+
+    <script src="https://www.gstatic.com/firebasejs/9.1.3/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.1.3/firebase-database-compat.js"></script>
+    <script src="/js/firecache.js?v=1"></script>
+    <style>
+        .notif-popup { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); backdrop-filter: blur(8px); z-index: 9999; display: none; justify-content: center; align-items: center; padding: 20px; box-sizing: border-box;}
+        .notif-box { background: var(--card, #fff); width: 100%; max-width: 400px; border-radius: 24px; padding: 25px; box-shadow: 0 20px 40px rgba(0,0,0,0.2); text-align: center; }
+        .notif-icon { width: 60px; height: 60px; background: rgba(255,149,0,0.1); color: var(--orange, #ff9500); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 30px; margin: 0 auto 15px auto; }
+        .notif-list { max-height: 250px; overflow-y: auto; text-align: left; margin: 20px 0; display: flex; flex-direction: column; gap: 10px; }
+        .notif-item { background: var(--bg, #f4f4f7); padding: 15px; border-radius: 12px; font-size: 13px; color: var(--text, #1c1c1e); border-left: 4px solid var(--orange, #ff9500); }
+    </style>
+    <div class="notif-popup" id="mod-notif">
+        <div class="notif-box">
+            <div class="notif-icon"><i class="ph-fill ph-bell-ringing"></i></div>
+            <h2 style="margin:0; font-size:22px; font-weight:900; color:var(--text, #1c1c1e);">Nuevas Alertas</h2>
+            <p style="font-size:13px; color:gray; margin-top:5px;">Notificaciones de Clientes.</p>
+            <div class="notif-list" id="notif-list-content"></div>
+            <button style="background:var(--text, #1c1c1e); color:white; border:none; padding:16px; border-radius:16px; width:100%; font-weight:800; cursor:pointer; margin-top:10px;" onclick="marcarNotificacionesLeidasHub()">Entendido</button>
+        </div>
+    </div>
+    <script>
+        const firebaseConfigNotif = { databaseURL: "https://rubik-bolivia-default-rtdb.firebaseio.com/" };
+        if (!firebase.apps.length) { firebase.initializeApp(firebaseConfigNotif); }
+        const dbNotif = firebase.database();
+
+        setTimeout(() => {
+            dbNotif.ref('notificaciones/hub').orderByChild('read').equalTo(false).on('value', snap => {
+                if(snap.exists()) {
+                    let html = ""; snap.forEach(child => { let n = child.val(); html += `<div class="notif-item"><b>${n.title}</b><br>${n.body}</div>`; });
+                    document.getElementById('notif-list-content').innerHTML = html; document.getElementById('mod-notif').style.display = 'flex';
+                }
+            });
+        }, 1500);
+
+        function marcarNotificacionesLeidasHub() {
+            dbNotif.ref('notificaciones/hub').orderByChild('read').equalTo(false).once('value', s => { 
+                if(s.exists()) s.forEach(c => c.ref.update({read: true})); 
+                document.getElementById('mod-notif').style.display='none'; 
+            });
+        }
+    </script>
+        <script src="/js/viewmode.js?v=1"></script>
+</body>
+</html>

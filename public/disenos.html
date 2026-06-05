@@ -1,0 +1,923 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Diseños y Archivos - Rubik</title>
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.1.3/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.1.3/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.1.3/firebase-database-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.1.3/firebase-storage-compat.js"></script>
+    <script>
+        window._rubikFirebaseConfig = window._rubikFirebaseConfig || {
+            apiKey: "AIzaSyDXYlofy31cDP14xVAVxWo_7TqXdSgsIjA",
+            authDomain: "rubik-bolivia.firebaseapp.com",
+            databaseURL: "https://rubik-bolivia-default-rtdb.firebaseio.com",
+            projectId: "rubik-bolivia",
+            storageBucket: "rubik-bolivia.firebasestorage.app",
+            messagingSenderId: "4153087958",
+            appId: "1:4153087958:web:cf2dd16106580ed6437677"
+        };
+        if (!firebase.apps.length) firebase.initializeApp(window._rubikFirebaseConfig);
+    </script>
+    <script src="/js/firecache.js?v=1"></script>
+    <script src="/js/auth-guard.js?v=1"></script>
+
+    <style>
+        :root { --bg: #f4f4f7; --card: #fff; --text: #1a1a1a; --blue: #007aff; --green: #34c759; --red: #ff3b30; --orange: #ff9500; --purple: #af52de; --gray: #8e8e93; --border: #d1d1d6; }
+        body.dark-mode { --bg: #000; --card: #1c1c1e; --text: #fff; --border: #333; }
+        body { font-family: -apple-system, sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 20px; padding-bottom: 100px; }
+        
+        .nav { display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px; }
+        .btn-nav { background: var(--card); border: 1px solid var(--border); padding: 8px 14px; border-radius: 20px; font-weight: 700; color: var(--blue); cursor: pointer; display: flex; align-items: center; gap: 5px; }
+        
+        .tabs-wrap { background: var(--border); padding: 4px; border-radius: 14px; display: flex; margin-bottom: 20px; overflow-x: auto; scrollbar-width: none; }
+        .tabs-wrap::-webkit-scrollbar { display: none; }
+        .tab-btn { flex: 1; min-width: max-content; padding: 10px 15px; border: none; background: transparent; font-weight: 800; font-size: 12px; border-radius: 10px; color: var(--gray); cursor: pointer; transition: 0.3s; }
+        .tab-btn.active { background: var(--card); color: var(--text); box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+
+        .upload-card { background: var(--card); border: 2px dashed var(--blue); border-radius: 18px; padding: 30px 20px; text-align: center; cursor: pointer; margin-bottom: 20px; color: var(--blue); font-weight: 800; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; transition: 0.2s; }
+        .upload-card:hover { background: rgba(0,122,255,0.05); }
+        .upload-card:active { transform: scale(0.98); }
+        .upload-card.dragover { background: rgba(52, 199, 89, 0.1); border-color: var(--green); color: var(--green); transform: scale(1.02); }
+        
+        .grid-gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 10px; margin-bottom: 20px;}
+        .g-item-wrap { position: relative; aspect-ratio: 1; border-radius: 12px; overflow: hidden; border: 1px solid var(--border); background: var(--card); }
+        .g-item { width: 100%; height: 100%; object-fit: cover; cursor: pointer; }
+        .btn-del-float { position: absolute; top: 5px; right: 5px; background: rgba(255,59,48,0.9); color: white; border: none; width: 28px; height: 28px; border-radius: 8px; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 14px; z-index: 10;}
+
+        .list-docs { display: flex; flex-direction: column; gap: 10px; margin-bottom: 20px;}
+        .doc-wrap { display: flex; align-items: center; justify-content: space-between; background: var(--card); border: 1px solid var(--border); padding: 15px; border-radius: 14px; }
+        .doc-box { display: flex; align-items: center; gap: 15px; cursor: pointer; flex-grow: 1; overflow: hidden; }
+
+        .viewer-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #000; z-index: 5000; display: none; align-items: center; justify-content: center; flex-direction: column; user-select: none; }
+        .viewer-nav-top { position: absolute; top: 0; left: 0; right: 0; z-index: 5010; display: flex; justify-content: space-between; align-items: center; padding: 14px 14px; padding-top: max(14px, env(safe-area-inset-top)); background: linear-gradient(to bottom, rgba(0,0,0,0.7) 0%, transparent 100%); }
+        .viewer-btn-back { background: rgba(255,255,255,0.18); backdrop-filter: blur(10px); color: white; border: none; padding: 10px 15px; border-radius: 12px; font-weight: 800; display: flex; align-items: center; gap: 5px; cursor: pointer; font-size: 14px; -webkit-tap-highlight-color: transparent; }
+        .viewer-actions { display: flex; gap: 8px; }
+        .viewer-action-btn { background: rgba(255,255,255,0.18); backdrop-filter: blur(10px); color: white; border: none; padding: 10px 14px; border-radius: 12px; font-weight: 800; display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: 13px; -webkit-tap-highlight-color: transparent; }
+        .viewer-action-btn.green { background: rgba(52,199,89,0.35); }
+        .viewer-action-btn.whatsapp { background: rgba(37,211,102,0.35); }
+        .viewer-img { max-width: 100vw; max-height: 100vh; object-fit: contain; touch-action: none; cursor: grab; will-change: transform; transition: transform 0.05s linear; }
+        
+        .viewer-btn-prev, .viewer-btn-next { position: absolute; top: 50%; transform: translateY(-50%); background: rgba(255,255,255,0.15); color: white; border: none; width: 45px; height: 45px; border-radius: 50%; font-size: 24px; cursor: pointer; z-index: 5010; backdrop-filter: blur(5px); transition:0.2s; display:flex; align-items:center; justify-content:center;}
+        .viewer-btn-prev:active, .viewer-btn-next:active { background: rgba(255,255,255,0.4); transform: translateY(-50%) scale(0.9); }
+        .viewer-btn-prev { left: 15px; }
+        .viewer-btn-next { right: 15px; }
+
+        #loader { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 4000; display: none; flex-direction: column; align-items: center; justify-content: center; color: white; font-weight: 800; }
+        .spinner { width: 40px; height: 40px; border: 4px solid rgba(255,255,255,0.3); border-top: 4px solid white; border-radius: 50%; animation: spin 1s linear infinite; margin-bottom: 15px; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        
+        .empty-msg { text-align: center; color: var(--gray); font-size: 12px; font-weight: 600; padding: 30px; border: 1px dashed var(--border); border-radius: 12px;}
+
+        .chapter-header { background: var(--blue); padding: 12px 15px; border-radius: 8px; font-weight: 900; font-size: 13px; margin-top: 20px; text-transform: uppercase; color: white; cursor: pointer; display: flex; justify-content: space-between; align-items: center; transition: 0.2s;}
+        .chapter-header:active { transform: scale(0.98); }
+        .chapter-content { display: block; overflow: hidden; transition: max-height 0.3s ease-out; }
+        
+        .item-card { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 15px; margin-top: 10px; box-shadow: 0 4px 10px rgba(0,0,0,0.02); }
+        .item-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 15px; border-bottom: 1px dashed var(--border); padding-bottom: 12px; flex-wrap: wrap; gap:10px;}
+        .item-title { font-size: 14px; font-weight: 900; color: var(--text); line-height: 1.2;}
+        .item-subtitle { font-size: 10px; font-weight: 800; color: var(--gray); text-transform: uppercase; margin-bottom: 4px; }
+        
+        .btn-item-upload { background: rgba(0,122,255,0.1); color: var(--blue); border: none; padding: 8px 12px; border-radius: 8px; font-weight: 800; cursor: pointer; font-size: 11px; display: flex; align-items: center; gap: 5px; transition: 0.2s;}
+        .btn-item-upload:active { transform: scale(0.95); }
+        .btn-paste { background: rgba(52,199,89,0.1); color: var(--green); }
+        .btn-ia-gen { background: rgba(175,82,222,0.1); color: var(--purple); }
+        
+        .item-gallery { display: flex; gap: 10px; overflow-x: auto; padding-bottom: 10px; align-items: center;}
+        .item-gallery::-webkit-scrollbar { height: 6px; }
+        .item-gallery::-webkit-scrollbar-thumb { background: var(--border); border-radius: 10px; }
+
+        /* ========================================== */
+        /* MODAL DE CHAT IA PARA DISEÑOS              */
+        /* ========================================== */
+        .chat-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #000000; z-index: 9500; flex-direction: column; }
+        .chat-header { background: #1c1c1e; padding: 15px 20px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #38383a; }
+        .chat-body { flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 15px; }
+        .msg { max-width: 85%; padding: 12px 16px; border-radius: 18px; font-size: 14px; line-height: 1.4; word-wrap: break-word; color:white; }
+        .msg-ai { background: #1c1c1e; border: 1px solid #38383a; align-self: flex-start; border-bottom-left-radius: 4px; }
+        .msg-user { background: var(--blue); align-self: flex-end; border-bottom-right-radius: 4px; }
+        .chat-footer { background: #1c1c1e; padding: 15px; border-top: 1px solid #38383a; display: flex; gap: 10px; align-items: flex-end; }
+        .chat-input { flex: 1; background: #000; border: 1px solid #38383a; color: white; padding: 12px; border-radius: 16px; font-size: 14px; outline: none; resize: none; max-height: 100px; font-family: inherit; }
+        .btn-ai-action { background: var(--purple); color: white; border: none; width: 42px; height: 42px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 20px; cursor: pointer; flex-shrink:0; }
+        .typing-indicator { display: none; align-self: flex-start; background: #1c1c1e; padding: 12px 16px; border-radius: 20px; border-bottom-left-radius: 4px; border: 1px solid #38383a;}
+        .dot { height: 8px; width: 8px; background: #8e8e93; border-radius: 50%; display: inline-block; animation: blink 1.4s infinite both; margin: 0 2px;}
+        .dot:nth-child(2) { animation-delay: 0.2s; } .dot:nth-child(3) { animation-delay: 0.4s; }
+        @keyframes blink { 0% { opacity: 0.2; transform:scale(0.8);} 20% { opacity: 1; transform:scale(1);} 100% { opacity: 0.2; transform:scale(0.8); } }
+    </style>
+    <link rel="stylesheet" href="/css/responsive.css?v=1">
+</head>
+<body>
+
+    <div id="loader"><div class="spinner"></div><div id="loader-text">Procesando Archivo...</div></div>
+
+    <div class="nav">
+        <button class="btn-nav" onclick="rutearAtras()"><i class="ph-bold ph-caret-left"></i> Atrás</button>
+        <button class="btn-nav" style="border:none; background:transparent;" onclick="document.body.classList.toggle('dark-mode')"><i class="ph-fill ph-moon"></i></button>
+    </div>
+
+    <div>
+        <div style="font-size: 24px; font-weight: 900;" id="h-pro">Cargando...</div>
+        <div style="font-size: 13px; color: var(--gray); font-weight: 600; margin-bottom: 20px;">Repositorio de Proyecto</div>
+    </div>
+
+    <div class="tabs-wrap">
+        <button class="tab-btn active" id="tab-renders" onclick="switchTab('renders')">Renders</button>
+        <button class="tab-btn" id="tab-fotos" onclick="switchTab('fotos')">Fotos</button>
+        <button class="tab-btn" id="tab-planos" onclick="switchTab('planos')">Planos y Cortes</button>
+        <button class="tab-btn admin-only" id="tab-docs" onclick="switchTab('docs')">Documentación</button>
+        <button class="tab-btn" id="tab-links" onclick="switchTab('links')">Enlaces</button>
+    </div>
+
+    <div id="upload-section" class="upload-card admin-only" onclick="document.getElementById('file-input').click()">
+        <i class="ph-bold ph-upload-simple" style="font-size:32px;"></i> 
+        <span style="font-size: 14px;">Haz clic aquí o <b>pega una imagen (Ctrl+V)</b></span>
+        <span style="font-size: 10px; color: var(--gray); font-weight: 600;">Soporta subida múltiple (fotos, pdfs, etc.)</span>
+    </div>
+    
+    <input type="file" id="file-input" style="display:none;" multiple onchange="subirDesdeInput(this)">
+    <input type="file" id="file-input-item" style="display:none;" multiple accept="image/*" onchange="subirDesdeInputAItem(this)">
+    
+    <div id="upload-link-section" class="upload-card admin-only" style="display:none; background:var(--bg);" onclick="subirEnlace()">
+        <i class="ph-bold ph-link" style="font-size:24px; color:var(--text);"></i> <span style="color:var(--text);">Añadir Nuevo Enlace</span>
+    </div>
+
+    <div id="panel-renders" class="grid-gallery"></div>
+    <div id="panel-fotos" class="grid-gallery" style="display:none;"></div>
+    
+    <div id="panel-planos" style="display:none; flex-direction:column;"></div>
+    
+    <div id="panel-docs" class="list-docs" style="display:none;"></div>
+    <div id="panel-links" class="list-docs" style="display:none;"></div>
+
+    <div class="viewer-overlay" id="mod-viewer">
+        <div class="viewer-nav-top">
+            <button class="viewer-btn-back" onclick="document.getElementById('mod-viewer').style.display='none'">
+                <i class="ph-bold ph-caret-left"></i> Atrás
+            </button>
+            <div class="viewer-actions">
+                <button class="viewer-action-btn green" onclick="guardarImagenVisor()" title="Guardar en el dispositivo">
+                    <i class="ph-bold ph-download-simple"></i> <span>Guardar</span>
+                </button>
+                <button class="viewer-action-btn whatsapp" onclick="enviarPorWhatsapp()" title="Enviar por WhatsApp">
+                    <i class="ph-bold ph-whatsapp-logo"></i> <span>Enviar</span>
+                </button>
+            </div>
+        </div>
+        <button class="viewer-btn-prev" onclick="prevImg(event)"><i class="ph-bold ph-caret-left"></i></button>
+        <img loading="lazy" decoding="async" id="viewer-img" class="viewer-img" crossorigin="anonymous">
+        <button class="viewer-btn-next" onclick="nextImg(event)"><i class="ph-bold ph-caret-right"></i></button>
+    </div>
+
+    <div class="chat-overlay" id="ai-chat-modal">
+        <div class="chat-header">
+            <div style="font-weight: 900; font-size: 15px; display: flex; align-items: center; gap: 8px; color:white;">
+                <i class="ph-fill ph-magic-wand" style="font-size: 24px; color: #af52de;"></i> IA Diseño
+            </div>
+            <button class="btn-item-upload" style="background:var(--card); color:var(--text);" onclick="closeAIChat()">Cerrar</button>
+        </div>
+        <div class="chat-body" id="ai-chat-box">
+            <div class="msg msg-ai" id="ai-welcome-msg">Hola. Estoy listo para ayudarte a conceptualizar este diseño.</div>
+        </div>
+        <div class="typing-indicator" id="ai-typing" style="margin-left: 20px;"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div>
+        <div class="chat-footer">
+            <textarea id="ai-user-input" class="chat-input" rows="1" placeholder="Ej: Describe la estructura interna para este mueble..."></textarea>
+            <button class="btn-ai-action" onclick="sendAIMessage()"><i class="ph-bold ph-paper-plane-right"></i></button>
+        </div>
+    </div>
+
+<script>
+    // Firebase ya inicializado en el <head>
+    if (!firebase.apps.length) firebase.initializeApp(window._rubikFirebaseConfig);
+    const db = firebase.database(); const storage = firebase.storage();
+
+    const urlParams = new URLSearchParams(window.location.search);
+    let cid = urlParams.get('cid') || localStorage.getItem('rubik_client_id');
+    let pid = urlParams.get('pid') || localStorage.getItem('rubik_current_pid');
+    
+    const isWorker = new URLSearchParams(window.location.search).get('mode') === 'worker';
+    let currentTab = 'renders';
+
+    let galleryData = { renders: [], fotos: [], planos: [] };
+    let currentGalleryCategory = '';
+    let currentImgIndex = 0;
+
+    let projectItems = {};
+    window.itemUploadTarget = null; 
+
+    // IA Globals
+    window.currentItemForIA = null;
+    window.currentDescForIA = null;
+
+    window.onload = () => {
+        if(cid && pid) {
+            localStorage.setItem('rubik_client_id', cid);
+            localStorage.setItem('rubik_current_pid', pid);
+        } else {
+            alert("Error de navegación. Por favor, selecciona el proyecto desde tu Panel.");
+            return rutearAtras();
+        }
+        
+        db.ref(`proyectos/${cid}/${pid}/nombre`).once('value').then(s => {
+            const nombre = s.val() || "Proyecto";
+            document.getElementById('h-pro').innerText = nombre;
+        });
+
+        if(isWorker) { document.querySelectorAll('.admin-only').forEach(el => el.style.display = 'none'); }
+        else { configurarDragAndDrop(); configurarPaste(); }
+        
+        cargarArchivosGenerales(); 
+        cargarItemsDePresupuesto();
+    };
+
+    function rutearAtras() {
+        if(isWorker) { window.location.href = 'interno/app-trabajador.html?tab=proyectos'; } 
+        else { window.location.href = 'dashboard-proyecto.html'; }
+    }
+
+    function switchTab(tab) {
+        ['renders', 'fotos', 'planos', 'docs', 'links'].forEach(t => { 
+            document.getElementById(`tab-${t}`).classList.remove('active'); 
+            document.getElementById(`panel-${t}`).style.display = 'none'; 
+        });
+        document.getElementById(`tab-${tab}`).classList.add('active'); 
+        
+        currentTab = tab;
+        window.itemUploadTarget = null;
+
+        if (tab === 'planos') {
+            document.getElementById('panel-planos').style.display = 'flex';
+            document.getElementById('upload-section').style.display = 'none';
+            document.getElementById('upload-link-section').style.display = 'none';
+            renderPlanosEstructurados();
+        } else if (tab === 'docs' || tab === 'links') {
+            document.getElementById(`panel-${tab}`).style.display = 'flex';
+            document.getElementById('upload-section').style.display = (tab === 'links') ? 'none' : 'flex';
+            document.getElementById('upload-link-section').style.display = (tab === 'links') ? 'flex' : 'none';
+        } else {
+            document.getElementById(`panel-${tab}`).style.display = 'grid';
+            if(!isWorker) document.getElementById('upload-section').style.display = 'flex';
+            document.getElementById('upload-link-section').style.display = 'none';
+        }
+    }
+
+    function configurarDragAndDrop() {
+        const dropZone = document.getElementById('upload-section');
+        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => { dropZone.addEventListener(eventName, e => { e.preventDefault(); e.stopPropagation(); }, false); });
+        ['dragenter', 'dragover'].forEach(eventName => { dropZone.addEventListener(eventName, () => dropZone.classList.add('dragover'), false); });
+        ['dragleave', 'drop'].forEach(eventName => { dropZone.addEventListener(eventName, () => dropZone.classList.remove('dragover'), false); });
+        dropZone.addEventListener('drop', (e) => { let dt = e.dataTransfer; let files = dt.files; if(files && files.length > 0) { procesarListaArchivos(Array.from(files)); } });
+    }
+
+    function configurarPaste() {
+        // Ctrl+V global: si hay un item target activo (tab planos), va al item;
+        // si no y la tab es renders/fotos, va a la galería general.
+        document.addEventListener('paste', async e => {
+            if(isWorker) return;
+            // Si el modal de IA de imagen está abierto, ignorar
+            if(document.getElementById('mod-imagen-ia') && document.getElementById('mod-imagen-ia').style.display !== 'none') return;
+            // Si hay texto seleccionado o el foco está en un input/textarea, ignorar
+            const tag = document.activeElement && document.activeElement.tagName;
+            if(tag === 'INPUT' || tag === 'TEXTAREA') return;
+            if(currentTab === 'links' || currentTab === 'docs') return;
+
+            const items = e.clipboardData.items;
+            let filesToUpload = [];
+            for (let i = 0; i < items.length; i++) {
+                if (items[i].type.indexOf('image') !== -1) {
+                    const blob = items[i].getAsFile();
+                    filesToUpload.push(new File([blob], `pegado_${Date.now()}.png`, {type: blob.type}));
+                }
+            }
+            if (filesToUpload.length === 0) return;
+
+            if (currentTab === 'planos') {
+                // En la tab de planos: pegar solo si hay un itemUploadTarget establecido
+                if (window.itemUploadTarget) {
+                    procesarListaArchivosAItem(filesToUpload, window.itemUploadTarget);
+                } else {
+                    // Pedir al usuario que elija un ítem primero
+                    alert('Haz clic en el botón "Pegar" del ítem al que querés agregar el plano.');
+                }
+            } else {
+                procesarListaArchivos(filesToUpload);
+            }
+        });
+    }
+
+    function subirDesdeInput(input) {
+        if(isWorker || !input.files || input.files.length === 0) return;
+        procesarListaArchivos(Array.from(input.files));
+        input.value = '';
+    }
+
+    async function procesarListaArchivos(files) {
+        if(isWorker || files.length === 0) return;
+        
+        let targetNode = currentTab;
+        if(currentTab === 'docs') targetNode = 'documentacion';
+        
+        document.getElementById('loader').style.display = 'flex';
+        let total = files.length; let count = 0;
+
+        for(let file of files) {
+            count++; document.getElementById('loader-text').innerText = `Subiendo ${count} de ${total}...`;
+            try {
+                const fname = `disenos/${pid}_${Date.now()}_${file.name}`;
+                const snap = await storage.ref(fname).put(file);
+                const url = await snap.ref.getDownloadURL();
+                await db.ref(`proyectos/${cid}/${pid}/diseno/${targetNode}`).push({ name: file.name, url: url });
+            } catch(e) { console.error("Error al subir", e); }
+        }
+        
+        document.getElementById('loader').style.display = 'none'; document.getElementById('loader-text').innerText = "Procesando Archivo...";
+    }
+
+    function cargarArchivosGenerales() {
+        db.ref(`proyectos/${cid}/${pid}/diseno`).once('value', snap => {
+            const data = snap.val() || {};
+            renderGrid(data.renders, 'panel-renders', 'renders');
+            renderGrid(data.fotos, 'panel-fotos', 'fotos');
+            renderList(data.documentacion, 'panel-docs', 'documentacion', 'ph-file-pdf');
+            renderList(data.enlaces, 'panel-links', 'enlaces', 'ph-link');
+        });
+    }
+
+    function renderGrid(obj, containerId, category) {
+        const box = document.getElementById(containerId); box.innerHTML = '';
+        galleryData[category] = []; 
+        if(!obj) { box.innerHTML = '<div class="empty-msg">No hay imágenes en esta sección.</div>'; return; }
+        
+        let index = 0;
+        Object.keys(obj).forEach(k => {
+            const item = obj[k];
+            galleryData[category].push(item.url);
+            const btnTrash = !isWorker ? `<button class="btn-del-float" onclick="event.stopPropagation(); eliminarArchivoGeneral('${category}', '${k}')"><i class="ph-bold ph-trash"></i></button>` : '';
+            box.innerHTML += `<div class="g-item-wrap" onclick="abrirGaleria('${category}', ${index})">${btnTrash}<img loading="lazy" decoding="async" src="${item.url}" class="g-item" crossorigin="anonymous"></div>`;
+            index++;
+        });
+    }
+
+    function renderList(obj, containerId, category, iconClass) {
+        const box = document.getElementById(containerId); box.innerHTML = '';
+        if(!obj) { box.innerHTML = '<div class="empty-msg">No hay documentos en esta sección.</div>'; return; }
+        Object.keys(obj).forEach(k => {
+            const item = obj[k];
+            const btnTrash = !isWorker ? `<button class="btn-del-float" style="position:relative; top:0; right:0;" onclick="eliminarArchivoGeneral('${category}', '${k}')"><i class="ph-bold ph-trash"></i></button>` : '';
+            box.innerHTML += `<div class="doc-wrap"><div class="doc-box" onclick="window.open('${item.url}', '_blank')"><i class="ph-bold ${iconClass}" style="font-size:30px; color:var(--blue);"></i><div style="font-size:12px; font-weight:700; word-break:break-all;">${item.name || 'Archivo'}</div></div>${btnTrash}</div>`;
+        });
+    }
+
+    function eliminarArchivoGeneral(cat, key) {
+        if(isWorker) return;
+        if(confirm("¿Eliminar definitivamente este archivo?")) { db.ref(`proyectos/${cid}/${pid}/diseno/${cat}/${key}`).remove(); }
+    }
+
+    function subirEnlace() {
+        if(isWorker) return;
+        const name = prompt("Nombre del enlace:"); const url = prompt("Pega la URL completa (https://...):");
+        if(name && url) db.ref(`proyectos/${cid}/${pid}/diseno/enlaces`).push({ name, url });
+    }
+
+    function cargarItemsDePresupuesto() {
+        db.ref(`proyectos/${cid}/${pid}/presupuesto/items`).once('value', snap => {
+            projectItems = snap.val() || {};
+            if(currentTab === 'planos') renderPlanosEstructurados();
+        });
+    }
+
+    window.toggleChapter = function(chapKey) {
+        let content = document.getElementById('content-' + chapKey);
+        let icon = document.getElementById('icon-' + chapKey);
+        if(content.style.display === 'none') {
+            content.style.display = 'block';
+            icon.style.transform = 'rotate(0deg)';
+        } else {
+            content.style.display = 'none';
+            icon.style.transform = 'rotate(-90deg)';
+        }
+    };
+
+    function renderPlanosEstructurados() {
+        const box = document.getElementById('panel-planos');
+        galleryData['planos'] = []; 
+        let hasItems = false;
+        
+        let html = '';
+        let currentChapterKey = 'general';
+        let chaptersMap = { 'general': { name: 'Ítems Globales', items: [] } };
+
+        Object.keys(projectItems).forEach(k => {
+            const item = projectItems[k];
+            if(!item) return;
+            if (item.type === 'chapter') {
+                currentChapterKey = k;
+                chaptersMap[k] = { name: item.name || item.desc, items: [] };
+            } else {
+                if (!chaptersMap[currentChapterKey]) chaptersMap[currentChapterKey] = { name: 'General', items: [] };
+                chaptersMap[currentChapterKey].items.push({ key: k, data: item });
+                hasItems = true;
+            }
+        });
+
+        Object.keys(chaptersMap).forEach(chapKey => {
+            let chap = chaptersMap[chapKey];
+            if (chap.items.length === 0 && chapKey !== 'general') return; 
+            
+            if (chap.items.length > 0) {
+                let chevron = `<i class="ph-bold ph-caret-down" id="icon-${chapKey}" style="transition:0.3s; font-size:16px;"></i>`;
+                html += `
+                <div class="chapter-header" onclick="toggleChapter('${chapKey}')">
+                    <div style="display:flex; align-items:center;"><i class="ph-bold ph-folder-open" style="margin-right:8px; font-size:16px;"></i> ${chap.name}</div>
+                    ${chevron}
+                </div>
+                <div class="chapter-content" id="content-${chapKey}" style="display:block;">`;
+                
+                chap.items.forEach(it => {
+                    html += generarHTMLdeItem(it.key, it.data);
+                });
+                
+                html += `</div>`; 
+            }
+        });
+
+        if(!hasItems) {
+            box.innerHTML = '<div class="empty-msg">No hay ítems detallados en el presupuesto. Ingresa a Cómputo para crearlos.</div>';
+        } else {
+            box.innerHTML = html;
+        }
+    }
+
+    function generarHTMLdeItem(k, item) {
+        let imagesHtml = '';
+        if(item.cortes) {
+            Object.keys(item.cortes).forEach(cKey => {
+                const url = item.cortes[cKey];
+                galleryData['planos'].push(url);
+                const idxGaleria = galleryData['planos'].length - 1;
+                const btnTrash = !isWorker ? `<button class="btn-del-float" onclick="event.stopPropagation(); eliminarPlanoDeItem('${k}', '${cKey}')"><i class="ph-bold ph-trash"></i></button>` : '';
+                imagesHtml += `<div class="g-item-wrap" style="width:90px; height:90px; flex-shrink:0;" onclick="abrirGaleria('planos', ${idxGaleria})">${btnTrash}<img loading="lazy" decoding="async" src="${url}" class="g-item" crossorigin="anonymous"><div style="position:absolute; bottom:0; width:100%; background:rgba(0,0,0,0.6); color:white; font-size:9px; text-align:center; padding:2px 0;">Plano/Corte</div></div>`;
+            });
+        }
+        
+        if(!imagesHtml) imagesHtml = '<div style="font-size:11px; color:var(--gray); padding:10px;">Sin planos ni cortes asignados.</div>';
+
+        let btnAdd = '';
+        if(!isWorker) {
+            // INYECCIÓN DEL BOTÓN IA AQUÍ JUNTO A LOS OTROS
+            btnAdd = `
+            <div style="display:flex; gap:6px; flex-wrap:wrap; justify-content:flex-end;">
+                <button class="btn-item-upload btn-ia-gen" onclick="abrirIAParaItem('${k}', '${item.desc}')" title="Generar especificaciones con IA"><i class="ph-bold ph-magic-wand"></i> Generar IA</button>
+                <button class="btn-item-upload btn-paste" onclick="pegarPlanoDirecto('${k}')" title="Pegar"><i class="ph-bold ph-clipboard"></i> Pegar</button>
+                <button class="btn-item-upload" onclick="subirPlanoExplorador('${k}')" title="Subir"><i class="ph-bold ph-upload"></i> Subir</button>
+            </div>`;
+        }
+
+        return `
+        <div class="item-card">
+            <div class="item-header">
+                <div style="flex:1;">
+                    <div class="item-subtitle">Ítem de Producción</div>
+                    <div class="item-title">${item.cant} ${item.und} - ${item.desc}</div>
+                </div>
+                ${btnAdd}
+            </div>
+            <div class="item-gallery">${imagesHtml}</div>
+        </div>`;
+    }
+
+    window.subirPlanoExplorador = function(itemIdx) {
+        if(isWorker) return;
+        window.itemUploadTarget = itemIdx; 
+        document.getElementById('file-input-item').click();
+    };
+
+    function subirDesdeInputAItem(input) {
+        if(!input.files || input.files.length === 0 || !window.itemUploadTarget) return;
+        procesarListaArchivosAItem(Array.from(input.files), window.itemUploadTarget);
+        input.value = '';
+        window.itemUploadTarget = null; 
+    }
+
+    window.pegarPlanoDirecto = async function(itemIdx) {
+        if(isWorker) return;
+        window.itemUploadTarget = itemIdx;
+        // Intentar leer del clipboard API directamente
+        try {
+            const clipItems = await navigator.clipboard.read();
+            let filesToUpload = [];
+            for (const item of clipItems) {
+                if (item.types.some(t => t.startsWith('image/'))) {
+                    const blob = await item.getType(item.types.find(t => t.startsWith('image/')));
+                    const file = new File([blob], `pegado_directo_${Date.now()}.png`, {type: blob.type});
+                    filesToUpload.push(file);
+                }
+            }
+            if(filesToUpload.length > 0) {
+                window.itemUploadTarget = null;
+                procesarListaArchivosAItem(filesToUpload, itemIdx);
+            } else {
+                alert("El portapapeles está vacío. Copiá una imagen y presioná Ctrl+V en cualquier parte de la página (el ítem ya está seleccionado).");
+            }
+        } catch (err) {
+            // Clipboard API bloqueada por el navegador — dejar itemUploadTarget activo
+            // y esperar Ctrl+V del usuario
+            alert("Clipboard bloqueado. Presioná Ctrl+V en cualquier parte de la página para pegar en este ítem (ya está seleccionado).");
+        }
+    };
+
+    async function procesarListaArchivosAItem(files, itemIdx) {
+        if(isWorker || files.length === 0) return;
+        window.itemUploadTarget = null; // limpiar target después de usar
+        document.getElementById('loader').style.display = 'flex';
+        let total = files.length; let count = 0;
+
+        for(let file of files) {
+            count++; document.getElementById('loader-text').innerText = `Subiendo Plano ${count} de ${total}...`;
+            try {
+                const fname = `disenos/${cid}/${pid}/plano_item_${itemIdx}_${Date.now()}_${file.name}`;
+                const snap = await storage.ref(fname).put(file);
+                const url = await snap.ref.getDownloadURL();
+                // Guardar SOLO en presupuesto/items/cortes — de ahí lee producción y diseños
+                const newRef = await db.ref(`proyectos/${cid}/${pid}/presupuesto/items/${itemIdx}/cortes`).push(url);
+                const newKey = newRef.key;
+                // Actualizar projectItems en memoria para refrescar la vista sin recargar
+                if(!projectItems[itemIdx]) projectItems[itemIdx] = {};
+                if(!projectItems[itemIdx].cortes) projectItems[itemIdx].cortes = {};
+                projectItems[itemIdx].cortes[newKey] = url;
+            } catch(e) { console.error("Error subiendo plano", e); }
+        }
+        document.getElementById('loader').style.display = 'none';
+        document.getElementById('loader-text').innerText = "Procesando Archivo...";
+        renderPlanosEstructurados(); // refrescar galería
+    }
+
+    function eliminarPlanoDeItem(itemIdx, corteKey) {
+        if(isWorker) return;
+        if(confirm("¿Eliminar definitivamente este plano? También se borrará de Producción.")) {
+            db.ref(`proyectos/${cid}/${pid}/presupuesto/items/${itemIdx}/cortes/${corteKey}`).remove()
+                .then(() => {
+                    // Actualizar memoria y re-renderizar inmediatamente
+                    if(projectItems[itemIdx] && projectItems[itemIdx].cortes) {
+                        delete projectItems[itemIdx].cortes[corteKey];
+                    }
+                    renderPlanosEstructurados();
+                })
+                .catch(e => alert('Error al eliminar: ' + e.message));
+        }
+    }
+
+    function abrirGaleria(category, index) {
+        currentGalleryCategory = category; currentImgIndex = index;
+        document.getElementById('viewer-img').src = galleryData[category][currentImgIndex];
+        document.getElementById('mod-viewer').style.display = 'flex';
+    }
+
+    // ─── Guardar imagen en el dispositivo ────────────────────────────────────
+    async function guardarImagenVisor() {
+        const url = document.getElementById('viewer-img').src;
+        if (!url) return;
+        try {
+            const resp = await fetch(url);
+            const blob = await resp.blob();
+            // Web Share API con archivo (soportado en iOS Safari 15+ y Android Chrome)
+            if (navigator.canShare && navigator.canShare({ files: [new File([blob], 'plano.jpg', { type: blob.type })] })) {
+                const file = new File([blob], 'Rubik_Plano_' + Date.now() + '.jpg', { type: blob.type });
+                await navigator.share({ files: [file], title: 'Plano Rubik OS' });
+                return;
+            }
+            // Fallback: descarga clásica
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = 'Rubik_Plano_' + Date.now() + '.jpg';
+            document.body.appendChild(a); a.click();
+            URL.revokeObjectURL(a.href); a.remove();
+        } catch(e) {
+            if (e.name !== 'AbortError') window.open(url, '_blank');
+        }
+    }
+
+    // ─── Enviar por WhatsApp ──────────────────────────────────────────────────
+    async function enviarPorWhatsapp() {
+        const url = document.getElementById('viewer-img').src;
+        if (!url) return;
+        try {
+            const resp = await fetch(url);
+            const blob = await resp.blob();
+            const file = new File([blob], 'Rubik_Plano_' + Date.now() + '.jpg', { type: blob.type });
+            // Web Share API — en móvil abre el selector nativo que incluye WhatsApp
+            if (navigator.canShare && navigator.canShare({ files: [file] })) {
+                await navigator.share({ files: [file], title: 'Plano - Rubik OS', text: '📐 Plano técnico desde Rubik OS' });
+                return;
+            }
+            // Fallback: abrir WhatsApp con el link (en desktop o navegadores sin Web Share)
+            const texto = encodeURIComponent('📐 Plano técnico Rubik OS: ' + url);
+            window.open('https://wa.me/?text=' + texto, '_blank');
+        } catch(e) {
+            if (e.name !== 'AbortError') {
+                const texto = encodeURIComponent('📐 Plano técnico Rubik OS: ' + url);
+                window.open('https://wa.me/?text=' + texto, '_blank');
+            }
+        }
+    }
+    function prevImg(e) {
+        if(e) e.stopPropagation(); const urls = galleryData[currentGalleryCategory]; if(!urls || urls.length===0) return;
+        currentImgIndex = (currentImgIndex - 1 + urls.length) % urls.length; document.getElementById('viewer-img').src = urls[currentImgIndex];
+    }
+    function nextImg(e) {
+        if(e) e.stopPropagation(); const urls = galleryData[currentGalleryCategory]; if(!urls || urls.length===0) return;
+        currentImgIndex = (currentImgIndex + 1) % urls.length; document.getElementById('viewer-img').src = urls[currentImgIndex];
+    }
+    // ── Zoom + pan + swipe para el visor ─────────────────────────────────────
+    iniciarZoomVisor(
+        document.getElementById('viewer-img'),
+        document.getElementById('mod-viewer'),
+        { onSwipeLeft: () => nextImg(), onSwipeRight: () => prevImg() }
+    );
+
+    function iniciarZoomVisor(img, overlay, { onSwipeLeft, onSwipeRight } = {}) {
+        let scale = 1, lastScale = 1;
+        let originX = 0, originY = 0;          // origen del pinch en px relativo al img
+        let translateX = 0, translateY = 0;    // desplazamiento acumulado
+        let startX = 0, startY = 0;            // posición inicial del pan/swipe
+        let startTX = 0, startTY = 0;
+        let isPinching = false, lastTap = 0;
+        const MAX_SCALE = 6, MIN_SCALE = 1;
+        const SWIPE_THRESHOLD = 50;
+
+        function applyTransform(animate) {
+            img.style.transition = animate ? 'transform 0.25s ease' : 'none';
+            img.style.transform = `translate(${translateX}px, ${translateY}px) scale(${scale})`;
+        }
+        function resetZoom(animate) {
+            scale = 1; translateX = 0; translateY = 0;
+            applyTransform(animate);
+        }
+        function clampTranslate() {
+            // Limitar el pan para que la imagen no salga fuera de pantalla
+            const rect = img.getBoundingClientRect();
+            const ow = overlay.clientWidth, oh = overlay.clientHeight;
+            const maxX = Math.max(0, (rect.width - ow) / 2);
+            const maxY = Math.max(0, (rect.height - oh) / 2);
+            translateX = Math.min(maxX, Math.max(-maxX, translateX));
+            translateY = Math.min(maxY, Math.max(-maxY, translateY));
+        }
+
+        img.addEventListener('touchstart', e => {
+            if (e.touches.length === 2) {
+                isPinching = true;
+                const t1 = e.touches[0], t2 = e.touches[1];
+                lastScale = scale;
+                originX = (t1.clientX + t2.clientX) / 2 - img.getBoundingClientRect().left;
+                originY = (t1.clientY + t2.clientY) / 2 - img.getBoundingClientRect().top;
+                img._pinchDist = Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY);
+            } else if (e.touches.length === 1) {
+                isPinching = false;
+                startX = e.touches[0].clientX; startY = e.touches[0].clientY;
+                startTX = translateX; startTY = translateY;
+                // Doble tap
+                const now = Date.now();
+                if (now - lastTap < 280) {
+                    e.preventDefault();
+                    if (scale > 1) { resetZoom(true); } else { scale = 2.5; applyTransform(true); }
+                }
+                lastTap = now;
+            }
+        }, { passive: false });
+
+        img.addEventListener('touchmove', e => {
+            e.preventDefault();
+            if (e.touches.length === 2 && isPinching) {
+                const t1 = e.touches[0], t2 = e.touches[1];
+                const dist = Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY);
+                scale = Math.min(MAX_SCALE, Math.max(MIN_SCALE, lastScale * (dist / img._pinchDist)));
+                applyTransform(false);
+            } else if (e.touches.length === 1 && !isPinching) {
+                const dx = e.touches[0].clientX - startX;
+                const dy = e.touches[0].clientY - startY;
+                if (scale > 1) {
+                    translateX = startTX + dx; translateY = startTY + dy;
+                    clampTranslate(); applyTransform(false);
+                }
+            }
+        }, { passive: false });
+
+        img.addEventListener('touchend', e => {
+            if (scale < 1.05) { resetZoom(true); return; }
+            // Snap back si sale de límites
+            clampTranslate(); applyTransform(true);
+            // Swipe solo cuando no hay zoom
+            if (scale <= 1 && e.changedTouches.length === 1 && onSwipeLeft && onSwipeRight) {
+                const dx = e.changedTouches[0].clientX - startX;
+                if (Math.abs(dx) > SWIPE_THRESHOLD) {
+                    if (dx < 0) onSwipeLeft(); else onSwipeRight();
+                }
+            }
+        }, { passive: true });
+
+        // Resetear zoom cada vez que se abre una imagen nueva
+        const origAbrirGaleria = window.abrirGaleria;
+        window.abrirGaleria = function(cat, idx) { resetZoom(false); origAbrirGaleria(cat, idx); };
+    }
+</script>
+
+<script type="module">
+    import { GoogleGenerativeAI, generateImage, callGemini } from "/js/gemini-client.js?v=2";
+
+    // ===========================================================
+    // Generador de PLANO TÉCNICO con Gemini 2.5 Flash Image
+    // ===========================================================
+
+    // Inyecta el modal del generador la primera vez que se usa
+    function montarModalIA() {
+        if (document.getElementById('mod-imagen-ia')) return;
+        const html = `
+        <div id="mod-imagen-ia" class="modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.85); z-index:9700; justify-content:center; align-items:center; padding:20px; box-sizing:border-box; backdrop-filter:blur(6px);">
+            <div class="modal-box" style="background:var(--card); width:100%; max-width:460px; padding:20px; border-radius:18px; max-height:90vh; overflow-y:auto;">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+                    <h3 style="margin:0; font-size:16px;"><i class="ph-bold ph-magic-wand" style="color:var(--purple)"></i> Generar Plano Técnico con IA</h3>
+                    <i class="ph-bold ph-x" style="font-size:20px; cursor:pointer;" onclick="cerrarModalIAImagen()"></i>
+                </div>
+                <div id="mod-ia-itemname" style="font-size:12px; color:var(--gray); margin-bottom:12px; font-weight:700;"></div>
+
+                <label style="font-size:11px; font-weight:800; color:var(--gray); text-transform:uppercase;">Tipo de vista</label>
+                <select id="ia-vista" style="width:100%; padding:10px; margin:6px 0 12px 0; border:1px solid var(--border); background:var(--bg); color:var(--text); border-radius:10px; font-weight:700;">
+                    <option value="plano superior">Plano (vista superior / planta)</option>
+                    <option value="vista frontal">Vista frontal / elevación</option>
+                    <option value="vista lateral">Vista lateral / perfil</option>
+                    <option value="axonometria isometrica" selected>Axonometría / Isométrico 3D</option>
+                    <option value="despiece exploded">Despiece (vista explotada)</option>
+                </select>
+
+                <label style="font-size:11px; font-weight:800; color:var(--gray); text-transform:uppercase;">Detalles adicionales</label>
+                <textarea id="ia-prompt-extra" rows="3" placeholder="Ej: Indicar uniones soldadas, mostrar dimensiones aproximadas, énfasis en patas..." style="width:100%; padding:10px; margin:6px 0 12px 0; border:1px solid var(--border); background:var(--bg); color:var(--text); border-radius:10px; font-size:13px; box-sizing:border-box; resize:vertical;"></textarea>
+
+                <label style="font-size:11px; font-weight:800; color:var(--gray); text-transform:uppercase;">Referencias visuales (opcional, máx 3)</label>
+                <button onclick="document.getElementById('ia-refs-input').click()" style="padding:10px; font-size:12px; background:var(--bg); border:1px dashed var(--border); border-radius:10px; cursor:pointer; color:var(--text); width:100%; margin:6px 0;"><i class="ph-bold ph-image"></i> Subir fotos</button>
+                <input type="file" id="ia-refs-input" multiple accept="image/*" style="display:none;" onchange="iaPreviewRefs(this)">
+                <div id="ia-refs-preview" style="display:flex; gap:6px; overflow-x:auto; margin-bottom:12px;"></div>
+                <button onclick="ejecutarGeneracionPlanoIA()" style="background:var(--purple); color:white; border:none; padding:14px; font-size:14px; width:100%; border-radius:12px; font-weight:bold; cursor:pointer;">Generar Plano</button>
+            </div>
+        </div>`;
+        document.body.insertAdjacentHTML('beforeend', html);
+    }
+    window.abrirIAParaItem = function(key, desc) {
+        montarModalIA();
+        window.currentItemForIA = key;
+        window.currentDescForIA = desc;
+        window.iaRefImages = [];
+        const itemData = projectItems[key] || {};
+        // Mostrar nombre y características del ítem
+        const featTxt = itemData.feat ? ` · ${itemData.feat}` : '';
+        document.getElementById('mod-ia-itemname').innerText = desc + featTxt;
+        // Limpiar preview de refs previas
+        const previewEl = document.getElementById('ia-refs-preview');
+        if (previewEl) {
+            previewEl.innerHTML = '';
+            // Previsualizar imágenes ya existentes del ítem (cortes/planos)
+            if (itemData.cortes) {
+                Object.values(itemData.cortes).slice(0, 3).forEach(url => {
+                    previewEl.innerHTML += `<img src="${url}" style="width:60px; height:60px; object-fit:cover; border-radius:8px; border:1px solid var(--border);" title="Plano existente (se usará como referencia)">`;
+                });
+            }
+            if (itemData.img) {
+                previewEl.innerHTML = `<img src="${itemData.img}" style="width:60px; height:60px; object-fit:cover; border-radius:8px; border:2px solid var(--blue);" title="Imagen principal del ítem">` + previewEl.innerHTML;
+            }
+        }
+        document.getElementById('mod-imagen-ia').style.display = 'flex';
+    };
+    window.cerrarModalIAImagen = function() { const m = document.getElementById('mod-imagen-ia'); if (m) m.style.display = 'none'; };
+    window.iaPreviewRefs = function(input) { window.iaRefImages = window.iaRefImages || []; if (!input.files) return; Array.from(input.files).slice(0, 3).forEach(file => { const r = new FileReader(); r.onload = e => { const b64 = e.target.result.split(',')[1]; window.iaRefImages.push({ data: b64, mimeType: file.type }); }; r.readAsDataURL(file); }); };
+    window.ejecutarGeneracionPlanoIA = async function() {
+        const btnGen = document.querySelector('#mod-imagen-ia button[onclick="ejecutarGeneracionPlanoIA()"]');
+        const extraPrompt = (document.getElementById('ia-prompt-extra').value || '').trim();
+        const tipoVista = (document.getElementById('ia-vista').value || 'axonometria isometrica');
+        const itemKey = window.currentItemForIA;
+        const itemData = projectItems[itemKey] || {};
+        const itemDesc = itemData.desc || window.currentDescForIA || 'ítem';
+
+        if (btnGen) { btnGen.disabled = true; btnGen.innerText = 'Generando...'; }
+
+        try {
+            // ---- Construir contexto técnico completo del ítem ----
+            const feat = itemData.feat ? `\nCaracterísticas técnicas: ${itemData.feat}` : '';
+            const cantidad = itemData.cant ? `\nCantidad: ${itemData.cant} ${itemData.und || ''}` : '';
+
+            // Materiales del APU
+            let materialesStr = '';
+            if (itemData.apu && itemData.apu.mat && Array.isArray(itemData.apu.mat) && itemData.apu.mat.length > 0) {
+                const mats = itemData.apu.mat.map(m => `  - ${m.d || m.desc || ''} (${m.q || m.cant || '?'}${m.u || m.und || ''}) a ${m.p || m.pu || '?'} Bs`).join('\n');
+                materialesStr = `\nMateriales (APU):\n${mats}`;
+            }
+            let moStr = '';
+            if (itemData.apu && itemData.apu.mo && Array.isArray(itemData.apu.mo) && itemData.apu.mo.length > 0) {
+                const mos = itemData.apu.mo.map(m => `  - ${m.d || m.desc || ''} (${m.q || m.cant || '?'} ${m.u || m.und || ''})`).join('\n');
+                moStr = `\nMano de obra:\n${mos}`;
+            }
+
+            const prompt = `Dibuja un plano técnico de fabricación de: "${itemDesc}".
+Vista solicitada: ${tipoVista}.${feat}${cantidad}${materialesStr}${moStr}
+${extraPrompt ? 'Instrucciones adicionales del diseñador: ' + extraPrompt : ''}
+
+REGLAS DE DIBUJO:
+- Estilo: esquema técnico lineal. Fondo blanco, líneas negras y grises, sin colores decorativos.
+- Incluir cotas y dimensiones en centímetros o milímetros según la escala.
+- Etiquetar los materiales principales que aparecen en el APU.
+- NO inventar materiales ni dimensiones que no estén en los datos anteriores.
+- Si no hay dimensiones explícitas, estimar proporciones coherentes con los materiales del APU.
+- Compacto, claro y legible. Sin texto decorativo ni fondos de color.`;
+
+            // ---- Preparar imágenes de referencia ----
+            // 1. Imagen principal del ítem (item.img) como referencia base
+            // 2. Imágenes adicionales del ítem (item.op_images)
+            // 3. Imágenes cortes/planos ya existentes del ítem
+            // 4. Imágenes subidas manualmente por el usuario en el modal
+            let refImages = [];
+
+            async function urlToBase64(url) {
+                try {
+                    const resp = await fetch(url);
+                    const blob = await resp.blob();
+                    return new Promise((resolve, reject) => {
+                        const reader = new FileReader();
+                        reader.onload = e => {
+                            const b64 = e.target.result.split(',')[1];
+                            resolve({ data: b64, mimeType: blob.type || 'image/jpeg' });
+                        };
+                        reader.onerror = reject;
+                        reader.readAsDataURL(blob);
+                    });
+                } catch(_) { return null; }
+            }
+
+            // Imagen principal del ítem
+            if (itemData.img) {
+                const ref = await urlToBase64(itemData.img);
+                if (ref) refImages.push(ref);
+            }
+            // Imágenes adicionales del ítem (op_images)
+            if (itemData.op_images && typeof itemData.op_images === 'object') {
+                for (const k of Object.keys(itemData.op_images).slice(0, 2)) {
+                    const imgUrl = typeof itemData.op_images[k] === 'string' ? itemData.op_images[k] : itemData.op_images[k]?.url;
+                    if (imgUrl) { const ref = await urlToBase64(imgUrl); if (ref) refImages.push(ref); }
+                }
+            }
+            // Planos/cortes ya existentes del ítem (máx 2)
+            if (itemData.cortes && typeof itemData.cortes === 'object') {
+                const corteKeys = Object.keys(itemData.cortes).slice(0, 2);
+                for (const k of corteKeys) {
+                    const ref = await urlToBase64(itemData.cortes[k]);
+                    if (ref) refImages.push(ref);
+                }
+            }
+            // Refs manuales subidas en el modal (máx 3)
+            if (window.iaRefImages && window.iaRefImages.length > 0) {
+                refImages = refImages.concat(window.iaRefImages.slice(0, 3));
+            }
+            // Limitar total a 6 imágenes de referencia
+            refImages = refImages.slice(0, 6);
+
+            const dataUrl = await generateImage({
+                prompt,
+                referenceImages: refImages,
+                model: "auto"
+            });
+
+            // Guardar en Firebase Storage
+            const blob = await (await fetch(dataUrl)).blob();
+            const fileName = `disenos/${cid}/${pid}/plano_ia_${itemKey}_${Date.now()}.jpg`;
+            const storageRef = storage.ref(fileName);
+            await storageRef.put(blob, { contentType: 'image/jpeg' });
+            const url = await storageRef.getDownloadURL();
+
+            // Guardar SOLO en presupuesto/items/cortes (fuente única de verdad)
+            const newRef = await db.ref(`proyectos/${cid}/${pid}/presupuesto/items/${itemKey}/cortes`).push(url);
+            const newKey = newRef.key;
+
+            // Actualizar projectItems en memoria
+            if(!projectItems[itemKey]) projectItems[itemKey] = {};
+            if(!projectItems[itemKey].cortes) projectItems[itemKey].cortes = {};
+            projectItems[itemKey].cortes[newKey] = url;
+
+            cerrarModalIAImagen();
+            renderPlanosEstructurados();
+            alert('✅ Plano técnico generado y guardado en Planos.');
+        } catch(e) {
+            console.error('Error generando imagen IA:', e);
+            const msg = e.message || String(e);
+            if(msg.includes('429') || msg.includes('quota')) {
+                alert('⚠️ Cuota de imágenes agotada. Esperá unos minutos e intentá de nuevo.');
+            } else if(msg.includes('503') || msg.includes('unavailable')) {
+                alert('⚠️ El modelo de imagen está saturado. Intentá en 1-2 minutos.');
+            } else {
+                alert('Error al generar imagen: ' + msg.slice(0, 200));
+            }
+        } finally {
+            if (btnGen) { btnGen.disabled = false; btnGen.innerText = 'Generar Plano'; }
+        }
+    };
+    window.closeAIChat = function() { const m = document.getElementById('ai-chat-modal'); if (m) m.style.display = 'none'; };
+</script>
+</body>
+</html>

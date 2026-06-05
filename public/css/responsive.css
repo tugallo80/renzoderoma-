@@ -1,0 +1,80 @@
+/**
+ * Rubik OS — Responsive Layer
+ * Aplica overrides para que cualquier página del sistema funcione bien
+ * en PC además del diseño mobile-first original.
+ *
+ * Modos:
+ *   - body[data-view="auto"]   → media query decide (≥900px = web)
+ *   - body[data-view="web"]    → fuerza layout web aunque sea celular
+ *   - body[data-view="mobile"] → fuerza layout móvil aunque sea PC
+ */
+
+/* ─── BASE: web (auto en pantallas ≥900px o forzado por preferencia) ─── */
+@media (min-width: 900px) {
+    body[data-view="auto"], body[data-view="web"] {
+        max-width: 1280px;
+        margin-left: auto !important;
+        margin-right: auto !important;
+        padding-left: 32px;
+        padding-right: 32px;
+    }
+    body[data-view="auto"] .nav,
+    body[data-view="web"] .nav { gap: 14px; }
+
+    /* Grilla de tarjetas/galerías: más columnas en web */
+    body[data-view="auto"] .grid-gallery,
+    body[data-view="web"]  .grid-gallery {
+        grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)) !important;
+        gap: 18px !important;
+    }
+    /* Botonera de tabs más respirada */
+    body[data-view="auto"] .tabs-wrap,
+    body[data-view="web"]  .tabs-wrap { max-width: 720px; }
+
+    /* Modales un poco más grandes en escritorio */
+    body[data-view="auto"] .modal-box,
+    body[data-view="web"]  .modal-box,
+    body[data-view="auto"] .modal-content,
+    body[data-view="web"]  .modal-content {
+        max-width: 720px !important;
+    }
+
+    /* Inputs y botones con tap area normal en desktop */
+    body[data-view="auto"] input, body[data-view="auto"] textarea, body[data-view="auto"] select,
+    body[data-view="web"]  input, body[data-view="web"]  textarea, body[data-view="web"]  select {
+        font-size: 14px;
+    }
+
+    /* Cards: tener 2 columnas cuando hay listas largas */
+    body[data-view="auto"] .list-container,
+    body[data-view="web"]  .list-container {
+        display: grid !important;
+        grid-template-columns: repeat(2, 1fr) !important;
+        gap: 14px;
+    }
+    body[data-view="auto"] .generic-card,
+    body[data-view="web"]  .generic-card { margin-bottom: 0; }
+
+    /* Para que las imágenes no se vean gigantes */
+    body[data-view="auto"] img.client-logo,
+    body[data-view="web"]  img.client-logo { max-width: 60px; max-height: 60px; }
+}
+
+/* ─── FORZADO MÓVIL: la app se ve como en celular aunque entres por PC ─── */
+body[data-view="mobile"] {
+    max-width: 480px !important;
+    margin-left: auto !important;
+    margin-right: auto !important;
+}
+body[data-view="mobile"] .list-container { display: flex !important; flex-direction: column !important; }
+body[data-view="mobile"] .grid-gallery   { grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)) !important; }
+body[data-view="mobile"] .modal-box,
+body[data-view="mobile"] .modal-content { max-width: 92vw !important; }
+
+/* ─── COMUNES (siempre activos): mejoras genéricas que no rompen mobile ─── */
+img { max-width: 100%; height: auto; }
+table { width: 100%; }
+.scroll-x { overflow-x: auto; }
+
+/* Indicador chico del modo activo (solo en debug, no se renderiza si .badge-view oculto) */
+.badge-view { display: none; }

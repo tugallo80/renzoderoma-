@@ -1,0 +1,435 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>La Viborita Retro - Rubik</title>
+    
+    <script src="https://www.gstatic.com/firebasejs/9.1.3/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.1.3/firebase-database-compat.js"></script>
+    <script>
+        window._rubikFirebaseConfig = window._rubikFirebaseConfig || {
+            apiKey: "AIzaSyDXYlofy31cDP14xVAVxWo_7TqXdSgsIjA",
+            authDomain: "rubik-bolivia.firebaseapp.com",
+            databaseURL: "https://rubik-bolivia-default-rtdb.firebaseio.com",
+            projectId: "rubik-bolivia",
+            storageBucket: "rubik-bolivia.firebasestorage.app",
+            messagingSenderId: "4153087958",
+            appId: "1:4153087958:web:cf2dd16106580ed6437677"
+        };
+        if (!firebase.apps.length) firebase.initializeApp(window._rubikFirebaseConfig);
+    </script>
+    <script src="/js/firecache.js?v=1"></script>
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+
+    <style>
+        :root { --bg: #000; --text: #fff; --green-nokia: #8ccb16; --nokia-dark: #1e231c; --gold: #f1c40f; }
+        body { margin: 0; padding: 0; background: var(--bg); color: var(--text); font-family: 'Courier New', Courier, monospace; overflow: hidden; touch-action: none; user-select: none; -webkit-user-select: none; }
+        
+        #intro-screen { position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 1000; padding: 20px; box-sizing: border-box; background: var(--bg); font-family: -apple-system, BlinkMacSystemFont, sans-serif; }
+        .top-ui { text-align: center; z-index: 10; width: 100%; max-width: 400px; }
+        .instruction-title { font-size: 22px; font-weight: 900; margin-bottom: 15px; color: var(--green-nokia); text-transform: uppercase; text-shadow: 0 0 15px rgba(140, 203, 22, 0.4);}
+        .card-panel { background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); padding: 20px; border-radius: 15px; text-align: left; margin-bottom: 20px; backdrop-filter: blur(10px); }
+        .sel-proy { width: 100%; padding: 15px; border-radius: 10px; font-size: 16px; font-weight: 700; background: white; color: black; border: none; margin-bottom: 15px; font-family: inherit; }
+        .radio-row { display: flex; align-items: center; gap: 10px; margin-bottom: 15px; font-size: 14px; font-weight: 600; }
+        
+        .btn-animo { background: var(--green-nokia); color: #000; border: none; padding: 18px 40px; border-radius: 30px; font-size: 18px; font-weight: 900; box-shadow: 0 0 20px rgba(140, 203, 22, 0.5); cursor: pointer; transition: 0.2s; text-transform: uppercase; width: 100%; font-family: -apple-system, BlinkMacSystemFont, sans-serif;}
+        .btn-animo:active { transform: scale(0.95); }
+        .btn-sec { background: transparent; color: white; border: 1px solid white; padding: 12px; border-radius: 30px; font-size: 14px; font-weight: 700; margin-top: 15px; width: 100%; cursor: pointer; font-family: -apple-system, BlinkMacSystemFont, sans-serif;}
+
+        #game-screen {
+            position: absolute; top: 0; left: 0; width: 100vw; height: 100dvh;
+            display: none; align-items: center; justify-content: center;
+            background: #000; padding: 0; box-sizing: border-box;
+        }
+
+        /* El Nokia mantiene su relación de aspecto nativa (~0.54 ancho/alto) */
+        /* En mobile: ocupa el alto completo; en PC: se centra y no excede el alto */
+        .phone-wrapper {
+            position: relative;
+            /* Relación de aspecto real de nokia.png ≈ 540 × 1000px → ratio 0.54 */
+            width: min(100vw, 100dvh * 0.54);
+            height: min(100dvh, 100vw / 0.54);
+            flex-shrink: 0;
+        }
+
+        .phone-img {
+            width: 100%; height: 100%;
+            object-fit: contain;           /* mantiene proporciones — sin estirar */
+            display: block; pointer-events: none; z-index: 5; position: absolute; top: 0; left: 0;
+        }
+
+        /* PANTALLA DEL JUEGO: posicionada proporcionalmente sobre nokia.png */
+        #game-canvas {
+            position: absolute; background: #80961d; z-index: 1;
+            top: 23%; left: 12.8%; width: 72.2%; height: 25%;
+            box-shadow: inset 0 3px 8px rgba(0,0,0,0.5);
+            border-radius: 4px;
+        }
+
+        .screen-glass {
+            position: absolute; z-index: 6; pointer-events: none;
+            top: 23%; left: 12.8%; width: 72.2%; height: 25%;
+            background: linear-gradient(135deg, rgba(255,255,255,0.1) 0%, rgba(255,255,255,0) 40%);
+            border-radius: 4px;
+        }
+
+        /* HITBOXES QUIRÚRGICOS INVISIBLES */
+        .hitbox { position: absolute; z-index: 100; cursor: pointer; border-radius: 50%; -webkit-tap-highlight-color: transparent; }
+        
+        .btn-c     { top: 52%; left: 12%; width: 22%; height: 8%; }  /* Botón C (Izquierda) */
+        .btn-start { top: 52%; left: 35%; width: 30%; height: 8%; }  /* Home (Centro) */
+        
+        .btn-up    { top: 64%; left: 38%; width: 24%; height: 8.5%; } /* Número 2 */
+        .btn-left  { top: 72.5%; left: 14%; width: 24%; height: 8.5%; } /* Número 4 */
+        .btn-right { top: 72.5%; left: 62%; width: 24%; height: 8.5%; } /* Número 6 */
+        .btn-down  { top: 81%; left: 38%; width: 24%; height: 8.5%; } /* Número 8 */
+
+        #result-screen { position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.95); display: none; flex-direction: column; align-items: center; justify-content: center; z-index: 2000; text-align: center; padding: 20px; box-sizing: border-box; backdrop-filter: blur(10px); font-family: -apple-system, BlinkMacSystemFont, sans-serif; }
+        .res-emoji { font-size: 80px; margin-bottom: 20px; }
+        .res-title { font-size: 36px; font-weight: 900; margin-bottom: 10px; text-transform: uppercase; }
+        .res-sub { font-size: 18px; font-weight: 600; color: white; margin-bottom: 30px; line-height: 1.4;}
+        .btn-back { background: white; color: black; border: none; padding: 18px 40px; border-radius: 30px; font-weight: 900; font-size: 16px; cursor: pointer; text-transform: uppercase; font-family: -apple-system, BlinkMacSystemFont, sans-serif;}
+        
+        .demo-badge { position: absolute; top: 10px; left: 50%; transform: translateX(-50%); background: var(--orange); color: black; font-weight: 900; padding: 5px 15px; border-radius: 20px; font-size: 12px; z-index: 3000; display: none; box-shadow: 0 4px 10px rgba(0,0,0,0.5); font-family: -apple-system, BlinkMacSystemFont, sans-serif;}
+    </style>
+    <link rel="stylesheet" href="/css/responsive.css?v=1">
+</head>
+<body>
+    
+    <div class="demo-badge" id="badge-demo">MODO ENTRENAMIENTO (NO SE GUARDA)</div>
+
+    <div id="intro-screen">
+        <div class="top-ui" id="ui-panel">
+            <div id="step-1">
+                <div class="instruction-title">¿Para cuál proyecto jugarás?</div>
+                <div class="card-panel">
+                    <select id="sel-proy" class="sel-proy">
+                        <option value="">Cargando proyectos...</option>
+                    </select>
+                    <div id="no-proy-msg" style="display:none; color:var(--gold); font-weight:800; text-align:center;">Ya jugaste para todos tus proyectos o no tienes proyectos elegibles.</div>
+                </div>
+                <button class="btn-animo" id="btn-next" onclick="goToStep2()">CONTINUAR</button>
+                <button class="btn-sec" onclick="volverAlPerfil()">Volver al Portal</button>
+            </div>
+
+            <div id="step-2" style="display:none;">
+                <div class="instruction-title">ELIGE TU RETO (3 INTENTOS)</div>
+                <div class="card-panel">
+                    <label class="radio-row"><input type="radio" name="risk" value="1" checked> <span><b>1% Descuento:</b> Comer 10 Manzanas.</span></label>
+                    <label class="radio-row"><input type="radio" name="risk" value="2"> <span><b>2% Descuento:</b> Comer 20 Manzanas.</span></label>
+                    <label class="radio-row"><input type="radio" name="risk" value="3"> <span><b>3% Descuento:</b> Comer 30 Manzanas.</span></label>
+                    <label class="radio-row"><input type="radio" name="risk" value="4"> <span><b>4% Descuento:</b> Comer 40 Manzanas.</span></label>
+                </div>
+                <button class="btn-animo" onclick="abrirCelular()">¡ENCENDER NOKIA!</button>
+                <button class="btn-sec" style="border:none;" onclick="backToStep1()">Cambiar Proyecto</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="game-screen">
+        <div class="phone-wrapper">
+            <canvas id="game-canvas" width="290" height="190"></canvas>
+            <div class="screen-glass"></div>
+            <!-- Precargamos sin lazy para carga simultánea con la pantalla verde -->
+            <img src="nokia.png" class="phone-img" alt="Nokia" id="nokia-img">
+            
+            <div class="hitbox btn-c" onpointerdown="touchAction('back', event);" onmousedown="touchAction('back', event);"></div>
+            <div class="hitbox btn-start" onpointerdown="touchAction('start', event);" onmousedown="touchAction('start', event);"></div>
+            <div class="hitbox btn-up" onpointerdown="touchAction('up', event);" onmousedown="touchAction('up', event);"></div>
+            <div class="hitbox btn-left" onpointerdown="touchAction('left', event);" onmousedown="touchAction('left', event);"></div>
+            <div class="hitbox btn-right" onpointerdown="touchAction('right', event);" onmousedown="touchAction('right', event);"></div>
+            <div class="hitbox btn-down" onpointerdown="touchAction('down', event);" onmousedown="touchAction('down', event);"></div>
+        </div>
+    </div>
+
+    <div id="result-screen">
+        <div class="res-emoji" id="r-emoji">🎉</div>
+        <div class="res-title" id="r-title">¡FELICIDADES!</div>
+        <div class="res-sub" id="r-sub">Has ganado el descuento.</div>
+        <button class="btn-back" onclick="volverAlPerfil()">Volver a mi Perfil</button>
+    </div>
+
+<script>
+    const firebaseConfig = {
+        apiKey: "AIzaSyDXYlofy31cDP14xVAVxWo_7TqXdSgsIjA",
+        authDomain: "rubik-bolivia.firebaseapp.com",
+        databaseURL: "https://rubik-bolivia-default-rtdb.firebaseio.com",
+        projectId: "rubik-bolivia",
+        storageBucket: "rubik-bolivia.firebasestorage.app",
+        messagingSenderId: "706820816059",
+        appId: "1:706820816059:web:4d0b3da6e94d946f5b5b5e"
+    };
+    if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
+    const db = firebase.database();
+
+    const urlParams = new URLSearchParams(window.location.search);
+    const isDemo = urlParams.get('demo') === 'true';
+    const cid = urlParams.get('cid') || localStorage.getItem('rubik_client_id');
+    if (cid) localStorage.setItem('rubik_client_id', cid);
+
+    if(!cid && !isDemo) window.location.href = 'index.html';
+
+    function vibrate(ms) {
+        try { if ("vibrate" in navigator) { navigator.vibrate(ms); } } catch(e) {}
+    }
+
+    function touchAction(action, e) {
+        if(e) e.preventDefault();
+        vibrate(30); 
+        if (action === 'start') nokiaStart();
+        if (action === 'up') changeDir(0, -1);
+        if (action === 'down') changeDir(0, 1);
+        if (action === 'left') changeDir(-1, 0);
+        if (action === 'right') changeDir(1, 0);
+        if (action === 'back') volverAlPerfil(); 
+    }
+
+    function volverAlPerfil() {
+        window.location.href = `cliente-view.html?cid=${cid}&skipLanding=true&t=${Date.now()}`;
+    }
+
+    let riskPercent = 1;
+    let targetScore = 10;
+    let availableProjects = {};
+
+    if(isDemo) {
+        document.getElementById('badge-demo').style.display = 'block';
+        const sel = document.getElementById('sel-proy');
+        sel.innerHTML = `<option value="demo_id">PROYECTO DE ENTRENAMIENTO</option>`;
+    } else {
+        db.ref(`proyectos/${cid}`).once('value', snap => {
+            const sel = document.getElementById('sel-proy'); sel.innerHTML = "";
+            let hasProjects = false;
+            snap.forEach(child => {
+                const p = child.val();
+                if((p.juego_snake_jugado === undefined || p.juego_snake_jugado === null || p.juego_snake_jugado === false) && p.estado !== 'entregado') {
+                    availableProjects[child.key] = p; hasProjects = true;
+                    sel.innerHTML += `<option value="${child.key}">${p.nombre}</option>`;
+                }
+            });
+            if(!hasProjects) {
+                sel.style.display = 'none'; document.getElementById('btn-next').style.display = 'none'; document.getElementById('no-proy-msg').style.display = 'block';
+            }
+        });
+    }
+
+    function goToStep2() {
+        if(!document.getElementById('sel-proy').value) return;
+        document.getElementById('step-1').style.display = 'none';
+        document.getElementById('step-2').style.display = 'block';
+    }
+    function backToStep1() {
+        document.getElementById('step-2').style.display = 'none';
+        document.getElementById('step-1').style.display = 'block';
+    }
+
+    // --- MOTOR DE JUEGO RETRO ---
+    const canvas = document.getElementById('game-canvas');
+    const ctx = canvas.getContext('2d');
+    const gridSize = 10;
+    const gridW = canvas.width / gridSize;  
+    const gridH = canvas.height / gridSize; 
+    
+    const minX = 1;
+    const maxX = gridW - 2;
+    const minY = 5; 
+    const maxY = gridH - 2; 
+
+    let snake = []; let food = {};
+    let dx = 1; let dy = 0; let score = 0; let gameLoop;
+    let gameState = 'WAITING'; 
+    let intentosRestantes = 3;
+    let currentSpeed = 110; 
+    let inputLocked = false; 
+
+    // Precargar nokia.png al cargar la página para que esté lista cuando se necesite
+    const _nokiaImg = new Image();
+    _nokiaImg.src = 'nokia.png';
+
+    function abrirCelular() {
+        riskPercent = parseInt(document.querySelector('input[name="risk"]:checked').value);
+        targetScore = riskPercent * 10;
+        intentosRestantes = 3;
+        gameState = 'WAITING';
+
+        function _mostrar() {
+            document.getElementById('intro-screen').style.display = 'none';
+            document.getElementById('game-screen').style.display = 'flex';
+            dibujarPantallaVerde();
+        }
+
+        // Si ya cargó mostramos inmediatamente; si no, esperamos (máx 800ms de cortesía)
+        if (_nokiaImg.complete && _nokiaImg.naturalWidth > 0) {
+            _mostrar();
+        } else {
+            const _t = setTimeout(_mostrar, 800); // fallback máximo
+            _nokiaImg.onload = () => { clearTimeout(_t); _mostrar(); };
+            _nokiaImg.onerror = () => { clearTimeout(_t); _mostrar(); };
+        }
+    }
+
+    function nokiaStart() {
+        if (gameState === 'WAITING' || gameState === 'CRASHED') {
+            iniciarRonda();
+        }
+    }
+
+    function iniciarRonda() {
+        gameState = 'PLAYING';
+        snake = [{x: 5, y: 8}, {x: 4, y: 8}, {x: 3, y: 8}]; 
+        dx = 1; dy = 0; score = 0; inputLocked = false;
+        spawnFood();
+        
+        if(gameLoop) clearInterval(gameLoop);
+        gameLoop = setInterval(update, currentSpeed);
+    }
+
+    function spawnFood() {
+        let valid = false;
+        while (!valid) {
+            food.x = Math.floor(Math.random() * (maxX - minX + 1)) + minX;
+            food.y = Math.floor(Math.random() * (maxY - minY + 1)) + minY;
+            valid = true;
+            for (let part of snake) {
+                if (part.x === food.x && part.y === food.y) { valid = false; break; }
+            }
+        }
+    }
+
+    document.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" || e.key === " ") { e.preventDefault(); nokiaStart(); return; }
+        if (gameState !== 'PLAYING') return;
+        
+        let moved = false;
+        if(e.key === "ArrowUp") { changeDir(0, -1); moved = true; }
+        if(e.key === "ArrowDown") { changeDir(0, 1); moved = true; }
+        if(e.key === "ArrowLeft") { changeDir(-1, 0); moved = true; }
+        if(e.key === "ArrowRight") { changeDir(1, 0); moved = true; }
+        
+        if(moved) { e.preventDefault(); vibrate(20); }
+    });
+
+    function changeDir(newDx, newDy) {
+        if (gameState !== 'PLAYING') return;
+        if (inputLocked) return; 
+        
+        if (dx === -newDx && newDx !== 0) return; 
+        if (dy === -newDy && newDy !== 0) return;
+        
+        dx = newDx; dy = newDy;
+        inputLocked = true; 
+    }
+
+    function update() {
+        if (gameState !== 'PLAYING') return;
+        inputLocked = false; 
+
+        const head = { x: snake[0].x + dx, y: snake[0].y + dy };
+
+        if (head.x < minX || head.x > maxX || head.y < minY || head.y > maxY) { procesarChoque(); return; }
+        for (let i = 0; i < snake.length; i++) {
+            if (head.x === snake[i].x && head.y === snake[i].y) { procesarChoque(); return; }
+        }
+
+        snake.unshift(head);
+
+        if (head.x === food.x && head.y === food.y) {
+            score++;
+            vibrate(80); 
+            if (score >= targetScore) { terminarJuegoTotal(true); return; }
+            spawnFood();
+        } else {
+            snake.pop(); 
+        }
+        dibujarPantallaVerde();
+    }
+
+    function procesarChoque() {
+        clearInterval(gameLoop);
+        vibrate([100, 50, 100]); 
+        
+        intentosRestantes--;
+        if(intentosRestantes <= 0) {
+            gameState = 'GAMEOVER';
+            terminarJuegoTotal(false);
+        } else {
+            gameState = 'CRASHED';
+            dibujarPantallaVerde(); 
+        }
+    }
+
+    function dibujarPantallaVerde() {
+        ctx.fillStyle = '#80961d';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        ctx.fillStyle = '#1e231c';
+        ctx.font = "bold 14px 'Courier New', monospace";
+        ctx.textAlign = "left";
+        ctx.fillText(`Int: ${intentosRestantes}`, minX * gridSize, 42);
+        ctx.textAlign = "right";
+        ctx.fillText(`Mzn: ${score}/${targetScore}`, (maxX + 1) * gridSize, 42);
+
+        ctx.lineWidth = 2;
+        ctx.strokeStyle = '#1e231c';
+        ctx.strokeRect(
+            minX * gridSize - 1, 
+            minY * gridSize - 1, 
+            (maxX - minX + 1) * gridSize + 2, 
+            (maxY - minY + 1) * gridSize + 2
+        );
+
+        ctx.textAlign = "center";
+        const centerY = (minY + maxY) * gridSize / 2; 
+
+        if (gameState === 'WAITING') {
+            ctx.font = "bold 18px 'Courier New'";
+            ctx.fillText("RUBIK SNAKE", canvas.width/2, centerY - 15);
+            ctx.font = "bold 12px 'Courier New'";
+            ctx.fillText("TOCA TECLA CENTRAL", canvas.width/2, centerY + 15);
+            ctx.fillText("PARA INICIAR", canvas.width/2, centerY + 30);
+            return;
+        }
+
+        if (gameState === 'CRASHED') {
+            ctx.font = "bold 18px 'Courier New'";
+            ctx.fillText("¡CHOCASTE!", canvas.width/2, centerY - 15);
+            ctx.font = "bold 12px 'Courier New'";
+            ctx.fillText(`TE QUEDAN ${intentosRestantes} INTENTOS`, canvas.width/2, centerY + 15);
+            ctx.fillText("TOCA PARA SEGUIR", canvas.width/2, centerY + 30);
+            return;
+        }
+
+        ctx.fillRect(food.x * gridSize + 2, food.y * gridSize + 2, gridSize - 4, gridSize - 4);
+        snake.forEach((part) => { ctx.fillRect(part.x * gridSize + 1, part.y * gridSize + 1, gridSize - 2, gridSize - 2); });
+    }
+
+    function terminarJuegoTotal(win) {
+        clearInterval(gameLoop);
+        const selectedPid = document.getElementById('sel-proy').value;
+        document.getElementById('result-screen').style.display = 'flex';
+        
+        if(win) {
+            document.getElementById('r-emoji').innerText = "🏆";
+            document.getElementById('r-title').innerText = "¡RETO SUPERADO!";
+            document.getElementById('r-title').style.color = "var(--green-nokia)";
+            document.getElementById('r-sub').innerText = `¡Comiste las ${targetScore} manzanas!\nGanaste ${riskPercent}% de descuento.`;
+            confetti({ particleCount: 150, spread: 80, origin: { y: 0.6 }, colors: ['#8ccb16', '#ffffff'] });
+            
+            if(!isDemo) {
+                db.ref(`proyectos/${cid}/${selectedPid}`).update({ juego_snake_jugado: true, descuento_ganado_snake: riskPercent });
+            }
+        } else {
+            document.getElementById('r-emoji').innerText = "💀";
+            document.getElementById('r-title').innerText = "¡FIN DEL JUEGO!";
+            document.getElementById('r-title').style.color = "var(--red)";
+            document.getElementById('r-sub').innerText = `Perdiste tus 3 intentos.\nNo obtuviste el descuento.`;
+            
+            if(!isDemo) db.ref(`proyectos/${cid}/${selectedPid}`).update({ juego_snake_jugado: true, descuento_ganado_snake: 0 });
+        }
+    }
+</script>
+    <script src="/js/viewmode.js?v=1"></script>
+</body>
+</html>

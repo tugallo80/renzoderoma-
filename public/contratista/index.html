@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Portal Contratista - Rubik OS</title>
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.1.3/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.1.3/firebase-database-compat.js"></script>
+    <script>
+        window._rubikFirebaseConfig = window._rubikFirebaseConfig || {
+            apiKey: "AIzaSyDXYlofy31cDP14xVAVxWo_7TqXdSgsIjA",
+            authDomain: "rubik-bolivia.firebaseapp.com",
+            databaseURL: "https://rubik-bolivia-default-rtdb.firebaseio.com",
+            projectId: "rubik-bolivia",
+            storageBucket: "rubik-bolivia.firebasestorage.app",
+            messagingSenderId: "4153087958",
+            appId: "1:4153087958:web:cf2dd16106580ed6437677"
+        };
+        if (!firebase.apps.length) firebase.initializeApp(window._rubikFirebaseConfig);
+    </script>
+    <script src="/js/firecache.js?v=1"></script>
+    <style>
+        :root { --bg: #f2f2f7; --card: #ffffff; --text: #1c1c1e; --blue: #007aff; --green: #34c759; --orange: #ff9500; --red: #ff3b30; --purple: #af52de; --gray: #8e8e93; --border: #e5e5ea; }
+        body { font-family: -apple-system, sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 20px; padding-bottom: 120px; -webkit-tap-highlight-color: transparent;}
+        
+        .header { text-align: center; margin-bottom: 25px; }
+        .user-badge { background: var(--blue); color: white; padding: 5px 15px; border-radius: 20px; font-size: 11px; font-weight: 800; display: inline-block; margin-bottom: 10px; text-transform: uppercase;}
+        .title { font-size: 24px; font-weight: 900; margin: 0; }
+
+        .kpi-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-bottom: 25px; }
+        .kpi-card { background: #1c1c1e; color: white; padding: 15px 10px; border-radius: 16px; text-align: center; box-shadow: 0 4px 15px rgba(0,0,0,0.15);}
+        .kpi-lbl { font-size: 9px; font-weight: 800; color: var(--gray); text-transform: uppercase; margin-bottom: 5px;}
+        .kpi-val { font-size: 16px; font-weight: 900; }
+
+        .section-title { font-size: 16px; font-weight: 900; margin-bottom: 15px; display: flex; align-items: center; gap: 8px;}
+
+        .card { background: var(--card); border-radius: 18px; padding: 18px; border: 1px solid var(--border); margin-bottom: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.03); }
+        .card:active { transform: scale(0.98); }
+        .p-name { font-size: 16px; font-weight: 900; color: var(--text); margin-bottom: 5px; }
+        .p-info { font-size: 12px; color: var(--gray); font-weight: 600; margin-bottom: 12px; }
+        .badge { font-size: 10px; font-weight: 800; padding: 4px 8px; border-radius: 6px; text-transform: uppercase; background: rgba(255,149,0,0.1); color: var(--orange); display: inline-block; margin-bottom: 8px;}
+        
+        .btn-main { background: var(--blue); color: white; border: none; padding: 14px; border-radius: 12px; font-weight: 900; font-size: 14px; width: 100%; cursor: pointer; display: flex; justify-content: center; gap: 8px; transition: 0.2s;}
+        .btn-green { background: var(--green); } .btn-red { background: var(--red); }
+        
+        .empty-msg { text-align: center; color: var(--gray); font-size: 13px; padding: 30px; font-weight: 700; border: 2px dashed var(--border); border-radius: 16px;}
+        
+        .cotizador-panel { position: fixed; top: 100%; left: 0; width: 100%; height: 100%; background: var(--bg); z-index: 1000; transition: top 0.4s cubic-bezier(0.1, 0.8, 0.2, 1); overflow-y: auto; padding: 20px; box-sizing: border-box; padding-bottom: 120px;}
+        .cotizador-panel.active { top: 0; }
+        .nav-panel { display: flex; align-items: center; gap: 10px; margin-bottom: 20px; }
+        .btn-back { background: var(--card); border: 1px solid var(--border); padding: 10px 15px; border-radius: 14px; font-weight: 800; color: var(--text); cursor: pointer; display: flex; align-items: center; gap: 5px; }
+
+        .item-row { background: var(--card); border: 1px solid var(--border); border-radius: 16px; padding: 15px; margin-bottom: 12px; position: relative; box-shadow: 0 4px 10px rgba(0,0,0,0.02);}
+        .i-parent { font-size: 10px; font-weight: 800; color: var(--gray); text-transform: uppercase; margin-bottom: 4px; }
+        .i-name { font-size: 15px; font-weight: 900; margin-bottom: 8px; line-height: 1.2; padding-right: 90px;}
+        .i-metrics { display: flex; gap: 10px; font-size: 12px; font-weight: 600; color: var(--gray); margin-bottom: 12px; }
+        
+        .price-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; align-items: center; background: var(--bg); padding: 12px; border-radius: 12px; }
+        .pu-inp { border: none; border-bottom: 2px solid var(--blue); background: transparent; font-size: 18px; font-weight: 900; color: var(--text); width: 100%; text-align: center; outline: none; border-radius:0; padding-bottom:5px;}
+        .subt-val { font-size: 16px; font-weight: 900; color: var(--green); text-align: right; }
+
+        .btn-photo { position: absolute; top: 15px; right: 15px; background: var(--blue); border: none; width: 40px; height: 40px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 22px; color: white; cursor: pointer; box-shadow: 0 4px 10px rgba(0,122,255,0.3);}
+        
+        .floating-total { position: fixed; bottom: 0; left: 0; width: 100%; background: var(--card); border-top: 1px solid var(--border); padding: 15px 20px; box-sizing: border-box; box-shadow: 0 -10px 20px rgba(0,0,0,0.05); z-index: 1100; transition: bottom 0.4s;}
+        
+        .photo-modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.95); z-index: 3000; flex-direction: column; }
+        .photo-nav { display: flex; justify-content: space-between; padding: 20px; padding-top: 40px; background: linear-gradient(rgba(0,0,0,0.8), transparent); position: absolute; width: 100%; box-sizing: border-box; z-index: 3010;}
+        .btn-black { background: rgba(255,255,255,0.2); backdrop-filter: blur(10px); color: white; border: none; padding: 10px 15px; border-radius: 10px; font-weight: 800; display: flex; gap: 5px; cursor: pointer;}
+        .full-img { width: 100%; height: 100%; object-fit: contain; position: absolute; top: 0; left: 0; }
+        .nav-arrows { position: absolute; top: 50%; transform: translateY(-50%); width: 100%; display: flex; justify-content: space-between; padding: 0 20px; box-sizing: border-box; z-index: 3010; pointer-events: none; }
+        .arrow-btn { pointer-events: auto; background: rgba(255,255,255,0.2); backdrop-filter: blur(5px); border: none; color: white; width: 50px; height: 50px; border-radius: 25px; font-size: 24px; cursor: pointer; display: flex; justify-content: center; align-items: center; }
+        .photo-counter { position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%); color: white; font-weight: 800; font-size: 14px; background: rgba(0,0,0,0.5); padding: 5px 15px; border-radius: 20px; z-index: 3010; }
+
+        .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); z-index: 4000; justify-content: center; align-items: center; backdrop-filter: blur(4px); }
+        .modal-box { background: var(--card); width: 90%; max-width: 400px; padding: 25px; border-radius: 24px; position: relative; box-sizing: border-box; max-height: 80vh; overflow-y: auto;}
+    </style>
+    <link rel="stylesheet" href="/css/responsive.css?v=1">
+</head>
+<body>
+
+    <div id="main-hub">
+        <div class="header">
+            <div class="user-badge" id="u-badge">Especialista / Contratista</div>
+            <h1 class="title" id="u-name">Cargando...</h1>
+        </div>
+
+        <div class="kpi-grid">
+            <div class="kpi-card"><div class="kpi-lbl">Adjudicado</div><div class="kpi-val" style="color:var(--blue);" id="kpi-adj">0 Bs</div></div>
+            <div class="kpi-card"><div class="kpi-lbl">Cobrado</div><div class="kpi-val" style="color:var(--green);" id="kpi-cob">0 Bs</div></div>
+            <div class="kpi-card"><div class="kpi-lbl">Saldo</div><div class="kpi-val" style="color:var(--orange);" id="kpi-sal">0 Bs</div></div>
+        </div>
+
+        <div class="section-title"><i class="ph-bold ph-bell-ringing" style="color:var(--orange);"></i> Licitaciones Pendientes</div>
+        <div id="pending-container"><div class="empty-msg">Sincronizando con matriz...</div></div>
+
+        <div class="section-title" style="margin-top:25px;"><i class="ph-bold ph-buildings" style="color:var(--blue);"></i> Mis Proyectos Activos</div>
+        <div id="active-container"><div class="empty-msg">Sincronizando con matriz...</div></div>
+    </div>
+
+    <div id="panel-cotizador" class="cotizador-panel">
+        <div class="nav-panel">
+            <button class="btn-back" onclick="cerrarCotizador()"><i class="ph-bold ph-caret-down"></i> Volver</button>
+            <div>
+                <div style="font-size: 18px; font-weight: 900; line-height: 1.1;" id="cot-p-name">Proyecto</div>
+                <div style="font-size: 11px; color: var(--orange); font-weight: 800; text-transform: uppercase;" id="cot-status">Ingresa tus Precios</div>
+            </div>
+        </div>
+        <div id="cot-items-container"></div>
+    </div>
+    <div id="float-footer" class="floating-total" style="bottom: -150px;"></div>
+
+    <div id="modal-foto" class="photo-modal">
+        <div class="photo-nav">
+            <button class="btn-black" onclick="cerrarVisorFotos()"><i class="ph-bold ph-caret-left"></i> Atrás</button>
+            <button class="btn-black" onclick="descargarFoto()"><i class="ph-bold ph-download-simple"></i> Guardar</button>
+        </div>
+        <img loading="lazy" decoding="async" id="img-viewer" class="full-img" src="">
+        <div class="nav-arrows" id="nav-arrows" style="display:none;">
+            <button class="arrow-btn" onclick="cambiarFoto(-1)"><i class="ph-bold ph-caret-left"></i></button>
+            <button class="arrow-btn" onclick="cambiarFoto(1)"><i class="ph-bold ph-caret-right"></i></button>
+        </div>
+        <div class="photo-counter" id="photo-counter">1 / 1</div>
+    </div>
+
+    <div id="mod-info" class="modal">
+        <div class="modal-box">
+            <h3 style="margin-top:0; margin-bottom:15px;"><i class="ph-bold ph-list-magnifying-glass"></i> Detalles de la Tarea</h3>
+            <h4 style="margin-bottom:5px; color:var(--blue); font-size:12px; text-transform:uppercase;">Descripción y Especificaciones</h4>
+            <div id="info-feat" style="font-size:13px; color:var(--text); margin-bottom:20px; line-height:1.5; white-space: pre-wrap;"></div>
+            <h4 style="margin-bottom:5px; color:var(--blue); font-size:12px; text-transform:uppercase;">Materiales Base / Requerimientos</h4>
+            <div id="info-mats" style="font-size:13px; color:var(--text); margin-bottom:25px; line-height:1.5; white-space: pre-wrap;"></div>
+            <button class="btn-main" style="margin-bottom:0;" onclick="document.getElementById('mod-info').style.display='none'"><i class="ph-bold ph-arrow-left"></i> Volver a Cotización</button>
+        </div>
+    </div>
+
+    <div id="mod-pagos" class="modal">
+        <div class="modal-box">
+            <h3 style="margin-top:0; margin-bottom:15px;"><i class="ph-bold ph-receipt"></i> Estado de Cuenta</h3>
+            <div id="pagos-lista" style="font-size:13px; color:var(--text); margin-bottom:20px;"></div>
+            <button class="btn-main" style="margin-bottom:0;" onclick="document.getElementById('mod-pagos').style.display='none'">Cerrar</button>
+        </div>
+    </div>
+
+<script>
+    // Firebase ya inicializado en el <head>
+    if (!firebase.apps.length) firebase.initializeApp(window._rubikFirebaseConfig);
+    const db = firebase.database();
+
+    const urlParams = new URLSearchParams(window.location.search);
+    let workerId = urlParams.get('wid');
+    let targetLicId = urlParams.get('lic'); 
+    let userName = "Contratista";
+
+    if(!workerId) {
+        document.getElementById('u-name').innerText = "Enlace inválido o no autorizado";
+        document.getElementById('pending-container').innerHTML = '<div class="empty-msg">Error: Falta el ID del contratista.</div>';
+        document.getElementById('active-container').innerHTML = '<div class="empty-msg">Contacta a la oficina matriz.</div>';
+    } else {
+        db.ref(`personal/${workerId}/nombre`).once('value').then(snap => {
+            if(snap.exists()){
+                userName = snap.val();
+                document.getElementById('u-name').innerText = userName;
+            }
+        });
+    }
+
+    let solicitudesGlobales = {};
+    let currentCotKey = null;
+    let pidToCidMap = {};
+    let currentPhotosArray = [];
+    let currentPhotoIndex = 0;
+    let currentTareasArray = [];
+
+    async function generateAdminLink(cId, pId) {
+        let current = window.location.href.split('?')[0];
+        let base = current.includes('file://') ? (await db.ref('config/base_url').once('value')).val() || "https://misistema-rubik.com" : current.replace(/\/(graficos|contratista)\/index\.html$/, '');
+        return `${base.replace(/\/+$/, '')}/licitaciones.html?cid=${cId}&pid=${pId}`;
+    }
+
+    if(workerId) {
+        db.ref('proyectos').once('value').then(pSnap => {
+            if(pSnap.exists()) { pSnap.forEach(c => c.forEach(p => pidToCidMap[p.key] = c.key)); }
+            iniciarEscuchaSolicitudes();
+        });
+    }
+
+    function fMoney(num) { return parseFloat(num || 0).toLocaleString('es-BO', {minimumFractionDigits: 2, maximumFractionDigits: 2}); }
+
+    function iniciarEscuchaSolicitudes() {
+        db.ref(`personal/${workerId}/solicitudes`).on('value', snap => {
+            const contPend = document.getElementById('pending-container');
+            const contAct = document.getElementById('active-container');
+            contPend.innerHTML = ''; contAct.innerHTML = '';
+            
+            solicitudesGlobales = snap.val() || {};
+            let cPend = 0; let cAct = 0;
+            let globalAdjudicado = 0; let globalCobrado = 0; let globalSaldo = 0;
+            let proyectosActivos = {};
+
+            Object.keys(solicitudesGlobales).forEach(key => {
+                let sol = solicitudesGlobales[key];
+                let solPid = sol.proyecto_id || sol.pid;
+                if(!solPid || solPid === 'undefined') return;
+
+                let realCid = sol.cliente_id || sol.cid || pidToCidMap[solPid];
+                
+                if(sol.estado === 'adjudicado' || sol.estado === 'aprobado' || sol.estado === 'terminado') {
+                    let montoAdjudicado = parseFloat(sol.precio_final || sol.precio_propuesto || 0);
+                    globalAdjudicado += montoAdjudicado;
+                    
+                    let pagosItem = 0;
+                    if(sol.pagos) { Object.values(sol.pagos).forEach(p => { pagosItem += parseFloat(p.monto || 0); globalCobrado += parseFloat(p.monto || 0); }); }
+                    let saldoItem = montoAdjudicado - pagosItem;
+                    globalSaldo += saldoItem;
+
+                    if(!proyectosActivos[solPid]) { proyectosActivos[solPid] = { cid: realCid, pid: solPid, nombre: sol.p_name || sol.pName, adjudicado: 0, cobrado: 0, saldo: 0, lics: [] }; }
+                    proyectosActivos[solPid].adjudicado += montoAdjudicado; proyectosActivos[solPid].cobrado += pagosItem; proyectosActivos[solPid].saldo += saldoItem;
+                    proyectosActivos[solPid].lics.push(key);
+                }
+
+                if(sol.estado === 'enviado' || sol.estado === 'espera_cotizacion' || sol.estado === 'contra_oferta') {
+                    cPend++;
+                    let isContra = sol.estado === 'contra_oferta';
+                    contPend.innerHTML += `
+                    <div class="card" style="${isContra ? 'border-color:var(--red);' : ''}">
+                        <div class="badge" style="${isContra ? 'color:var(--red); background:rgba(255,59,48,0.1);' : ''}">${isContra ? '🔴 Matriz envió Contraoferta' : '🟢 Ingresa tu Precio'}</div>
+                        <div class="p-name">${sol.p_name || sol.pName || 'Proyecto Rubik'}</div>
+                        <div class="p-info">${sol.tareas ? Object.keys(sol.tareas).length : 0} ítems/tareas solicitadas</div>
+                        <button class="btn-main" onclick="abrirCotizador('${key}')"><i class="ph-bold ph-pencil-simple"></i> ${isContra ? 'Revisar Contraoferta' : 'Llenar Cotización'}</button>
+                    </div>`;
+                }
+            });
+
+            Object.values(proyectosActivos).forEach(p => {
+                cAct++;
+                contAct.innerHTML += `
+                <div class="card" style="border-left: 5px solid var(--blue);">
+                    <div class="p-name">${p.nombre}</div>
+                    <div style="display:flex; justify-content:space-between; font-size:11px; margin-bottom:12px; background:var(--bg); padding:10px; border-radius:8px;">
+                        <div><span style="color:var(--gray); font-weight:800;">Adjudicado:</span><br><b>${fMoney(p.adjudicado)} Bs</b></div>
+                        <div><span style="color:var(--gray); font-weight:800;">Cobrado:</span><br><b style="color:var(--green)">${fMoney(p.cobrado)} Bs</b></div>
+                        <div><span style="color:var(--gray); font-weight:800;">Saldo:</span><br><b style="color:var(--orange)">${fMoney(p.saldo)} Bs</b></div>
+                    </div>
+                    <div style="display:flex; gap:10px;">
+                        <button class="btn-main btn-green" style="flex:1; font-size:12px; padding:12px;" onclick="window.location.href='obra.html?wid=${workerId}&cid=${p.cid}&pid=${p.pid}'"><i class="ph-bold ph-door-open"></i> Entrar a Obra</button>
+                        <button class="btn-main" style="flex:1; font-size:12px; padding:12px; background:var(--card); border:1px solid var(--border); color:var(--text); box-shadow:none;" onclick="verPagos('${p.pid}')"><i class="ph-bold ph-receipt"></i> Pagos</button>
+                    </div>
+                </div>`;
+            });
+
+            document.getElementById('kpi-adj').innerText = fMoney(globalAdjudicado);
+            document.getElementById('kpi-cob').innerText = fMoney(globalCobrado);
+            document.getElementById('kpi-sal').innerText = fMoney(globalSaldo);
+
+            if(cPend === 0) contPend.innerHTML = '<div class="empty-msg">Todo al día. No hay cotizaciones pendientes. 👍</div>';
+            if(cAct === 0) contAct.innerHTML = '<div class="empty-msg">No tienes proyectos en ejecución.</div>';
+
+            if (targetLicId && solicitudesGlobales[targetLicId]) {
+                const est = solicitudesGlobales[targetLicId].estado;
+                if (est === 'enviado' || est === 'espera_cotizacion' || est === 'contra_oferta') { abrirCotizador(targetLicId); targetLicId = null; }
+            }
+        });
+    }
+
+    function verPagos(pid) {
+        const cont = document.getElementById('pagos-lista'); cont.innerHTML = '';
+        let hayPagos = false;
+        Object.keys(solicitudesGlobales).forEach(k => {
+            let sol = solicitudesGlobales[k];
+            if((sol.proyecto_id === pid || sol.pid === pid) && sol.pagos) {
+                Object.values(sol.pagos).forEach(p => {
+                    hayPagos = true;
+                    let d = p.fecha ? new Date(p.fecha).toLocaleDateString() : 'Sin fecha';
+                    let comprobante = p.comprobante ? `<a href="${p.comprobante}" target="_blank" style="color:var(--blue); font-weight:800; text-decoration:none;"><i class="ph-bold ph-file-pdf"></i> Ver Recibo</a>` : 'Sin comprobante adjunto';
+                    cont.innerHTML += `<div style="background:var(--bg); border:1px solid var(--border); padding:10px; border-radius:8px; margin-bottom:8px; display:flex; justify-content:space-between; align-items:center;">
+                        <div><div style="font-size:10px; color:var(--gray); font-weight:800;">${d}</div>${comprobante}</div>
+                        <div style="font-size:16px; font-weight:900; color:var(--green);">+${fMoney(p.monto)} Bs</div>
+                    </div>`;
+                });
+            }
+        });
+        if(!hayPagos) cont.innerHTML = '<div class="empty-msg" style="padding:15px;">No hay pagos registrados para este proyecto.</div>';
+        document.getElementById('mod-pagos').style.display = 'flex';
+    }
+
+    function abrirCotizador(key) {
+        currentCotKey = key; const sol = solicitudesGlobales[key];
+        document.getElementById('cot-p-name').innerText = sol.p_name || sol.pName || 'Proyecto';
+        const isContra = sol.estado === 'contra_oferta';
+        document.getElementById('cot-status').innerText = isContra ? 'Revisa la oferta de la oficina' : 'Llena los precios unitarios';
+        document.getElementById('cot-status').style.color = isContra ? 'var(--red)' : 'var(--orange)';
+        const cont = document.getElementById('cot-items-container'); cont.innerHTML = '';
+        
+        let tareasArray = Object.keys(sol.tareas || {}).map(k => sol.tareas[k]);
+        currentTareasArray = tareasArray; 
+
+        tareasArray.forEach((t, i) => {
+            let img = [];
+            if(t.foto_ref) img.push(t.foto_ref); if(t.img) img.push(t.img);
+            if(t.cortes) { if(Array.isArray(t.cortes)) img.push(...t.cortes); else Object.values(t.cortes).forEach(c=>img.push(c)); }
+            if(t.op_images) { if(Array.isArray(t.op_images)) img.push(...t.op_images); else Object.values(t.op_images).forEach(c=>img.push(c)); }
+
+            let btnFoto = ''; let rPos = '15px';
+            if (img.length > 0) { btnFoto = `<button class="btn-photo" onclick="verFotosTarea(decodeURIComponent('${encodeURIComponent(JSON.stringify(img))}'))"><i class="ph-bold ph-images"></i></button>`; rPos = '65px'; }
+            let btnInfo = `<button class="btn-photo" style="right:${rPos}; background:var(--orange);" onclick="verInfoTarea(${i})"><i class="ph-bold ph-list-magnifying-glass"></i></button>`;
+
+            let valPu = t.pu > 0 ? t.pu : ''; let valSub = t.subtotal > 0 ? (t.subtotal).toFixed(2) : '0.00';
+            cont.innerHTML += `
+            <div class="item-row">${btnFoto}${btnInfo}
+                <div class="i-parent">${t.parent_desc || 'TAREA ASIGNADA'}</div><div class="i-name">${t.task_name || t.desc}</div>
+                <div class="i-metrics"><span>Cant: <b>${t.cant}</b></span> <span>Und: <b>${t.und}</b></span></div>
+                <div class="price-row">
+                    <div><div style="font-size:9px; color:var(--gray); font-weight:800; margin-bottom:4px;">P. UNITARIO (Bs)</div><input type="number" class="pu-inp inp-calc" data-idx="${i}" data-cant="${t.cant}" value="${valPu}" placeholder="0.00" oninput="recalcValores()" ${isContra?"readonly":""}></div>
+                    <div style="text-align:right;"><div style="font-size:9px; color:var(--gray); font-weight:800; margin-bottom:4px;">SUBTOTAL</div><div class="subt-val sub-lbl-${i}">${valSub}</div></div>
+                </div>
+            </div>`;
+        });
+
+        let totalInicial = sol.precio_propuesto || 0; const footer = document.getElementById('float-footer');
+        if(isContra) footer.innerHTML = `<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;"><span style="font-size:12px; font-weight:800; color:var(--gray);">TOTAL OFRECIDO POR OFICINA:</span><span style="font-size:24px; font-weight:900; color:var(--blue);">${totalInicial.toFixed(2)} Bs</span></div><div style="display:flex; gap:10px;"><button class="btn-main btn-red" onclick="rechazarOferta()">Rechazar</button><button class="btn-main btn-green" onclick="aceptarOferta(${totalInicial})">Aceptar Trabajo</button></div>`;
+        else footer.innerHTML = `<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;"><span style="font-size:14px; font-weight:800;">MI OFERTA TOTAL:</span><span id="tot-calc" style="font-size:26px; font-weight:900; color:var(--green);">${totalInicial.toFixed(2)} Bs</span></div><button class="btn-main" onclick="enviarPresupuesto()"><i class="ph-bold ph-paper-plane-right"></i> Enviar Cotización a Oficina</button>`;
+        document.getElementById('panel-cotizador').classList.add('active'); footer.style.bottom = '0px';
+    }
+
+    function cerrarCotizador() { document.getElementById('panel-cotizador').classList.remove('active'); document.getElementById('float-footer').style.bottom = '-150px'; currentCotKey = null; }
+    function recalcValores() { let t = 0; document.querySelectorAll('.inp-calc').forEach(i => { let idx = i.getAttribute('data-idx'); let c = parseFloat(i.getAttribute('data-cant'))||0; let p = parseFloat(i.value)||0; let s = c*p; document.querySelector(`.sub-lbl-${idx}`).innerText = s.toFixed(2); t += s; }); document.getElementById('tot-calc').innerText = t.toFixed(2) + " Bs"; }
+    function procesarAccionFirebase(payload, successMsg) { const sol = solicitudesGlobales[currentCotKey]; db.ref(`personal/${workerId}/solicitudes/${currentCotKey}`).update(payload); let cidReal = sol.cliente_id || sol.cid; let pidReal = sol.proyecto_id || sol.pid; if(cidReal && cidReal !== 'undefined') { db.ref(`proyectos/${cidReal}/${pidReal}/licitaciones/${currentCotKey}`).update(payload); if(successMsg) alert(successMsg); cerrarCotizador(); } }
+    
+    function enviarPresupuesto() {
+        let total = parseFloat(document.getElementById('tot-calc').innerText.replace(' Bs', '')) || 0; if(total <= 0) return alert("Por favor ingresa tus precios antes de enviar."); if(!confirm("¿Enviar tu cotización oficial a la oficina?")) return;
+        let tareasUpdate = solicitudesGlobales[currentCotKey].tareas; let keysArray = Object.keys(tareasUpdate); 
+        document.querySelectorAll('.inp-calc').forEach(inp => { let loopIdx = parseInt(inp.getAttribute('data-idx')); let realKey = keysArray[loopIdx]; tareasUpdate[realKey].pu = parseFloat(inp.value) || 0; tareasUpdate[realKey].subtotal = tareasUpdate[realKey].pu * tareasUpdate[realKey].cant; });
+        procesarAccionFirebase({ estado: 'revisado', precio_propuesto: total, tareas: tareasUpdate });
+        const sol = solicitudesGlobales[currentCotKey]; db.ref('config/admin_phone').once('value').then(async snap => { let num = snap.val() || "59176868833"; num = num.replace(/\D/g, ''); if(!num.startsWith("591")) num = "591" + num; window.location.href = `https://wa.me/${num}?text=${encodeURIComponent(`Hola Oficina! 👋\nYa llené el presupuesto del proyecto *${sol.p_name || sol.pName}*.\n\n💰 Mi oferta total es por: *${total} Bs*.\n\n👉 Entra directamente a la licitación del proyecto aquí:\n${await generateAdminLink(sol.cliente_id || sol.cid, sol.proyecto_id || sol.pid)}`)}`; });
+    }
+
+    function aceptarOferta(total) {
+        procesarAccionFirebase({ estado: 'adjudicado', precio_final: total }, "¡Excelente! Has aceptado el trabajo. Ahora lo verás en tus Proyectos Activos.");
+        const sol = solicitudesGlobales[currentCotKey]; db.ref('config/admin_phone').once('value').then(async snap => { let num = snap.val() || "59176868833"; num = num.replace(/\D/g, ''); if(!num.startsWith("591")) num = "591" + num; window.location.href = `https://wa.me/${num}?text=${encodeURIComponent(`¡Hola Oficina! ✅\nAcabo de ACEPTAR la contraoferta de *${total} Bs* para el proyecto *${sol.p_name || sol.pName}*.\n\n👉 Ver en el sistema:\n${await generateAdminLink(sol.cliente_id || sol.cid, sol.proyecto_id || sol.pid)}`)}`; });
+    }
+
+    function rechazarOferta() { if(!confirm("¿Seguro que deseas rechazar la contraoferta de la oficina?")) return; procesarAccionFirebase({ estado: 'rechazado' }, "Oferta rechazada."); }
+    function verInfoTarea(index) { let t = currentTareasArray[index]; if(!t) return; document.getElementById('info-feat').innerText = t.feat || "No se detallaron especificaciones adicionales."; document.getElementById('info-mats').innerText = t.mats || "El ítem no tiene requerimientos de material extra asignados."; document.getElementById('mod-info').style.display = 'flex'; }
+    function verFotosTarea(dataEncoded) { try { currentPhotosArray = JSON.parse(dataEncoded); if(currentPhotosArray.length > 0) { currentPhotoIndex = 0; actualizarVisor(); document.getElementById('modal-foto').style.display = 'flex'; document.getElementById('nav-arrows').style.display = (currentPhotosArray.length > 1) ? 'flex' : 'none'; } } catch(e) {} }
+    function actualizarVisor() { document.getElementById('img-viewer').src = currentPhotosArray[currentPhotoIndex]; document.getElementById('photo-counter').innerText = `${currentPhotoIndex + 1} / ${currentPhotosArray.length}`; }
+    function cambiarFoto(direccion) { currentPhotoIndex += direccion; if(currentPhotoIndex < 0) currentPhotoIndex = currentPhotosArray.length - 1; if(currentPhotoIndex >= currentPhotosArray.length) currentPhotoIndex = 0; actualizarVisor(); }
+    function cerrarVisorFotos() { document.getElementById('modal-foto').style.display = 'none'; document.getElementById('img-viewer').src = ''; }
+    function descargarFoto() { let url = currentPhotosArray[currentPhotoIndex]; if(!url) return; fetch(url).then(res => res.blob()).then(blob => { const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = "Referencia_Rubik_" + Date.now() + ".jpg"; document.body.appendChild(a); a.click(); document.body.removeChild(a); }).catch(() => alert("Error al guardar la imagen.")); }
+    
+    let touchstartX = 0; let touchendX = 0; const viewerNode = document.getElementById('modal-foto');
+    viewerNode.addEventListener('touchstart', e => { touchstartX = e.changedTouches[0].screenX; }, {passive: true}); viewerNode.addEventListener('touchend', e => { touchendX = e.changedTouches[0].screenX; handleSwipe(); }, {passive: true});
+    function handleSwipe() { if(document.getElementById('modal-foto').style.display !== 'flex' || currentPhotosArray.length <= 1) return; const SWIPE_THRESHOLD = 40; if (touchendX < touchstartX - SWIPE_THRESHOLD) cambiarFoto(1); if (touchendX > touchstartX + SWIPE_THRESHOLD) cambiarFoto(-1); }
+</script>
+    <script src="/js/viewmode.js?v=1"></script>
+</body>
+</html>

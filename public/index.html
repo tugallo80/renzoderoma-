@@ -1,0 +1,1547 @@
+<!-- RUBIK OS 2026-05-17 - Security refactor v2 (cache bust) -->
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Rubik OS | Hub Administrativo Bolivia</title>
+
+    <!-- PWA / Icono de acceso directo -->
+    <link rel="manifest" href="/manifest.json">
+    <meta name="theme-color" content="#000000">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Rubik OS">
+    <link rel="icon" type="image/png" href="/rubik-icon.png">
+    <link rel="shortcut icon" href="/rubik-icon.png">
+    <link rel="apple-touch-icon" href="/rubik-icon.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="/rubik-icon.png">
+    <link rel="apple-touch-icon" sizes="512x512" href="/rubik-icon.png">
+
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.1.3/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.1.3/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.1.3/firebase-database-compat.js"></script>
+    <script>
+        window._rubikFirebaseConfig = window._rubikFirebaseConfig || {
+            apiKey: "AIzaSyDXYlofy31cDP14xVAVxWo_7TqXdSgsIjA",
+            authDomain: "rubik-bolivia.firebaseapp.com",
+            databaseURL: "https://rubik-bolivia-default-rtdb.firebaseio.com",
+            projectId: "rubik-bolivia",
+            storageBucket: "rubik-bolivia.firebasestorage.app",
+            messagingSenderId: "4153087958",
+            appId: "1:4153087958:web:cf2dd16106580ed6437677"
+        };
+        if (!firebase.apps.length) firebase.initializeApp(window._rubikFirebaseConfig);
+    </script>
+    <script src="/js/firecache.js?v=1"></script>
+    <script src="/js/auth-guard.js?v=1"></script>
+
+    <style>
+        :root { --bg: #f2f2f7; --card: #ffffff; --blue: #007aff; --text: #1c1c1e; --orange: #ff9500; --green: #34c759; --red: #ff3b30; --purple: #af52de; --gray: #8e8e93; --border: #38383a;}
+        body.dark-mode { --bg: #000000; --card: #1c1c1e; --text: #ffffff; --border: #2c2c2e;}
+        
+        body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 20px; padding-bottom: 60px; min-height: 100vh; -webkit-tap-highlight-color: transparent; transition: background 0.3s, color 0.3s;}
+        
+        .logo-area { text-align: center; margin-top: 20px; margin-bottom: 40px; }
+        .logo-img { height: 70px; max-width: 100%; border-radius: 12px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); object-fit: contain; background: #fff;}
+        .welcome { font-size: 24px; font-weight: 900; margin-top: 15px; letter-spacing: -0.5px; color: var(--text);}
+
+        .grid-apps { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; max-width: 500px; margin: 0 auto; }
+        
+        .app-btn { border-radius: 22px; padding: 20px; color: white; text-decoration: none; display: flex; flex-direction: column; justify-content: center; align-items: flex-start; position: relative; overflow: hidden; transition: transform 0.2s, box-shadow 0.2s; box-shadow: 0 8px 20px rgba(0,0,0,0.1); cursor: pointer; min-height: 120px; border: 1px solid rgba(255,255,255,0.1);}
+        .app-btn:active { transform: scale(0.95); box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
+        .app-btn i.main-ic { font-size: 32px; margin-bottom: 12px; z-index: 2; }
+        .app-btn span { font-weight: 900; font-size: 14px; line-height: 1.2; z-index: 2; text-shadow: 0 2px 4px rgba(0,0,0,0.2); }
+        .app-btn i.bg-ic { position: absolute; right: -15px; bottom: -15px; font-size: 90px; color: rgba(255,255,255,0.1); z-index: 1; transform: rotate(-10deg);}
+
+        .b-cli { background: linear-gradient(135deg, #1c1c1e, #3a3a3c); }
+        .b-db { background: linear-gradient(135deg, var(--blue), #5ac8fa); }
+        .b-fin { background: linear-gradient(135deg, var(--green), #30db5b); }
+        .b-ia { background: linear-gradient(135deg, var(--purple), #5856d6); }
+
+        .btn-logout { margin: 40px auto 0 auto; background: rgba(255, 59, 48, 0.1); color: var(--red); border: none; padding: 15px 30px; border-radius: 16px; font-weight: 900; font-size: 14px; cursor: pointer; display: flex; align-items: center; gap: 8px; justify-content: center; max-width: 200px; transition: 0.2s;}
+        .btn-logout:active { transform: scale(0.95); }
+
+        .btn-config-ceo { position: fixed; top: 20px; right: 20px; background: #1c1c1e; color: #fff; border: 1px solid var(--border); border-radius: 50%; width: 45px; height: 45px; display: flex; align-items: center; justify-content: center; font-size: 24px; cursor: pointer; z-index: 9000; box-shadow: 0 4px 10px rgba(0,0,0,0.2); transition: 0.2s; }
+        .btn-config-ceo:active { transform: scale(0.90); }
+
+        /* ESTILOS MODAL IA CHAT */
+        .chat-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); backdrop-filter: blur(5px); z-index: 9500; flex-direction: column; justify-content: center; align-items: center; padding: 20px;}
+        .chat-overlay.active { display: flex; }
+        .modal-ia-box { background: #000000; width: 100%; max-width: 600px; height: 90vh; border-radius: 24px; border: 1px solid var(--border); overflow: hidden; display: flex; flex-direction: column; box-shadow: 0 20px 50px rgba(0,0,0,0.3); }
+        
+        .chat-header { background: #1c1c1e; padding: 15px 20px; display: flex; flex-direction: column; gap: 12px; border-bottom: 1px solid var(--border); }
+        .header-top { display: flex; align-items: center; justify-content: space-between; width: 100%;}
+        .ia-brand { font-weight: 900; font-size: 15px; display: flex; align-items: center; gap: 8px; color:white; }
+        .ia-logo-min { width: 28px; height: 28px; border-radius: 50%; object-fit: contain; background: #fff; border: 1px solid rgba(255,255,255,0.3);}
+        .btn-close-ia { background:rgba(255,255,255,0.1); color:white; padding: 6px 12px; font-size:12px; border:none; border-radius:8px; font-weight:bold; cursor:pointer; }
+        
+        .ia-tabs { background: #000; padding: 4px; border-radius: 12px; display: flex; gap: 5px; width: 100%;}
+        .ia-tab-btn { flex: 1; padding: 10px; border-radius: 8px; border: none; background: transparent; color: var(--gray); font-size: 11px; font-weight: 800; cursor: pointer; transition: 0.3s; text-transform: uppercase; display: flex; align-items: center; justify-content: center; gap: 5px;}
+        .ia-tab-btn.active { background: #1c1c1e; color: white; }
+
+        .chat-body { flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 15px; background: #000;}
+        .msg { max-width: 85%; padding: 12px 16px; border-radius: 18px; font-size: 14px; line-height: 1.4; word-wrap: break-word; color:white; }
+        .msg-ai { background: #1c1c1e; border: 1px solid var(--border); align-self: flex-start; border-bottom-left-radius: 4px; }
+        .msg-user { background: var(--blue); align-self: flex-end; border-bottom-right-radius: 4px; }
+        .msg-img { max-width: 100%; border-radius: 12px; margin-bottom: 8px; border: 1px solid rgba(255,255,255,0.1); }
+        
+        .chat-footer { background: #1c1c1e; padding: 15px; border-top: 1px solid var(--border); display: flex; gap: 10px; align-items: flex-end; }
+        .chat-input { flex: 1; background: #000; border: 1px solid var(--border); color: white; padding: 12px; border-radius: 16px; font-size: 14px; outline: none; resize: none; max-height: 100px; font-family: inherit; }
+        .chat-input:focus { border-color: var(--blue); }
+        
+        .btn-ai-action { background: var(--blue); color: white; border: none; width: 42px; height: 42px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 20px; cursor: pointer; flex-shrink:0; transition: background 0.2s;}
+        .btn-ai-action:disabled { background: #3a3a3c; cursor: not-allowed; }
+        .btn-ai-action.cam { background: #000; color: #8e8e93; border: 1px solid var(--border); }
+        .btn-ai-action.audio { background: #000; color: var(--gray); border: 1px solid var(--border); transition: transform 0.1s, background 0.15s; }
+        .btn-ai-action.audio.recording { background: var(--red); color: white; animation: pulse 1.5s infinite; border: none; transform: scale(1.2); }
+        .btn-ai-action.audio:active { transform: scale(1.25); }
+        @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(255, 59, 48, 0.7); } 70% { box-shadow: 0 0 0 10px rgba(255, 59, 48, 0); } 100% { box-shadow: 0 0 0 0 rgba(255, 59, 48, 0); } }
+
+        .chat-img-preview { max-width: 100px; border-radius: 8px; display: none; border: 1px solid var(--border); object-fit: cover;}
+        .typing-indicator { display: none; align-self: flex-start; background: #1c1c1e; padding: 12px 16px; border-radius: 20px; border-bottom-left-radius: 4px; border: 1px solid var(--border); margin-left: 20px;}
+        .dot { height: 8px; width: 8px; background: var(--gray); border-radius: 50%; display: inline-block; animation: blink 1.4s infinite both; margin: 0 2px;}
+        .dot:nth-child(2) { animation-delay: 0.2s; } .dot:nth-child(3) { animation-delay: 0.4s; }
+        @keyframes blink { 0% { opacity: 0.2; transform:scale(0.8);} 20% { opacity: 1; transform:scale(1);} 100% { opacity: 0.2; transform:scale(0.8); } }
+
+        /* ESTILOS TABLA FLASH */
+        .flash-body { display: none; flex: 1; flex-direction: column; background: #000; padding: 15px; overflow: hidden; }
+        .flash-body.active { display: flex; }
+        .flash-p-info { background: #1c1c1e; border-radius: 12px; padding: 15px; border: 1px solid var(--border); margin-bottom: 10px;}
+        .inp-flash { width: 100%; padding: 10px; background: #000; border: 1px solid var(--border); color: white; border-radius: 8px; font-size: 13px; font-weight: 600; box-sizing: border-box; margin-bottom: 10px;}
+        
+        .ia-item-row { background: #1c1c1e; padding: 15px; border-radius: 12px; border: 1px dashed #444; margin-bottom: 10px; position: relative; display: flex; flex-direction: column; gap: 10px; }
+        .ia-item-row .btn-del-row { position: absolute; top: -8px; right: -8px; background: var(--red); color: white; border: none; border-radius: 50%; width: 24px; height: 24px; cursor: pointer; display: flex; justify-content: center; align-items: center; box-shadow: 0 2px 5px rgba(0,0,0,0.2); }
+        .ia-grid { display: grid; grid-template-columns: 2fr 1fr; gap: 10px; }
+        .ia-inp-lbl { font-size: 10px; font-weight: 800; color: #888; text-transform: uppercase; margin-bottom: 4px; display: block; }
+        .ia-inp-std { width: 100%; padding: 10px; border: 1px solid #333; background: #000; color: white; border-radius: 8px; font-size: 12px; box-sizing: border-box; outline:none; margin:0;}
+        .ia-btn-upload { background: rgba(175,82,222,0.1); color: var(--purple); border: 1px solid var(--purple); padding: 8px 12px; border-radius: 8px; font-weight: 800; cursor: pointer; font-size: 11px; display: flex; align-items: center; gap: 5px; width: fit-content; }
+        .ia-img-preview { max-height: 60px; border-radius: 6px; display: none; object-fit: cover; border: 1px solid #333; }
+
+        .flash-footer { padding: 15px; border-top: 1px solid var(--border); background: #1c1c1e; display: flex; justify-content: flex-end; }
+        .btn-flash-save { width:100%; justify-content:center; background: var(--green); color: white; border: none; padding: 15px 20px; border-radius: 12px; font-weight: bold; cursor: pointer; display: flex; align-items: center; gap: 8px; font-size: 14px;}
+
+        /* MODAL CONFIRMACIÓN CLIENTE */
+        .overlay-conf { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 10000; justify-content: center; align-items: center; padding: 20px; backdrop-filter: blur(5px); }
+        .overlay-conf.active { display: flex; }
+        .modal-conf { background: #1c1c1e; width: 100%; max-width: 400px; padding: 25px; border-radius: 20px; border: 1px solid var(--border); box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
+        .conf-title { font-size: 18px; font-weight: 900; color: white; margin-top: 0; margin-bottom: 15px; letter-spacing: -0.5px;}
+        .conf-label { font-size: 12px; font-weight: bold; color: var(--gray); display: block; margin-bottom: 8px;}
+        .conf-select { width: 100%; padding: 12px; background: #000; border: 1px solid var(--border); color: white; border-radius: 10px; font-size: 14px; font-weight: 600; margin-bottom: 20px; appearance: none;}
+        .btn-conf-group { display: flex; gap: 10px; }
+        .btn-c-cancel { flex: 1; background: #3a3a3c; color: white; border: none; padding: 12px; border-radius: 10px; font-weight: bold; cursor: pointer; }
+        .btn-c-crear { flex: 1; background: var(--green); color: white; border: none; padding: 12px; border-radius: 10px; font-weight: bold; cursor: pointer; }
+        
+        #loader-conf { color: white; font-weight: bold; font-size: 14px; flex-direction: column; gap: 10px; }
+
+        /* --- ESTILOS LABORATORIO IA (CMS) --- */
+        .cms-body-layout { display: flex; flex: 1; overflow: hidden; background: #000; height: calc(100% - 70px); }
+        .cms-sidebar { width: 220px; background: #121212; border-right: 1px solid var(--border); overflow-y: auto; padding: 10px; display: flex; flex-direction: column; gap: 5px; }
+        .cms-menu-btn { background: transparent; color: var(--gray); border: none; text-align: left; padding: 12px; border-radius: 8px; cursor: pointer; font-weight: bold; font-size: 12px; display: flex; align-items: center; gap: 8px; transition: 0.2s; }
+        .cms-menu-btn:hover { background: rgba(255,255,255,0.05); color: white;}
+        .cms-menu-btn.active { background: rgba(175,82,222,0.15); color: var(--purple); border-left: 3px solid var(--purple); }
+        
+        .cms-editor { flex: 1; display: flex; flex-direction: column; padding: 20px; overflow-y: auto; position: relative;}
+        .cms-editor-title { color: white; margin-top: 0; font-size: 18px; margin-bottom: 5px;}
+        .cms-editor-desc { color: var(--gray); font-size: 12px; margin-bottom: 15px; line-height: 1.4;}
+        .cms-textarea { flex: 1; background: #1c1c1e; border: 1px solid var(--border); color: white; border-radius: 12px; padding: 15px; font-family: monospace; font-size: 13px; line-height: 1.5; outline: none; resize: none; margin-bottom: 15px;}
+        .cms-textarea:focus { border-color: var(--purple); }
+        
+        .cms-tags-area { background: rgba(255,255,255,0.05); border-radius: 8px; padding: 12px; margin-bottom: 15px; border: 1px dashed var(--border); }
+        .cms-tag-btn { background: #2c2c2e; color: var(--orange); border: 1px solid #444; padding: 6px 12px; border-radius: 6px; font-size: 11px; font-family: monospace; font-weight: bold; cursor: pointer; transition: 0.2s; display: inline-flex; align-items: center; gap: 6px; margin-right: 8px; margin-bottom: 8px;}
+        .cms-tag-btn:hover { background: #3a3a3c; border-color: var(--orange); transform: translateY(-1px); }
+        .cms-tag-desc { font-size: 10px; color: #aaa; font-family: -apple-system, BlinkMacSystemFont, sans-serif; font-weight: normal; }
+        .cms-tag-custom { color: #5ac8fa; border-color: #5ac8fa; }
+        
+        .btn-new-tag { background: transparent; border: 1px dashed var(--gray); color: var(--gray); font-size: 11px; font-weight: bold; padding: 6px 12px; border-radius: 6px; cursor: pointer; transition: 0.2s; margin-bottom: 8px;}
+        .btn-new-tag:hover { border-color: white; color: white; }
+
+        @media (max-width: 600px) {
+            .chat-overlay { padding: 0; }
+            .modal-ia-box { height: 100vh; border-radius: 0; border: none; }
+            .cms-body-layout { flex-direction: column; }
+            .cms-sidebar { width: 100%; border-right: none; border-bottom: 1px solid var(--border); flex-direction: row; overflow-x: auto; padding-bottom: 5px;}
+            .cms-menu-btn { white-space: nowrap; }
+        }
+    </style>
+    <link rel="stylesheet" href="/css/responsive.css?v=1">
+</head>
+<body>
+
+    <div class="logo-area">
+        <img loading="lazy" decoding="async" src="logo.jpg" alt="Rubik Logo" class="logo-img" onerror="this.src='./logo.jpg'">
+        <div class="welcome">HUB Administrativo Bolivia</div>
+    </div>
+
+    <div class="grid-apps">
+        <a href="clientes.html" class="app-btn b-cli" style="grid-column: 1 / -1;">
+            <i class="ph-fill ph-users-three main-ic"></i>
+            <span>Clientes &<br>Proyectos</span>
+            <i class="ph-fill ph-briefcase bg-ic"></i>
+        </a>
+        
+        <a href="base_datos.html" class="app-btn b-db">
+            <i class="ph-fill ph-database main-ic"></i>
+            <span>Base de Datos<br>& Ítems</span>
+            <i class="ph-fill ph-hard-drives bg-ic"></i>
+        </a>
+
+        <a href="tesoreria.html" class="app-btn b-fin">
+            <i class="ph-fill ph-wallet main-ic"></i>
+            <span>Finanzas &<br>Tesorería</span>
+            <i class="ph-fill ph-coins bg-ic"></i>
+        </a>
+
+        <a href="#" class="app-btn b-ia" onclick="openAIChat(); return false;" style="grid-column: 1 / -1; align-items: center; text-align: center;">
+            <img loading="lazy" decoding="async" src="LOGO-IA-RUBIK.jpg" alt="IA Logo" style="width: 48px; height: 48px; border-radius: 50%; margin-bottom: 12px; z-index: 2; border: 2px solid rgba(255,255,255,0.4); object-fit: contain; background: #ffffff;" onerror="this.src='./LOGO-IA-RUBIK.jpg'">
+            <span style="font-size: 16px;">Cerebro Ejecutivo<br><span style="font-size: 11px; font-weight: normal; opacity: 0.8;">Asistente Rubik IA</span></span>
+            <i class="ph-fill ph-robot bg-ic" style="right: auto; left: -10px; bottom: -20px; font-size: 120px;"></i>
+        </a>
+    </div>
+
+    <button class="btn-logout" onclick="window.location.href='login.html'"><i class="ph-bold ph-sign-out"></i> Cerrar Sesión</button>
+    <button class="btn-config-ceo" onclick="abrirCMSPrompt()" title="Laboratorio IA"><i class="ph-fill ph-gear"></i></button>
+
+    <div class="chat-overlay" id="ia-modal">
+        <div class="modal-ia-box">
+            <div class="chat-header">
+                <div class="header-top">
+                    <div class="ia-brand">
+                        <img loading="lazy" decoding="async" src="LOGO-IA-RUBIK.jpg" class="ia-logo-min" onerror="this.src='./LOGO-IA-RUBIK.jpg'"> Cerebro Ejecutivo
+                    </div>
+                    <button class="btn-close-ia" onclick="closeAIChat()">Cerrar</button>
+                </div>
+                
+                <div class="ia-tabs">
+                    <button id="tab-gen" class="ia-tab-btn active" onclick="setIAMode('general')"><i class="ph-bold ph-chats"></i> CONSULTOR GLOBAL</button>
+                    <button id="tab-flash" class="ia-tab-btn" onclick="setIAMode('flash')"><i class="ph-bold ph-lightning"></i> COTIZACIÓN FLASH</button>
+                </div>
+            </div>
+            
+            <div class="chat-body" id="ai-chat-box">
+                <div class="msg msg-ai">Hola CEO. Tengo visión global de todos los proyectos, clientes registrados y la base de datos de Rubik Ingeniería en Bolivia. ¿En qué te ayudo hoy?</div>
+            </div>
+
+            <div class="typing-indicator" id="ai-typing"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div>
+
+            <div style="padding: 0 15px; display:flex; justify-content:flex-end; background: #000;">
+                <div style="position:relative; display:inline-block;">
+                    <img loading="lazy" decoding="async" id="ai-img-preview" class="chat-img-preview">
+                    <div id="ai-img-remove" onclick="removeAIImage()" style="display:none; position:absolute; top:-8px; right:-8px; background:var(--red); color:white; border-radius:50%; width:24px; height:24px; text-align:center; line-height:24px; cursor:pointer; font-size:12px; font-weight:bold; z-index:10;">X</div>
+                </div>
+            </div>
+            
+            <div class="chat-footer" id="chat-footer">
+                <button class="btn-ai-action cam" onclick="document.getElementById('ai-file-upload').click()"><i class="ph-bold ph-camera"></i></button>
+                <input type="file" id="ai-file-upload" accept="image/*" capture="environment" style="display:none" onchange="handleAIImage(this)">
+                <button id="btn-audio" class="btn-ai-action audio"
+                    onmousedown="pttStart(event)" onmouseup="pttStop(event)" onmouseleave="pttStop(event)"
+                    ontouchstart="pttStart(event)" ontouchend="pttStop(event)" ontouchcancel="pttStop(event)"
+                    style="touch-action:none; user-select:none; -webkit-user-select:none;">
+                    <i class="ph-bold ph-microphone"></i>
+                </button>
+                <textarea id="ai-user-input" class="chat-input" rows="1" placeholder="Mensaje para Cerebro..."></textarea>
+                <button id="btn-send-chat" class="btn-ai-action" onclick="sendAIMessage()"><i class="ph-bold ph-paper-plane-right"></i></button>
+            </div>
+
+            <div class="flash-body" id="flash-table-view">
+                <div class="flash-p-info">
+                    <input type="text" id="flash-p-name" class="inp-flash" placeholder="Nombre del Proyecto Nuevo (Ej: Letrero Sony Sucursal Norte)">
+                    <div style="font-size: 11px; color: var(--gray); font-weight: 600;">Agrega los ítems que necesitas. La IA generará el APU detallado con materiales, mano de obra y 50% de utilidad listos para revisar.</div>
+                </div>
+                <div id="ia-items-container" style="display:flex; flex-direction:column; gap:10px; flex:1; overflow-y:auto; padding-right:5px;"></div>
+                <div style="margin-top:10px;">
+                    <button class="btn" style="background:transparent; color:var(--purple); border:1px dashed var(--purple); width: 100%; justify-content: center; padding: 12px; font-size:12px; border-radius:12px; font-weight:bold; cursor:pointer;" onclick="addFlashRow()"><i class="ph-bold ph-plus"></i> Añadir fila de ítem</button>
+                </div>
+            </div>
+            
+            <div class="flash-footer" id="flash-footer" style="display:none;">
+                <button class="btn-flash-save" onclick="prepararCreacionFlash()"><i class="ph-bold ph-rocket-launch"></i> Generar e Inyectar Proyecto</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="chat-overlay" id="cms-modal" style="z-index: 9900;">
+        <div class="modal-ia-box" style="max-width: 850px; height: 85vh;">
+            <div class="chat-header">
+                <div class="header-top">
+                    <div class="ia-brand" style="color: var(--purple);"><i class="ph-fill ph-flask" style="font-size:24px;"></i> Laboratorio IA (Gestor de Prompts)</div>
+                    <button class="btn-close-ia" onclick="cerrarCMSPrompt()">Cerrar</button>
+                </div>
+            </div>
+            
+            <div class="cms-body-layout">
+                <div class="cms-sidebar">
+                    <div style="color:#555; font-size:10px; font-weight:900; margin-bottom:5px; text-transform:uppercase; padding-left:12px;">Módulos Core</div>
+                    <button class="cms-menu-btn active" onclick="seleccionarModuloCMS('index_consultor', this)"><i class="ph-bold ph-chats"></i> Consultor Global</button>
+                    <button class="cms-menu-btn" onclick="seleccionarModuloCMS('index_flash', this)"><i class="ph-bold ph-lightning"></i> Cotizador Flash</button>
+                    <button class="cms-menu-btn" onclick="seleccionarModuloCMS('presupuesto_apu', this)"><i class="ph-bold ph-calculator"></i> Generador APU</button>
+                    
+                    <div style="color:#555; font-size:10px; font-weight:900; margin-top:15px; margin-bottom:5px; text-transform:uppercase; padding-left:12px;">Operativos</div>
+                    <button class="cms-menu-btn" onclick="seleccionarModuloCMS('supervisor_campo', this)"><i class="ph-bold ph-hard-hat"></i> Supervisor</button>
+                    <button class="cms-menu-btn" onclick="seleccionarModuloCMS('trabajador_app', this)"><i class="ph-bold ph-wrench"></i> Trabajador</button>
+                    <button class="cms-menu-btn" onclick="seleccionarModuloCMS('gantt_diagnostico', this)"><i class="ph-bold ph-calendar"></i> Gantt IA</button>
+                    <button class="cms-menu-btn" onclick="seleccionarModuloCMS('produccion_imagen', this)"><i class="ph-bold ph-image"></i> Diseñador OP</button>
+                    <button class="cms-menu-btn" onclick="seleccionarModuloCMS('tesoreria_lector', this)"><i class="ph-bold ph-receipt"></i> Lector Facturas</button>
+
+                    <div style="color:#555; font-size:10px; font-weight:900; margin-top:15px; margin-bottom:5px; text-transform:uppercase; padding-left:12px;">Conocimiento</div>
+                    <button class="cms-menu-btn" id="btn-reglas-tecnicas" onclick="abrirReglasTecnicas(this)"><i class="ph-bold ph-book-open"></i> Reglas Técnicas</button>
+                </div>
+
+                <!-- Panel Reglas Técnicas (oculto por defecto) -->
+                <div id="panel-reglas-tecnicas" style="display:none; flex:1; overflow-y:auto; padding:0 4px;">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
+                        <div>
+                            <h3 style="margin:0; font-size:15px; font-weight:900; color:var(--text);">📐 Reglas Técnicas de Cálculo</h3>
+                            <div style="font-size:11px; color:#888; margin-top:3px;">La IA las usa automáticamente al generar APU. Podés ir agregando reglas por tipo de ítem.</div>
+                        </div>
+                        <button onclick="abrirFormRegla(null)" style="background:var(--purple); color:#fff; border:none; border-radius:10px; padding:8px 14px; font-size:12px; font-weight:700; cursor:pointer; white-space:nowrap;"><i class="ph-bold ph-plus"></i> Nueva Regla</button>
+                    </div>
+
+                    <!-- Formulario crear/editar regla (oculto por defecto) -->
+                    <div id="form-regla" style="display:none; background:#1c1c1e; border-radius:12px; padding:16px; margin-bottom:14px; border:1px solid #333;">
+                        <input type="hidden" id="regla-edit-key">
+                        <div style="margin-bottom:10px;">
+                            <label style="font-size:11px; color:#888; display:block; margin-bottom:4px;">Categoría (ej: Bastidores, Muebles, Letreros)</label>
+                            <input id="regla-cat" type="text" placeholder="Bastidores" style="width:100%; background:#000; color:#fff; border:1px solid #444; border-radius:8px; padding:9px 12px; font-size:13px; box-sizing:border-box;">
+                        </div>
+                        <div style="margin-bottom:10px;">
+                            <label style="font-size:11px; color:#888; display:block; margin-bottom:4px;">Nombre de la regla</label>
+                            <input id="regla-nombre" type="text" placeholder="Costillas de estructura" style="width:100%; background:#000; color:#fff; border:1px solid #444; border-radius:8px; padding:9px 12px; font-size:13px; box-sizing:border-box;">
+                        </div>
+                        <div style="margin-bottom:12px;">
+                            <label style="font-size:11px; color:#888; display:block; margin-bottom:4px;">Instrucción para la IA (sé concreto, como si le explicaras a un estimador)</label>
+                            <textarea id="regla-texto" rows="5" placeholder="Ej: En bastidores con lona tensada, colocar costillas verticales cada 1m de ancho. Si la medida no es múltiplo exacto de 1m, se puede estirar hasta 1.25m antes de agregar otra costilla. Aplicar la misma lógica para costillas horizontales cada 1m de alto." style="width:100%; background:#000; color:#fff; border:1px solid #444; border-radius:8px; padding:9px 12px; font-size:13px; resize:vertical; box-sizing:border-box; font-family:inherit;"></textarea>
+                        </div>
+                        <div style="display:flex; gap:8px;">
+                            <button onclick="cancelarFormRegla()" style="flex:1; background:transparent; color:#888; border:1px solid #444; border-radius:8px; padding:10px; font-size:13px; cursor:pointer;">Cancelar</button>
+                            <button onclick="guardarRegla()" style="flex:2; background:var(--purple); color:#fff; border:none; border-radius:8px; padding:10px; font-size:13px; font-weight:700; cursor:pointer;"><i class="ph-bold ph-floppy-disk"></i> Guardar Regla</button>
+                        </div>
+                    </div>
+
+                    <!-- Lista de reglas -->
+                    <div id="lista-reglas"></div>
+                </div>
+
+                <div class="cms-editor" id="cms-editor-panel">
+                    <h3 class="cms-editor-title" id="cms-title">Consultor Global (Index)</h3>
+                    <div class="cms-editor-desc" id="cms-desc">Define la personalidad, tono y reglas generales de cómo responde la IA.</div>
+                    
+                    <div class="cms-tags-area">
+                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+                            <span style="font-size:11px; color:#888; font-weight:bold;">Etiquetas Disponibles (Haz clic para insertar):</span>
+                            <button class="btn-new-tag" onclick="crearNuevaEtiquetaCMS()"><i class="ph-bold ph-plus"></i> Nueva Etiqueta</button>
+                        </div>
+                        <div id="cms-tags-container"></div>
+                        <div id="cms-custom-tags-container" style="margin-top: 5px; padding-top: 5px; border-top: 1px solid rgba(255,255,255,0.1);"></div>
+                    </div>
+
+                    <textarea class="cms-textarea" id="cms-text-input">Cargando...</textarea>
+                    
+                    <div style="display: flex; gap: 10px;">
+                        <button style="background:transparent; color:var(--gray); border:1px solid #444; padding:15px; border-radius:12px; font-weight:bold; cursor:pointer;" onclick="restaurarPromptDefecto()"><i class="ph-bold ph-arrow-counter-clockwise"></i> Restaurar Original</button>
+                        <button id="btn-save-cms" style="flex:1; background:var(--purple); color:white; border:none; padding:15px; border-radius:12px; font-weight:900; font-size:14px; cursor:pointer; display:flex; justify-content:center; align-items:center; gap:8px;" onclick="guardarPromptCMS()"><i class="ph-bold ph-floppy-disk"></i> Guardar Configuración en Firebase</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="overlay-conf" id="modal-conf-cliente" style="display:none;">
+        <div class="modal-conf">
+            <h3 class="conf-title">Finalizar Proyecto Flash</h3>
+            <div class="input-group" id="flash-nombre-group" style="display:none;">
+                <label class="conf-label">Nombre del Proyecto:</label>
+                <input type="text" id="flash-pname-chat" class="conf-select" placeholder="Ej: Letrero luminoso Empresa X" style="background:#000;color:white;border:1px solid var(--border);border-radius:10px;padding:12px;font-size:14px;width:100%;box-sizing:border-box;">
+            </div>
+            <div class="input-group">
+                <label class="conf-label">Asignar al Cliente:</label>
+                <select id="flash-client-select" class="conf-select">
+                    <option value="">-- Selecciona Cliente --</option>
+                </select>
+            </div>
+            <div class="btn-conf-group">
+                <button class="btn-c-cancel" onclick="cerrarConfirmacionFlash()">Cancelar</button>
+                <button class="btn-c-crear" onclick="finalizarCreacionFlash()">Crear y Abrir Planilla</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="chat-overlay" id="loader-conf" style="z-index: 11000;"><i class="ph ph-spinner-gap ph-spin" style="font-size: 48px; color: var(--purple); margin-bottom: 10px;"></i><span style="color:white; font-weight:bold;">Procesando...</span></div>
+
+    <script>
+        // Firebase ya inicializado en el <head>
+    if (!firebase.apps.length) firebase.initializeApp(window._rubikFirebaseConfig);
+        const db = firebase.database();
+        window.db = db; // expone db a los <script type="module"> que viven en otro scope
+
+        const tx = document.getElementById('ai-user-input');
+        tx.setAttribute('style', 'height:' + (tx.scrollHeight) + 'px;overflow-y:hidden;');
+        tx.addEventListener("input", OnInput, false);
+        function OnInput() { this.style.height = 'auto'; this.style.height = (this.scrollHeight) + 'px'; }
+
+        // --- LÓGICA DE CMS Y FIREBASE ---
+        let currentCmsModule = 'index_consultor';
+        let etiquetasPersonalizadas = {}; // Cache de custom tags
+
+        // DICCIONARIO DE PROMPTS POR DEFECTO (RESCATE)
+        const dicDefaultPrompts = {
+            'index_consultor': `Eres Rubik IA, el Cerebro Ejecutivo de Rubik Ingeniería Bolivia — empresa de señalética, fabricación de stands, letreros luminosos, BTL y publicidad física en Santa Cruz.
+
+IDENTIDAD Y TONO:
+- Hablas con el CEO (Renzo). Eres su mano derecha digital. Directo, técnico, ejecutivo.
+- Para clientes vía WhatsApp: tono comercial, amable, profesional.
+- Para trabajadores vía WhatsApp: tono claro, operativo, simple.
+- NUNCA dices "no tengo acceso" o "no puedo". Razonas con los datos disponibles.
+
+REGLAS DE INTERPRETACIÓN INTELIGENTE:
+- Si el CEO menciona "el proyecto de los muebles", "la obra de MOVE", "los letreros de SENSS", etc. → buscá por nombre parcial del proyecto O por el campo "cliente". Búsqueda insensible a mayúsculas.
+- Si dice "cómo va" → informá el estado actual y el % de avance si está disponible.
+- Si dice "cuánto falta cobrar" → calculá monto_cierre o presupuesto_total menos los ingresos registrados para ese proyecto/cliente.
+- Si menciona un trabajador por nombre → buscá en licitaciones por ese nombre.
+- Si hay ambigüedad entre dos proyectos similares → listá ambos y preguntá cuál.
+- NUNCA inventés datos. Si no está en el contexto, decilo con precisión.
+
+DATOS COMPLETOS CARGADOS EN TU MEMORIA:
+- Clientes registrados: [CONTEXTO_CLIENTES]
+- Proyectos (cada uno incluye el campo "cliente" con el nombre del cliente dueño): [CONTEXTO_PROYECTOS]
+- Licitaciones/contratos de mano de obra (cada una incluye "cliente" y "proyecto"): [CONTEXTO_LICITACIONES]
+- Ingresos registrados: [CONTEXTO_INGRESOS]
+- Materiales con precios: [CONTEXTO_MATERIALES]
+- Mano de Obra tarifas: [CONTEXTO_MO]
+- Catálogo de Ítems con APU: [CONTEXTO_ITEMS]ciones/contratos de mano de obra (cada una incluye "cliente" y "proyecto"): [CONTEXTO_LICITACIONES]
+- Ingresos registrados: [CONTEXTO_INGRESOS]
+- Materiales con precios: [CONTEXTO_MATERIALES]
+- Mano de Obra tarifas: [CONTEXTO_MO]
+- Catálogo de Ítems con APU: [CONTEXTO_ITEMS]
+- Personal: [CONTEXTO_PERSONAL]
+
+REGLA FUNDAMENTAL DE CRUCE DE DATOS:
+Cada proyecto tiene el campo "cliente" que lo vincula directamente al cliente. Si te preguntan "proyectos de SENSS" → filtra proyectos donde cliente contenga "SENSS" (búsqueda parcial, insensible a mayúsculas). NUNCA digas que no tienes vinculación — la vinculación ya viene en los datos.
+
+CAPACIDADES QUE DOMINAS CON RAZONAMIENTO:
+
+1. FINANZAS Y PLANILLAS — Razona así:
+   "¿Cuánto le debo a Julio?" → filtra licitaciones donde trabajador contiene "Julio" → suma monto → resta anticipos → saldo exacto.
+   "¿Cuánto entró de caja este mes?" → suma ingresos del mes → resta pagos a trabajadores → utilidad.
+
+2. PROYECTOS POR CLIENTE — Razona así:
+   "¿Qué proyectos tengo con SENSS?" → filtra proyectos donde cliente contiene "SENSS" → lista nombre, estado, monto.
+   "¿Cuál es el total de SENSS Arreglo Muebles?" → busca proyecto con ese nombre → devuelve monto.
+
+3. COTIZACIONES CON APU DESGLOSADO:
+   SIEMPRE lista materiales individuales: tubín, lona, acrílico, neones, cable, pintura, remaches — NUNCA "kit completo glb".
+   Calcula pu = (suma_mat + suma_mo) × 1.5
+
+4. LICITACIONES Y COMPRAS — Razona así:
+   "¿Cuánto costó la mano de obra del proyecto X?" → filtra licitaciones donde proyecto contiene X → suma montos aprobados.
+   "¿Hay anticipos pendientes?" → compara monto vs anticipos en cada licitación.
+
+5. TESORERÍA/FACTURAS: Escanea imágenes de facturas → extrae NIT, monto, CUF, fecha.
+
+6. WHATSAPP INTELIGENTE: Cruza el número/nombre del remitente con clientes y personal. Adapta tono según rol.
+
+7. CREAR CLIENTE: Si el CEO pide crear/agregar un nuevo cliente, AÑADE este bloque al final de tu respuesta (además del texto normal):
+CREAR_CLIENTE: {"nombre": "Nombre Empresa o Persona", "wsp": "591XXXXXXXX", "email": "email@ejemplo.com"}
+Solo incluye los campos que el CEO mencionó. El campo "nombre" es obligatorio.n rol.
+
+REGLA MAESTRA DE COTIZACIÓN (para chat rápido):
+Si el CEO pide cotizar algo, añade este bloque JSON al final para que el sistema cree el presupuesto automáticamente:
+$$$QUOTE_DATA: [{"desc":"Nombre Item","feat":"- Característica 1\n- Característica 2","cant":1,"und":"pza","pu":0,"type":"item","apu":{"mat":[{"d":"TUBIN 20X20X0.8","u":"barra","q":3,"p":55},{"d":"LONA BACKLIGHT","u":"m2","q":2,"p":80}],"mo":[{"d":"SOLDADOR","u":"hr","q":4,"p":60}],"eq":[],"sub":[],"util":50,"ind":10}}] $$$
+
+REGLA APU — JAMÁS SIMPLIFICAR MATERIALES:
+En "mat" lista CADA componente por separado con precio unitario real de la base de datos. Nunca agrupes en "glb" o "kit completo". La empresa usa estos datos para compras y producción.
+
+════════════════════════════════════════════════════════════════
+CONTROL DE PRECIOS — verificá antes de cotizar:
+════════════════════════════════════════════════════════════════
+Neon flex letrero hasta 1.5m ancho: 800–2000 Bs | Caja de luz 1.2×0.6m: 400–900 Bs | Acrílico iluminado hasta 1m2: 600–1500 Bs/m2
+Si el precio supera el doble del límite superior → revisá cantidades, estás sobreestimando materiales.
+Neon flex cursiva texto 1.20m → entre 5 y 8 ml total (MÁXIMO 15 ml para ese tamaño).
+
+════════════════════════════════════════════════════════════════
+CONTORNOS Y METROS LINEALES — OBLIGATORIO cuando el ítem lleve neon flex, canal de letra, perfil aluminio, marco o tubo doblado:
+════════════════════════════════════════════════════════════════
+Calculá el perímetro/contorno ANTES de asignar cantidades:
+→ Rectángulo: ml = 2×(base+altura) +15% curvas. Ej: 1.20×0.40m → 3.68 ml
+→ Círculo: ml = π×diámetro × 1.15
+→ Texto bloque/sans: ml = nro_letras × altura_letra_m × 3.5 × 1.15
+→ Texto cursiva/script: ml = nro_letras × altura_letra_m × 2.5 × 1.8 × 1.15 (letra 25cm → ~0.6ml/letra)
+→ Letra canal suelta: I,L,T = altura×3 ml | A,N,U = altura×4 ml | B,R,S,E = altura×5 ml
+Siempre mostrá el cálculo en feat: "- Contorno estimado: X.X ml → con merma: Y.Y ml"
+Componentes neon flex: NEON FLEX LED 12V (ml) + FUENTE PODER 12V (pza) + CONTROLADOR RGB (pza) + CANAL NEON FLEX (ml)
+
+════════════════════════════════════════════════════════════════
+MOTOR DE GEOMETRÍA VOLUMÉTRICA — EXPERTO INDUSTRIA PUBLICITARIA
+════════════════════════════════════════════════════════════════
+Antes de calcular APU, SIEMPRE realizá el desglose geométrico completo.
+
+BLOQUE A — LETRAS CORPÓREAS (3D): Una letra corpórea tiene 3 superficies: TAPA FRONTAL + CANTO LATERAL + RESPALDO.
+Coeficientes por letra: I(área=0.85,ancho=0.25) | L(0.55,0.55) | T(0.55,0.65) | O(0.78,0.80) | A(0.65,0.75) | R(0.68,0.65) | U(0.68,0.75) | B(0.70,0.65) | K(0.65,0.70) | M(0.82,0.90) | N(0.78,0.75)
+Coef_complejidad perímetro: I/L/T=2.5 | C/O/U/D=3.2 | A/N/H/V=3.0 | B/R/S/E=3.8 | M/W=3.5
+área_tapa = alto_m × (alto_m × factor_ancho) × área_coef
+área_canto = (alto_m × factor_ancho × 2 + alto_m × 2) × coef_complejidad × grosor_canto_m
+Para acrílico iluminado: frente acrílico translúcido 3mm + canto PVC foam + LED strip interior (perímetro × 1.1 ml) + fuente poder
+
+BLOQUE B — CAJAS DE LUZ: Cara(s) visibles (ancho×alto m2) + Cantos/laterales 2×(ancho+alto)×profundidad + Estructura tubín 20×20.
+LED strip: filas = ceil(alto_m / 0.12) × ancho_m × 1.1 ml. Barras tubín = ceil(perímetro×2/5.8).
+
+BLOQUE C — STANDS/MUEBLES: Descomponer en PIEZAS: base + laterales×2 + fondo + tapa + repisas.
+MDF 15mm: tablero 1.22×2.44m = 2.98m2, rendimiento real 85%. Tapacantos PVC 22mm por ml visible.
+
+BLOQUE D — ESTRUCTURAS METÁLICAS: Tubín 20×20×0.8=5.8ml/barra útil, Tubín 40×40×1.2=5.8ml/barra.
+Soldadura: nodo simple=15min, reforzado=25min. Anticorrosivo 0.08ltr/m2, duco 0.12ltr/m2.
+
+BLOQUE E — IMPRESIÓN GRAN FORMATO: área = ancho × alto × 1.08 (+8% sangrado). Lona mate 440g: 35–45 Bs/m2 | Lona backlight 510g: 75–90 Bs/m2 | Adhesivo vinílico: 85–110 Bs/m2.
+
+BLOQUE F — PROFUNDIDADES ESTÁNDAR: Caja de luz simple 8–12cm | Letra acrílica sin luz 3–5cm canto | Con luz 6–10cm | Mostrador 85–95cm alto | Stand portátil 200–250cm.
+En feat SIEMPRE mostrar: "- Tapa frontal: X.XX m2", "- Canto Xcm: X.XX m2", "- Perímetro: X.XX ml", "- LED: X.XX ml".`,
+            
+            'index_flash': `Eres el Especialista en Licitaciones de Rubik Bolivia. 
+TU OBJETIVO: Ganar la licitación con precios competitivos reales de Santa Cruz/Bolivia.
+
+Reglas de Ajuste de Precios:
+1. "pu" (Precio Unitario): Ajusta para que un Backing/Letrero estándar no pase de 180-220 Bs el m2.
+2. "mat": Usa precios de mercado (Ej: Tubo 2x2 mt ~12-15 Bs, Lona m2 ~25 Bs, LED mod ~3.5 Bs). No infles.
+3. "mo": Rendimientos eficientes. Un letrero no toma 20 horas de maestro, usa tiempos reales (ej: 2-4 hrs por m2).
+4. "util": 50, "ind": 10.
+5. "feat": Una característica técnica por línea (separadas por \\n).
+
+RESPUESTA SOLO JSON:
+[FORMATO_JSON_APU]`,
+
+            'presupuesto_apu': `Eres el Estimador de Costos APU de Rubik Bolivia.
+Calcula los materiales, mano de obra y equipos para este ítem: [ITEMS_MANUALES].
+Recuerda aplicar siempre: [REGLA_UTILIDAD].`
+        };
+
+        const dicEtiquetasDinamicas = {
+            'index_consultor': [
+                { tag: '[CONTEXTO_CLIENTES]', desc: '(Clientes registrados)' },
+                { tag: '[CONTEXTO_PROYECTOS]', desc: '(Proyectos con estado y presupuesto)' },
+                { tag: '[CONTEXTO_LICITACIONES]', desc: '(Contratos MO con anticipos y saldos)' },
+                { tag: '[CONTEXTO_INGRESOS]', desc: '(Ingresos de caja registrados)' },
+                { tag: '[CONTEXTO_MATERIALES]', desc: '(Materiales con precios reales)' },
+                { tag: '[CONTEXTO_MO]', desc: '(Mano de obra con tarifas)' },
+                { tag: '[CONTEXTO_ITEMS]', desc: '(Catálogo de ítems Rubik con APU)' },
+                { tag: '[CONTEXTO_PERSONAL]', desc: '(Personal y especialidades)' }
+            ],
+            'index_flash': [{ tag: '[FORMATO_JSON_APU]', desc: '(Regla obligatoria para el código)' }],
+            'presupuesto_apu': [{ tag: '[ITEMS_MANUALES]', desc: '(Lo que el usuario tipeó)' }, { tag: '[REGLA_UTILIDAD]', desc: '(Fuerza 50% Util y 10% Ind)' }],
+            'default': []
+        };
+
+        window.abrirCMSPrompt = function() { 
+            document.getElementById('cms-modal').classList.add('active'); 
+            cargarEtiquetasPersonalizadasFirebase();
+        }
+        window.cerrarCMSPrompt = function() { document.getElementById('cms-modal').classList.remove('active'); }
+        
+        window.seleccionarModuloCMS = async function(moduloId, btnElement) {
+            // Siempre volver al panel editor cuando se selecciona un módulo normal
+            document.getElementById('panel-reglas-tecnicas').style.display = 'none';
+            document.getElementById('cms-editor-panel').style.display = '';
+            currentCmsModule = moduloId;
+            document.querySelectorAll('.cms-menu-btn').forEach(b => b.classList.remove('active'));
+            btnElement.classList.add('active');
+            
+            const titulos = {
+                'index_consultor': 'Consultor Global (Index)', 'index_flash': 'Cotizador Flash (Index)',
+                'presupuesto_apu': 'Generador APU (Presupuesto)', 'supervisor_campo': 'Asistente Supervisor',
+                'trabajador_app': 'Asistente Trabajador', 'gantt_diagnostico': 'Analista Gantt',
+                'produccion_imagen': 'Diseñador Producción', 'tesoreria_lector': 'Lector de Facturas'
+            };
+            document.getElementById('cms-title').innerText = titulos[moduloId] || 'Módulo Seleccionado';
+            
+            // Renderizar Etiquetas Dinámicas
+            const containerTags = document.getElementById('cms-tags-container');
+            containerTags.innerHTML = '';
+            const tagsDisponibles = dicEtiquetasDinamicas[moduloId] || dicEtiquetasDinamicas['default'];
+            tagsDisponibles.forEach(e => {
+                const btn = document.createElement('button'); btn.className = 'cms-tag-btn';
+                btn.innerHTML = `${e.tag} <span class="cms-tag-desc">${e.desc}</span>`;
+                btn.onclick = () => window.insertarEtiquetaCMS(e.tag);
+                containerTags.appendChild(btn);
+            });
+
+            // Cargar Prompt de Firebase
+            const textarea = document.getElementById('cms-text-input');
+            textarea.value = "Descargando configuración de IA...";
+            textarea.disabled = true;
+            
+            try {
+                let snap = await db.ref(`config_ia/prompts/${moduloId}`).once('value');
+                if (snap.exists() && snap.val() !== "") {
+                    textarea.value = snap.val();
+                } else {
+                    textarea.value = dicDefaultPrompts[moduloId] || "Escribe las instrucciones para este agente aquí...";
+                }
+            } catch(e) {
+                textarea.value = dicDefaultPrompts[moduloId] || "Error al cargar. Escribe tu prompt aquí.";
+            }
+            textarea.disabled = false;
+        }
+
+        window.guardarPromptCMS = async function() {
+            const btn = document.getElementById('btn-save-cms');
+            const originalText = btn.innerHTML;
+            btn.innerHTML = '<i class="ph ph-spinner-gap ph-spin"></i> Guardando...';
+            btn.disabled = true;
+
+            const newPrompt = document.getElementById('cms-text-input').value;
+            try {
+                await db.ref(`config_ia/prompts/${currentCmsModule}`).set(newPrompt);
+                btn.style.background = "var(--green)";
+                btn.innerHTML = '<i class="ph-bold ph-check"></i> Guardado en el Cerebro';
+                setTimeout(() => { btn.style.background = "var(--purple)"; btn.innerHTML = originalText; btn.disabled = false; }, 2000);
+            } catch(e) {
+                alert("Error al guardar. Verifica tu conexión.");
+                btn.innerHTML = originalText; btn.disabled = false;
+            }
+        }
+
+        window.restaurarPromptDefecto = function() {
+            if(confirm("¿Seguro que quieres borrar tus modificaciones y volver al prompt de fábrica?")) {
+                const textarea = document.getElementById('cms-text-input');
+                textarea.value = dicDefaultPrompts[currentCmsModule] || "Escribe aquí...";
+            }
+        }
+
+     // --- MANEJO DE ETIQUETAS PERSONALIZADAS (TEXT SNIPPETS) ---
+        async function cargarEtiquetasPersonalizadasFirebase() {
+            try {
+                let snap = await db.ref('config_ia/custom_tags').once('value');
+                etiquetasPersonalizadas = snap.exists() ? snap.val() : {};
+                renderizarEtiquetasPersonalizadas();
+            } catch(e){}
+        }
+
+        function renderizarEtiquetasPersonalizadas() {
+            const container = document.getElementById('cms-custom-tags-container');
+            container.innerHTML = '';
+            for (const [key, value] of Object.entries(etiquetasPersonalizadas)) {
+                const wrapper = document.createElement('div');
+                wrapper.style.display = 'inline-block';
+                wrapper.style.position = 'relative';
+                wrapper.style.marginRight = '12px';
+                wrapper.style.marginBottom = '8px';
+
+                const btn = document.createElement('button'); 
+                btn.className = 'cms-tag-btn cms-tag-custom';
+                btn.style.margin = '0';
+                btn.innerHTML = `[${key}]`;
+                btn.onclick = () => window.insertarEtiquetaCMS(`[${key}]`);
+                btn.title = value; // Muestra el texto al pasar el mouse
+
+                const delBtn = document.createElement('button');
+                delBtn.innerHTML = '<i class="ph-bold ph-x"></i>';
+                delBtn.style.position = 'absolute';
+                delBtn.style.top = '-6px';
+                delBtn.style.right = '-6px';
+                delBtn.style.background = 'var(--red)';
+                delBtn.style.color = 'white';
+                delBtn.style.border = 'none';
+                delBtn.style.borderRadius = '50%';
+                delBtn.style.width = '18px';
+                delBtn.style.height = '18px';
+                delBtn.style.fontSize = '10px';
+                delBtn.style.cursor = 'pointer';
+                delBtn.style.display = 'flex';
+                delBtn.style.alignItems = 'center';
+                delBtn.style.justifyContent = 'center';
+                delBtn.style.boxShadow = '0 2px 4px rgba(0,0,0,0.3)';
+                delBtn.onclick = () => window.eliminarEtiquetaCMS(key);
+
+                wrapper.appendChild(btn);
+                wrapper.appendChild(delBtn);
+                container.appendChild(wrapper);
+            }
+        }
+
+        window.crearNuevaEtiquetaCMS = async function() {
+            let nombre = prompt("Dale un nombre a tu etiqueta (Ej: REGLAS_COBRO):");
+            if(!nombre) return;
+            nombre = nombre.toUpperCase().replace(/\s+/g, '_').replace(/[^A-Z0-9_]/g, '');
+            
+            let contenido = prompt(`Escribe el texto que representa [${nombre}]:`);
+            if(!contenido) return;
+
+            try {
+                await db.ref(`config_ia/custom_tags/${nombre}`).set(contenido);
+                etiquetasPersonalizadas[nombre] = contenido;
+                renderizarEtiquetasPersonalizadas();
+            } catch(e) { alert("Error al guardar etiqueta."); }
+        }
+
+        window.eliminarEtiquetaCMS = async function(nombre) {
+            if(confirm(`¿Seguro que deseas eliminar la etiqueta [${nombre}] de tu base de datos?`)) {
+                try {
+                    await db.ref(`config_ia/custom_tags/${nombre}`).remove();
+                    delete etiquetasPersonalizadas[nombre];
+                    renderizarEtiquetasPersonalizadas();
+                } catch(e) { alert("Error al eliminar."); }
+            }
+        }
+
+        window.insertarEtiquetaCMS = function(etiqueta) {
+            const textarea = document.getElementById('cms-text-input');
+            const startPos = textarea.selectionStart;
+            const endPos = textarea.selectionEnd;
+            const textBefore = textarea.value.substring(0, startPos);
+            const textAfter  = textarea.value.substring(endPos, textarea.value.length);
+            textarea.value = textBefore + etiqueta + textAfter;
+            textarea.focus();
+            textarea.selectionStart = startPos + etiqueta.length;
+            textarea.selectionEnd = startPos + etiqueta.length;
+        }
+
+        // ══════════════════════════════════════════════════════════
+        // SISTEMA DE REGLAS TÉCNICAS
+        // Guardado en Firebase: config_ia/reglas_tecnicas/{key}
+        // Estructura: { cat, nombre, texto, activa, ts }
+        // ══════════════════════════════════════════════════════════
+        let _reglasTecnicas = {};  // cache local
+
+        // Reglas base que se precargan si Firebase está vacío
+        const _reglasBase = [
+            {
+                cat: 'Bastidores',
+                nombre: 'Costillas de estructura',
+                texto: 'En bastidores con lona tensada, colocar costillas (travesaños internos) de tubín cada 1m. Si la medida no es múltiplo exacto de 1m, se puede estirar hasta 1.25m antes de agregar otra costilla. Aplicar esta lógica tanto para costillas verticales (cada 1m de ancho) como horizontales (cada 1m de alto). Ejemplo: bastidor 2.5m ancho → 2 costillas verticales (divide en 3 tramos de ~0.83m). Bastidor 1.1m de ancho → solo 1 costilla (estira a 1.1m, dentro del límite). Incluir las costillas en el APU como tubín adicional al marco perimetral.',
+                activa: true
+            },
+            {
+                cat: 'Bastidores',
+                nombre: 'Tensado con remaches',
+                texto: 'La lona se tesa al bastidor con remaches cada 10cm a lo largo de todo el perímetro. En cada esquina se colocan 4 remaches adicionales. Fórmula: remaches_perimetro = ceil(perímetro_m × 100 / 10); remaches_esquinas = 4 × 4 = 16; total_remaches = remaches_perimetro + remaches_esquinas. Incluir los remaches en el APU como unidad (pza).',
+                activa: true
+            },
+            {
+                cat: 'Bastidores',
+                nombre: 'Lona en dos caras',
+                texto: 'Cuando el bastidor lleva lona en ambas caras, la segunda cara se pega con Clefa (adhesivo de contacto). Calcular el área de la segunda cara igual que la primera (ancho × alto × 1.08 por merma de tensado). Agregar al APU: CLEFA en litros (rendimiento ~8m2/litro), más la mano de obra adicional para pegar la segunda cara.',
+                activa: true
+            },
+            {
+                cat: 'Muebles y Carpintería',
+                nombre: 'Cálculo de planchas MDF/Melamínico',
+                texto: 'Para calcular la cantidad de planchas MDF o melamínico, primero sumar el área total de todas las piezas del mueble (laterales, tapa, base, fondo, repisas, puertas). Luego buscar en la base de datos el precio del material para obtener las dimensiones de la plancha (generalmente 1.22m × 2.44m = 2.98m2). Dividir: cant_planchas = ceil(area_total_piezas / (largo_plancha × ancho_plancha × 0.85)), donde 0.85 es el factor de aprovechamiento real considerando cortes y merma. Nunca cotizar por m2 suelto si el material en BD está en "plancha" o "und".',
+                activa: true
+            },
+            {
+                cat: 'General',
+                nombre: 'Descripción de ítems — estilo',
+                texto: 'Las descripciones (desc) deben ser cortas y técnicas, máximo 6 palabras. Formato: MATERIAL/TIPO + DIMENSIÓN + CARACTERÍSTICA CLAVE. Ejemplos correctos: "BASTIDOR TUBIN LONA TENSADA 1 CARA", "CAJA DE LUZ DOBLE CARA 1.2×0.6m", "LETRERO ACRÍLICO ILUMINADO". Incorrecto: "Bastidor de tubín estructural con lona impresa digital tensada en una cara con remaches". Los detalles de construcción van en feat, no en desc.',
+                activa: true
+            }
+        ];
+
+        window.abrirReglasTecnicas = async function(btn) {
+            // Deselect todos los botones del sidebar
+            document.querySelectorAll('.cms-menu-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+
+            // Mostrar panel reglas, ocultar editor CMS
+            document.getElementById('cms-editor-panel').style.display = 'none';
+            document.getElementById('panel-reglas-tecnicas').style.display = 'flex';
+            document.getElementById('panel-reglas-tecnicas').style.flexDirection = 'column';
+
+            await _cargarYRenderReglas();
+        };
+
+        async function _cargarYRenderReglas() {
+            try {
+                const snap = await db.ref('config_ia/reglas_tecnicas').once('value');
+                if (snap.exists()) {
+                    _reglasTecnicas = snap.val();
+                } else {
+                    // Primera vez: precargar reglas base
+                    _reglasTecnicas = {};
+                    for (const r of _reglasBase) {
+                        const key = 'r_' + Date.now() + '_' + Math.random().toString(36).substr(2,5);
+                        _reglasTecnicas[key] = { ...r, ts: Date.now() };
+                        await db.ref(`config_ia/reglas_tecnicas/${key}`).set(_reglasTecnicas[key]);
+                    }
+                }
+            } catch(e) { _reglasTecnicas = {}; }
+            _renderListaReglas();
+        }
+
+        function _renderListaReglas() {
+            const container = document.getElementById('lista-reglas');
+            if (!container) return;
+            const entries = Object.entries(_reglasTecnicas).sort((a,b) => {
+                const catCmp = (a[1].cat||'').localeCompare(b[1].cat||'');
+                return catCmp !== 0 ? catCmp : (a[1].nombre||'').localeCompare(b[1].nombre||'');
+            });
+            if (entries.length === 0) {
+                container.innerHTML = '<div style="text-align:center; color:#555; padding:30px 0; font-size:13px;">No hay reglas aún. Creá la primera con el botón "Nueva Regla".</div>';
+                return;
+            }
+            // Agrupar por categoría
+            const porCat = {};
+            entries.forEach(([key, r]) => {
+                const cat = r.cat || 'Sin categoría';
+                if (!porCat[cat]) porCat[cat] = [];
+                porCat[cat].push([key, r]);
+            });
+            let html = '';
+            for (const [cat, items] of Object.entries(porCat)) {
+                html += `<div style="font-size:10px; font-weight:900; color:#666; text-transform:uppercase; letter-spacing:1px; margin:14px 0 6px 2px;">${cat}</div>`;
+                for (const [key, r] of items) {
+                    const activa = r.activa !== false;
+                    html += `<div style="background:#1c1c1e; border-radius:10px; padding:12px 14px; margin-bottom:8px; border:1px solid ${activa ? '#333' : '#222'}; opacity:${activa ? 1 : 0.5};">
+                        <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:10px;">
+                            <div style="flex:1; min-width:0;">
+                                <div style="font-size:13px; font-weight:700; color:var(--text); margin-bottom:4px;">${r.nombre || '(sin nombre)'}</div>
+                                <div style="font-size:11px; color:#888; line-height:1.5; word-break:break-word;">${(r.texto||'').length > 180 ? r.texto.substring(0,180)+'…' : r.texto}</div>
+                            </div>
+                            <div style="display:flex; gap:6px; flex-shrink:0; margin-top:2px;">
+                                <button onclick="toggleRegla('${key}')" title="${activa ? 'Desactivar' : 'Activar'}" style="background:${activa ? '#1a3a1a' : '#2a2a2a'}; color:${activa ? 'var(--green)' : '#555'}; border:1px solid ${activa ? '#2d5a2d' : '#444'}; border-radius:6px; padding:5px 8px; font-size:11px; cursor:pointer;"><i class="ph-bold ${activa ? 'ph-toggle-right' : 'ph-toggle-left'}"></i></button>
+                                <button onclick="abrirFormRegla('${key}')" style="background:#1a1a2e; color:var(--blue); border:1px solid #1e3a5f; border-radius:6px; padding:5px 8px; font-size:11px; cursor:pointer;"><i class="ph-bold ph-pencil"></i></button>
+                                <button onclick="eliminarRegla('${key}')" style="background:#2a1a1a; color:var(--red); border:1px solid #5a1e1e; border-radius:6px; padding:5px 8px; font-size:11px; cursor:pointer;"><i class="ph-bold ph-trash"></i></button>
+                            </div>
+                        </div>
+                    </div>`;
+                }
+            }
+            const activasCount = entries.filter(([,r]) => r.activa !== false).length;
+            html = `<div style="font-size:11px; color:#555; margin-bottom:10px;">${entries.length} reglas · <span style="color:var(--green);">${activasCount} activas</span> — la IA las usa automáticamente al generar presupuestos</div>` + html;
+            container.innerHTML = html;
+        }
+
+        window.abrirFormRegla = function(key) {
+            const form = document.getElementById('form-regla');
+            form.style.display = 'block';
+            if (key && _reglasTecnicas[key]) {
+                const r = _reglasTecnicas[key];
+                document.getElementById('regla-edit-key').value = key;
+                document.getElementById('regla-cat').value = r.cat || '';
+                document.getElementById('regla-nombre').value = r.nombre || '';
+                document.getElementById('regla-texto').value = r.texto || '';
+            } else {
+                document.getElementById('regla-edit-key').value = '';
+                document.getElementById('regla-cat').value = '';
+                document.getElementById('regla-nombre').value = '';
+                document.getElementById('regla-texto').value = '';
+            }
+            document.getElementById('regla-cat').focus();
+            form.scrollIntoView({ behavior: 'smooth' });
+        };
+
+        window.cancelarFormRegla = function() {
+            document.getElementById('form-regla').style.display = 'none';
+        };
+
+        window.guardarRegla = async function() {
+            const key = document.getElementById('regla-edit-key').value;
+            const cat = document.getElementById('regla-cat').value.trim();
+            const nombre = document.getElementById('regla-nombre').value.trim();
+            const texto = document.getElementById('regla-texto').value.trim();
+            if (!cat || !nombre || !texto) return alert('Completá todos los campos.');
+            const regla = { cat, nombre, texto, activa: true, ts: Date.now() };
+            const finalKey = key || ('r_' + Date.now() + '_' + Math.random().toString(36).substr(2,5));
+            try {
+                await db.ref(`config_ia/reglas_tecnicas/${finalKey}`).set(regla);
+                _reglasTecnicas[finalKey] = regla;
+                document.getElementById('form-regla').style.display = 'none';
+                _renderListaReglas();
+            } catch(e) { alert('Error al guardar: ' + e.message); }
+        };
+
+        window.eliminarRegla = async function(key) {
+            if (!confirm('¿Eliminar esta regla?')) return;
+            try {
+                await db.ref(`config_ia/reglas_tecnicas/${key}`).remove();
+                delete _reglasTecnicas[key];
+                _renderListaReglas();
+            } catch(e) { alert('Error: ' + e.message); }
+        };
+
+        window.toggleRegla = async function(key) {
+            if (!_reglasTecnicas[key]) return;
+            const nuevaActiva = !(_reglasTecnicas[key].activa !== false);
+            _reglasTecnicas[key].activa = nuevaActiva;
+            try {
+                await db.ref(`config_ia/reglas_tecnicas/${key}/activa`).set(nuevaActiva);
+                _renderListaReglas();
+            } catch(e) {}
+        };
+
+        // Helper interno para volver al panel del editor normal desde reglas técnicas
+        window._mostrarCmsEditor = function() {
+            document.getElementById('panel-reglas-tecnicas').style.display = 'none';
+            document.getElementById('cms-editor-panel').style.display = '';
+        };
+
+        // Inicializar
+        window.onload = function() {
+            seleccionarModuloCMS('index_consultor', document.querySelector('.cms-menu-btn.active'));
+        };
+    </script>
+
+    <script>
+        // Helper: typewriter effect (inline, no module needed)
+        async function typewriterAppend(el, html, delay = 12) {
+            el.innerHTML = '';
+            let i = 0;
+            return new Promise(resolve => {
+                function step() {
+                    if (i < html.length) {
+                        el.innerHTML = html.substring(0, ++i);
+                        setTimeout(step, delay);
+                    } else resolve();
+                }
+                step();
+            });
+        }
+
+        let currentAIImage = null; let currentIAMode = 'general'; window.clientesGlobales = [];
+        let recognition; let isRecording = false; let baseText = '';
+
+        // ── Cache de contexto Firebase (evita recargar en cada mensaje) ──
+        let _ctxCache = null;
+        let _ctxCacheTs = 0;
+        const CTX_TTL_MS = 5 * 60 * 1000; // 5 minutos
+
+        // ── Cache del prompt base + custom tags (se carga una vez, se reutiliza) ──
+        let _promptBaseCache = null;
+        let _promptBaseCacheTs = 0;
+        const PROMPT_TTL_MS = 10 * 60 * 1000; // 10 minutos
+
+        // ── Historial multi-turn del chat interno (conversación continua) ──
+        let _iaHistorial = [];
+
+        async function getContextDB() {
+            if (_ctxCache && (Date.now() - _ctxCacheTs) < CTX_TTL_MS) return _ctxCache;
+            let contextDB = { proyectos: [], clientes: [], materiales: [], mo: [], items: [], personal: [], licitaciones: [], ingresos: [] };
+            try {
+                const [pSnap, cSnap, bdSnap, persSnap, ingSnap] = await Promise.all([
+                    db.ref('proyectos').once('value'),
+                    db.ref('clientes').once('value'),
+                    db.ref('base_datos').once('value'),
+                    db.ref('personal').once('value'),
+                    db.ref('ingresos').once('value')
+                ]);
+                const clienteNombres = {};
+                if(cSnap.exists()) cSnap.forEach(c => {
+                    const d = c.val();
+                    const nombre = d.empresa || d.nombre || c.key;
+                    clienteNombres[c.key] = nombre;
+                    contextDB.clientes.push({ nombre, id: c.key });
+                });
+                if(pSnap.exists()) {
+                    pSnap.forEach(cliNode => {
+                        const cid = cliNode.key;
+                        const clienteNombre = clienteNombres[cid] || cid;
+                        cliNode.forEach(proyNode => {
+                            const p = proyNode.val();
+                            let ppto = 0;
+                            if(p.presupuesto && p.presupuesto.items) {
+                                const items = Array.isArray(p.presupuesto.items) ? p.presupuesto.items : Object.values(p.presupuesto.items);
+                                items.forEach(it => { if(it && it.type !== 'chapter') ppto += (parseFloat(it.cant)||1)*(parseFloat(it.pu)||0); });
+                            }
+                            contextDB.proyectos.push({ cid, pid: proyNode.key, cliente: clienteNombre, nombre: p.nombre||'(sin nombre)', estado: p.estado||'', monto: p.monto_cierre||ppto, descripcion: p.descripcion||'', fecha_creacion: (p.fecha_creacion||'').substring(0,10) });
+                            if(p.licitaciones) {
+                                Object.values(p.licitaciones).forEach(lic => {
+                                    let anticipos = 0;
+                                    if(lic.pagos) Object.values(lic.pagos).forEach(pg => anticipos += parseFloat(pg.monto||0));
+                                    contextDB.licitaciones.push({ proyecto: p.nombre||'', cliente: clienteNombre, trabajador: lic.worker_name||lic.trabajador_nombre||lic.asignado||'S/N', monto: parseFloat(lic.precio_propuesto||0), anticipos, saldo: parseFloat(lic.precio_propuesto||0)-anticipos, estado: lic.estado||'', periodo: lic.periodo||'', tareas: lic.tareas?(Array.isArray(lic.tareas)?lic.tareas:Object.values(lic.tareas)).map(t=>t.task_name||t.desc||'').filter(Boolean).join(', '):'' });
+                                });
+                            }
+                        });
+                    });
+                }
+                if(bdSnap.exists()) {
+                    const bd = bdSnap.val();
+                    if(bd.materiales) contextDB.materiales = Object.values(bd.materiales).slice(0,80).map(m=>`${m.desc||m.n||''}: ${m.precio||m.pu||m.p||0} Bs/${m.und||m.u||''}`).filter(s=>s.length>5);
+                    if(bd.mano_obra) contextDB.mo = Object.values(bd.mano_obra).map(m=>`${m.desc||m.n||''}: ${m.p||m.pu||0} Bs/${m.u||'hr'}`).filter(s=>s.length>5);
+                    if(bd.items) contextDB.items = Object.values(bd.items).filter(it=>it.pu>0).slice(0,80).map(it=>`${it.desc||''}: ${it.pu} Bs/${it.und||'glb'}`).filter(s=>s.length>5);
+                }
+                if(persSnap.exists()) persSnap.forEach(p => contextDB.personal.push(`${p.val().nombre||''} (${p.val().tipo||''} - ${p.val().especialidad||''})`));
+                if(ingSnap.exists()) ingSnap.forEach(i => contextDB.ingresos.push({ proyecto: i.val().proyecto||'', monto: i.val().monto||0, fecha: i.val().fecha||'', facturado: i.val().is_facturado||false }));
+            } catch(e) { console.warn('Context load partial:', e); }
+            _ctxCache = contextDB;
+            _ctxCacheTs = Date.now();
+            return contextDB;
+        }
+
+        // Pre-cargar contexto apenas abre el modal (no esperar al primer mensaje)
+        window.openAIChat = () => {
+            document.getElementById('ia-modal').classList.add('active');
+            getContextDB(); // warmup silencioso
+        };
+
+        // ── PTT (Push-to-Talk) estilo WhatsApp ──────────────────────────────
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        let _pttActive = false;
+        let _pttTranscript = '';
+
+        function _buildRecognition() {
+            if (!SpeechRecognition) return null;
+            const r = new SpeechRecognition();
+            r.continuous = true;
+            r.interimResults = true;
+            r.lang = 'es-ES';
+            r.onresult = (e) => {
+                let interim = '', final = '';
+                for (let i = 0; i < e.results.length; i++) {
+                    if (e.results[i].isFinal) final += e.results[i][0].transcript;
+                    else interim += e.results[i][0].transcript;
+                }
+                _pttTranscript = final || interim;
+                // Mostrar en vivo en el input mientras se habla
+                const inp = document.getElementById('ai-user-input');
+                inp.value = _pttTranscript;
+                inp.style.height = 'auto'; inp.style.height = inp.scrollHeight + 'px';
+            };
+            r.onerror = (e) => {
+                if (e.error === 'aborted') return;
+                _pttReset();
+            };
+            r.onend = () => {
+                // Si soltaron antes de que termine, enviar igual
+                if (!_pttActive) _pttEnviar();
+            };
+            return r;
+        }
+
+        function _pttReset() {
+            _pttActive = false;
+            _pttTranscript = '';
+            const btn = document.getElementById('btn-audio');
+            if (btn) {
+                btn.classList.remove('recording');
+                btn.innerHTML = `<i class="ph-bold ph-microphone"></i>`;
+                btn.style.transform = '';
+            }
+        }
+
+        function _pttEnviar() {
+            const txt = _pttTranscript.trim();
+            _pttReset();
+            if (txt) {
+                const inp = document.getElementById('ai-user-input');
+                inp.value = txt;
+                sendAIMessage();
+            } else {
+                const inp = document.getElementById('ai-user-input');
+                inp.value = '';
+            }
+        }
+
+        window.pttStart = function(e) {
+            e.preventDefault();
+            if (!SpeechRecognition) return alert("Tu navegador no soporta el micrófono. Usa Chrome o Safari.");
+            if (_pttActive) return;
+            _pttActive = true;
+            _pttTranscript = '';
+            recognition = _buildRecognition();
+            const btn = document.getElementById('btn-audio');
+            btn.classList.add('recording');
+            btn.innerHTML = `<i class="ph-fill ph-microphone"></i>`;
+            btn.style.transform = 'scale(1.2)';
+            try { recognition.start(); } catch(_) {}
+        };
+
+        window.pttStop = function(e) {
+            e.preventDefault();
+            if (!_pttActive) return;
+            _pttActive = false;
+            try { recognition.stop(); } catch(_) {
+                // Si stop falla, enviar lo que hay
+                _pttEnviar();
+            }
+            // onend del recognition llamará a _pttEnviar
+        };
+
+        // Compatibilidad: si alguien llama toggleAudioRecording legacy
+        window.toggleAudioRecording = window.pttStart;
+
+        window.setIAMode = function(mode) {
+            currentIAMode = mode;
+            document.querySelectorAll('.ia-tab-btn').forEach(b => b.classList.remove('active'));
+            document.getElementById(mode === 'general' ? 'tab-gen' : 'tab-flash').classList.add('active');
+            if(mode === 'flash') {
+                document.getElementById('ai-chat-box').style.display = 'none'; document.getElementById('chat-footer').style.display = 'none';
+                document.getElementById('flash-table-view').classList.add('active'); document.getElementById('flash-footer').style.display = 'flex';
+                if(document.querySelectorAll('.ia-item-row').length === 0) addFlashRow(); 
+            } else {
+                document.getElementById('ai-chat-box').style.display = 'flex'; document.getElementById('chat-footer').style.display = 'flex';
+                document.getElementById('flash-table-view').classList.remove('active'); document.getElementById('flash-footer').style.display = 'none';
+            }
+        }
+
+        window.closeAIChat = () => { document.getElementById('ia-modal').classList.remove('active'); if(isRecording && recognition) { isRecording = false; try { recognition.abort(); } catch(_){} } }
+
+        async function loadClientes() {
+            try {
+                const dbRef = (typeof db !== "undefined" ? db : window.db);
+                if (!dbRef) return;
+                let cSnap = await dbRef.ref('clientes').once('value');
+                const select = document.getElementById('flash-client-select');
+                if(cSnap.exists()) {
+                    cSnap.forEach(cli => {
+                        let c = cli.val(); let name = c.empresa || c.nombre || "Sin Nombre";
+                        window.clientesGlobales.push({ nombre: name, id: cli.key });
+                        let opt = document.createElement('option'); opt.value = cli.key; opt.innerText = name;
+                        select.appendChild(opt);
+                    });
+                }
+            } catch(e){ console.warn("loadClientes:", e); }
+        }
+        loadClientes();
+
+        window.handleAIImage = function(inp) {
+            if (inp.files && inp.files[0]) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    currentAIImage = e.target.result;
+                    document.getElementById('ai-img-preview').src = currentAIImage;
+                    document.getElementById('ai-img-preview').style.display = 'block';
+                    document.getElementById('ai-img-remove').style.display = 'block';
+                };
+                reader.readAsDataURL(inp.files[0]);
+            }
+            inp.value = '';
+        }
+
+        window.removeAIImage = function() {
+            currentAIImage = null; document.getElementById('ai-img-preview').style.display = 'none'; document.getElementById('ai-img-remove').style.display = 'none';
+        }
+
+        window.memoriaCotizacionChat = null;
+
+        // Función Helper para inyectar Custom Tags en el Prompt
+        async function aplicarEtiquetasPersonalizadas(promptText) {
+            let snap = await db.ref('config_ia/custom_tags').once('value');
+            if(snap.exists()) {
+                const tags = snap.val();
+                for (const [key, value] of Object.entries(tags)) {
+                    // Reemplaza todas las ocurrencias de [NOMBRETAGE] por su valor
+                    const regex = new RegExp(`\\[${key}\\]`, 'g');
+                    promptText = promptText.replace(regex, value);
+                }
+            }
+            return promptText;
+        }
+
+        window.sendAIMessage = async function() {
+            const input = document.getElementById('ai-user-input');
+            const text = input.value.trim();
+            if(!text && !currentAIImage) return;
+
+            const chatBox = document.getElementById('ai-chat-box');
+            const typing = document.getElementById('ai-typing');
+            const btnSend = document.getElementById('btn-send-chat');
+            
+            const userMsg = document.createElement('div'); userMsg.className = 'msg msg-user';
+            userMsg.innerHTML = (currentAIImage ? `<img loading="lazy" decoding="async" src="${currentAIImage}" class="msg-img">` : '') + text.replace(/\n/g, '<br>');
+            chatBox.appendChild(userMsg);
+            
+            const imageToSend = currentAIImage;
+            input.value = ''; input.style.height = 'auto'; window.removeAIImage();
+            chatBox.scrollTop = chatBox.scrollHeight;
+
+            typing.style.display = 'block'; chatBox.appendChild(typing); btnSend.disabled = true;
+
+            // Contexto desde caché (sin espera si ya fue cargado antes)
+            const contextDB = await getContextDB();
+
+            // ── PROMPT BASE: cacheado 10 min para no hacer fetch en cada mensaje ──
+            let sysPrompt = "";
+            const ahora = Date.now();
+            if (_promptBaseCache && (ahora - _promptBaseCacheTs) < PROMPT_TTL_MS) {
+                sysPrompt = _promptBaseCache;
+            } else {
+                try {
+                    const [snapPrompt, snapTags, snapReglas] = await Promise.all([
+                        db.ref('config_ia/prompts/index_consultor').once('value'),
+                        db.ref('config_ia/custom_tags').once('value'),
+                        db.ref('config_ia/reglas_tecnicas').once('value')
+                    ]);
+                    sysPrompt = (snapPrompt.exists() && snapPrompt.val() !== "") ? snapPrompt.val() : dicDefaultPrompts['index_consultor'];
+                    // Aplicar custom tags en la misma pasada
+                    if (snapTags.exists()) {
+                        const tags = snapTags.val();
+                        for (const [key, value] of Object.entries(tags)) {
+                            sysPrompt = sysPrompt.replace(new RegExp(`\\[${key}\\]`, 'g'), value);
+                        }
+                    }
+                    // Inyectar reglas técnicas activas
+                    if (snapReglas.exists()) {
+                        const rActivas = Object.values(snapReglas.val()).filter(r => r.activa !== false);
+                        if (rActivas.length > 0) {
+                            const porCat = {};
+                            rActivas.forEach(r => { const c = r.cat||'General'; if(!porCat[c]) porCat[c]=[]; porCat[c].push(r); });
+                            let bloque = '\n\n════ REGLAS TÉCNICAS DE CÁLCULO (RUBIK BOLIVIA) ════\nAplicá estas reglas SIEMPRE que cotices o calcules ítems del tipo indicado:\n';
+                            for (const [cat, items] of Object.entries(porCat)) {
+                                bloque += `\n[${cat.toUpperCase()}]\n`;
+                                items.forEach(r => { bloque += `• ${r.nombre}: ${r.texto}\n`; });
+                            }
+                            sysPrompt += bloque;
+                        }
+                    }
+                    // Agregar regla QUOTE_DATA una sola vez al caché
+                    sysPrompt += `\n\nREGLA MAESTRA (COTIZACIÓN FLASH POR CHAT):
+Si el CEO pide cotizar algo rápido, OBLIGATORIAMENTE añade este bloque JSON al final para que el sistema cree el presupuesto. Usa datos reales de Bolivia.
+$$$QUOTE_DATA: [{"desc":"Nombre Item","feat":"Característica","cant":1,"und":"pza","pu":100,"type":"item","apu":{"mat":[{"d":"Mat1","u":"m2","q":1,"p":50}],"mo":[],"eq":[],"sub":[],"util":50,"ind":10}}] $$$`;
+                    _promptBaseCache = sysPrompt;
+                    _promptBaseCacheTs = ahora;
+                } catch(e) {
+                    sysPrompt = dicDefaultPrompts['index_consultor'];
+                }
+            }
+
+            // Inyectar contexto dinámico en el prompt (datos frescos del caché Firebase)
+            sysPrompt = sysPrompt
+                .replace('[CONTEXTO_CLIENTES]', JSON.stringify(contextDB.clientes))
+                .replace('[CONTEXTO_PROYECTOS]', JSON.stringify(contextDB.proyectos))
+                .replace('[CONTEXTO_LICITACIONES]', JSON.stringify(contextDB.licitaciones))
+                .replace('[CONTEXTO_INGRESOS]', JSON.stringify(contextDB.ingresos))
+                .replace('[CONTEXTO_MATERIALES]', contextDB.materiales.join('; '))
+                .replace('[CONTEXTO_MO]', contextDB.mo.join('; '))
+                .replace('[CONTEXTO_ITEMS]', contextDB.items.join('; '))
+                .replace('[CONTEXTO_PERSONAL]', contextDB.personal.join(', '));
+
+            // Historial de conversación (últimos 10 turnos para contexto continuo)
+            if (_iaHistorial.length > 0) {
+                const histStr = _iaHistorial.slice(-10).map(h => `${h.role === 'user' ? 'CEO' : 'Cerebro'}: ${h.text}`).join('\n');
+                sysPrompt += `\n\n════ CONVERSACIÓN PREVIA ════\n${histStr}`;
+            }
+
+            try {
+                // Construir prompt final con imagen si existe
+                let promptFinal = sysPrompt + "\n\nCEO DICE: " + (text || "Analiza esta imagen.");
+                const reqBody = { prompt: promptFinal, model: 'gemini-2.5-flash' };
+                if (imageToSend) {
+                    reqBody.image = { data: imageToSend.split(',')[1], mimeType: imageToSend.split(';')[0].split(':')[1] };
+                }
+                const _tok1 = await firebase.auth().currentUser.getIdToken();
+                const _res1 = await fetch('/api/gemini', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + _tok1 },
+                    body: JSON.stringify(reqBody)
+                });
+                const _data1 = await _res1.json();
+                if (!_res1.ok) throw new Error(_data1.error || 'Gemini API error');
+                let aiText = _data1.text || (_data1.candidates && _data1.candidates[0].content.parts[0].text) || '';
+                
+                let quoteDataChat = null;
+                // Regex mejorado: captura JSON entre $$$QUOTE_DATA: y $$$ incluyendo multilínea y anidado
+                const regex = /\$\$\$QUOTE_DATA:\s*(\[[\s\S]*?\])\s*\$\$\$/;
+                const match = aiText.match(regex);
+                if (match) {
+                    try {
+                        // Validar que es JSON parseable antes de guardar
+                        JSON.parse(match[1]);
+                        quoteDataChat = match[1];
+                    } catch(eJson) {
+                        // Intentar extraer limpiando el bloque
+                        try { quoteDataChat = match[1]; } catch { quoteDataChat = null; }
+                    }
+                    aiText = aiText.replace(match[0], '').trim();
+                }
+
+                aiText = aiText.replace(/\*\*(.*?)\*\*/g, '<b>$1</b>'); 
+                typing.style.display = 'none';
+
+                const aiMsg = document.createElement('div'); aiMsg.className = 'msg msg-ai';
+
+                // Guardar en historial multi-turn (máx 20 turnos)
+                _iaHistorial.push({ role: 'user', text: text || '[imagen]' });
+                _iaHistorial.push({ role: 'assistant', text: aiText.replace(/<[^>]+>/g, '') });
+                if (_iaHistorial.length > 20) _iaHistorial = _iaHistorial.slice(-20);
+
+                chatBox.appendChild(aiMsg);
+                chatBox.scrollTop = chatBox.scrollHeight;
+                // Typewriter: renderizado progresivo carácter por carácter
+                await typewriterAppend(aiMsg, aiText, 10);
+                // Botón de cotización se añade DESPUÉS del typewriter (si aplica)
+                if (quoteDataChat) {
+                    window.memoriaCotizacionChat = quoteDataChat;
+                    aiMsg.innerHTML += `<div style="margin-top:15px; padding-top:10px; border-top:1px solid var(--border);"><button style="background:var(--green); color:white; border:none; padding:12px; border-radius:10px; width:100%; font-weight:bold; cursor:pointer; font-size:13px; display:flex; align-items:center; justify-content:center; gap:8px;" onclick="abrirConfirmacionCliente('usar_memoria', 'chat')"><i class="ph-bold ph-rocket-launch"></i> Crear Proyecto con esta Cotización</button></div>`;
+                }
+                chatBox.scrollTop = chatBox.scrollHeight;
+            } catch (e) {
+                console.error("[Cerebro Ejecutivo] error en consulta IA:", e);
+                typing.style.display = 'none';
+                const errMsg = document.createElement('div'); errMsg.className = 'msg msg-ai'; errMsg.style.color= 'var(--red)'; errMsg.innerText = "Error: " + (e && e.message ? e.message : "desconocido"); chatBox.appendChild(errMsg);
+            }
+            btnSend.disabled = false;
+        }
+
+        let flashRowCounter = 0;
+        window.addFlashRow = function() {
+            flashRowCounter++;
+            const container = document.getElementById('ia-items-container');
+            const row = document.createElement('div'); row.className = 'ia-item-row';
+            row.innerHTML = `
+                <button class="btn-del-row" onclick="this.parentElement.remove()" title="Eliminar fila"><i class="ph-bold ph-x"></i></button>
+                <div class="ia-grid"><div><span class="ia-inp-lbl">Ítem a crear</span><input type="text" class="ia-inp-std ia-inp-name" placeholder="Ej: Letrero..."></div><div><span class="ia-inp-lbl">Cant</span><input type="number" class="ia-inp-std ia-inp-cant" value="1"></div></div>
+                <div><span class="ia-inp-lbl">Instrucciones / Características</span><input type="text" class="ia-inp-std ia-inp-prompt" placeholder="Ej: Acrílico 3mm..."></div>
+                <div style="display:flex; align-items:center; gap:10px; margin-top:5px;"><button class="ia-btn-upload" onclick="document.getElementById('ia-file-flash-${flashRowCounter}').click()"><i class="ph-bold ph-camera"></i> Subir Foto</button><input type="file" id="ia-file-flash-${flashRowCounter}" accept="image/*" style="display:none" onchange="window.handleFlashRowPhoto(this, ${flashRowCounter})"><img loading="lazy" decoding="async" id="ia-img-prev-flash-${flashRowCounter}" class="ia-img-preview"></div>
+            `;
+            container.appendChild(row); container.scrollTop = container.scrollHeight;
+        }
+
+        window.handleFlashRowPhoto = function(inp, id) {
+            if (inp.files && inp.files[0]) {
+                const reader = new FileReader();
+                reader.onload = function(e) { const img = document.getElementById('ia-img-prev-flash-' + id); img.src = e.target.result; img.style.display = 'block'; inp.setAttribute('data-b64', e.target.result); };
+                reader.readAsDataURL(inp.files[0]);
+            }
+        }
+
+        window.prepararCreacionFlash = function() {
+            const pName = document.getElementById('flash-p-name').value.trim();
+            if(!pName) return alert("Ponle un nombre al Proyecto Nuevo.");
+            if(document.querySelectorAll('.ia-item-row').length === 0) return alert("Agrega al menos un ítem.");
+            abrirConfirmacionCliente('', 'tabla', pName);
+        }
+
+        let currentFlashData = null; let currentFlashSource = 'chat'; let currentFlashPName = '';
+        window.abrirConfirmacionCliente = function(encodedData, source, pNameManual = '') {
+            currentFlashData = encodedData; currentFlashSource = source; currentFlashPName = pNameManual;
+            // Mostrar campo de nombre solo cuando viene del chat (no tiene nombre previo)
+            const nombreGroup = document.getElementById('flash-nombre-group');
+            const nombreInp = document.getElementById('flash-pname-chat');
+            if (source === 'chat') {
+                nombreGroup.style.display = 'block';
+                nombreInp.value = '';
+                setTimeout(() => nombreInp.focus(), 200);
+            } else {
+                nombreGroup.style.display = 'none';
+            }
+            document.getElementById('modal-conf-cliente').classList.add('active');
+        }
+        window.cerrarConfirmacionFlash = function() { document.getElementById('modal-conf-cliente').classList.remove('active'); currentFlashData = null; }
+
+        function extraerJSONLimpio(textoCrudo) {
+            if (!textoCrudo) throw new Error("JSON vacío recibido de la IA.");
+            // Limpiar marcadores de código
+            let textoLimpio = textoCrudo
+                .replace(/```json/gi, '')
+                .replace(/```/g, '')
+                .trim();
+            // Buscar el array JSON principal (de apertura [ a cierre ] balanceado)
+            const inicioIndex = textoLimpio.indexOf('[');
+            if (inicioIndex === -1) throw new Error("No se encontró JSON en la respuesta de la IA.");
+            // Encontrar el ] de cierre balanceado (contando niveles de anidamiento)
+            let depth = 0, finIndex = -1;
+            for (let i = inicioIndex; i < textoLimpio.length; i++) {
+                if (textoLimpio[i] === '[' || textoLimpio[i] === '{') depth++;
+                else if (textoLimpio[i] === ']' || textoLimpio[i] === '}') {
+                    depth--;
+                    if (depth === 0 && textoLimpio[i] === ']') { finIndex = i; break; }
+                }
+            }
+            if (finIndex === -1) throw new Error("JSON incompleto en la respuesta de la IA.");
+            textoLimpio = textoLimpio.substring(inicioIndex, finIndex + 1);
+            // Eliminar caracteres de control inválidos en JSON (excepto \t \n \r)
+            textoLimpio = textoLimpio.replace(/[--]+/g, "");
+            try {
+                return JSON.parse(textoLimpio);
+            } catch(eP) {
+                // Último intento: reparar \n literales dentro de strings
+                textoLimpio = textoLimpio.replace(/([^\\])\n/g, '$1\\n');
+                return JSON.parse(textoLimpio);
+            }
+        }
+
+        window.finalizarCreacionFlash = async function() {
+            // Guard: no ejecutar si el modal no está visible (previene activación espuria al cargar)
+            const modalEl = document.getElementById('modal-conf-cliente');
+            if (!modalEl || !modalEl.classList.contains('active')) return;
+            const cid = document.getElementById('flash-client-select').value;
+            if(!cid) return alert("Selecciona un Cliente para asignar el proyecto.");
+            cerrarConfirmacionFlash(); document.getElementById('loader-conf').classList.add('active'); 
+
+            try {
+                let finalItemsForDb = []; let projectNameForDb = '';
+
+                if(currentFlashSource === 'chat') {
+                    if(!window.memoriaCotizacionChat) throw new Error("No hay cotización generada por IA. Primero genera una cotización en el chat.");
+                    finalItemsForDb = extraerJSONLimpio(window.memoriaCotizacionChat);
+                    // Leer nombre del input del modal si viene de chat
+                    const chatPNameInp = document.getElementById('flash-pname-chat');
+                    const chatPName = chatPNameInp ? chatPNameInp.value.trim() : '';
+                    projectNameForDb = chatPName || currentFlashPName || (finalItemsForDb[0] && finalItemsForDb[0].desc) || "Proyecto Flash";  finalItemsForDb = extraerJSONLimpio(window.memoriaCotizacionChat);
+                    projectNameForDb = finalItemsForDb[0].desc; 
+                } else {
+                    projectNameForDb = currentFlashPName;
+                    let parts = []; let textPrompt = "Genera un APU competitivo para Bolivia. CARACTERÍSTICAS: puntuales, una por línea (\\n).\n";
+                    
+                    document.querySelectorAll('.ia-item-row').forEach((row) => {
+                        const name = row.querySelector('.ia-inp-name').value.trim(); const cant = row.querySelector('.ia-inp-cant').value;
+                        const prompt = row.querySelector('.ia-inp-prompt').value.trim(); const fileInp = row.querySelector('input[type="file"]');
+                        if(name) {
+                            let itemDesc = `- Item: ${name}, Cantidad: ${cant}.`; if (prompt) itemDesc += ` Instrucciones: ${prompt}.`;
+                            if (fileInp && fileInp.getAttribute('data-b64')) {
+                                const b64 = fileInp.getAttribute('data-b64').split(',')[1]; const mime = fileInp.getAttribute('data-b64').split(';')[0].split(':')[1];
+                                parts.push({ inlineData: { data: b64, mimeType: mime } });
+                            }
+                            textPrompt += itemDesc + "\n";
+                        }
+                    });
+
+                    // DESCARGAMOS EL PROMPT DE FLASH DE FIREBASE O USAMOS EL DEFAULT
+                    let promptEstructurar = "";
+                    try {
+                        let snapFlash = await db.ref('config_ia/prompts/index_flash').once('value');
+                        promptEstructurar = (snapFlash.exists() && snapFlash.val() !== "") ? snapFlash.val() : dicDefaultPrompts['index_flash'];
+                    } catch(e) { promptEstructurar = dicDefaultPrompts['index_flash']; }
+                    
+                    // Aseguramos que tenga la orden final de JSON
+                    promptEstructurar = await aplicarEtiquetasPersonalizadas(promptEstructurar);
+                    promptEstructurar = promptEstructurar.replace('[FORMATO_JSON_APU]', `[\n  {\n    "desc": "Provisión y Montaje de...", \n    "feat": "Tubo cuadrado 2x2\\nLona Blackout",\n    "cant": 1, "und": "m2", "pu": 0, "type": "item",\n    "apu": { \n        "mat": [{"d": "Tubo 2x2", "u": "ml", "q": 4, "p": 13}], \n        "mo": [{"d": "Maestro Cerrajero", "u": "hr", "q": 2, "p": 25}], \n        "eq": [{"d": "Herramientas menores", "u": "glb", "q": 1, "p": 15}], \n        "sub": [], "util": 50, "ind": 10 \n    }\n  }\n]`);
+
+                    parts.push({ text: promptEstructurar + "\n\n" + textPrompt });
+
+                    // Construir prompt combinado (texto + imágenes inline en el prompt)
+                    const _textPart = parts.find(p => p.text);
+                    const _imgParts = parts.filter(p => p.inlineData);
+                    const _reqBody2 = { prompt: _textPart ? _textPart.text : textPrompt, model: 'gemini-2.5-flash' };
+                    if (_imgParts.length > 0) _reqBody2.image = _imgParts[0].inlineData;
+                    const _tok2 = await firebase.auth().currentUser.getIdToken();
+                    const _res2 = await fetch('/api/gemini', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + _tok2 },
+                        body: JSON.stringify(_reqBody2)
+                    });
+                    const _data2 = await _res2.json();
+                    if (!_res2.ok) throw new Error(_data2.error || 'Gemini API error');
+                    const _rawText2 = _data2.text || (_data2.candidates && _data2.candidates[0].content.parts[0].text) || '';
+                    finalItemsForDb = extraerJSONLimpio(_rawText2);
+                }
+
+                const nuevoPid = db.ref(`proyectos/${cid}`).push().key;
+                let newProjObj = { nombre: projectNameForDb, estado: 'cotizacion', fecha_creacion: new Date().toISOString().split('T')[0], presupuesto: { items: finalItemsForDb, impuestos: false, descuento: 0 } };
+                
+                await db.ref(`proyectos/${cid}/${nuevoPid}`).set(newProjObj);
+                
+                localStorage.removeItem('rubik_current_pid'); localStorage.removeItem('rubik_client_id'); localStorage.removeItem('rubik_current_pname'); localStorage.removeItem('rubik_client_name');
+                localStorage.setItem('rubik_client_id', cid); localStorage.setItem('rubik_current_pid', nuevoPid); localStorage.setItem('rubik_current_pname', projectNameForDb);
+                let cObj = window.clientesGlobales.find(c => c.id === cid); if(cObj) localStorage.setItem('rubik_client_name', cObj.nombre);
+
+                window.location.href = `presupuesto.html?cid=${cid}&pid=${nuevoPid}`;
+                
+            } catch(e) {
+                console.error(e); alert("Error crítico al estructurar e inyectar el Proyecto Flash.");
+            } finally { document.getElementById('loader-conf').classList.remove('active'); }
+        }
+        
+        // =========================================================================
+        // --- ESCUCHA ACTIVA DE WHATSAPP (EL PUENTE CON MAKE) ---
+        // =========================================================================
+        (function waitAuthWA(retries) {
+            const user = firebase.auth().currentUser;
+            if (user) {
+            db.ref('interfaz_wa/entrada').on('value', async (snapshot) => {
+            if (snapshot.exists()) {
+                const data = snapshot.val();
+                
+                // Solo actúa si hay un mensaje nuevo que no ha sido procesado
+                if (data.procesado === false && data.mensaje) {
+                    console.log("Cerebro activado: Nuevo mensaje de WhatsApp de", data.telefono);
+
+                    // 1. Bloqueamos el estado para evitar que se procese dos veces por latencia
+                    await db.ref('interfaz_wa/entrada/procesado').set("procesando");
+
+                    try {
+                        // 2. Cargar contexto completo para respuesta inteligente
+                        let contextDB = { proyectos: [], clientes: [], materiales: [], mo: [], items: [], personal: [], licitaciones: [], ingresos: [] };
+                        try {
+                            const [pSnap, cSnap, bdSnap, persSnap] = await Promise.all([
+                                db.ref('proyectos').once('value'),
+                                db.ref('clientes').once('value'),
+                                db.ref('base_datos').once('value'),
+                                db.ref('personal').once('value')
+                            ]);
+                            if(pSnap.exists()) pSnap.forEach(cli => cli.forEach(proy => {
+                                let p = proy.val();
+                                contextDB.proyectos.push({ nombre: p.nombre, estado: p.estado, monto: p.monto_cierre || 0 });
+                            }));
+                            if(cSnap.exists()) cSnap.forEach(c => contextDB.clientes.push({nombre: c.val().empresa||c.val().nombre, id: c.key}));
+                            if(bdSnap.exists()) {
+                                const bd = bdSnap.val();
+                                if(bd.materiales) contextDB.materiales = Object.values(bd.materiales).slice(0,60).map(m=>`${m.desc||m.n||''}: ${m.precio||m.pu||m.p||0} Bs/${m.und||m.u||''}`).filter(s=>s.length>5);
+                                if(bd.mano_obra) contextDB.mo = Object.values(bd.mano_obra).map(m=>`${m.desc||m.n||''}: ${m.p||0} Bs/${m.u||'hr'}`).filter(s=>s.length>5);
+                                if(bd.items) contextDB.items = Object.values(bd.items).filter(it=>it.pu>0).slice(0,60).map(it=>`${it.desc||''}: ${it.pu} Bs/${it.und||''}`).filter(s=>s.length>5);
+                            }
+                            if(persSnap.exists()) persSnap.forEach(p => contextDB.personal.push(`${p.val().nombre||''} (${p.val().tipo||''})`));
+                        } catch(e) { console.warn("WA context partial:", e); }
+
+                        // 3. Descargar el Prompt Maestro de Firebase y aplicar etiquetas
+                        let sysPrompt = dicDefaultPrompts['index_consultor'];
+                        let snapPrompt = await db.ref('config_ia/prompts/index_consultor').once('value');
+                        if(snapPrompt.exists() && snapPrompt.val() !== "") sysPrompt = snapPrompt.val();
+
+                        sysPrompt = sysPrompt
+                            .replace('[CONTEXTO_CLIENTES]', JSON.stringify(contextDB.clientes))
+                            .replace('[CONTEXTO_PROYECTOS]', JSON.stringify(contextDB.proyectos))
+                            .replace('[CONTEXTO_LICITACIONES]', JSON.stringify(contextDB.licitaciones))
+                            .replace('[CONTEXTO_INGRESOS]', JSON.stringify(contextDB.ingresos))
+                            .replace('[CONTEXTO_MATERIALES]', contextDB.materiales.join('; '))
+                            .replace('[CONTEXTO_MO]', contextDB.mo.join('; '))
+                            .replace('[CONTEXTO_ITEMS]', contextDB.items.join('; '))
+                            .replace('[CONTEXTO_PERSONAL]', contextDB.personal.join(', '));
+                        sysPrompt = await aplicarEtiquetasPersonalizadas(sysPrompt);
+                        
+                        // Identificar si el remitente es cliente, trabajador o desconocido
+                        const clienteMatch = contextDB.clientes.find(c => data.telefono && data.nombre_remitente && (data.nombre_remitente.toLowerCase().includes(c.nombre.toLowerCase())));
+                        const rolRemitente = clienteMatch ? `CLIENTE: ${clienteMatch.nombre}` : 'CONSULTA EXTERNA';
+
+                        // 4. Instanciar Gemini y procesar la respuesta
+                        // Llamada via proxy /api/gemini
+                        const _promptWA = `${sysPrompt}\n\nMENSAJE RECIBIDO VÍA WHATSAPP:\nRemitente: ${data.telefono} | Nombre: ${data.nombre_remitente || 'Desconocido'} | Rol detectado: ${rolRemitente}\nMensaje: ${data.mensaje}`;
+                        const _tokWA = await firebase.auth().currentUser.getIdToken();
+                        const _resWA = await fetch('/api/gemini', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + _tokWA },
+                            body: JSON.stringify({ prompt: _promptWA, model: 'gemini-2.5-flash' })
+                        });
+                        const _dataWA = await _resWA.json();
+                        if (!_resWA.ok) throw new Error(_dataWA.error || 'Gemini WA error');
+                        let respuestaIA = _dataWA.text || (_dataWA.candidates && _dataWA.candidates[0].content.parts[0].text) || '';
+                        
+                        // Limpiar asteriscos markdown si WhatsApp no los formatea bien, o dejarlos para negritas de WA
+                        respuestaIA = respuestaIA.trim();
+
+                        // 5. Escribir la respuesta en la base de datos para que Make la envíe
+                        await db.ref('interfaz_wa/salida').set({
+                            respuesta: respuestaIA,
+                            telefono: data.telefono,
+                            timestamp: Date.now(),
+                            leido_por_make: false
+                        });
+
+                        // 6. Marcar como procesado con éxito
+                        await db.ref('interfaz_wa/entrada/procesado').set(true);
+                        console.log("Respuesta depositada en Firebase lista para Make.");
+
+                    } catch(error) {
+                        console.error("Error crítico en el Agente procesando WhatsApp:", error);
+                        // Revertir estado para que Make o el sistema sepa que falló
+                        await db.ref('interfaz_wa/entrada/procesado').set("error");
+                    }
+                }
+            }
+            }); // db.ref('interfaz_wa/entrada').on
+            } else if (retries > 0) { setTimeout(function(){ waitAuthWA(retries-1); }, 200); }
+        })(25);
+    </script>
+    <script src="/js/viewmode.js?v=1"></script>
+    <script>
+        // Fallback: asegura que openAIChat sea accesible desde onclick HTML
+        document.addEventListener('DOMContentLoaded', function() {
+            if (!window.openAIChat) {
+                window.openAIChat = function() {
+                    document.getElementById('ia-modal').classList.add('active');
+                };
+            }
+        });
+    </script>
+</body>
+</html>

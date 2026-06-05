@@ -1,0 +1,671 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>HUB del Proyecto - Rubik</title>
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.1.3/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.1.3/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.1.3/firebase-database-compat.js"></script>
+    <script>
+        window._rubikFirebaseConfig = {
+            apiKey: "AIzaSyDXYlofy31cDP14xVAVxWo_7TqXdSgsIjA",
+            authDomain: "rubik-bolivia.firebaseapp.com",
+            databaseURL: "https://rubik-bolivia-default-rtdb.firebaseio.com",
+            projectId: "rubik-bolivia",
+            storageBucket: "rubik-bolivia.firebasestorage.app",
+            messagingSenderId: "4153087958",
+            appId: "1:4153087958:web:cf2dd16106580ed6437677"
+        };
+        if (!firebase.apps.length) firebase.initializeApp(window._rubikFirebaseConfig);
+    </script>
+    <script src="/js/firecache.js?v=1"></script>
+    <script src="/js/auth-guard.js?v=1"></script>
+
+    <style>
+        :root { --bg: #f4f4f7; --card: #fff; --text: #1a1a1a; --blue: #007aff; --green: #34c759; --red: #ff3b30; --orange: #ff9500; --gray: #8e8e93; --border: #d1d1d6; }
+        body.dark-mode { --bg: #000; --card: #1c1c1e; --text: #fff; --border: #333; }
+        body { font-family: -apple-system, sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 20px; padding-bottom: 100px; -webkit-tap-highlight-color: transparent;}
+        .nav { display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px; flex-wrap: wrap; gap:10px;}
+        .btn-nav { background: var(--card); border: 1px solid var(--border); padding: 8px 14px; border-radius: 20px; font-weight: 700; color: var(--blue); cursor: pointer; display: flex; align-items: center; gap: 5px; }
+        .header-title { font-size: 26px; font-weight: 900; margin-bottom: 5px; letter-spacing: -0.5px;}
+        .header-sub { font-size: 12px; color: var(--gray); font-weight: 700; text-transform: uppercase; margin-bottom: 25px;}
+        .finance-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-bottom: 25px; }
+        .fin-card { background: var(--card); border-radius: 16px; padding: 15px; border: 1px solid var(--border); box-shadow: 0 4px 10px rgba(0,0,0,0.02); }
+        .fin-card.highlight { border-left: 4px solid var(--blue); }
+        .fin-lbl { font-size: 10px; font-weight: 800; color: var(--gray); text-transform: uppercase; margin-bottom: 5px; }
+        .fin-val { font-size: 20px; font-weight: 900; }
+        .val-green { color: var(--green); } .val-red { color: var(--red); }
+        .modules-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px 10px; margin-bottom: 30px; }
+        .mod-item { display: flex; flex-direction: column; align-items: center; cursor: pointer; text-align: center; gap: 8px; transition: 0.1s;}
+        .mod-item:active { transform: scale(0.95); }
+        .mod-icon { width: 60px; height: 60px; border-radius: 18px; background: var(--card); box-shadow: 0 6px 15px rgba(0,0,0,0.06); display: flex; align-items: center; justify-content: center; font-size: 28px; border: 1px solid var(--border); }
+        .mod-label { font-size: 11px; font-weight: 700; color: var(--text); line-height: 1.2; }
+        .ic-dis { color: #bf5af2; } .ic-pre { color: var(--blue); } .ic-gan { color: var(--orange); }
+        .ic-pro { color: var(--text); } .ic-com { color: var(--green); } .ic-lic { color: var(--red); }
+        .generic-card { background: var(--card); border-radius: 16px; padding: 20px; border: 1px solid var(--border); margin-bottom: 15px; box-shadow: 0 4px 10px rgba(0,0,0,0.02);}
+        .card-title { font-size: 16px; font-weight: 900; margin-top: 0; margin-bottom: 15px; border-bottom: 1px solid var(--border); padding-bottom: 10px; }
+        .inp-std { width: 100%; padding: 14px; border: 1px solid var(--border); background: var(--bg); color: var(--text); border-radius: 12px; font-size: 14px; box-sizing: border-box; font-weight: 600; margin-bottom: 10px;}
+        .btn-action { background: var(--blue); color: white; border: none; padding: 14px; border-radius: 12px; font-size: 14px; font-weight: 800; width: 100%; cursor: pointer; display: flex; align-items: center; justify-content: center; gap:8px;}
+        .btn-success { background: var(--green); }
+        .alert-box { background: rgba(255,149,0,0.1); padding: 15px; border-radius: 12px; border: 1px solid var(--orange); margin-bottom: 15px; }
+        .flex-row { display: flex; gap: 10px; align-items: center; margin-top: 10px;}
+
+        /* ========================================== */
+        /* ESTILOS PARA LA IA (INYECCIÓN NO INVASIVA) */
+        /* ========================================== */
+        .fab-ai-btn { position: fixed; bottom: 25px; right: 20px; width: 65px; height: 65px; border-radius: 50%; background: #000; box-shadow: 0 8px 25px rgba(0,122,255,0.4); cursor: pointer; z-index: 900; transition: transform 0.2s; padding: 0; border: 2px solid var(--card); overflow: hidden; display: flex; align-items: center; justify-content: center; -webkit-tap-highlight-color: transparent;}
+        .fab-ai-btn img { width: 100%; height: 100%; object-fit: cover; }
+        .fab-ai-btn:active { transform: scale(0.9); }
+        .chat-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #000000; z-index: 9500; flex-direction: column; }
+        .chat-header { background: #1c1c1e; padding: 15px 20px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #38383a; }
+        .chat-body { flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 15px; }
+        .msg { max-width: 85%; padding: 12px 16px; border-radius: 18px; font-size: 14px; line-height: 1.4; word-wrap: break-word; color:white; }
+        .msg-ai { background: #1c1c1e; border: 1px solid #38383a; align-self: flex-start; border-bottom-left-radius: 4px; }
+        .msg-user { background: var(--blue); align-self: flex-end; border-bottom-right-radius: 4px; }
+        .msg-img { max-width: 100%; border-radius: 12px; margin-bottom: 8px; border: 1px solid rgba(255,255,255,0.1); }
+        .chat-footer { background: #1c1c1e; padding: 15px; border-top: 1px solid #38383a; display: flex; gap: 10px; align-items: flex-end; }
+        .chat-input { flex: 1; background: #000; border: 1px solid #38383a; color: white; padding: 12px; border-radius: 16px; font-size: 14px; outline: none; resize: none; max-height: 100px; font-family: inherit; }
+        .chat-input:focus { border-color: var(--blue); }
+        .btn-ai-action { background: var(--blue); color: white; border: none; width: 42px; height: 42px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 20px; cursor: pointer; flex-shrink:0; }
+        .btn-ai-action.cam { background: #000; color: #8e8e93; border: 1px solid #38383a; }
+        .chat-img-preview { max-width: 100px; border-radius: 8px; display: none; border: 1px solid #38383a; object-fit: cover;}
+        .typing-indicator { display: none; align-self: flex-start; background: #1c1c1e; padding: 12px 16px; border-radius: 20px; border-bottom-left-radius: 4px; border: 1px solid #38383a;}
+        .dot { height: 8px; width: 8px; background: #8e8e93; border-radius: 50%; display: inline-block; animation: blink 1.4s infinite both; margin: 0 2px;}
+        .dot:nth-child(2) { animation-delay: 0.2s; } .dot:nth-child(3) { animation-delay: 0.4s; }
+        @keyframes blink { 0% { opacity: 0.2; transform:scale(0.8);} 20% { opacity: 1; transform:scale(1);} 100% { opacity: 0.2; transform:scale(0.8); } }
+    </style>
+    <link rel="stylesheet" href="/css/responsive.css?v=1">
+</head>
+<body>
+    <div class="nav">
+        <div style="display:flex; gap:8px; align-items:center;">
+            <button class="btn-nav" onclick="location.href='index.html'" title="Inicio"><i class="ph-bold ph-house"></i></button>
+            <button class="btn-nav" onclick="location.href='proyectos-cliente.html'"><i class="ph-bold ph-caret-left"></i> Volver</button>
+        </div>
+        <div style="display:flex; gap:10px;">
+            <button class="btn-nav" onclick="document.body.classList.toggle('dark-mode')"><i class="ph-fill ph-moon"></i></button>
+            <button class="btn-nav" id="btn-dup-proy" onclick="duplicarProyecto()" title="Duplicar proyecto"><i class="ph-bold ph-copy-simple"></i></button>
+            <button class="btn-nav" id="btn-vis-proy" onclick="toggleVisibleCliente()" title="Visible/Oculto para cliente"><i class="ph-bold ph-eye" id="ico-vis-proy"></i></button>
+            <button class="btn-nav" onclick="location.href='base_datos.html'"><i class="ph-bold ph-database"></i> DB Maestra</button>
+            <button class="btn-nav" onclick="abrirReqAsistido()" style="background:rgba(191,90,242,0.1); color:#bf5af2; border-color:rgba(191,90,242,0.35); position:relative;" id="nav-req-btn">
+                <i class="ph-fill ph-ruler"></i> Req. Asistido
+                <span id="nav-req-badge" style="display:none; position:absolute; top:-5px; right:-5px; background:var(--orange); width:14px; height:14px; border-radius:50%; font-size:8px; font-weight:900; color:#fff; align-items:center; justify-content:center; border:2px solid var(--bg);">!</span>
+            </button>
+        </div>
+    </div>
+
+    <div>
+        <div class="header-title" id="txt-pname">Cargando...</div>
+        <div class="header-sub">HUB Administrativo y Financiero</div>
+    </div>
+
+    <div class="finance-grid">
+        <div class="fin-card highlight"><div class="fin-lbl">Venta Base (Ppto)</div><div class="fin-val" id="val-venta">0,00</div></div>
+        <div class="fin-card"><div class="fin-lbl">Cierre + Extras</div><div class="fin-val val-green" id="val-final">0,00</div></div>
+        <div class="fin-card"><div class="fin-lbl">Gasto Real (Costos)</div><div class="fin-val val-red" id="val-gasto">0,00</div></div>
+        <div class="fin-card highlight" style="border-left-color: var(--green);"><div class="fin-lbl">Utilidad Neta</div><div class="fin-val" id="val-utilidad">0,00</div></div>
+    </div>
+
+    <div class="modules-grid">
+        <div class="mod-item" onclick="abrirModulo('disenos')"><div class="mod-icon ic-dis"><i class="ph-fill ph-palette"></i></div><div class="mod-label">Diseños &<br>Archivos</div></div>
+        <div class="mod-item" onclick="abrirModulo('presupuesto')"><div class="mod-icon ic-pre"><i class="ph-fill ph-calculator"></i></div><div class="mod-label">Presupuesto<br>& Extras</div></div>
+        <div class="mod-item" onclick="abrirModulo('gantt')"><div class="mod-icon ic-gan"><i class="ph-fill ph-calendar-check"></i></div><div class="mod-label">Gantt de<br>Obra</div></div>
+        <div class="mod-item" onclick="abrirModulo('produccion')"><div class="mod-icon ic-pro"><i class="ph-fill ph-hammer"></i></div><div class="mod-label">Control<br>Producción</div></div>
+        <div class="mod-item" onclick="abrirModulo('compras')"><div class="mod-icon ic-com"><i class="ph-fill ph-shopping-cart"></i></div><div class="mod-label">Compras y<br>Materiales</div></div>
+        <div class="mod-item" onclick="abrirModulo('licitaciones')"><div class="mod-icon ic-lic"><i class="ph-fill ph-handshake"></i></div><div class="mod-label">Licitaciones</div></div>
+        <div class="mod-item" onclick="abrirReqAsistido()" id="mod-req-asistido">
+            <div class="mod-icon" style="color:#bf5af2; position:relative;" id="req-asistido-icon">
+                <i class="ph-fill ph-ruler"></i>
+                <div id="req-asistido-badge" style="display:none; position:absolute; top:-6px; right:-6px; background:#ff9500; width:16px; height:16px; border-radius:50%; font-size:9px; font-weight:900; color:#fff; display:flex; align-items:center; justify-content:center; border:2px solid var(--card);">!</div>
+            </div>
+            <div class="mod-label">Req.<br>Asistido</div>
+        </div>
+    </div>
+
+    <div class="generic-card">
+        <h3 class="card-title">Cierre y Facturación</h3>
+        <div id="negociacion-alerta" class="alert-box" style="display:none;">
+            <div style="font-weight:900; color:var(--orange); font-size:11px; text-transform:uppercase;">El cliente envió una oferta</div>
+            <div style="font-size:22px; font-weight:900; color:var(--text); margin-top:2px;" id="txt-oferta">0,00 Bs</div>
+            <div class="flex-row">
+                <button class="btn-action btn-success" style="flex:1; padding:10px; font-size:12px;" onclick="aceptarOfertaCliente()">Cerrar Trato</button>
+                <button class="btn-action" style="flex:1; padding:10px; font-size:12px; background:var(--bg); color:var(--text); border:1px solid var(--border);" onclick="enviarContraPropuesta()">Contraofertar</button>
+            </div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; margin-bottom: 20px;">
+            <div>
+                <div style="font-size:12px; font-weight:700; color:var(--gray); margin-bottom:8px;">Fijar Monto de Cierre Manual:</div>
+                <div class="flex-row"><input type="number" step="any" id="inp-cierre" class="inp-std" style="margin:0;" placeholder="Monto Bs..."><button class="btn-action" style="margin:0; width:120px;" onclick="fijarCierre()">Fijar</button></div>
+                
+                <div style="font-size:12px; font-weight:700; color:var(--gray); margin-bottom:8px; margin-top:20px;">Enlace de Factura Electrónica:</div>
+                <div class="flex-row"><input type="text" id="inp-factura" class="inp-std" style="margin:0;" placeholder="URL del PDF..."><button class="btn-action btn-success" style="margin:0; width:120px;" onclick="guardarFactura()">Enviar</button></div>
+            </div>
+
+            <div style="border-left: 1px solid var(--border); padding-left: 20px;">
+                <h3 style="margin-top:0; color:var(--green); font-size:14px;"><i class="ph-bold ph-money"></i> Registrar Anticipo / Pago</h3>
+                <div style="display:flex; gap:10px; margin-bottom:10px;">
+                    <input type="number" id="pago-monto" class="inp-std" placeholder="Monto Bs" style="flex:1; margin:0; padding:10px;">
+                    <input type="date" id="pago-fecha" class="inp-std" style="flex:1; margin:0; padding:10px;">
+                </div>
+                <div style="display:flex; gap:10px;">
+                    <input type="text" id="pago-nota" class="inp-std" placeholder="Nota (Ej: QR, Banco Unión)" style="flex:2; margin:0; padding:10px;">
+                    <button class="btn-action btn-success" style="flex:1; margin:0; padding:10px;" onclick="registrarPagoCliente()">Añadir</button>
+                </div>
+                <div id="lista-pagos-admin" style="margin-top:15px; max-height:150px; overflow-y:auto; font-size:12px; border-top:1px dashed var(--border); padding-top:10px;"></div>
+            </div>
+        </div>
+    </div>
+
+    <button class="fab-ai-btn" onclick="openAIChat()">
+        <img loading="lazy" decoding="async" src="IA RUBIK BOTON.png" onerror="this.src='./IA RUBIK BOTON.png'" alt="Rubik IA">
+    </button>
+
+    <div class="chat-overlay" id="ai-chat-modal">
+        <div class="chat-header">
+            <div style="font-weight: 900; font-size: 15px; display: flex; align-items: center; gap: 8px; color:white;">
+                <img loading="lazy" decoding="async" src="IA RUBIK BOTON.png" style="width: 28px; border-radius: 50%;" onerror="this.src='./IA RUBIK BOTON.png'"> IA del Proyecto
+            </div>
+            <button class="btn-action" style="width:auto; padding: 6px 12px; font-size:12px; background:var(--card); color:var(--text);" onclick="closeAIChat()">Cerrar</button>
+        </div>
+        <div class="chat-body" id="ai-chat-box">
+            <div class="msg msg-ai">Hola CEO. Estoy analizando las finanzas exclusivas de este proyecto. Puedo ayudarte con dudas sobre los costos, utilidad o evaluar la salud de la obra. ¿En qué te ayudo?</div>
+        </div>
+        
+        <div class="typing-indicator" id="ai-typing" style="margin-left: 20px;"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div>
+
+        <div style="padding: 0 15px; display:flex; justify-content:flex-end;">
+            <div style="position:relative; display:inline-block;">
+                <img loading="lazy" decoding="async" id="ai-img-preview" class="chat-img-preview">
+                <div id="ai-img-remove" onclick="removeAIImage()" style="display:none; position:absolute; top:-8px; right:-8px; background:var(--red); color:white; border-radius:50%; width:24px; height:24px; text-align:center; line-height:24px; cursor:pointer; font-size:12px; font-weight:bold; box-shadow:0 2px 5px rgba(0,0,0,0.5);">X</div>
+            </div>
+        </div>
+        
+        <div class="chat-footer">
+            <button class="btn-ai-action cam" onclick="document.getElementById('ai-file-upload').click()"><i class="ph-bold ph-camera"></i></button>
+            <input type="file" id="ai-file-upload" accept="image/*" capture="environment" style="display:none" onchange="handleAIImage(this)">
+            
+            <button id="btn-audio" class="btn-ai-action cam" onclick="toggleAudioRecording()"><i class="ph-bold ph-microphone"></i></button>
+
+            <textarea id="ai-user-input" class="chat-input" rows="1" placeholder="Ej: ¿Qué porcentaje de utilidad llevamos?"></textarea>
+            <button class="btn-ai-action" onclick="sendAIMessage()"><i class="ph-bold ph-paper-plane-right"></i></button>
+        </div>
+    </div>
+
+<script>
+    // Firebase ya inicializado en el <head>
+    if (!firebase.apps.length) firebase.initializeApp(window._rubikFirebaseConfig);
+    const db = firebase.database();
+
+    const cid = localStorage.getItem('rubik_client_id');
+    const pid = localStorage.getItem('rubik_current_pid');
+    const pname = localStorage.getItem('rubik_current_pname');
+
+    if(!cid || !pid) { window.location.href = 'clientes.html'; }
+    document.getElementById('txt-pname').innerText = pname;
+
+    // ── Esperar auth antes de leer Firebase ─────────────────────────
+    (function arrancarCarga() {
+        var auth = firebase.auth();
+        if (auth.currentUser) { cargarDashboard(); return; }
+        var unsub = auth.onAuthStateChanged(function(user) {
+            unsub();
+            if (user) { cargarDashboard(); }
+            else { window.location.href = 'login.html'; }
+        });
+    })();
+
+    function cargarDashboard() {
+        // Inicializar botón visible/oculto
+        db.ref(`proyectos/${cid}/${pid}/visible_cliente`).once('value', snap => {
+            const vis = snap.val() !== false;
+            document.getElementById('ico-vis-proy').className = `ph-bold ${vis ? 'ph-eye' : 'ph-eye-slash'}`;
+            document.getElementById('btn-vis-proy').style.color = vis ? '' : 'var(--gray)';
+            document.getElementById('btn-vis-proy').title = vis ? 'Ocultar para cliente' : 'Hacer visible para cliente';
+        });
+
+        // Badge req asistido
+        db.ref(`requerimientos_asistidos/${cid}/${pid}`).once('value', snap => {
+            if (!snap.exists()) return;
+            let hayPendiente = false;
+            snap.forEach(child => {
+                if (child.val().estado === 'medidas_recibidas') hayPendiente = true;
+            });
+            if (!hayPendiente) return;
+            const b1 = document.getElementById('req-asistido-badge');
+            const b2 = document.getElementById('nav-req-badge');
+            if (b1) b1.style.display = 'flex';
+            if (b2) b2.style.display = 'flex';
+        });
+
+        // Datos financieros
+        Promise.all([
+            db.ref(`proyectos/${cid}/${pid}/presupuesto`).once('value'),
+            db.ref(`proyectos/${cid}/${pid}/extras`).once('value'),
+            db.ref(`proyectos/${cid}/${pid}/licitaciones`).once('value'),
+            db.ref(`proyectos/${cid}/${pid}/gasto_total`).once('value'),
+            db.ref(`proyectos/${cid}/${pid}/monto_cierre`).once('value'),
+            db.ref(`proyectos/${cid}/${pid}/negociacion`).once('value'),
+            db.ref(`proyectos/${cid}/${pid}/factura_url`).once('value'),
+            db.ref(`caja_chica`).once('value')
+        ]).then(snaps => {
+            let subtotalItems = 0; let desc = 0; let hasImp = false;
+            let ppto = snaps[0].val();
+            if(ppto) {
+                if(ppto.items) Object.values(ppto.items).forEach(it => { if(it.type !== 'chapter') subtotalItems += (it.cant * it.pu); });
+                desc = parseFloat(ppto.descuento) || 0; hasImp = ppto.impuestos || false;
+            }
+            let baseImponible = subtotalItems - desc;
+            let iva = hasImp ? baseImponible * 0.13 : 0; let it_tax = hasImp ? baseImponible * 0.03 : 0;
+            let totalVentaBase = baseImponible + iva + it_tax;
+            document.getElementById('val-venta').innerText = fMoney(totalVentaBase);
+            let totalExtras = 0; let ext = snaps[1].val();
+            if(ext) Object.values(ext).forEach(ex => { if(ex.estado === 'aprobado' && ex.precio) totalExtras += parseFloat(ex.precio); });
+            let montoCierre = snaps[4].val();
+            let valorFinal = montoCierre ? parseFloat(montoCierre) : totalVentaBase;
+            valorFinal += totalExtras;
+            document.getElementById('val-final').innerText = fMoney(valorFinal);
+            let gastoCajaChica = 0;
+            let cc = snaps[7].val();
+            if(cc) { Object.values(cc).forEach(w => { if(w.gastos) { Object.values(w.gastos).forEach(g => { if(g.proyecto === pname) gastoCajaChica += parseFloat(g.monto_total || g.monto || 0); }); } }); }
+            let gastoLicitaciones = 0; let lic = snaps[2].val();
+            if(lic) { Object.values(lic).forEach(l => { if(l.estado === 'adjudicado' && l.precio_final) gastoLicitaciones += parseFloat(l.precio_final); }); }
+            let gastoTotalBase = snaps[3].val() ? parseFloat(snaps[3].val()) : 0;
+            let gastoReal = gastoTotalBase + gastoLicitaciones + gastoCajaChica;
+            document.getElementById('val-gasto').innerText = fMoney(gastoReal);
+            document.getElementById('val-utilidad').innerText = fMoney(valorFinal - gastoReal);
+            let nego = snaps[5].val();
+            if(nego && nego.propuesta && !montoCierre) {
+                document.getElementById('negociacion-alerta').style.display = 'block'; document.getElementById('txt-oferta').innerText = fMoney(nego.propuesta) + ' Bs';
+            }
+            let fac = snaps[6].val();
+            if(fac) document.getElementById('inp-factura').value = fac;
+            if(montoCierre) document.getElementById('inp-cierre').value = parseFloat(montoCierre).toFixed(2);
+            escucharPagosAdmin();
+        });
+    } // fin cargarDashboard
+
+    async function toggleVisibleCliente() {
+        const snap = await db.ref(`proyectos/${cid}/${pid}/visible_cliente`).once('value');
+        const vis = snap.val() !== false;
+        const nuevo = !vis;
+        await db.ref(`proyectos/${cid}/${pid}/visible_cliente`).set(nuevo);
+        document.getElementById('ico-vis-proy').className = `ph-bold ${nuevo ? 'ph-eye' : 'ph-eye-slash'}`;
+        document.getElementById('btn-vis-proy').style.color = nuevo ? '' : 'var(--gray)';
+        document.getElementById('btn-vis-proy').title = nuevo ? 'Ocultar para cliente' : 'Hacer visible para cliente';
+        const msg = nuevo ? 'Proyecto ahora VISIBLE para el cliente ✅' : 'Proyecto OCULTO para el cliente 🚫';
+        alert(msg);
+    }
+
+    async function duplicarProyecto() {
+        if(!confirm('¿Duplicar este proyecto?')) return;
+        const snap = await db.ref(`proyectos/${cid}/${pid}`).once('value');
+        if(!snap.exists()) return alert('No se pudo leer el proyecto.');
+        const original = snap.val();
+        const copia = JSON.parse(JSON.stringify(original));
+        copia.nombre = (copia.nombre || 'Proyecto') + ' (copia)';
+        copia.fecha_creacion = new Date().toISOString();
+        copia.estado = 'planificacion';
+        delete copia.pid;
+        const newRef = db.ref(`proyectos/${cid}`).push();
+        await newRef.set(copia);
+        alert(`Proyecto duplicado como "${copia.nombre}". Podés verlo en la lista.`);
+    }
+
+    function fMoney(num) { return parseFloat(num || 0).toLocaleString('es-BO', {minimumFractionDigits: 2, maximumFractionDigits: 2}); }
+    function abrirModulo(mod) { window.location.href = mod + '.html?cid=' + cid + '&pid=' + pid; }
+
+    function abrirReqAsistido() {
+        localStorage.setItem('rubik_req_backref', 'dashboard-proyecto.html');
+        window.location.href = 'requerimiento-asistido.html';
+    }
+
+    function aceptarOfertaCliente() {
+        db.ref(`proyectos/${cid}/${pid}/negociacion`).once('value', snap => {
+            const nego = snap.val();
+            if(nego && nego.propuesta) { 
+                db.ref(`proyectos/${cid}/${pid}/monto_cierre`).set(nego.propuesta); 
+                db.ref(`proyectos/${cid}/${pid}/estado`).set('produccion'); 
+                db.ref(`proyectos/${cid}/${pid}/negociacion`).remove(); 
+                alert("¡Trato cerrado con el cliente!"); location.reload(); 
+            }
+        });
+    }
+    function enviarContraPropuesta() {
+        const monto = prompt("Ingresa el monto de tu contraoferta en Bs:");
+        if(monto && !isNaN(monto)) { db.ref(`proyectos/${cid}/${pid}/negociacion/contrapropuesta`).set(parseFloat(monto)); alert("Contraoferta enviada al cliente."); }
+    }
+    function fijarCierre() {
+        const monto = parseFloat(document.getElementById('inp-cierre').value);
+        if(!monto || monto <= 0) return alert("Ingresa un monto válido.");
+        if(confirm("¿Fijar este monto como el cierre definitivo del proyecto?")) { 
+            db.ref(`proyectos/${cid}/${pid}/monto_cierre`).set(monto); 
+            db.ref(`proyectos/${cid}/${pid}/estado`).set('produccion'); 
+            db.ref(`proyectos/${cid}/${pid}/negociacion`).remove(); 
+            alert("Monto de cierre fijado correctamente."); location.reload(); 
+        }
+    }
+    function guardarFactura() {
+        const url = document.getElementById('inp-factura').value.trim();
+        if(!url) return alert("Pega el enlace de la factura.");
+        db.ref(`proyectos/${cid}/${pid}/factura_url`).set(url); 
+        db.ref(`proyectos/${cid}/${pid}/estado`).set('entregado'); 
+        alert("Factura enviada al portal del cliente.");
+    }
+
+    function registrarPagoCliente() {
+        const monto = parseFloat(document.getElementById('pago-monto').value);
+        const fecha = document.getElementById('pago-fecha').value;
+        const nota = document.getElementById('pago-nota').value.trim();
+
+        if(!monto || !fecha) return alert("Ingresa el monto y la fecha del pago.");
+
+        const pagoData = { monto, fecha, nota, timestamp: Date.now() };
+        db.ref(`proyectos/${cid}/${pid}/pagos`).push(pagoData).then(() => {
+            alert("Pago registrado correctamente.");
+            document.getElementById('pago-monto').value = '';
+            document.getElementById('pago-nota').value = '';
+        });
+    }
+
+    function escucharPagosAdmin() {
+        db.ref(`proyectos/${cid}/${pid}/pagos`).on('value', snap => {
+            const cont = document.getElementById('lista-pagos-admin');
+            if(!cont) return;
+            cont.innerHTML = '';
+            let totalPagado = 0;
+            if(snap.exists()){
+                snap.forEach(child => {
+                    const p = child.val();
+                    totalPagado += parseFloat(p.monto || 0);
+                    cont.innerHTML += `<div style="display:flex; justify-content:space-between; border-bottom:1px solid var(--border); padding:8px 0; color:var(--text);">
+                        <span><b style="color:var(--gray); margin-right:5px;">${p.fecha}</b> ${p.nota}</span>
+                        <b style="color:var(--green);">+${parseFloat(p.monto || 0).toLocaleString('es-BO', {minimumFractionDigits: 2})} Bs</b>
+                    </div>`;
+                });
+                cont.innerHTML += `<div style="text-align:right; font-weight:900; margin-top:10px; color:var(--green); font-size:14px;">Total Pagado: ${totalPagado.toLocaleString('es-BO', {minimumFractionDigits: 2})} Bs</div>`;
+            } else {
+                cont.innerHTML = '<div style="color:var(--gray); text-align:center;">No hay pagos registrados.</div>';
+            }
+        });
+    }
+</script>
+
+<script type="module">
+        // IA via proxy /api/gemini
+        // Caché de prompt (10 min) e historial multi-turn
+        let _dashPromptCache = null, _dashPromptTs = 0;
+        const DASH_PROMPT_TTL = 10 * 60 * 1000;
+        let _dashHistorial = [];
+
+        // LAS FUNCIONES DE ABRIR Y CERRAR AHORA EXISTEN Y USAN "FLEX"
+        window.openAIChat = function() {
+            document.getElementById('ai-chat-modal').style.display = 'flex';
+        };
+        
+        window.closeAIChat = function() {
+            document.getElementById('ai-chat-modal').style.display = 'none';
+            if (isRecording && recognition) recognition.stop();
+        };
+
+        let currentAIImage = null;
+        const currentCid = localStorage.getItem('rubik_client_id');
+        const currentPid = localStorage.getItem('rubik_current_pid');
+
+        // --- MOTOR DE VOZ BLINDADO ---
+        let recognition;
+        let isRecording = false;
+        let baseText = ''; 
+
+        if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
+            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+            recognition = new SpeechRecognition();
+            recognition.continuous = true; 
+            recognition.interimResults = false; 
+            recognition.lang = 'es-ES'; 
+
+            recognition.onresult = (event) => {
+                let finalSentence = '';
+                for (let i = event.resultIndex; i < event.results.length; i++) finalSentence += event.results[i][0].transcript;
+                const inp = document.getElementById('ai-user-input');
+                inp.value = baseText + finalSentence;
+                inp.style.height = 'auto'; inp.style.height = (inp.scrollHeight) + 'px';
+            };
+            recognition.onerror = () => { isRecording = false; const btn = document.getElementById('btn-audio'); if(btn) btn.style.background = '#000'; };
+            recognition.onend = () => { 
+                isRecording = false; 
+                const btn = document.getElementById('btn-audio');
+                if(btn) { btn.style.background = '#000'; btn.innerHTML = '<i class="ph-bold ph-microphone"></i>'; }
+            };
+        }
+
+        window.toggleAudioRecording = function() {
+            if(!recognition) return alert("Navegador no soporta voz.");
+            if(isRecording) recognition.stop();
+            else {
+                baseText = document.getElementById('ai-user-input').value; 
+                if(baseText.length > 0 && !baseText.endsWith(' ')) baseText += ' ';
+                recognition.start(); isRecording = true;
+                const btn = document.getElementById('btn-audio');
+                if(btn) { btn.style.background = 'var(--red)'; btn.innerHTML = '<i class="ph-bold ph-stop-circle"></i>'; }
+            }
+        }
+
+        window.handleAIImage = function(inp) {
+            if (inp.files && inp.files[0]) {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    currentAIImage = e.target.result;
+                    const pre = document.getElementById('ai-img-preview');
+                    pre.src = currentAIImage; pre.style.display = 'block';
+                    document.getElementById('ai-img-remove').style.display = 'block';
+                };
+                reader.readAsDataURL(inp.files[0]);
+            }
+            inp.value = '';
+        }
+
+        window.removeAIImage = function() {
+            currentAIImage = null; 
+            document.getElementById('ai-img-preview').style.display = 'none'; 
+            document.getElementById('ai-img-remove').style.display = 'none';
+        }
+
+        document.getElementById('ai-chat-box').addEventListener('click', function(e) {
+            if(e.target && e.target.tagName === 'IMG' && e.target.classList.contains('msg-img')) {
+                window.open(e.target.src, '_blank');
+            }
+        });
+
+        async function aplicarEtiquetasPersonalizadas(promptText) {
+            try {
+                let snap = await firebase.database().ref('config_ia/custom_tags').once('value');
+                if(snap.exists()) {
+                    const tags = snap.val();
+                    for (const key in tags) {
+                        const regex = new RegExp('\\[' + key + '\\]', 'g');
+                        promptText = promptText.replace(regex, tags[key]);
+                    }
+                }
+            } catch(e){}
+            return promptText;
+        }
+
+        window.sendAIMessage = async function() {
+            const input = document.getElementById('ai-user-input');
+            const text = input.value.trim();
+            if(!text && !currentAIImage) return;
+
+            const chatBox = document.getElementById('ai-chat-box');
+            const typing = document.getElementById('ai-typing');
+            
+            const userMsg = document.createElement('div'); userMsg.className = 'msg msg-user';
+            userMsg.innerHTML = (currentAIImage ? '<img loading="lazy" decoding="async" src="' + currentAIImage + '" class="msg-img">' : '') + text.replace(/\n/g, '<br>');
+            chatBox.appendChild(userMsg);
+            
+            const imageToSend = currentAIImage;
+            input.value = ''; input.style.height = 'auto'; window.removeAIImage();
+            chatBox.scrollTop = chatBox.scrollHeight;
+            typing.style.display = 'block';
+
+            let contextoProyecto = "Sin datos.";
+            try {
+                // Cargar el proyecto completo en paralelo con la base de datos de precios
+                const [pSnap, bdSnap] = await Promise.all([
+                    firebase.database().ref('proyectos/' + currentCid + '/' + currentPid).once('value'),
+                    firebase.database().ref('base_datos').once('value')
+                ]);
+
+                if(pSnap.exists()) {
+                    const p = pSnap.val();
+
+                    // Calcular financiero
+                    let ventaBase = 0, gastoLic = 0, totalPagadoCliente = 0;
+                    if(p.presupuesto?.items) Object.values(p.presupuesto.items).forEach(it => { if(it.type !== 'chapter') ventaBase += (parseFloat(it.cant||1) * parseFloat(it.pu||0)); });
+                    if(p.licitaciones) Object.values(p.licitaciones).forEach(l => {
+                        const monto = parseFloat(l.precio_propuesto||0);
+                        let pagado = 0; if(l.pagos) Object.values(l.pagos).forEach(pg => pagado += parseFloat(pg.monto||0));
+                        gastoLic += monto;
+                        l._saldo = monto - pagado; // enriquecer con saldo
+                    });
+                    if(p.pagos) Object.values(p.pagos).forEach(pg => totalPagadoCliente += parseFloat(pg.monto||0));
+
+                    // APU completo de cada ítem
+                    const itemsDetalle = {};
+                    if(p.presupuesto?.items) {
+                        Object.entries(p.presupuesto.items).forEach(([idx, it]) => {
+                            if(it.type === 'chapter') return;
+                            itemsDetalle[idx] = {
+                                desc: it.desc, cant: it.cant, und: it.und, pu: it.pu,
+                                feat: it.feat,
+                                tipo: it.type || 'venta',
+                                apu: it.apu || null,
+                                proceso_ia: it.proceso_ia || null,
+                                mats_compra: it.mats || null
+                            };
+                        });
+                    }
+
+                    // Catálogo de precios de referencia
+                    let preciosRef = {};
+                    if(bdSnap.exists()) {
+                        const bd = bdSnap.val();
+                        preciosRef.materiales = Object.values(bd.materiales||{}).slice(0,60).map(m=>`${m.desc||m.n}: ${m.precio||m.pu||m.p||0} Bs/${m.und||m.u}`);
+                        preciosRef.mano_obra = Object.values(bd.mano_obra||{}).map(m=>`${m.desc||m.n}: ${m.p||0} Bs/${m.u}`);
+                    }
+
+                    contextoProyecto = JSON.stringify({
+                        nombre: p.nombre,
+                        estado: p.estado,
+                        cliente_id: currentCid,
+                        financiero: {
+                            venta_base: ventaBase,
+                            monto_cierre: p.monto_cierre || ventaBase,
+                            gasto_licitaciones: gastoLic,
+                            pagado_por_cliente: totalPagadoCliente,
+                            saldo_cliente: (p.monto_cierre || ventaBase) - totalPagadoCliente,
+                            utilidad_estimada: (p.monto_cierre || ventaBase) - gastoLic
+                        },
+                        items_detalle: itemsDetalle,
+                        licitaciones: p.licitaciones || {},
+                        gantt: p.gantt?.items || {},
+                        compras: p.compras || {},
+                        extras: p.extras || {},
+                        descripcion: p.descripcion || '',
+                        precios_referencia: preciosRef
+                    });
+                }
+            } catch(e){ console.warn('Context error:', e); }
+
+            let sysPrompt = "";
+            const _dashPromptDefecto = `Eres el Cerebro IA del proyecto de Rubik Bolivia. Analiza el contexto completo.
+
+DATOS DEL PROYECTO:
+[DATOS_PROYECTO]
+
+CAPACIDADES:
+1. FINANCIERO: venta base, cierre, gastos, saldo cliente, utilidad.
+2. ÍTEMS Y APU: cada ítem con materiales, MO y precios del APU.
+3. LICITACIONES: trabajadores, montos, anticipos, saldos.
+4. GANTT: tareas y su estado.
+5. COMPRAS: qué se compró, cuándo y cuánto.
+
+REGLAS:
+- Directo y técnico. El CEO es tu jefe.
+- Si te mandan foto, analizá en contexto del proyecto.
+- NUNCA digas "no tengo acceso". Si falta info, estimá con lo disponible.`;
+
+            // Cargar prompt desde Firebase o usar default
+            const _now = Date.now();
+            if (_dashPromptCache && (_now - _dashPromptTs) < DASH_PROMPT_TTL) {
+                sysPrompt = _dashPromptCache;
+            } else {
+                try {
+                    const [_snapP, _snapT] = await Promise.all([
+                        firebase.database().ref('config_ia/prompts/dashboard_proyecto').once('value'),
+                        firebase.database().ref('config_ia/custom_tags').once('value')
+                    ]);
+                    sysPrompt = (_snapP.exists() && _snapP.val()) ? _snapP.val() : _dashPromptDefecto;
+                    if (_snapT.exists()) {
+                        const _tags = _snapT.val();
+                        for (const [k, v] of Object.entries(_tags)) {
+                            sysPrompt = sysPrompt.replace(new RegExp('\\[' + k + '\\]', 'g'), v);
+                        }
+                    }
+                    _dashPromptCache = sysPrompt;
+                    _dashPromptTs = _now;
+                } catch(_e) { sysPrompt = _dashPromptDefecto; }
+            }
+
+            // Inyectar contexto del proyecto
+            sysPrompt = sysPrompt.replace('[DATOS_PROYECTO]', contextoProyecto);
+
+            // Historial multi-turn (últimos 8 turnos)
+            if (_dashHistorial.length > 0) {
+                const histStr = _dashHistorial.slice(-8).map(h => `${h.role === 'user' ? 'CEO' : 'IA'}: ${h.text}`).join('\n');
+                sysPrompt += `\n\n═══ CONVERSACIÓN PREVIA ═══\n${histStr}`;
+            }
+
+            try {
+                // Llamada via proxy /api/gemini
+                const _imgDash = imageToSend;
+                const _bodyDash = { prompt: sysPrompt + '\n\nCEO DICE: ' + (text || 'Analiza la imagen adjunta.'), model: 'gemini-2.5-flash' };
+                if (_imgDash) {
+                    _bodyDash.image = { data: _imgDash.split(',')[1], mimeType: _imgDash.split(';')[0].split(':')[1] };
+                }
+                const _tokDash = await firebase.auth().currentUser.getIdToken();
+                const _resDash = await fetch('/api/gemini', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + _tokDash },
+                    body: JSON.stringify(_bodyDash)
+                });
+                const _dataDash = await _resDash.json();
+                if (!_resDash.ok) throw new Error(_dataDash.error || 'Gemini error');
+                let aiText = _dataDash.text || (_dataDash.candidates?.[0]?.content?.parts?.[0]?.text) || '';
+
+                // Guardar en historial
+                _dashHistorial.push({ role: 'user', text: text || '[imagen]' });
+                _dashHistorial.push({ role: 'assistant', text: aiText.replace(/<[^>]+>/g, '') });
+                if (_dashHistorial.length > 16) _dashHistorial = _dashHistorial.slice(-16);
+
+                aiText = aiText.replace(/\*\*(.*?)\*\*/g, '<b>$1</b>');
+                typing.style.display = 'none';
+                const aiMsg = document.createElement('div'); aiMsg.className = 'msg msg-ai';
+                aiMsg.innerHTML = aiText.replace(/\n/g, '<br>');
+                chatBox.appendChild(aiMsg);
+                chatBox.scrollTop = chatBox.scrollHeight;
+            } catch(e) {
+                typing.style.display = 'none';
+                const errMsg = document.createElement('div'); errMsg.className = 'msg msg-ai';
+                errMsg.style.color = 'var(--red)';
+                errMsg.innerText = 'Error IA: ' + (e.message || 'desconocido');
+                chatBox.appendChild(errMsg);
+                console.error('Dashboard IA error:', e);
+            }
+        }
+
+    </script>
+</body>
+</html>

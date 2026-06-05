@@ -1,0 +1,435 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Proyectos del Cliente - Rubik</title>
+    
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.1.3/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.1.3/firebase-database-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.1.3/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.1.3/firebase-storage-compat.js"></script>
+    <script>
+        window._rubikFirebaseConfig = window._rubikFirebaseConfig || {
+            apiKey: "AIzaSyDXYlofy31cDP14xVAVxWo_7TqXdSgsIjA",
+            authDomain: "rubik-bolivia.firebaseapp.com",
+            databaseURL: "https://rubik-bolivia-default-rtdb.firebaseio.com",
+            projectId: "rubik-bolivia",
+            storageBucket: "rubik-bolivia.firebasestorage.app",
+            messagingSenderId: "4153087958",
+            appId: "1:4153087958:web:cf2dd16106580ed6437677"
+        };
+        if (!firebase.apps.length) firebase.initializeApp(window._rubikFirebaseConfig);
+    </script>
+    <script src="/js/firecache.js?v=1"></script>
+    <script src="/js/auth-guard.js?v=1"></script>
+
+    <style>
+        :root { --bg: #f4f4f7; --card: #fff; --text: #1a1a1a; --blue: #007aff; --green: #34c759; --red: #ff3b30; --orange: #ff9500; --gray: #8e8e93; --border: #d1d1d6; }
+        body.dark-mode { --bg: #000; --card: #1c1c1e; --text: #fff; --border: #333; }
+        body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 20px; padding-bottom: 100px; -webkit-tap-highlight-color: transparent; user-select: none;}
+
+        .nav { display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px; flex-wrap: wrap; gap:10px;}
+        .btn-nav { background: var(--card); border: 1px solid var(--border); padding: 8px 14px; border-radius: 20px; font-weight: 700; color: var(--blue); cursor: pointer; display: flex; align-items: center; gap: 5px; }
+
+        .client-header { margin-bottom: 25px; }
+        .client-name { font-size: 28px; font-weight: 900; letter-spacing: -0.5px; margin-bottom: 5px; }
+        .client-sub { font-size: 13px; color: var(--gray); font-weight: 600; text-transform: uppercase; }
+
+        .project-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px 15px; margin-top: 10px; }
+        @media (max-width: 500px) { .project-grid { grid-template-columns: repeat(3, 1fr); } }
+
+        .app-item { display: flex; flex-direction: column; align-items: center; cursor: pointer; transition: transform 0.2s; position: relative; -webkit-touch-callout: none; }
+        .app-item:active { transform: scale(0.92); }
+        
+        .icon-wrap { width: 100%; aspect-ratio: 1; border-radius: 22px; background: var(--card); border: 1px solid var(--border); box-shadow: 0 4px 10px rgba(0,0,0,0.05); display: flex; align-items: center; justify-content: center; overflow: hidden; font-size: 28px; font-weight: 900; color: var(--gray); margin-bottom: 8px; position: relative; }
+        .icon-wrap img { width: 100%; height: 100%; object-fit: cover; }
+        .app-name { font-size: 11px; font-weight: 700; text-align: center; line-height: 1.2; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+        
+        .badge-status { position: absolute; bottom: -5px; background: var(--card); font-size: 14px; width: 22px; height: 22px; border-radius: 50%; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 5px rgba(0,0,0,0.2); border: 1px solid var(--border); }
+
+        .fab { position: fixed; bottom: 30px; right: 30px; width: 60px; height: 60px; background: var(--blue); color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 28px; box-shadow: 0 5px 20px rgba(0, 122, 255, 0.4); border: none; cursor: pointer; z-index: 100; }
+
+        .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); z-index: 1000; justify-content: center; align-items: center; backdrop-filter: blur(4px); }
+        .modal-box { background: var(--card); width: 85%; max-width: 400px; padding: 25px; border-radius: 24px; color: var(--text); position: relative; max-height: 90vh; overflow-y: auto; }
+        
+        .inp-lbl { font-size: 10px; font-weight: 800; color: var(--gray); text-transform: uppercase; display: block; margin-bottom: 5px; margin-top: 10px; text-align: left; }
+        .inp-std { width: 100%; padding: 14px; border: 1px solid var(--border); background: var(--bg); color: var(--text); border-radius: 12px; font-size: 15px; box-sizing: border-box; font-weight: 600; }
+        
+        .action-list { display: flex; flex-direction: column; gap: 8px; margin-top: 15px; }
+        .btn-act { width: 100%; padding: 16px; border: none; border-radius: 12px; font-weight: 800; font-size: 14px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; transition: 0.2s; }
+        
+        .btn-primary { background: var(--blue); color: white; }
+        .btn-edit { background: var(--bg); color: var(--text); border: 1px solid var(--border); }
+        .btn-wsp { background: #25D366; color: white; }
+        .btn-mail { background: #007aff; color: white; }
+        .btn-danger { background: rgba(255,59,48,0.1); color: var(--red); border: 1px solid rgba(255,59,48,0.2); }
+        .btn-cancel { background: transparent; color: var(--gray); margin-top: 5px;}
+
+        .img-upload { width: 100px; height: 100px; border-radius: 22px; background: var(--bg); border: 2px dashed var(--blue); margin: 0 auto 15px auto; display: flex; flex-direction: column; align-items: center; justify-content: center; cursor: pointer; overflow: hidden; position: relative; color: var(--blue); font-weight: 700; font-size: 11px; gap: 5px;}
+        .img-upload img { width: 100%; height: 100%; object-fit: cover; display: none; position: absolute; top:0; left:0;}
+        .img-upload i { font-size: 35px; }
+    </style>
+    <link rel="stylesheet" href="/css/responsive.css?v=1">
+</head>
+<body>
+
+    <div class="nav">
+        <div style="display:flex; gap:8px; align-items:center;">
+            <button class="btn-nav" onclick="location.href='index.html'" title="Inicio"><i class="ph-bold ph-house"></i></button>
+            <button class="btn-nav" onclick="location.href='clientes.html'"><i class="ph-bold ph-caret-left"></i> Clientes</button>
+        </div>
+        <div style="display:flex; gap:10px; flex-wrap:wrap; justify-content:flex-end;">
+            <button class="btn-nav" style="background:transparent; color:var(--orange); border:1px solid var(--orange);" onclick="resetJuegosAdmin()"><i class="ph-bold ph-arrows-clockwise"></i> Limpiar Intentos</button>
+            <button class="btn-nav" style="background:var(--text); color:var(--bg); border:none;" onclick="abrirPortalCliente()"><i class="ph-bold ph-eye"></i> Ver como Cliente</button>
+            <button class="btn-nav" onclick="document.body.classList.toggle('dark-mode')"><i class="ph-fill ph-moon"></i></button>
+        </div>
+    </div>
+
+    <div class="client-header">
+        <div class="client-name" id="h-client-name">Cargando...</div>
+        <div class="client-sub">Carpeta de Proyectos</div>
+    </div>
+
+    <div id="project-grid" class="project-grid"></div>
+
+    <button class="fab" onclick="openModal()"><i class="ph-bold ph-plus"></i></button>
+
+    <div id="modal-actions" class="modal">
+        <div class="modal-box" style="text-align:center;">
+            <div id="act-logo" style="width:70px; height:70px; border-radius:18px; background:var(--bg); border:1px solid var(--border); margin:0 auto 10px auto; display:flex; align-items:center; justify-content:center; font-weight:900; overflow:hidden;"></div>
+            <h3 style="margin-top:0; margin-bottom:5px;" id="act-name">Proyecto</h3>
+            <p style="font-size:12px; color:var(--gray); margin-bottom:20px;">Gestión de Proyecto</p>
+            
+            <div class="action-list">
+                <div style="display:flex; gap:10px; margin-bottom:5px;">
+                    <button class="btn-act btn-edit" style="flex:1; font-size:12px; padding:12px;" onclick="moveProject(-1)"><i class="ph-bold ph-arrow-left"></i> Mover</button>
+                    <button class="btn-act btn-edit" style="flex:1; font-size:12px; padding:12px;" onclick="moveProject(1)">Mover <i class="ph-bold ph-arrow-right"></i></button>
+                </div>
+                
+                <button class="btn-act btn-edit" onclick="goToEditProject()"><i class="ph-bold ph-pencil-simple"></i> Editar Datos y Foto</button>
+                <button class="btn-act" style="background:rgba(191,90,242,0.1); color:#bf5af2; border:1px solid rgba(191,90,242,0.35);" onclick="abrirReqAsistido()"><i class="ph-bold ph-ruler"></i> Requerimiento Asistido</button>
+                <button class="btn-act btn-wsp" onclick="shareProject('wsp')"><i class="ph-bold ph-whatsapp-logo"></i> Notificar a Cliente (WhatsApp)</button>
+                <button class="btn-act btn-mail" onclick="shareProject('mail')"><i class="ph-bold ph-envelope-simple"></i> Notificar a Cliente (Correo)</button>
+                <button class="btn-act" style="background:rgba(52,199,89,0.12); color:var(--green); border:1px solid var(--green);" onclick="duplicarProyecto()"><i class="ph-bold ph-copy-simple"></i> Duplicar Proyecto</button>
+                <button class="btn-act" id="btn-toggle-visible" style="background:rgba(0,122,255,0.1); color:var(--blue); border:1px solid var(--blue);" onclick="toggleVisibleCliente()"><i class="ph-bold ph-eye" id="ico-visible"></i> <span id="lbl-visible">Visible para cliente</span></button>
+                <button class="btn-act btn-danger" onclick="deleteCurrentProject()"><i class="ph-bold ph-trash"></i> Eliminar Proyecto</button>
+                <button class="btn-act btn-cancel" onclick="closeModals()">Cancelar</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="modal-add" class="modal">
+        <div class="modal-box">
+            <h3 style="margin-top:0; text-align:center;" id="form-title">Crear Proyecto</h3>
+            <div class="img-upload" onclick="document.getElementById('file-img').click()">
+                <i class="ph-bold ph-image" id="icon-cam"></i><span id="txt-cam">Foto Portada</span><img loading="lazy" decoding="async" id="preview-img">
+            </div>
+            <input type="file" id="file-img" style="display:none" accept="image/*" onchange="previewImg(this)">
+            <label class="inp-lbl">Nombre del Proyecto</label>
+            <input type="text" id="inp-name" class="inp-std" placeholder="Ej: Stand Expo...">
+            <label class="inp-lbl">Estado</label>
+            <select id="inp-status" class="inp-std">
+                <option value="planificacion">⚪ Planificación</option>
+                <option value="produccion">🔵 En Producción</option>
+                <option value="entregado">🟢 Entregado</option>
+            </select>
+            <button class="btn-act btn-primary" id="btn-save" onclick="saveProject()"><span id="save-text">Guardar Proyecto</span></button>
+            <button class="btn-act btn-cancel" onclick="closeModals()">Cancelar</button>
+        </div>
+    </div>
+
+<script>
+    // Firebase ya inicializado en el <head>
+    if (!firebase.apps.length) firebase.initializeApp(window._rubikFirebaseConfig);
+    const db = firebase.database(); const storage = firebase.storage();
+
+    const cid = localStorage.getItem('rubik_client_id');
+    const cname = localStorage.getItem('rubik_client_name');
+    if(!cid) { window.location.href = 'clientes.html'; throw new Error('sin cid'); }
+    document.getElementById('h-client-name').innerText = cname || '';
+
+    function abrirPortalCliente() { window.open('cliente-view.html?cid=' + cid, '_blank'); }
+
+    async function resetJuegosAdmin() {
+        if(!confirm("¿Estás seguro de aniquilar todos los intentos bloqueados de este cliente en todos sus proyectos?")) return;
+        try {
+            await db.ref(`clientes/${cid}/juego_moneda_jugado`).remove();
+            await db.ref(`clientes/${cid}/descuento_ganado`).remove();
+            await db.ref(`clientes/${cid}/juego_snake_jugado`).remove();
+            await db.ref(`clientes/${cid}/snake_ganado`).remove();
+            
+            const snap = await db.ref(`proyectos/${cid}`).once('value');
+            if(snap.exists()) {
+                const promises = [];
+                snap.forEach(child => {
+                    const pid = child.key;
+                    promises.push(db.ref(`proyectos/${cid}/${pid}/juego_moneda_jugado`).remove());
+                    promises.push(db.ref(`proyectos/${cid}/${pid}/descuento_ganado_juego`).remove());
+                    promises.push(db.ref(`proyectos/${cid}/${pid}/juego_snake_jugado`).remove());
+                    promises.push(db.ref(`proyectos/${cid}/${pid}/descuento_ganado_snake`).remove());
+                });
+                await Promise.all(promises); 
+            }
+            alert("✅ Eliminación completa. Ahora el cliente puede volver a jugar.");
+        } catch(e) {
+            alert("Error al limpiar base de datos: " + e);
+        }
+    }
+
+    let tempImgFile = null; let existingImgUrl = null; let currentEditPid = null; let actionPid = null; let actionData = {}; let clientContact = { wsp: '', email: '' };
+    let globalProjectsArr = []; // Array global para el ordenamiento
+
+    // Cargar datos — usar onAuthStateChanged directamente, es lo más robusto
+    (function arrancarCarga() {
+        var auth = firebase.auth();
+        // Si ya hay usuario en memoria, arrancar de una
+        if (auth.currentUser) {
+            console.log('[proyectos-cliente] currentUser inmediato:', auth.currentUser.email);
+            _cargarDatosIniciales();
+            return;
+        }
+        // Si no, esperar el callback
+        var unsub = auth.onAuthStateChanged(function(user) {
+            unsub();
+            if (user) {
+                console.log('[proyectos-cliente] auth callback:', user.email);
+                _cargarDatosIniciales();
+            } else {
+                console.warn('[proyectos-cliente] sin sesión, redirigiendo');
+                window.location.href = 'login.html';
+            }
+        });
+    })();
+
+    function _cargarDatosIniciales() {
+        db.ref(`clientes/${cid}`).once('value', snap => { if(snap.exists()) { clientContact.wsp = snap.val().wsp || ''; clientContact.email = snap.val().email || ''; } });
+        _cargarProyectos();
+    }
+
+    function _cargarProyectos() {
+
+    // CARGA DE PROYECTOS CON MOTOR DE ORDENAMIENTO
+    db.ref(`proyectos/${cid}`).once('value', snap => {
+        const grid = document.getElementById('project-grid'); grid.innerHTML = "";
+        globalProjectsArr = [];
+        if(!snap.exists()) { grid.innerHTML = `<div style="grid-column:span 4; text-align:center; color:var(--gray); padding:40px;">Este cliente no tiene proyectos.</div>`; return; }
+
+        let tempArr = [];
+        snap.forEach(child => {
+            let p = child.val();
+            p.pid = child.key;
+            tempArr.push(p);
+        });
+
+        // Ordenamos por la variable 'orden' (si no existe, va al final)
+        tempArr.sort((a, b) => {
+            let oA = a.orden !== undefined ? a.orden : 999999;
+            let oB = b.orden !== undefined ? b.orden : 999999;
+            return oA - oB;
+        });
+
+        // Normalizamos los números de orden (0, 1, 2, 3...)
+        globalProjectsArr = tempArr.map((p, index) => {
+            p.orden = index;
+            return p;
+        });
+
+        globalProjectsArr.forEach(p => {
+            const pid = p.pid;
+            let statusIcon = '⚪'; let iconColor = 'var(--gray)';
+            if(p.estado === 'produccion') { statusIcon = '🔵'; iconColor = 'var(--blue)'; }
+            if(p.estado === 'entregado') { statusIcon = '🟢'; iconColor = 'var(--green)'; }
+
+            const imgSrc = p.img ? `<img src="${p.img}" loading="lazy">` : `<i class="ph-bold ph-folder" style="color:var(--gray);"></i>`;
+            const safeName = (p.nombre || "Sin nombre").replace(/'/g, "\\'"); const safeImg = p.img ? p.img : '';
+
+            const oculto = p.visible_cliente === false;
+            const ocultoBadge = oculto ? `<div style="position:absolute;top:4px;left:4px;background:rgba(0,0,0,0.6);color:#fff;font-size:9px;font-weight:800;padding:2px 6px;border-radius:6px;letter-spacing:0.5px;">OCULTO</div>` : '';
+            grid.innerHTML += `
+            <div class="app-item"
+                 onclick="openProject('${pid}', '${safeName}')"
+                 oncontextmenu="openActionMenu('${pid}', '${safeName}', '${safeImg}', '${p.estado}'); event.preventDefault(); return false;"
+                 ontouchstart="_lpStart(event, '${pid}', '${safeName}', '${safeImg}', '${p.estado}')"
+                 ontouchend="_lpCancel()"
+                 ontouchmove="_lpCancel()"
+                 style="${oculto ? 'opacity:0.55;' : ''}">
+                <div class="icon-wrap" style="position:relative;">${imgSrc}<div class="badge-status" style="color:${iconColor};">${statusIcon}</div>${ocultoBadge}</div>
+                <div class="app-name">${p.nombre}${oculto ? ' 🚫' : ''}</div>
+            </div>`;
+        });
+    });
+    } // fin _cargarProyectos
+
+    // FUNCIÓN PARA MOVER PROYECTOS (-1 = Izquierda, 1 = Derecha)
+    function moveProject(direction) {
+        let currentIndex = globalProjectsArr.findIndex(p => p.pid === actionPid);
+        if(currentIndex === -1) return;
+        
+        let swapIndex = currentIndex + direction;
+        
+        // Evitamos que se salga de los límites
+        if(swapIndex < 0 || swapIndex >= globalProjectsArr.length) return;
+        
+        let p1 = globalProjectsArr[currentIndex];
+        let p2 = globalProjectsArr[swapIndex];
+        
+        // Intercambiamos los valores de orden en Firebase
+        let updates = {};
+        updates[`${p1.pid}/orden`] = swapIndex;
+        updates[`${p2.pid}/orden`] = currentIndex;
+        
+        db.ref(`proyectos/${cid}`).update(updates);
+        closeModals();
+    }
+
+    function openProject(pid, pname) { if (window._lpFired) { window._lpFired = false; return; } localStorage.setItem('rubik_current_pid', pid); localStorage.setItem('rubik_current_pname', pname); window.location.href = 'dashboard-proyecto.html'; }
+
+    // ── Long press para móvil (equivalente al clic derecho de PC) ──
+    let _lpTimer = null;
+    let _lpFired = false;
+    window._lpStart = function(e, pid, name, img, status) {
+        _lpFired = false;
+        _lpTimer = setTimeout(() => {
+            _lpFired = true;
+            // Vibración táctil si el dispositivo lo soporta
+            if (navigator.vibrate) navigator.vibrate(40);
+            openActionMenu(pid, name, img, status);
+        }, 500);
+    };
+    window._lpCancel = function() {
+        clearTimeout(_lpTimer);
+        _lpTimer = null;
+    };
+
+    function openActionMenu(pid, name, img, status) {
+        actionPid = pid; actionData = { name, img, status }; document.getElementById('act-name').innerText = name;
+        document.getElementById('act-logo').innerHTML = img ? `<img loading="lazy" decoding="async" src="${img}" style="width:100%;height:100%;object-fit:cover;">` : `<i class="ph-bold ph-folder" style="font-size:30px; color:var(--gray);"></i>`;
+        // Leer visible_cliente del proyecto para reflejar estado en el botón
+        db.ref(`proyectos/${cid}/${pid}/visible_cliente`).once('value', snap => {
+            const visible = snap.val() !== false; // true por defecto
+            document.getElementById('ico-visible').className = `ph-bold ${visible ? 'ph-eye' : 'ph-eye-slash'}`;
+            document.getElementById('lbl-visible').innerText = visible ? 'Visible para cliente' : 'Oculto para cliente';
+            document.getElementById('btn-toggle-visible').style.color = visible ? 'var(--blue)' : 'var(--gray)';
+            document.getElementById('btn-toggle-visible').style.borderColor = visible ? 'var(--blue)' : 'var(--gray)';
+        });
+        document.getElementById('modal-actions').style.display = 'flex';
+    }
+
+    function shareProject(method) {
+        const link = `${window.location.href.substring(0, window.location.href.lastIndexOf('/'))}/cliente-view.html?cid=${cid}`;
+        const msg = encodeURIComponent(`Hola ${cname}! 👋\nTe notificamos que hay actualizaciones en tu proyecto: *${actionData.name}*.\n\nPuedes revisar el avance aquí:\n${link}`);
+        if(method === 'wsp') { if(!clientContact.wsp) return alert("El cliente no tiene WhatsApp registrado."); window.open(`https://wa.me/${clientContact.wsp.replace(/\D/g,'')}?text=${msg}`, '_blank'); } 
+        else { if(!clientContact.email) return alert("El cliente no tiene correo registrado."); window.open(`mailto:${clientContact.email}?subject=${encodeURIComponent(`Actualización Proyecto: ${actionData.name}`)}&body=${msg}`, '_blank'); }
+    }
+
+    function openModal() {
+        currentEditPid = null; tempImgFile = null; existingImgUrl = null; document.getElementById('form-title').innerText = "Nuevo Proyecto";
+        document.getElementById('inp-name').value = ''; document.getElementById('inp-status').value = 'planificacion';
+        document.getElementById('preview-img').style.display = 'none'; document.getElementById('icon-cam').style.display = 'block'; document.getElementById('txt-cam').style.display = 'block';
+        document.getElementById('modal-actions').style.display = 'none'; document.getElementById('modal-add').style.display = 'flex';
+    }
+
+    function goToEditProject() {
+        currentEditPid = actionPid; tempImgFile = null; existingImgUrl = actionData.img; document.getElementById('form-title').innerText = "Editar Proyecto";
+        document.getElementById('inp-name').value = actionData.name; document.getElementById('inp-status').value = actionData.status || 'planificacion';
+        if(existingImgUrl) { document.getElementById('preview-img').src = existingImgUrl; document.getElementById('preview-img').style.display = 'block'; document.getElementById('icon-cam').style.display = 'none'; document.getElementById('txt-cam').style.display = 'none'; } 
+        else { document.getElementById('preview-img').style.display = 'none'; document.getElementById('icon-cam').style.display = 'block'; document.getElementById('txt-cam').style.display = 'block'; }
+        document.getElementById('modal-actions').style.display = 'none'; document.getElementById('modal-add').style.display = 'flex';
+    }
+
+    function closeModals() { document.getElementById('modal-add').style.display = 'none'; document.getElementById('modal-actions').style.display = 'none'; }
+
+    function abrirReqAsistido() {
+        if (!actionPid) return;
+        localStorage.setItem('rubik_current_pid', actionPid);
+        localStorage.setItem('rubik_current_pname', (actionData && actionData.name) || '');
+        localStorage.setItem('rubik_req_backref', 'proyectos-cliente.html');
+        closeModals();
+        window.location.href = 'requerimiento-asistido.html';
+    }
+    function previewImg(inp) { if(inp.files && inp.files[0]) { tempImgFile = inp.files[0]; document.getElementById('preview-img').src = URL.createObjectURL(tempImgFile); document.getElementById('preview-img').style.display = 'block'; document.getElementById('icon-cam').style.display = 'none'; document.getElementById('txt-cam').style.display = 'none'; } }
+
+    function compressImage(file, maxWidth, quality) {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader(); reader.readAsDataURL(file);
+            reader.onload = event => {
+                const img = new Image(); img.src = event.target.result;
+                img.onload = () => {
+                    const canvas = document.createElement('canvas'); let scaleSize = 1; if(img.width > maxWidth) { scaleSize = maxWidth / img.width; }
+                    canvas.width = img.width * scaleSize; canvas.height = img.height * scaleSize; const ctx = canvas.getContext('2d'); ctx.drawImage(img, 0, 0, canvas.width, canvas.height); resolve(canvas.toDataURL('image/jpeg', quality));
+                };
+            };
+        });
+    }
+
+    async function saveProject() {
+        const name = document.getElementById('inp-name').value.trim(); const status = document.getElementById('inp-status').value;
+        if(!name) return alert("Ingresa el nombre del proyecto.");
+        document.getElementById('btn-save').disabled = true;
+        let finalImgUrl = existingImgUrl;
+        try {
+            if(tempImgFile) {
+                const base64Compressed = await compressImage(tempImgFile, 600, 0.7); const fileName = `portadas/proy_${Date.now()}.jpg`;
+                const storageRef = storage.ref(fileName); const snapshot = await storageRef.putString(base64Compressed, 'data_url'); finalImgUrl = await snapshot.ref.getDownloadURL();
+            }
+            const payload = { nombre: name, estado: status }; if(finalImgUrl) payload.img = finalImgUrl;
+
+            if(currentEditPid) {
+                await db.ref(`proyectos/${cid}/${currentEditPid}`).update(payload);
+            } else {
+                payload.fecha_creacion = new Date().toISOString();
+                payload.orden = globalProjectsArr.length;
+                await db.ref(`proyectos/${cid}`).push(payload);
+            }
+            closeModals();
+            _cargarProyectos();
+        } catch(error) { alert("Error al guardar: " + error); }
+        finally { document.getElementById('btn-save').disabled = false; }
+    }
+
+    async function duplicarProyecto() {
+        if(!actionPid) return;
+        closeModals();
+        const snap = await db.ref(`proyectos/${cid}/${actionPid}`).once('value');
+        if(!snap.exists()) return alert("No se encontró el proyecto.");
+        const orig = snap.val();
+        // Copia completa del proyecto (presupuesto, APU, artes, licitaciones, etc.)
+        const copia = JSON.parse(JSON.stringify(orig));
+        copia.nombre = (copia.nombre || 'Proyecto') + ' (copia)';
+        copia.fecha_creacion = new Date().toISOString();
+        copia.estado = 'planificacion';
+        copia.orden = globalProjectsArr.length;
+        delete copia.pid;
+        // Limpiar datos operativos que no deben copiarse
+        delete copia.licitaciones;
+        delete copia.pagos;
+        delete copia.compras;
+        delete copia.visible_cliente;
+        const newRef = db.ref(`proyectos/${cid}`).push();
+        await newRef.set(copia);
+        alert(`✅ Proyecto duplicado como "${copia.nombre}" con todos sus ítems y presupuesto.`);
+        _cargarProyectos();
+    }
+
+    async function deleteCurrentProject() {
+        if(!actionPid) return;
+        if(!confirm('¿Eliminar este proyecto? Esta acción no se puede deshacer.')) return;
+        await db.ref(`proyectos/${cid}/${actionPid}`).remove();
+        closeModals();
+        _cargarProyectos();
+    }
+
+    async function toggleVisibleCliente() {
+        if(!actionPid) return;
+        const snap = await db.ref(`proyectos/${cid}/${actionPid}/visible_cliente`).once('value');
+        const actual = snap.val() !== false;
+        await db.ref(`proyectos/${cid}/${actionPid}/visible_cliente`).set(!actual);
+        closeModals();
+        _cargarProyectos();
+    }
+
+</script>
+</body>
+</html>

@@ -1,0 +1,899 @@
+<!-- RUBIK OS v2026-05-09 03:18 - gemini-2.5-flash -->
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Base de Datos Maestra - Rubik OS</title>
+    
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.1.3/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.1.3/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.1.3/firebase-database-compat.js"></script>
+    <script src="/js/firecache.js?v=1"></script>
+    <script src="/js/auth-guard.js?v=1"></script>
+    
+    <style>
+        :root { --bg: #f4f4f7; --card: #fff; --text: #1a1a1a; --blue: #007aff; --green: #34c759; --orange: #ff9500; --red: #ff3b30; --purple: #af52de; --gray: #8e8e93; --border: #d1d1d6; }
+        body.dark-mode { --bg: #000; --card: #1c1c1e; --text: #fff; --border: #333; }
+        body { font-family: -apple-system, sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 20px; padding-bottom: 100px; -webkit-tap-highlight-color: transparent; }
+
+        .nav { display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px; }
+        .btn-nav { background: var(--card); border: 1px solid var(--border); padding: 8px 14px; border-radius: 20px; font-weight: 700; color: var(--blue); cursor: pointer; display: flex; align-items: center; gap: 5px; text-decoration: none; }
+        
+        .h-title { font-size: 26px; font-weight: 900; margin-bottom: 5px; letter-spacing: -0.5px;}
+        .h-sub { font-size: 13px; color: var(--gray); font-weight: 700; text-transform: uppercase; margin-bottom: 25px;}
+
+        .tabs-wrap { background: var(--border); padding: 4px; border-radius: 14px; display: flex; margin-bottom: 20px; overflow-x: auto; scrollbar-width: none;}
+        .tabs-wrap::-webkit-scrollbar { display: none; }
+        .tab-btn { flex: 1; min-width: max-content; padding: 12px 15px; border: none; background: transparent; font-weight: 800; font-size: 11px; border-radius: 10px; color: var(--gray); cursor: pointer; transition: 0.3s; text-transform: uppercase;}
+        .tab-btn.active { background: var(--card); color: var(--text); box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+
+        .search-bar { width: 100%; padding: 16px; background: var(--card); border: 1px solid var(--border); border-radius: 16px; font-size: 15px; font-weight: bold; margin-bottom: 20px; box-sizing: border-box; outline: none; color: var(--text); box-shadow: 0 4px 10px rgba(0,0,0,0.02);}
+
+        .list-container { display: flex; flex-direction: column; gap: 12px; }
+        .data-card { background: var(--card); border: 1px solid var(--border); border-radius: 18px; padding: 15px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 4px 10px rgba(0,0,0,0.02); transition:0.2s; }
+        
+        .d-info { display: flex; flex-direction: column; gap: 4px; flex-grow: 1; padding-right:10px; overflow:hidden;}
+        .d-badge { display: inline-block; font-size: 10px; font-weight: 800; padding: 3px 8px; border-radius: 6px; text-transform: uppercase; width: max-content; }
+        .bg-blue { background: rgba(0,122,255,0.1); color: var(--blue); }
+        .bg-orange { background: rgba(255,149,0,0.1); color: var(--orange); }
+        .bg-green { background: rgba(52,199,89,0.1); color: var(--green); }
+        .bg-purple { background: rgba(175,82,222,0.1); color: var(--purple); }
+        .bg-gray { background: rgba(142,142,147,0.1); color: var(--text); }
+        
+        .d-name { font-size: 15px; font-weight: 900; color: var(--text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+        .d-sub { font-size: 12px; font-weight: 700; color: var(--gray); }
+        .d-price { font-size: 18px; font-weight: 900; color: var(--blue); }
+
+        .action-btns { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end;}
+        .btn-circle { width: 36px; height: 36px; border-radius: 10px; border: none; display: flex; align-items: center; justify-content: center; font-size: 18px; cursor: pointer; transition:0.2s;}
+        .btn-circle:active { transform: scale(0.9); }
+        .btn-wsp { background: rgba(52,199,89,0.1); color: var(--green); }
+        .btn-del { background: rgba(255,59,48,0.1); color: var(--red); }
+        .btn-eye { background: rgba(0,122,255,0.1); color: var(--blue); }
+        .btn-edit { background: rgba(255,149,0,0.1); color: var(--orange); }
+
+        .fab { position: fixed; bottom: 30px; right: 30px; width: 60px; height: 60px; background: var(--blue); color: white; border: none; border-radius: 50%; font-size: 30px; box-shadow: 0 10px 20px rgba(0,122,255,0.4); cursor: pointer; display: flex; align-items: center; justify-content: center; transition: 0.2s; z-index: 1000;}
+        .fab:active { transform: scale(0.9); }
+        
+        .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); z-index: 2000; justify-content: center; align-items: center; padding: 20px; box-sizing: border-box; backdrop-filter: blur(5px); }
+        .modal-box { background: var(--card); width: 100%; max-width: 450px; padding: 25px; border-radius: 24px; position:relative; box-shadow: 0 20px 40px rgba(0,0,0,0.3);}
+        .inp-lbl { font-size: 11px; font-weight: 800; color: var(--gray); text-transform: uppercase; display: block; margin-bottom: 8px; padding-left: 5px; }
+        .inp-std { width: 100%; padding: 15px; border: 1px solid var(--border); background: var(--bg); color: var(--text); border-radius: 12px; font-weight: 700; margin-bottom: 15px; box-sizing: border-box; outline:none; font-family:inherit;}
+        .btn-main { background: var(--blue); color: white; border: none; padding: 16px; border-radius: 14px; font-weight: 900; font-size: 15px; cursor: pointer; width: 100%; margin-top: 10px;}
+        .empty-state { text-align: center; padding: 40px 20px; color: var(--gray); font-size: 13px; font-weight: 600; border: 2px dashed var(--border); border-radius: 16px;}
+
+        #global-loader { display: none; position: fixed; top:0; left:0; width:100%; height:100%; background: rgba(0,0,0,0.9); backdrop-filter: blur(10px); z-index: 3000; justify-content: center; align-items: center; flex-direction: column; color:white; font-weight:800; text-align: center; padding: 20px;}
+        .spinner { border: 4px solid rgba(255,255,255,0.2); border-left-color: var(--blue); border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; margin-bottom: 15px; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+        /* Estilos Chat IA */
+        .msg { padding: 12px 16px; border-radius: 14px; font-size: 14px; line-height: 1.4; word-wrap: break-word; margin-bottom: 10px; }
+        .msg-ai { background: var(--bg); border: 1px solid var(--border); align-self: flex-start; border-bottom-left-radius: 4px; color: var(--text); max-width: 85%; }
+        .msg-user { background: var(--purple); color: white; align-self: flex-end; border-bottom-right-radius: 4px; max-width: 85%; }
+        
+        .img-preview-box { display: flex; gap: 10px; padding: 10px 15px; background: var(--card); border-top: 1px solid var(--border); overflow-x: auto; }
+        .img-thumb-wrap { position: relative; flex-shrink: 0; }
+        .img-thumb { width: 50px; height: 50px; border-radius: 8px; object-fit: cover; border: 1px solid var(--border); }
+        .img-thumb-del { position: absolute; top: -5px; right: -5px; background: var(--red); color: white; border-radius: 50%; width: 18px; height: 18px; display: flex; justify-content: center; align-items: center; font-size: 10px; cursor: pointer; }
+    </style>
+    <link rel="stylesheet" href="/css/responsive.css?v=1">
+</head>
+<body>
+
+    <div id="global-loader">
+        <div class="spinner" id="loader-spinner"></div>
+        <div id="loader-txt">Sincronizando Matriz...</div>
+    </div>
+
+    <div class="nav">
+        <a href="index.html" class="btn-nav"><i class="ph-bold ph-caret-left"></i> Volver al HUB</a>
+        <div style="display: flex; gap: 8px;">
+            <button class="btn-nav" style="color:var(--purple); border-color:var(--purple); background:rgba(175,82,222,0.1);" onclick="abrirChatIA()"><i class="ph-bold ph-magic-wand"></i> Cerebro IA</button>
+            <button class="btn-nav" style="border:none; background:transparent;" onclick="document.body.classList.toggle('dark-mode')"><i class="ph-fill ph-moon"></i></button>
+        </div>
+    </div>
+
+    <div>
+        <div class="h-title">Base de Datos</div>
+        <div class="h-sub">Directorio y Matriz de Costos Rubik</div>
+    </div>
+
+    <div class="tabs-wrap">
+        <button class="tab-btn active" id="tab-pers" onclick="switchTab('pers')">RRHH & Talleres</button>
+        <button class="tab-btn" id="tab-prov" onclick="switchTab('prov')">Proveedores</button>
+        <button class="tab-btn" id="tab-mat" onclick="switchTab('mat')">Materiales</button>
+        <button class="tab-btn" id="tab-mo" onclick="switchTab('mo')">Mano Obra</button>
+        <button class="tab-btn" id="tab-eq" onclick="switchTab('eq')">Gastos / Eq</button>
+        <button class="tab-btn" id="tab-apu" onclick="switchTab('apu')">APUs</button>
+        <button class="tab-btn" id="tab-inv" onclick="switchTab('inv')"><i class="ph-bold ph-scan"></i> Inventario IA</button>
+    </div>
+
+    <input type="text" id="search-db" class="search-bar" placeholder="🔍 Buscar registro..." onkeyup="renderCurrentTab()">
+
+    <div class="list-container" id="list-container"></div>
+
+    <button class="fab" onclick="abrirModalPrincipal()"><i class="ph-bold ph-plus"></i></button>
+
+    <!-- Modal Formulario RRHH -->
+    <div class="modal" id="mod-pers">
+        <div class="modal-box">
+            <i class="ph-bold ph-x" style="position:absolute; top:20px; right:20px; font-size:24px; color:var(--gray); cursor:pointer;" onclick="document.getElementById('mod-pers').style.display='none'"></i>
+            <h3 style="margin-top:0;" id="mod-pers-title">Nuevo Personal / Taller</h3>
+            <input type="text" id="p-nom" class="inp-std" placeholder="Nombre / Razón Social">
+            <select id="p-tipo" class="inp-std" onchange="toggleSueldo(this.value)">
+                <option value="interno">Trabajador Interno (Planta)</option>
+                <option value="supervisor">Supervisor de Obra</option>
+                <option value="externo">Contratista (Mano de Obra)</option>
+                <option value="empresa">Taller de Servicios Generales</option>
+                <option value="graficos">Empresa de Gráficos / Impresión</option>
+            </select>
+            <input type="text" id="p-esp" class="inp-std" placeholder="Especialidad (Ej. Soldador, Plotter, CNC)">
+            <input type="number" id="p-tel" class="inp-std" placeholder="Número de WhatsApp">
+            <div id="box-sueldo"><label class="inp-lbl">Sueldo Base Mensual (Bs)</label><input type="number" id="p-sueldo" class="inp-std" placeholder="Ej: 3500"></div>
+            <button class="btn-main" onclick="guardarPersonal()"><i class="ph-bold ph-floppy-disk"></i> Guardar Registro</button>
+        </div>
+    </div>
+
+    <!-- Modal Formulario Proveedor -->
+    <div class="modal" id="mod-prov">
+        <div class="modal-box">
+            <i class="ph-bold ph-x" style="position:absolute; top:20px; right:20px; font-size:24px; color:var(--gray); cursor:pointer;" onclick="document.getElementById('mod-prov').style.display='none'"></i>
+            <h3 style="margin-top:0;" id="mod-prov-title">Nuevo Proveedor</h3>
+            <input type="text" id="pv-nom" class="inp-std" placeholder="Razón Social (Ej. Tablecentro)">
+            <input type="text" id="pv-cat" class="inp-std" placeholder="Categoría (Ej. Melaminas, Herrajes)">
+            <input type="number" id="pv-tel" class="inp-std" placeholder="WhatsApp Ventas">
+            <button class="btn-main" onclick="guardarProveedor()"><i class="ph-bold ph-floppy-disk"></i> Guardar Proveedor</button>
+        </div>
+    </div>
+
+    <!-- Modal Formulario Costos Genericos -->
+    <div class="modal" id="mod-gen">
+        <div class="modal-box">
+            <i class="ph-bold ph-x" style="position:absolute; top:20px; right:20px; font-size:24px; color:var(--gray); cursor:pointer;" onclick="document.getElementById('mod-gen').style.display='none'"></i>
+            <h3 style="margin-top:0;" id="mod-gen-title">Nuevo Registro</h3>
+            <label class="inp-lbl">Nombre / Descripción</label>
+            <input type="text" id="g-nom" class="inp-std" placeholder="Ej: Melamina Blanca 18mm">
+            <div style="display:flex; gap:10px;">
+                <div style="flex:1;"><label class="inp-lbl">Unidad</label><input type="text" id="g-und" class="inp-std" placeholder="Ej: m2, plancha, jornal"></div>
+                <div style="flex:1;"><label class="inp-lbl">Precio (Bs)</label><input type="number" step="any" id="g-precio" class="inp-std" placeholder="Ej: 350.50"></div>
+            </div>
+            <div id="box-gen-prov" style="display:none;">
+                <label class="inp-lbl">Proveedor Referencial</label>
+                <select id="g-prov" class="inp-std"><option value="">Ninguno</option></select>
+            </div>
+            <button class="btn-main" onclick="guardarGeneric()"><i class="ph-bold ph-floppy-disk"></i> Guardar Costo</button>
+        </div>
+    </div>
+
+    <!-- MODAL CHAT CEREBRO CENTRAL IA -->
+    <div class="modal" id="mod-ia-chat">
+        <div class="modal-box" style="display:flex; flex-direction:column; height:85vh; padding:0; overflow:hidden; max-width: 500px;">
+            <div style="padding:20px; background:var(--card); border-bottom:1px solid var(--border); display:flex; justify-content:space-between; align-items:center;">
+                <h3 style="margin:0; color:var(--purple); display:flex; align-items:center; gap:8px;"><i class="ph-fill ph-magic-wand"></i> Cerebro Central IA</h3>
+                <i class="ph-bold ph-x" style="font-size:24px; color:var(--gray); cursor:pointer;" onclick="document.getElementById('mod-ia-chat').style.display='none'"></i>
+            </div>
+            <div id="ia-chat-history" style="flex-grow:1; padding:20px; overflow-y:auto; display:flex; flex-direction:column; background:var(--bg);">
+                <div class="msg msg-ai">Hola Renzo. Soy el Cerebro Central. ¿Qué necesitas actualizar, cotizar o registrar en la matriz hoy? Puedes pegar links, subir fotos o PDFs.</div>
+            </div>
+            
+            <div id="ia-preview-box" class="img-preview-box" style="display:none;"></div>
+
+            <div style="padding:15px; background:var(--card); border-top:1px solid var(--border); display:flex; gap:8px; align-items:center;">
+                <input type="file" id="ia-file-up" accept="image/*,application/pdf" multiple style="display:none;" onchange="handleIAUploadBD(this)">
+                <button class="btn-main" style="width:40px; height:40px; margin:0; border-radius:50%; background:rgba(0,122,255,0.1); color:var(--blue); flex-shrink:0; box-shadow:none;" onclick="document.getElementById('ia-file-up').click()"><i class="ph-bold ph-paperclip" style="font-size:20px;"></i></button>
+                <input type="text" id="ia-chat-input" class="inp-std" style="margin:0; flex-grow:1; border-radius:20px; padding:12px 15px;" placeholder="Pega un link o escribe aquí..." onkeypress="if(event.key === 'Enter') enviarMensajeIA()">
+                <button class="btn-main" style="width:40px; height:40px; margin:0; padding:0; border-radius:50%; background:var(--purple); flex-shrink:0;" onclick="enviarMensajeIA()"><i class="ph-bold ph-paper-plane-right" style="font-size:20px;"></i></button>
+            </div>
+        </div>
+    </div>
+
+<script type="module">
+    // Wrapper que enruta Gemini por el Cloud Function autenticado
+    import { callGemini } from "/js/gemini-client.js?v=2";
+    window.callGemini = callGemini;
+</script>
+
+<script>
+    // SISTEMA DE SEGURIDAD ANTI-BLOQUEOS
+    window.onerror = function(msg, url, lineNo, columnNo, error) {
+        document.getElementById('loader-spinner').style.display = 'none';
+        document.getElementById('loader-txt').innerHTML = `<span style="color:#ff3b30; font-size:14px;">Error en código (Línea ${lineNo}):<br>${msg}</span><br><br><span style="font-size:11px; color:#8e8e93;">Iniciando forzosamente en 3 segundos...</span>`;
+        setTimeout(() => { document.getElementById('global-loader').style.display = 'none'; }, 4000);
+        return false;
+    };
+
+    setTimeout(() => {
+        const loader = document.getElementById('global-loader');
+        if(loader.style.display !== 'none') {
+            document.getElementById('loader-txt').innerText = "Tiempo agotado. Forzando inicio de UI...";
+            setTimeout(() => { loader.style.display = 'none'; }, 1000);
+        }
+    }, 5000);
+
+    const firebaseConfig = {
+        apiKey: "AIzaSyDXYlofy31cDP14xVAVxWo_7TqXdSgsIjA",
+        authDomain: "rubik-bolivia.firebaseapp.com",
+        databaseURL: "https://rubik-bolivia-default-rtdb.firebaseio.com",
+        projectId: "rubik-bolivia",
+        storageBucket: "rubik-bolivia.firebasestorage.app",
+        messagingSenderId: "4153087958",
+        appId: "1:4153087958:web:cf2dd16106580ed6437677"
+    };
+    if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
+    const db = firebase.database();
+
+    let currentTab = 'pers';
+    let dbData = { pers: {}, prov: {}, mat: {}, mo: {}, eq: {}, apu: {}, inv: {} };
+    let editKey = null;
+
+    function fMoney(num) { return parseFloat(num || 0).toLocaleString('es-BO', {minimumFractionDigits: 2, maximumFractionDigits: 2}); }
+
+    // PERFORMANCE FIX: cargar solo los nodos necesarios en paralelo
+    // Antes: db.ref().on('value') descargaba 12MB completos (incluyendo 8MB de imágenes base64)
+    // Ahora: cargamos solo los 6 nodos necesarios (~250 KB total) en paralelo
+    async function cargarDatosIniciales() {
+        try {
+            const [persSnap, provSnap, matSnap, moSnap, eqSnap, invSnap] = await Promise.all([
+                db.ref('personal').once('value'),
+                db.ref('base_datos/proveedores').once('value'),
+                db.ref('base_datos/materiales').once('value'),
+                db.ref('base_datos/mano_obra').once('value'),
+                db.ref('base_datos/otros').once('value'),
+                db.ref('base_datos/inventario').once('value')
+            ]);
+            dbData.pers = persSnap.val() || {};
+            dbData.prov = provSnap.val() || {};
+            dbData.mat  = matSnap.val()  || {};
+            dbData.mo   = moSnap.val()   || {};
+            dbData.eq   = eqSnap.val()   || {};
+            dbData.inv  = invSnap.val()  || {};
+            // Items se carga solo si el usuario abre esa pestaña (lazy load)
+            dbData.apu  = {};
+            actualizarComboProveedores();
+            renderCurrentTab();
+        } catch(error) {
+            console.error("Error cargando datos:", error);
+        } finally {
+            document.getElementById('global-loader').style.display = 'none';
+        }
+    }
+
+    // Items (7.6MB) se carga solo cuando el usuario abre la pestaña APU
+    let itemsLoaded = false;
+    async function cargarItemsSiNecesario() {
+        if(itemsLoaded) return;
+        document.getElementById('global-loader').style.display = 'flex';
+        document.getElementById('loader-txt') && (document.getElementById('loader-txt').innerText = 'Cargando catálogo de ítems...');
+        const snap = await db.ref('base_datos/items').once('value');
+        dbData.apu = snap.val() || {};
+        itemsLoaded = true;
+        document.getElementById('global-loader').style.display = 'none';
+    }
+
+    // Escuchar cambios en tiempo real SOLO en los nodos livianos
+    db.ref('personal').on('value', snap => { dbData.pers = snap.val() || {}; if(currentTab === 'pers') renderCurrentTab(); });
+    db.ref('base_datos/proveedores').on('value', snap => { dbData.prov = snap.val() || {}; actualizarComboProveedores(); if(currentTab === 'prov') renderCurrentTab(); });
+    db.ref('base_datos/materiales').on('value', snap => { dbData.mat = snap.val() || {}; if(currentTab === 'mat') renderCurrentTab(); });
+    db.ref('base_datos/mano_obra').on('value', snap => { dbData.mo = snap.val() || {}; if(currentTab === 'mo') renderCurrentTab(); });
+    db.ref('base_datos/otros').on('value', snap => { dbData.eq = snap.val() || {}; if(currentTab === 'eq') renderCurrentTab(); });
+    db.ref('base_datos/inventario').on('value', snap => { dbData.inv = snap.val() || {}; if(currentTab === 'inv') renderCurrentTab(); });
+    
+    cargarDatosIniciales();
+
+    function actualizarComboProveedores() {
+        const sel = document.getElementById('g-prov');
+        sel.innerHTML = '<option value="">Ninguno</option>';
+        Object.values(dbData.prov || {}).forEach(p => {
+            if(p && p.nombre) {
+                let nombreProv = String(p.nombre);
+                sel.innerHTML += `<option value="${nombreProv}">${nombreProv}</option>`;
+            }
+        });
+    }
+
+    async function switchTab(t) {
+        currentTab = t;
+        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+        document.getElementById(`tab-${t}`).classList.add('active');
+        document.getElementById('search-db').value = '';
+        // LAZY LOAD: Items APU (7.6MB) solo se carga cuando el usuario abre esa pestaña
+        if(t === 'apu') await cargarItemsSiNecesario();
+        renderCurrentTab();
+    }
+
+    function renderCurrentTab() {
+        const box = document.getElementById('list-container'); 
+        box.innerHTML = '';
+        
+        const data = dbData[currentTab] || {};
+        const keys = Object.keys(data);
+        const searchInput = document.getElementById('search-db');
+        const search = searchInput ? String(searchInput.value || '').toLowerCase().trim() : '';
+        let count = 0;
+
+        keys.forEach(k => {
+            const el = data[k];
+            if(!el) return; 
+            
+            if(currentTab === 'pers') {
+                const nameStr = String(el.nombre || 'Sin nombre');
+                if(nameStr.toLowerCase().includes(search)) {
+                    count++;
+                    let bCls = "bg-blue", bTxt = "Interno";
+                    const t = String(el.tipo || '').toLowerCase();
+                    
+                    if(t === 'supervisor') { bCls = "bg-gray"; bTxt = "Supervisor"; }
+                    else if(t.includes('externo') || t.includes('contratista')) { bCls = "bg-orange"; bTxt = "Contratista"; }
+                    else if(t.includes('empresa') || t.includes('servicio')) { bCls = "bg-green"; bTxt = "Servicios"; }
+                    else if(t.includes('grafico') || t.includes('impresi')) { bCls = "bg-purple"; bTxt = "Impresión"; }
+                    
+                    const safeName = nameStr.replace(/'/g, "\\'"); 
+                    const safeTipo = t.replace(/'/g, "\\'");
+                    
+                    box.innerHTML += `
+                    <div class="data-card">
+                        <div class="d-info">
+                            <span class="d-badge ${bCls}">${bTxt}</span>
+                            <span class="d-name">${nameStr}</span>
+                            <span class="d-sub">${el.especialidad || 'General'} | <i class="ph-fill ph-whatsapp-logo"></i> ${el.telefono || 'Sin número'}</span>
+                        </div>
+                        <div class="action-btns">
+                            <button class="btn-circle btn-eye" title="Modo Dios" onclick="verPerfilModoDios('${k}', '${safeTipo}')"><i class="ph-bold ph-eye"></i></button>
+                            <button class="btn-circle btn-wsp" title="Enviar Enlace" onclick="enviarAccesoWsp('${k}', '${safeName}', '${el.telefono || ''}', '${safeTipo}')"><i class="ph-bold ph-paper-plane-right"></i></button>
+                            <button class="btn-circle btn-edit" onclick="abrirEdicionPers('${k}')"><i class="ph-bold ph-pencil-simple"></i></button>
+                            <button class="btn-circle btn-del" onclick="eliminarRegistro('personal', '${k}')"><i class="ph-bold ph-trash"></i></button>
+                        </div>
+                    </div>`;
+                }
+            } 
+            else if(currentTab === 'prov') {
+                const nameStr = String(el.nombre || 'Sin nombre');
+                if(nameStr.toLowerCase().includes(search)) {
+                    count++;
+                    box.innerHTML += `
+                    <div class="data-card">
+                        <div class="d-info"><span class="d-name">${nameStr}</span><span class="d-sub">${el.categoria || 'General'} | <i class="ph-fill ph-phone"></i> ${el.telefono || '-'}</span></div>
+                        <div class="action-btns">
+                            <button class="btn-circle btn-edit" onclick="abrirEdicionProv('${k}')"><i class="ph-bold ph-pencil-simple"></i></button>
+                            <button class="btn-circle btn-del" onclick="eliminarRegistro('proveedores', '${k}')"><i class="ph-bold ph-trash"></i></button>
+                        </div>
+                    </div>`;
+                }
+            } 
+            else if(currentTab === 'inv') {
+                const nameStr = String(el.nombre || 'Sin nombre');
+                if(nameStr.toLowerCase().includes(search) || String(el.tipo||'').toLowerCase().includes(search)) {
+                    count++;
+                    let fotoHtml = el.fotoUrl ? `<img loading="lazy" decoding="async" src="${el.fotoUrl}" style="width:50px; height:50px; border-radius:8px; object-fit:cover;">` : '';
+                    box.innerHTML += `
+                    <div class="data-card" style="align-items:flex-start;">
+                        ${fotoHtml}
+                        <div class="d-info" style="margin-left:10px;">
+                            <span class="d-badge bg-purple">${el.tipo || 'Activo'}</span>
+                            <span class="d-name">${nameStr}</span>
+                            <span class="d-sub">${el.descripcion || 'Sin detalles'}</span>
+                            <div style="font-size:10px; color:var(--gray); margin-top:5px;"><b>Estado:</b> ${el.estado_estimado} | <b>Ingreso:</b> ${new Date(el.fecha_ingreso).toLocaleDateString()}</div>
+                        </div>
+                        <div style="display:flex; flex-direction:column; align-items:flex-end; gap:5px;">
+                            <div class="d-price" style="color:var(--text); font-size:14px;">Cant: ${el.cantidad_estimada || 1} ${el.und || 'pza'}</div>
+                            <button class="btn-circle btn-del" onclick="eliminarRegistro('base_datos/inventario', '${k}')"><i class="ph-bold ph-trash"></i></button>
+                        </div>
+                    </div>`;
+                }
+            }
+            else if(currentTab === 'apu') {
+                const nameStr = String(el.desc || el.nombre || 'Sin nombre');
+                if(nameStr.toLowerCase().includes(search)) {
+                    count++;
+                    box.innerHTML += `
+                    <div class="data-card">
+                        <div class="d-info"><span class="d-badge bg-blue">${el.und || 'glb'}</span><span class="d-name">${nameStr}</span><span class="d-sub" style="color:var(--orange);">Plantilla Estandarizada</span></div>
+                        <div style="display:flex; align-items:center; gap:10px;">
+                            <div class="d-price">${fMoney(el.pu || el.p)} Bs</div>
+                            <button class="btn-circle btn-del" onclick="eliminarRegistro('base_datos/items', '${k}')"><i class="ph-bold ph-trash"></i></button>
+                        </div>
+                    </div>`;
+                }
+            }
+            else {
+                const nameStr = String(el.n || el.desc || 'Sin nombre');
+                if(nameStr.toLowerCase().includes(search)) {
+                    count++;
+                    let extraBadge = "";
+                    if(currentTab === 'mat' && el.proveedor) extraBadge = `<span class="d-badge bg-green" style="margin-bottom:4px;"><i class="ph-bold ph-storefront"></i> ${el.proveedor}</span>`;
+                    
+                    let pathNode = currentTab === 'mat' ? 'materiales' : (currentTab === 'mo' ? 'mano_obra' : 'otros');
+                    
+                    box.innerHTML += `
+                    <div class="data-card">
+                        <div class="d-info">${extraBadge}<span class="d-name">${nameStr}</span><span class="d-sub">UND: ${el.u || el.und || 'glb'}</span></div>
+                        <div style="display:flex; align-items:center; gap:10px;">
+                            <div class="d-price">${fMoney(el.p || el.pu)} Bs</div>
+                            <div class="action-btns">
+                                <button class="btn-circle btn-edit" onclick="abrirEdicionGen('${k}')"><i class="ph-bold ph-pencil-simple"></i></button>
+                                <button class="btn-circle btn-del" onclick="eliminarRegistro('base_datos/${pathNode}', '${k}')"><i class="ph-bold ph-trash"></i></button>
+                            </div>
+                        </div>
+                    </div>`;
+                }
+            }
+        });
+
+        if(count === 0) box.innerHTML = '<div class="empty-state">No hay registros aquí.</div>';
+    }
+
+    function abrirModalPrincipal() {
+        editKey = null;
+        if(currentTab === 'pers') {
+            document.getElementById('mod-pers-title').innerText = "Nuevo Personal / Taller";
+            document.getElementById('p-nom').value = ""; document.getElementById('p-esp').value = "";
+            document.getElementById('p-tel').value = ""; document.getElementById('p-sueldo').value = "";
+            document.getElementById('p-tipo').value = "interno"; toggleSueldo("interno");
+            document.getElementById('mod-pers').style.display = 'flex';
+        } 
+        else if(currentTab === 'prov') {
+            document.getElementById('mod-prov-title').innerText = "Nuevo Proveedor";
+            document.getElementById('pv-nom').value = ""; document.getElementById('pv-cat').value = ""; document.getElementById('pv-tel').value = "";
+            document.getElementById('mod-prov').style.display = 'flex';
+        }
+        else if(currentTab === 'apu') {
+            alert("💡 Los Ítems Compuestos se guardan automáticamente desde el Presupuesto.");
+        }
+        else {
+            let tStr = currentTab === 'mat' ? 'Material' : (currentTab === 'mo' ? 'Mano de Obra' : 'Gasto / Equipo');
+            document.getElementById('mod-gen-title').innerText = "Nuevo " + tStr;
+            document.getElementById('g-nom').value = ""; document.getElementById('g-precio').value = ""; document.getElementById('g-prov').value = "";
+            document.getElementById('g-und').value = currentTab === 'mo' ? 'jornal' : 'und';
+            document.getElementById('box-gen-prov').style.display = currentTab === 'mat' ? 'block' : 'none';
+            document.getElementById('mod-gen').style.display = 'flex';
+        }
+    }
+
+    function toggleSueldo(val) { document.getElementById('box-sueldo').style.display = (val === 'interno' || val === 'supervisor') ? 'block' : 'none'; }
+
+    function abrirEdicionPers(k) {
+        editKey = k; const el = dbData.pers[k];
+        document.getElementById('mod-pers-title').innerText = "Editar Personal";
+        document.getElementById('p-nom').value = el.nombre || ''; document.getElementById('p-esp').value = el.especialidad || '';
+        document.getElementById('p-tel').value = el.telefono || ''; document.getElementById('p-sueldo').value = el.sueldo || '';
+        
+        let sel = document.getElementById('p-tipo');
+        let options = Array.from(sel.options).map(o => o.value);
+        if(options.includes(el.tipo)) sel.value = el.tipo; else sel.value = 'externo';
+        toggleSueldo(sel.value);
+        document.getElementById('mod-pers').style.display = 'flex';
+    }
+
+    function abrirEdicionProv(k) {
+        editKey = k; const el = dbData.prov[k];
+        document.getElementById('mod-prov-title').innerText = "Editar Proveedor";
+        document.getElementById('pv-nom').value = el.nombre || ''; document.getElementById('pv-cat').value = el.categoria || ''; document.getElementById('pv-tel').value = el.telefono || '';
+        document.getElementById('mod-prov').style.display = 'flex';
+    }
+
+    function abrirEdicionGen(k) {
+        editKey = k; const el = dbData[currentTab][k];
+        let tStr = currentTab === 'mat' ? 'Material' : (currentTab === 'mo' ? 'Mano de Obra' : 'Gasto / Equipo');
+        document.getElementById('mod-gen-title').innerText = "Editar " + tStr;
+        document.getElementById('g-nom').value = el.n || el.desc || ''; document.getElementById('g-und').value = el.u || el.und || '';
+        document.getElementById('g-precio').value = el.p || el.pu || ''; document.getElementById('g-prov').value = el.proveedor || '';
+        document.getElementById('box-gen-prov').style.display = currentTab === 'mat' ? 'block' : 'none';
+        document.getElementById('mod-gen').style.display = 'flex';
+    }
+
+    function guardarPersonal() {
+        const nom = document.getElementById('p-nom').value.trim(); const tipo = document.getElementById('p-tipo').value; 
+        const tel = document.getElementById('p-tel').value.trim();
+        if(!nom) return alert("El nombre es obligatorio");
+        
+        const newKey = nom.replace(/\s/g, '_');
+        const payload = { nombre: nom, tipo: tipo, especialidad: document.getElementById('p-esp').value.trim(), telefono: tel };
+        if(tipo === 'interno' || tipo === 'supervisor') payload.sueldo = parseFloat(document.getElementById('p-sueldo').value) || 0;
+
+        if(editKey && editKey !== newKey) db.ref('personal/' + editKey).remove();
+        db.ref('personal/' + newKey).set(payload);
+        document.getElementById('mod-pers').style.display = 'none';
+    }
+
+    function guardarProveedor() {
+        const nom = document.getElementById('pv-nom').value.trim();
+        if(!nom) return alert("Razón Social obligatoria");
+        const payload = { nombre: nom, categoria: document.getElementById('pv-cat').value.trim(), telefono: document.getElementById('pv-tel').value.trim(), contacto: document.getElementById('pv-tel').value.trim() || 'S/N' };
+        // FIX: guardar en base_datos/proveedores (ruta correcta)
+        if(editKey) db.ref('base_datos/proveedores/' + editKey).update(payload);
+        else db.ref('base_datos/proveedores').push(payload);
+        document.getElementById('mod-prov').style.display = 'none';
+    }
+
+    function guardarGeneric() {
+        const n = document.getElementById('g-nom').value.trim(); const u = document.getElementById('g-und').value.trim().toLowerCase() || 'und';
+        const p = parseFloat(document.getElementById('g-precio').value) || 0;
+        if(!n) return alert("El nombre es obligatorio");
+
+        const cleanKey = n.toUpperCase().replace(/[.#$\[\]/]/g, "");
+        
+        let payload = { n: n.toUpperCase(), u: u, p: p, desc: n.toUpperCase(), und: u, pu: p }; 
+        if(currentTab === 'mat') payload.proveedor = document.getElementById('g-prov').value;
+
+        if(editKey && currentTab === 'mat' && dbData.mat[editKey]) {
+            if(dbData.mat[editKey].pw) payload.pw = dbData.mat[editKey].pw;
+            if(dbData.mat[editKey].ph) payload.ph = dbData.mat[editKey].ph;
+        }
+        
+        let pathNode = currentTab === 'mat' ? 'materiales' : (currentTab === 'mo' ? 'mano_obra' : 'otros');
+        
+        if(editKey && editKey !== cleanKey) db.ref(`base_datos/${pathNode}/${editKey}`).remove();
+        db.ref(`base_datos/${pathNode}/${cleanKey}`).update(payload);
+        if(u) db.ref(`base_datos/unidades/${u.replace(/[^a-z0-9]/g, "")}`).set({nombre: u});
+        
+        document.getElementById('mod-gen').style.display = 'none';
+    }
+
+    function eliminarRegistro(path, key) {
+        // FIX: mapear 'proveedores' al path correcto en Firebase
+        let realPath = path === 'proveedores' ? 'base_datos/proveedores' : path;
+        if(confirm("⚠️ ¿Eliminar registro maestro?")) { db.ref(`${realPath}/${key}`).remove(); }
+    }
+
+    function getLinkBase(tipo) {
+        const t = String(tipo || '').toLowerCase();
+        if(t === 'supervisor') return 'supervisor-index.html';
+        if(t.includes('interno') || t === 'planta') return 'interno/app-trabajador.html'; 
+        if(t.includes('grafico') || t.includes('impresi')) return 'proveedor-grafico.html';
+        return 'contratista/index.html'; 
+    }
+
+    function verPerfilModoDios(id, tipo) {
+        const urlBase = window.location.href.replace('base_datos.html', '');
+        let linkBase = getLinkBase(tipo);
+        const t = String(tipo || '').toLowerCase();
+        let param = (t.includes('interno') || t === 'planta') ? 'user' : 'wid'; 
+        window.open(`${urlBase}${linkBase}?${param}=${encodeURIComponent(id)}`, '_blank');
+    }
+
+    function enviarAccesoWsp(id, nombre, telefono, tipo) {
+        if(!telefono || telefono === 'undefined') return alert("Sin número registrado.");
+        const urlBase = window.location.href.replace('base_datos.html', '');
+        let linkBase = getLinkBase(tipo);
+        let txt = "este es tu Portal Operativo.";
+        const t = String(tipo || '').toLowerCase();
+        
+        let param = 'wid';
+        if(t === 'supervisor') {
+            txt = "este es tu Panel Maestro de Supervisor.";
+            param = 'wid';
+        } else if(t.includes('interno') || t === 'planta') {
+            txt = "este es tu Panel de Planta.";
+            param = 'user';
+        } else if(t.includes('grafico') || t.includes('impresi')) {
+            txt = "este es tu Panel de Servicios Gráficos.";
+        } else {
+            txt = "este es tu Portal de Avances.";
+        }
+        
+        const link = `${urlBase}${linkBase}?${param}=${encodeURIComponent(id)}`;
+        const msj = `Hola ${nombre},\n\nSoy Administración de *Rubik OS*, ${txt}\n\n🔗 Entra aquí:\n${link}`;
+        window.open(`https://wa.me/${telefono}?text=${encodeURIComponent(msj)}`, '_blank');
+    }
+
+    // =========================================================
+    // LÓGICA DEL CEREBRO CENTRAL IA — Gemini directo en browser
+    // FIX: Se eliminó la Cloud Function inexistente y se conecta
+    // directamente a Gemini igual que en cliente-view.html
+    // =========================================================
+
+    const GEMINI_API_KEY_BD = ""; // key removida — ahora vive en el Cloud Function
+
+    let iaImagesBase64 = [];
+    let iaPdfBase64 = null;
+
+    function abrirChatIA() {
+        document.getElementById('mod-ia-chat').style.display = 'flex';
+    }
+
+    // Pegar imagen con Ctrl+V en base de datos
+    document.addEventListener('paste', function(e) {
+        const items = (e.clipboardData || e.originalEvent.clipboardData).items;
+        for (const item of items) {
+            if (item.type.indexOf('image') !== -1) {
+                const file = item.getAsFile();
+                const reader = new FileReader();
+                reader.onload = function(ev) {
+                    const base64Data = ev.target.result;
+                    iaImagesBase64.push({ dataUrl: base64Data, mimeType: file.type });
+                    const previewBox = document.getElementById('ia-preview-box');
+                    previewBox.style.display = 'flex';
+                    renderIAPreviewBD();
+                };
+                reader.readAsDataURL(file);
+                e.preventDefault();
+                break;
+            }
+        }
+    });
+
+    function handleIAUploadBD(input) {
+        const previewBox = document.getElementById('ia-preview-box');
+        if (input.files) {
+            previewBox.style.display = 'flex';
+            Array.from(input.files).forEach(file => {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    const base64Data = e.target.result;
+                    if (file.type.startsWith('image/')) {
+                        iaImagesBase64.push({ dataUrl: base64Data, mimeType: file.type });
+                        renderIAPreviewBD();
+                    } else if (file.type === 'application/pdf') {
+                        iaPdfBase64 = { dataUrl: base64Data, mimeType: 'application/pdf' };
+                        renderIAPreviewBD();
+                    }
+                };
+                reader.readAsDataURL(file);
+            });
+        }
+        input.value = "";
+    }
+
+    function renderIAPreviewBD() {
+        const box = document.getElementById('ia-preview-box');
+        box.innerHTML = '';
+        if(iaPdfBase64) {
+            box.innerHTML += `<div class="img-thumb-wrap"><div class="img-thumb-del" onclick="removeIAPdfBD()"><i class="ph-bold ph-x"></i></div><div style="width:50px; height:50px; background:var(--bg); border:1px solid var(--border); border-radius:8px; display:flex; justify-content:center; align-items:center; font-size:20px; color:var(--red);"><i class="ph-bold ph-file-pdf"></i></div></div>`;
+        }
+        iaImagesBase64.forEach((img, i) => {
+            box.innerHTML += `<div class="img-thumb-wrap"><div class="img-thumb-del" onclick="removeIAImgBD(${i})"><i class="ph-bold ph-x"></i></div><img loading="lazy" decoding="async" src="${img.dataUrl}" class="img-thumb"></div>`;
+        });
+        box.style.display = (iaImagesBase64.length > 0 || iaPdfBase64) ? 'flex' : 'none';
+    }
+
+    function removeIAImgBD(index) { iaImagesBase64.splice(index, 1); renderIAPreviewBD(); }
+    function removeIAPdfBD() { iaPdfBase64 = null; renderIAPreviewBD(); }
+
+    async function enviarMensajeIA() {
+        const input = document.getElementById('ia-chat-input');
+        const text = input.value.trim();
+        if(!text && iaImagesBase64.length === 0 && !iaPdfBase64) return;
+
+        const chat = document.getElementById('ia-chat-history');
+
+        // Mostrar mensaje del usuario
+        let userMsgHtml = text ? text.replace(/\n/g,'<br>') : '';
+        if(iaImagesBase64.length > 0) userMsgHtml = iaImagesBase64.map(img => `<img loading="lazy" decoding="async" src="${img.dataUrl}" style="max-width:100px; border-radius:8px; margin-right:5px; margin-bottom:5px;">`).join('') + (userMsgHtml ? '<br>' + userMsgHtml : '');
+        if(iaPdfBase64) userMsgHtml = `<i class="ph-bold ph-file-pdf" style="color:var(--red);"></i> PDF adjunto<br>` + userMsgHtml;
+        chat.innerHTML += `<div class="msg msg-user">${userMsgHtml}</div>`;
+        input.value = '';
+        chat.scrollTop = chat.scrollHeight;
+
+        const loaderId = 'ia-loader-' + Date.now();
+        chat.innerHTML += `<div id="${loaderId}" class="msg msg-ai">Analizando archivos e investigando precios de mercado...</div>`;
+        chat.scrollTop = chat.scrollHeight;
+
+        // Snapshot de lo que se va a enviar
+        const imgSnapshot = [...iaImagesBase64];
+        const pdfSnapshot = iaPdfBase64;
+        iaImagesBase64 = []; iaPdfBase64 = null; renderIAPreviewBD();
+
+        // Construir catálogo actual de proveedores para el contexto
+        const provList = Object.values(dbData.prov).map(p => p.nombre).filter(Boolean).join(', ') || 'Ninguno registrado aún';
+
+        const sysPrompt = `Eres el Cerebro Central de Rubik OS, experto en gestión de costos para una empresa de fabricación de señalética, muebles y publicidad en Bolivia.
+
+Tu misión es analizar los archivos, capturas, fotos de listas de precios, facturas o recibos que te envíen y extraer la información para actualizar la base de datos de la empresa.
+
+PROVEEDORES YA REGISTRADOS: ${provList}
+
+REGLAS CRÍTICAS — Responde SOLO con este JSON limpio, sin markdown:
+{
+  "mensaje": "Resumen breve de lo que encontraste",
+  "proveedor_detectado": {
+    "es_nuevo": true,
+    "nombre": "Nombre del proveedor detectado",
+    "categoria": "Categoría (Ej: Melaminas, Maderas, Herrajes)",
+    "telefono": "número si aparece, sino vacío",
+    "nit": "NIT si aparece, sino vacío"
+  },
+  "categoria_materiales": "materiales",
+  "datos": [
+    {
+      "n": "NOMBRE MATERIAL EN MAYÚSCULAS",
+      "u": "unidad (m2, plancha, pza, ml, kg, etc)",
+      "p": 250.00,
+      "proveedor": "Nombre del proveedor",
+      "notas": "Observación si el precio es estimado o de mercado"
+    }
+  ]
+}
+
+INSTRUCCIONES ADICIONALES:
+- Si el proveedor ya existe en la lista de proveedores registrados, pon "es_nuevo": false con el nombre exacto.
+- Si es un proveedor nuevo, pon "es_nuevo": true y llena todos los campos disponibles.
+- Extrae TODOS los materiales/productos visibles con sus precios y unidades.
+- Si hay precios en USD u otra moneda, conviértelos a Bs (1 USD ≈ 6.96 Bs).
+- Para materiales que NO aparezcan en el documento pero sean necesarios para completar el contexto, investiga el precio de mercado en Bolivia y márcalos con notas: "Precio estimado de mercado".
+- Usa unidades estándar: plancha, m2, ml, pza, kg, lt, gl, jornal, hr.
+
+Mensaje del usuario: ${text || '(Solo archivos adjuntos)'}`;
+
+        try {
+            // Construir parts para Gemini
+            let parts = [{ text: sysPrompt }];
+            imgSnapshot.forEach(img => {
+                parts.push({ inlineData: { data: img.dataUrl.split(',')[1], mimeType: img.mimeType } });
+            });
+            if(pdfSnapshot) {
+                parts.push({ inlineData: { data: pdfSnapshot.dataUrl.split(',')[1], mimeType: pdfSnapshot.mimeType } });
+            }
+
+            // Llamada vía Cloud Function autenticado (sin key expuesta)
+            const geminiResult = await window.callGemini({
+                model: "gemini-2.5-flash",
+                contents: [{ role: 'user', parts: parts }],
+                generationConfig: { responseMimeType: 'application/json' }
+            });
+
+            const rawText = geminiResult.candidates?.[0]?.content?.parts?.[0]?.text
+                || geminiResult.text
+                || '{}';
+            const data = JSON.parse(rawText.replace(/```json|```/g, '').trim());
+
+            if(document.getElementById(loaderId)) document.getElementById(loaderId).remove();
+
+            if(!data.datos || data.datos.length === 0) {
+                chat.innerHTML += `<div class="msg msg-ai">${data.mensaje || 'No se detectaron datos estructurados. Intenta con una imagen más clara.'}</div>`;
+                chat.scrollTop = chat.scrollHeight;
+                return;
+            }
+
+            // Renderizar propuesta con info del proveedor
+            const prov = data.proveedor_detectado || {};
+            let provBadge = '';
+            if(prov.nombre) {
+                const badgeColor = prov.es_nuevo ? 'var(--orange)' : 'var(--green)';
+                const badgeLabel = prov.es_nuevo ? '🆕 Proveedor Nuevo' : '✅ Proveedor Existente';
+                provBadge = `<div style="background:rgba(0,0,0,0.05); padding:10px; border-radius:10px; margin-bottom:10px; border-left:3px solid ${badgeColor};">
+                    <div style="font-size:11px; font-weight:800; color:${badgeColor}; margin-bottom:4px;">${badgeLabel}</div>
+                    <div style="font-size:13px; font-weight:900;">${prov.nombre}</div>
+                    ${prov.categoria ? `<div style="font-size:11px; color:var(--gray);">${prov.categoria}</div>` : ''}
+                    ${prov.telefono ? `<div style="font-size:11px; color:var(--gray);"><i class="ph-fill ph-phone"></i> ${prov.telefono}</div>` : ''}
+                    ${prov.nit ? `<div style="font-size:11px; color:var(--gray);">NIT: ${prov.nit}</div>` : ''}
+                </div>`;
+            }
+
+            let htmlPropuesta = `<div class="msg msg-ai" style="border-color:var(--purple);">
+                <b style="color:var(--purple);">📦 ${data.mensaje}</b><br><br>
+                ${provBadge}
+                <b style="font-size:11px; text-transform:uppercase; color:var(--gray);">Materiales detectados (${data.datos.length}):</b>`;
+
+            data.datos.forEach(d => {
+                htmlPropuesta += `<div style="background:var(--bg); padding:8px 10px; border-radius:8px; margin-top:6px; font-size:12px;">
+                    <div style="font-weight:900;">${d.n}</div>
+                    <div style="color:var(--blue); font-weight:800;">${d.p} Bs / ${d.u}</div>
+                    ${d.notas ? `<div style="color:var(--orange); font-size:10px;">⚠ ${d.notas}</div>` : ''}
+                </div>`;
+            });
+
+            window.tempIAData = data;
+            htmlPropuesta += `<button class="btn-main" style="background:var(--green); padding:10px; font-size:12px; margin-top:12px; width:100%;" onclick="confirmarGuardadoIA()">
+                <i class="ph-bold ph-check-circle"></i> Confirmar y Guardar Todo
+            </button></div>`;
+            chat.innerHTML += htmlPropuesta;
+            chat.scrollTop = chat.scrollHeight;
+
+        } catch(error) {
+            if(document.getElementById(loaderId)) document.getElementById(loaderId).remove();
+            chat.innerHTML += `<div class="msg msg-ai" style="background:rgba(255,59,48,0.1); color:var(--red); border-color:var(--red);">Error al procesar con IA: ${error.message}</div>`;
+            console.error(error);
+        }
+    }
+
+    async function confirmarGuardadoIA() {
+        if(!window.tempIAData) return;
+        const data = window.tempIAData;
+        const chat = document.getElementById('ia-chat-history');
+        let updates = {};
+
+        // 1. Guardar o actualizar proveedor en base_datos/proveedores
+        const prov = data.proveedor_detectado;
+        let provKeyGuardado = '';
+        if(prov && prov.nombre) {
+            // Buscar si ya existe
+            let existingKey = null;
+            Object.entries(dbData.prov).forEach(([k, v]) => {
+                if(v.nombre && v.nombre.toLowerCase() === prov.nombre.toLowerCase()) existingKey = k;
+            });
+
+            if(existingKey) {
+                provKeyGuardado = existingKey;
+                // Actualizar datos del proveedor si llegaron nuevos campos
+                let provUpdate = {};
+                if(prov.telefono) provUpdate.telefono = prov.telefono;
+                if(prov.nit) provUpdate.nit = prov.nit;
+                if(prov.categoria) provUpdate.categoria = prov.categoria;
+                if(Object.keys(provUpdate).length > 0) {
+                    updates[`base_datos/proveedores/${existingKey}`] = { ...dbData.prov[existingKey], ...provUpdate };
+                }
+            } else if(prov.es_nuevo) {
+                // Crear proveedor nuevo
+                const newProvKey = db.ref('base_datos/proveedores').push().key;
+                provKeyGuardado = newProvKey;
+                updates[`base_datos/proveedores/${newProvKey}`] = {
+                    nombre: prov.nombre,
+                    categoria: prov.categoria || '',
+                    telefono: prov.telefono || '',
+                    nit: prov.nit || '',
+                    contacto: prov.telefono || 'S/N',
+                    materiales: {}
+                };
+            }
+        }
+
+        // 2. Guardar materiales en base_datos/materiales y también en el nodo del proveedor
+        data.datos.forEach(d => {
+            const key = (d.n || '').toUpperCase().replace(/[.#$\[\]/\s]/g, "_");
+            const payload = {
+                n: (d.n || '').toUpperCase(),
+                desc: (d.n || '').toUpperCase(),
+                u: (d.u || 'und').toLowerCase(),
+                und: (d.u || 'und').toLowerCase(),
+                p: parseFloat(d.p) || 0,
+                pu: parseFloat(d.p) || 0,
+                proveedor: prov ? prov.nombre : (d.proveedor || ''),
+                fecha_act: new Date().toISOString()
+            };
+            updates[`base_datos/materiales/${key}`] = payload;
+
+            // Vincular material al proveedor con su precio
+            if(provKeyGuardado) {
+                const matKey = key.replace(/[.#$\[\]/]/g, '_');
+                updates[`base_datos/proveedores/${provKeyGuardado}/materiales/${matKey}`] = {
+                    precio: parseFloat(d.p) || 0,
+                    und: (d.u || 'und').toLowerCase(),
+                    fecha_act: new Date().toISOString()
+                };
+            }
+
+            // Registrar unidad
+            if(d.u) updates[`base_datos/unidades/${d.u.replace(/[^a-z0-9]/g,'')}`] = { nombre: d.u };
+        });
+
+        try {
+            // FIX: Firebase no permite escribir padre e hijo en el mismo update().
+            // Separamos en: 1) proveedor, 2) materiales globales, 3) materiales del proveedor.
+            
+            let provUpdates = {};
+            let matUpdates = {};
+            let provMatUpdates = {};
+            
+            Object.entries(updates).forEach(([path, val]) => {
+                if (path.startsWith('base_datos/proveedores/') && !path.includes('/materiales/')) {
+                    provUpdates[path] = val;
+                } else if (path.startsWith('base_datos/proveedores/') && path.includes('/materiales/')) {
+                    provMatUpdates[path] = val;
+                } else {
+                    matUpdates[path] = val;
+                }
+            });
+
+            // Paso 1: crear/actualizar el nodo del proveedor
+            if (Object.keys(provUpdates).length > 0) await db.ref().update(provUpdates);
+            // Paso 2: guardar materiales globales y unidades
+            if (Object.keys(matUpdates).length > 0) await db.ref().update(matUpdates);
+            // Paso 3: vincular materiales al proveedor (ya existe el nodo padre)
+            if (Object.keys(provMatUpdates).length > 0) await db.ref().update(provMatUpdates);
+
+            chat.innerHTML += `<div class="msg msg-ai" style="background:rgba(52,199,89,0.1); color:var(--green); border-color:var(--green);">
+                ✅ ¡Guardado exitosamente! ${data.datos.length} material(es) actualizados${prov && prov.nombre ? ` y proveedor <b>${prov.nombre}</b> ${prov.es_nuevo ? 'creado' : 'actualizado'}` : ''}.
+            </div>`;
+            chat.scrollTop = chat.scrollHeight;
+            window.tempIAData = null;
+            renderCurrentTab();
+        } catch(err) {
+            chat.innerHTML += `<div class="msg msg-ai" style="color:var(--red);">Error guardando: ${err.message}</div>`;
+        }
+    }
+</script>
+    <script src="/js/viewmode.js?v=1"></script>
+</body>
+</html>

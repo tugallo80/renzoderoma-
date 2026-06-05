@@ -1,0 +1,710 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Rubik Interno - Centro de Comando</title>
+    
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.1.3/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.1.3/firebase-database-compat.js"></script>
+    <script>
+        window._rubikFirebaseConfig = window._rubikFirebaseConfig || {
+            apiKey: "AIzaSyDXYlofy31cDP14xVAVxWo_7TqXdSgsIjA",
+            authDomain: "rubik-bolivia.firebaseapp.com",
+            databaseURL: "https://rubik-bolivia-default-rtdb.firebaseio.com",
+            projectId: "rubik-bolivia",
+            storageBucket: "rubik-bolivia.firebasestorage.app",
+            messagingSenderId: "4153087958",
+            appId: "1:4153087958:web:cf2dd16106580ed6437677"
+        };
+        if (!firebase.apps.length) firebase.initializeApp(window._rubikFirebaseConfig);
+    </script>
+    <script src="/js/firecache.js?v=1"></script>
+
+    <style>
+        :root { --bg: #f4f4f7; --card: #fff; --text: #1a1a1a; --blue: #007aff; --green: #34c759; --orange: #ff9500; --red: #ff3b30; --purple: #5856d6; --gray: #8e8e93; --border: #d1d1d6; }
+        body.dark-mode { --bg: #000; --card: #1c1c1e; --text: #fff; --border: #333; }
+        
+        body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 20px; padding-bottom: 100px; -webkit-tap-highlight-color: transparent; transition: background 0.3s; }
+
+        /* Navegación superior */
+        .nav { display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px; }
+        .btn-nav { background: var(--card); border: 1px solid var(--border); padding: 8px 14px; border-radius: 20px; font-weight: 700; color: var(--blue); cursor: pointer; display: flex; align-items: center; gap: 5px; text-decoration: none; }
+        .header-title { font-size: 26px; font-weight: 900; letter-spacing: -0.5px; margin-bottom: 5px; }
+        .header-sub { font-size: 13px; color: var(--gray); font-weight: 600; text-transform: uppercase; margin-bottom: 20px; }
+
+        /* Módulo de Inteligencia Artificial (Preparación) */
+        .ai-panel { background: linear-gradient(135deg, #1c1c1e, #2c2c2e); color: white; border-radius: 24px; padding: 20px; margin-bottom: 25px; box-shadow: 0 10px 30px rgba(0,0,0,0.15); position: relative; overflow: hidden; }
+        .ai-panel::after { content: ''; position: absolute; top: -50%; right: -20%; width: 200px; height: 200px; background: radial-gradient(circle, rgba(0,122,255,0.4) 0%, transparent 70%); border-radius: 50%; z-index: 0; }
+        .ai-header { display: flex; align-items: center; gap: 10px; font-weight: 900; font-size: 18px; margin-bottom: 10px; position: relative; z-index: 1; }
+        .ai-header i { color: #5ac8fa; font-size: 24px; animation: pulse 2s infinite; }
+        .ai-body { font-size: 13px; font-weight: 500; color: #d1d1d6; line-height: 1.4; position: relative; z-index: 1; margin-bottom: 15px; }
+        .ai-btn { background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); color: white; padding: 10px 15px; border-radius: 12px; font-weight: 700; font-size: 12px; display: inline-flex; align-items: center; gap: 5px; backdrop-filter: blur(5px); }
+        @keyframes pulse { 0% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.1); opacity: 0.8; } 100% { transform: scale(1); opacity: 1; } }
+
+        /* Grid de KPIs Financieros y Operativos */
+        .kpi-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px; margin-bottom: 25px; }
+        .kpi-card { background: var(--card); padding: 18px; border-radius: 20px; border: 1px solid var(--border); box-shadow: 0 4px 10px rgba(0,0,0,0.02); display: flex; flex-direction: column; }
+        .kpi-icon { width: 35px; height: 35px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 20px; margin-bottom: 10px; color: white; }
+        .kpi-val { font-size: 22px; font-weight: 900; color: var(--text); }
+        .kpi-lbl { font-size: 11px; font-weight: 700; color: var(--gray); text-transform: uppercase; margin-top: 5px; }
+
+        /* Accesos Directos a la Matriz */
+        .section-title { font-size: 16px; font-weight: 900; margin-bottom: 15px; display: flex; align-items: center; gap: 8px; }
+        .quick-links { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 25px; }
+        .q-link { background: var(--card); border: 1px solid var(--border); border-radius: 16px; padding: 15px 5px; display: flex; flex-direction: column; align-items: center; justify-content: center; text-decoration: none; color: var(--text); font-size: 11px; font-weight: 700; text-align: center; gap: 8px; transition: 0.2s; }
+        .q-link:active { transform: scale(0.95); }
+        .q-link i { font-size: 24px; }
+
+        /* Actividad Reciente */
+        .activity-list { background: var(--card); border-radius: 20px; border: 1px solid var(--border); overflow: hidden; }
+        .act-item { display: flex; align-items: center; gap: 15px; padding: 15px; border-bottom: 1px solid var(--border); }
+        .act-item:last-child { border-bottom: none; }
+        .act-icon { width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 16px; flex-shrink: 0; }
+        .act-info { flex-grow: 1; line-height: 1.2; }
+        .act-title { font-size: 13px; font-weight: 800; color: var(--text); }
+        .act-sub { font-size: 11px; font-weight: 600; color: var(--gray); margin-top: 3px; }
+
+        .loader { position: fixed; top:0; left:0; width:100%; height:100%; background:var(--bg); z-index:3000; display:flex; flex-direction:column; justify-content:center; align-items:center; transition: 0.3s; }
+        .spinner { width: 40px; height: 40px; border: 4px solid var(--border); border-top: 4px solid var(--blue); border-radius: 50%; animation: spin 1s linear infinite; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+        /* ── Bandeja de Notificaciones ── */
+        #btn-inbox { position: relative; background: var(--card); border: 1px solid var(--border); padding: 8px 14px; border-radius: 20px; font-weight: 700; color: var(--text); cursor: pointer; display: flex; align-items: center; gap: 6px; font-size: 13px; }
+        #inbox-badge { position: absolute; top: -5px; right: -5px; background: #ff3b30; color: white; border-radius: 50%; width: 18px; height: 18px; font-size: 10px; font-weight: 900; display: none; align-items: center; justify-content: center; }
+        #inbox-panel {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            z-index: 4000; display: none; align-items: flex-start; justify-content: flex-start;
+        }
+        #inbox-panel-backdrop { position: absolute; inset: 0; background: rgba(0,0,0,0.4); backdrop-filter: blur(4px); }
+        #inbox-panel-box {
+            position: relative; z-index: 1;
+            background: var(--card); width: min(420px, 100vw); height: 100vh;
+            display: flex; flex-direction: column;
+            box-shadow: 4px 0 32px rgba(0,0,0,0.18);
+        }
+        #inbox-header { padding: 20px 18px 14px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; }
+        #inbox-tabs { display: flex; gap: 6px; padding: 10px 14px; border-bottom: 1px solid var(--border); flex-shrink: 0; overflow-x: auto; }
+        .inbox-tab { padding: 6px 14px; border-radius: 20px; font-size: 12px; font-weight: 800; border: 1.5px solid var(--border); background: transparent; color: var(--gray); cursor: pointer; white-space: nowrap; }
+        .inbox-tab.active { background: var(--blue); border-color: var(--blue); color: white; }
+        #inbox-list { flex: 1; overflow-y: auto; padding: 10px 14px; display: flex; flex-direction: column; gap: 8px; }
+        .inbox-item { background: var(--bg); border: 1px solid var(--border); border-radius: 14px; padding: 13px 14px; cursor: pointer; transition: box-shadow 0.2s; position: relative; }
+        .inbox-item:hover { box-shadow: 0 4px 16px rgba(0,0,0,0.1); }
+        .inbox-item.unread { border-left: 3px solid var(--blue); background: rgba(0,122,255,0.04); }
+        .inbox-item .inbox-title { font-size: 13px; font-weight: 900; margin-bottom: 3px; }
+        .inbox-item .inbox-body { font-size: 12px; color: var(--gray); line-height: 1.4; }
+        .inbox-item .inbox-meta { font-size: 10px; color: var(--gray); margin-top: 5px; display: flex; justify-content: space-between; align-items: center; }
+        .inbox-unread-dot { width: 8px; height: 8px; background: var(--blue); border-radius: 50%; flex-shrink: 0; margin-left: 8px; }
+
+        /* ── Panel de Chat ── */
+        #chat-panel {
+            position: fixed; top: 0; right: 0; width: min(420px, 100vw); height: 100vh;
+            z-index: 5000; background: var(--card); box-shadow: -4px 0 32px rgba(0,0,0,0.18);
+            display: none; flex-direction: column;
+        }
+        #chat-header { padding: 18px 18px 12px; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+        #chat-messages { flex: 1; overflow-y: auto; padding: 14px; display: flex; flex-direction: column; gap: 10px; }
+        .chat-msg { max-width: 78%; padding: 10px 13px; border-radius: 16px; font-size: 13px; line-height: 1.5; }
+        .chat-msg.sent { background: var(--blue); color: white; align-self: flex-end; border-radius: 16px 16px 4px 16px; }
+        .chat-msg.recv { background: var(--bg); border: 1px solid var(--border); align-self: flex-start; border-radius: 16px 16px 16px 4px; }
+        .chat-msg .msg-meta { font-size: 10px; opacity: 0.6; margin-top: 4px; }
+        #chat-input-row { padding: 12px 14px; border-top: 1px solid var(--border); display: flex; gap: 8px; align-items: flex-end; flex-shrink: 0; }
+        #chat-inp { flex: 1; padding: 11px 14px; border-radius: 14px; border: 1px solid var(--border); font-size: 14px; font-family: inherit; resize: none; outline: none; background: var(--bg); color: var(--text); min-height: 44px; max-height: 120px; }
+        #btn-chat-send { background: var(--blue); color: white; border: none; width: 44px; height: 44px; border-radius: 12px; font-size: 18px; cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+    </style>
+    <link rel="stylesheet" href="/css/responsive.css?v=1">
+</head>
+<body>
+
+    <div class="loader" id="sys-loader">
+        <div class="spinner"></div>
+        <div style="margin-top:15px; font-weight:800; font-size:12px; color:var(--gray);">Sincronizando Matriz...</div>
+    </div>
+
+    <div class="nav">
+        <div style="display:flex; align-items:center; gap:8px;">
+            <a href="../index.html" class="btn-nav"><i class="ph-bold ph-caret-left"></i> Volver al Hub</a>
+            <!-- Botón bandeja de notificaciones -->
+            <button id="btn-inbox" onclick="toggleInbox()">
+                <i class="ph-fill ph-bell"></i> Bandeja
+                <span id="inbox-badge"></span>
+            </button>
+        </div>
+        <button class="btn-nav" style="border:none; background:transparent;" onclick="document.body.classList.toggle('dark-mode')"><i class="ph-fill ph-moon"></i></button>
+    </div>
+
+    <!-- ══ PANEL BANDEJA DE NOTIFICACIONES ══ -->
+    <div id="inbox-panel" onclick="handleInboxBackdrop(event)">
+        <div id="inbox-panel-backdrop"></div>
+        <div id="inbox-panel-box">
+            <div id="inbox-header">
+                <div>
+                    <div style="font-size:17px; font-weight:900;">Bandeja</div>
+                    <div style="font-size:11px; color:var(--gray); margin-top:1px;">Notificaciones del sistema</div>
+                </div>
+                <div style="display:flex; gap:8px; align-items:center;">
+                    <button onclick="marcarTodasLeidas()" style="background:transparent; border:1px solid var(--border); color:var(--gray); font-size:11px; font-weight:800; padding:5px 10px; border-radius:10px; cursor:pointer;">Marcar leídas</button>
+                    <button onclick="toggleInbox()" style="background:var(--bg); border:none; width:32px; height:32px; border-radius:50%; font-size:16px; cursor:pointer; display:flex; align-items:center; justify-content:center; color:var(--gray);">✕</button>
+                </div>
+            </div>
+            <div id="inbox-tabs">
+                <button class="inbox-tab active" data-tab="todas" onclick="setInboxTab('todas')">Todas</button>
+                <button class="inbox-tab" data-tab="clientes" onclick="setInboxTab('clientes')">Clientes</button>
+                <button class="inbox-tab" data-tab="trabajadores" onclick="setInboxTab('trabajadores')">Trabajadores</button>
+                <button class="inbox-tab" data-tab="sistema" onclick="setInboxTab('sistema')">Sistema</button>
+            </div>
+            <div id="inbox-list">
+                <div style="text-align:center; color:var(--gray); font-size:13px; padding:40px; font-weight:700;">Cargando notificaciones...</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ══ PANEL DE CHAT EN TIEMPO REAL ══ -->
+    <div id="chat-panel">
+        <div id="chat-header">
+            <div style="display:flex; align-items:center; gap:10px; margin-bottom:10px;">
+                <button onclick="cerrarChat()" style="background:var(--bg); border:none; width:34px; height:34px; border-radius:50%; font-size:16px; cursor:pointer; display:flex; align-items:center; justify-content:center; color:var(--gray); flex-shrink:0;">←</button>
+                <div>
+                    <div style="font-size:15px; font-weight:900;" id="chat-titulo">Chat</div>
+                    <div style="font-size:11px; color:var(--gray);" id="chat-subtitulo">Proyecto</div>
+                </div>
+            </div>
+            <div style="display:flex; gap:6px; align-items:center;">
+                <span style="font-size:11px; color:var(--gray); font-weight:700;">Enviar a:</span>
+                <select id="chat-destino" style="flex:1; padding:6px 10px; border-radius:10px; border:1px solid var(--border); font-size:12px; font-weight:800; background:var(--bg); color:var(--text); outline:none;">
+                    <option value="cliente">Cliente</option>
+                    <option value="trabajadores">Todos los trabajadores</option>
+                    <option value="supervisor">Supervisor</option>
+                </select>
+            </div>
+        </div>
+        <div id="chat-messages"></div>
+        <div id="chat-input-row">
+            <textarea id="chat-inp" placeholder="Escribí tu mensaje..." rows="1"
+                oninput="this.style.height='auto';this.style.height=this.scrollHeight+'px'"
+                onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();enviarChatDashboard();}"></textarea>
+            <button id="btn-chat-send" onclick="enviarChatDashboard()"><i class="ph-bold ph-paper-plane-tilt"></i></button>
+        </div>
+    </div>
+
+    <div>
+        <div class="header-title">Rubik Interno</div>
+        <div class="header-sub">Centro de Comando y Analítica</div>
+    </div>
+
+    <div class="ai-panel">
+        <div class="ai-header"><i class="ph-fill ph-magic-wand"></i> Rubik AI Assistant</div>
+        <div class="ai-body" id="ai-status-text">
+            Analizando datos del servidor... Actualmente gestionas <b id="ai-proy-count">0</b> proyectos activos. La integración de inteligencia artificial para reportes automáticos estará disponible pronto.
+        </div>
+        <div class="ai-btn"><i class="ph-bold ph-plugs-connected"></i> API Standby</div>
+    </div>
+
+    <div class="kpi-grid">
+        <div class="kpi-card">
+            <div class="kpi-icon" style="background: var(--blue);"><i class="ph-bold ph-folders"></i></div>
+            <div class="kpi-val" id="k-activos">--</div>
+            <div class="kpi-lbl">Proyectos Activos</div>
+        </div>
+        <div class="kpi-card">
+            <div class="kpi-icon" style="background: var(--orange);"><i class="ph-bold ph-hard-hat"></i></div>
+            <div class="kpi-val" id="k-personal">--</div>
+            <div class="kpi-lbl">Personal en Red</div>
+        </div>
+        <div class="kpi-card" style="grid-column: span 2; flex-direction: row; align-items: center; justify-content: space-between;">
+            <div>
+                <div class="kpi-lbl" style="margin-top:0;">Gasto Acumulado en Obra</div>
+                <div class="kpi-val" id="k-gasto" style="color: var(--red); font-size: 28px;">0.00 Bs</div>
+            </div>
+            <div class="kpi-icon" style="background: rgba(255,59,48,0.1); color: var(--red); margin:0;"><i class="ph-bold ph-trend-down"></i></div>
+        </div>
+    </div>
+
+    <div class="section-title"><i class="ph-bold ph-squares-four"></i> Módulos Operativos</div>
+    <div class="quick-links">
+        <a href="../clientes.html" class="q-link"><i class="ph-fill ph-users-three" style="color:var(--blue);"></i> Clientes</a>
+        <a href="../tesoreria.html" class="q-link"><i class="ph-fill ph-bank" style="color:var(--green);"></i> Tesorería</a>
+        <a href="../personal.html" class="q-link"><i class="ph-fill ph-identification-card" style="color:var(--orange);"></i> Personal</a>
+        <a href="../base_datos.html" class="q-link"><i class="ph-fill ph-database" style="color:var(--purple);"></i> DB Matrix</a>
+    </div>
+
+    <!-- ══ CONTRATOS PENDIENTES ══ -->
+    <div class="section-title" style="margin-top:10px;">
+        <i class="ph-fill ph-file-text" style="color:var(--orange);"></i> Contratos Pendientes
+        <span id="contratos-badge" style="display:none; background:var(--red); color:white; font-size:10px; font-weight:900; padding:2px 8px; border-radius:20px; margin-left:4px;"></span>
+    </div>
+    <div id="contratos-lista" style="display:flex; flex-direction:column; gap:10px; margin-bottom:25px;">
+        <div style="background:var(--card); border:1px solid var(--border); border-radius:16px; padding:18px; text-align:center; color:var(--gray); font-size:13px; font-weight:600;">Verificando contratos...</div>
+    </div>
+
+    <!-- ══ PANEL RESPUESTA DE CONTRATO ══ -->
+    <div id="mod-contrato" style="display:none; position:fixed; inset:0; z-index:6000; background:rgba(0,0,0,0.5); backdrop-filter:blur(6px); align-items:center; justify-content:center; padding:20px; box-sizing:border-box;">
+        <div style="background:var(--card); border-radius:24px; width:100%; max-width:480px; max-height:90vh; overflow-y:auto; padding:24px; box-sizing:border-box; position:relative;">
+            <button onclick="cerrarContrato()" style="position:absolute; top:16px; right:16px; background:var(--bg); border:none; width:32px; height:32px; border-radius:50%; font-size:16px; cursor:pointer; color:var(--gray); display:flex; align-items:center; justify-content:center;">✕</button>
+            <div style="font-size:17px; font-weight:900; margin-bottom:4px;" id="mod-contrato-titulo">Proyecto</div>
+            <div style="font-size:12px; color:var(--gray); margin-bottom:18px;" id="mod-contrato-cliente">Cliente</div>
+
+            <!-- Info del proyecto -->
+            <div id="mod-contrato-info" style="background:var(--bg); border-radius:14px; padding:14px; margin-bottom:16px; font-size:13px; color:var(--gray); line-height:1.6;"></div>
+
+            <!-- Sección respuesta: enviar propuesta de precio -->
+            <div style="font-size:13px; font-weight:900; color:var(--text); margin-bottom:10px;">💰 Enviar Propuesta de Precio</div>
+            <div style="display:flex; gap:8px; margin-bottom:10px;">
+                <input type="number" id="mod-contrato-monto" class="inp-std" placeholder="Monto en Bs" style="flex:1; padding:12px; border:1.5px solid var(--border); border-radius:12px; font-size:15px; font-weight:800; background:var(--bg); color:var(--text); outline:none;">
+            </div>
+            <textarea id="mod-contrato-msg" placeholder="Mensaje para el cliente (opcional)..." style="width:100%; padding:12px; border:1.5px solid var(--border); border-radius:12px; font-size:13px; font-family:inherit; background:var(--bg); color:var(--text); outline:none; resize:none; min-height:70px; box-sizing:border-box; margin-bottom:14px;"></textarea>
+            <button onclick="enviarPropuestaRubik()" style="width:100%; background:linear-gradient(135deg,#007aff,#5856d6); color:white; border:none; padding:16px; border-radius:16px; font-size:15px; font-weight:900; cursor:pointer; margin-bottom:10px;">
+                <i class="ph-fill ph-paper-plane-tilt"></i> Enviar propuesta al cliente
+            </button>
+
+            <!-- Acción especial si hay contraoferta del cliente -->
+            <div id="mod-contrato-contraoferta-box" style="display:none; background:rgba(175,82,222,0.08); border:1px solid #af52de; border-radius:14px; padding:14px; margin-bottom:14px;">
+                <div style="font-size:11px; font-weight:900; color:#af52de; text-transform:uppercase; margin-bottom:6px;">🤝 Contraoferta del Cliente</div>
+                <div id="mod-contrato-contraoferta-val" style="font-size:20px; font-weight:900;"></div>
+                <div style="display:flex; gap:8px; margin-top:12px;">
+                    <button onclick="aceptarContraoferta()" style="flex:1; background:var(--green); color:white; border:none; padding:12px; border-radius:12px; font-weight:900; cursor:pointer;">✓ Aceptar contraoferta</button>
+                    <button onclick="rechazarContraoferta()" style="flex:1; background:transparent; color:var(--gray); border:1.5px solid var(--border); padding:12px; border-radius:12px; font-weight:800; cursor:pointer;">✗ Rechazar</button>
+                </div>
+            </div>
+
+            <!-- Aprobar proyecto directamente -->
+            <div style="border-top:1px solid var(--border); padding-top:14px; display:flex; gap:8px;">
+                <button onclick="activarProyecto()" style="flex:1; background:rgba(52,199,89,0.1); color:var(--green); border:1.5px solid var(--green); padding:12px; border-radius:12px; font-size:13px; font-weight:900; cursor:pointer;">
+                    <i class="ph-fill ph-play"></i> Activar Proyecto
+                </button>
+                <button onclick="cerrarContrato()" style="flex:1; background:transparent; color:var(--gray); border:1.5px solid var(--border); padding:12px; border-radius:12px; font-size:13px; font-weight:700; cursor:pointer;">Cancelar</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="section-title"><i class="ph-bold ph-activity"></i> Pulso Operativo (En Vivo)</div>
+    <div class="activity-list" id="feed-actividad">
+        <div style="padding: 20px; text-align: center; color: var(--gray); font-size: 13px; font-weight: 600;">Escaneando movimientos...</div>
+    </div>
+
+<script>
+    // Firebase ya inicializado en el <head>
+    if (!firebase.apps.length) firebase.initializeApp(window._rubikFirebaseConfig);
+    const db = firebase.database();
+
+    // ════════════════════════════════════════════════
+    //  DASHBOARD — Analíticas
+    // ════════════════════════════════════════════════
+    function initDashboard() {
+        db.ref('proyectos').on('value', snap => {
+            let activos = 0; let gastoTotal = 0; let proyectosFeed = [];
+            if(snap.exists()) {
+                snap.forEach(client => { client.forEach(proy => {
+                    const p = proy.val();
+                    if(p.estado !== 'entregado') activos++;
+                    gastoTotal += parseFloat(p.gasto_total || 0);
+                    if(p.fecha_creacion) proyectosFeed.push({ type: 'proyecto', title: `Nuevo Proyecto: ${p.nombre}`, sub: 'Cliente asignado', date: new Date(p.fecha_creacion) });
+                }); });
+            }
+            document.getElementById('k-activos').innerText = activos;
+            document.getElementById('ai-proy-count').innerText = activos;
+            document.getElementById('k-gasto').innerText = gastoTotal.toLocaleString('es-BO', {minimumFractionDigits: 2}) + " Bs";
+            actualizarFeed(proyectosFeed);
+        });
+        db.ref('personal').on('value', snap => {
+            document.getElementById('k-personal').innerText = snap.exists() ? Object.keys(snap.val()).length : 0;
+        });
+        setTimeout(() => {
+            document.getElementById('sys-loader').style.opacity = '0';
+            setTimeout(() => { document.getElementById('sys-loader').style.display = 'none'; }, 300);
+        }, 800);
+    }
+
+    let globalFeed = [];
+    function actualizarFeed(nuevosItems) {
+        globalFeed = [...nuevosItems];
+        globalFeed.sort((a, b) => b.date - a.date);
+        const feedBox = document.getElementById('feed-actividad');
+        feedBox.innerHTML = '';
+        const items = globalFeed.slice(0, 5);
+        if(!items.length) { feedBox.innerHTML = '<div style="padding:20px;text-align:center;color:var(--gray);font-size:13px;font-weight:600;">No hay actividad reciente.</div>'; return; }
+        items.forEach(item => {
+            feedBox.innerHTML += `<div class="act-item"><div class="act-icon" style="background:rgba(0,122,255,0.1);color:var(--blue);"><i class="ph-bold ph-folder-plus"></i></div><div class="act-info"><div class="act-title">${item.title}</div><div class="act-sub">${item.sub}</div></div></div>`;
+        });
+    }
+
+    // ════════════════════════════════════════════════
+    //  BANDEJA DE NOTIFICACIONES
+    // ════════════════════════════════════════════════
+    let _allNotifs = {};    // key → notif object
+    let _inboxTab  = 'todas';
+    let _inboxOpen = false;
+
+    // Escucha en tiempo real
+    db.ref('notificaciones/hub').orderByChild('date').on('value', snap => {
+        _allNotifs = {};
+        if(snap.exists()) snap.forEach(ch => { _allNotifs[ch.key] = { key: ch.key, ...ch.val() }; });
+        _renderBadge();
+        if(_inboxOpen) _renderInboxList();
+    });
+
+    function _renderBadge() {
+        const unread = Object.values(_allNotifs).filter(n => !n.read).length;
+        const badge = document.getElementById('inbox-badge');
+        badge.style.display = unread > 0 ? 'flex' : 'none';
+        badge.textContent = unread > 9 ? '9+' : unread;
+    }
+
+    function toggleInbox() {
+        _inboxOpen = !_inboxOpen;
+        const panel = document.getElementById('inbox-panel');
+        panel.style.display = _inboxOpen ? 'flex' : 'none';
+        if(_inboxOpen) _renderInboxList();
+    }
+
+    function handleInboxBackdrop(e) {
+        if(e.target === document.getElementById('inbox-panel-backdrop') || e.target === document.getElementById('inbox-panel')) toggleInbox();
+    }
+
+    function setInboxTab(tab) {
+        _inboxTab = tab;
+        document.querySelectorAll('.inbox-tab').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+        _renderInboxList();
+    }
+
+    function _categorizaNotif(n) {
+        const t = (n.title || '').toLowerCase() + ' ' + (n.body || '').toLowerCase();
+        if(t.includes('requerimiento') || t.includes('cotizaci') || t.includes('presupuesto') || t.includes('aprobado') || t.includes('extra') || t.includes('cliente')) return 'clientes';
+        if(t.includes('trabajador') || t.includes('licitaci') || t.includes('asignaci') || t.includes('contratista') || t.includes('planilla')) return 'trabajadores';
+        return 'sistema';
+    }
+
+    function _renderInboxList() {
+        const list = document.getElementById('inbox-list');
+        let items = Object.values(_allNotifs).sort((a,b) => (b.date||'').localeCompare(a.date||''));
+        if(_inboxTab !== 'todas') items = items.filter(n => _categorizaNotif(n) === _inboxTab);
+        if(!items.length) { list.innerHTML = `<div style="text-align:center;color:var(--gray);font-size:13px;padding:40px;font-weight:700;">No hay notificaciones${_inboxTab !== 'todas' ? ' en esta categoría' : ''}.</div>`; return; }
+        const iconMap = { clientes: 'ph-user', trabajadores: 'ph-hard-hat', sistema: 'ph-gear' };
+        const colorMap = { clientes: 'var(--blue)', trabajadores: 'var(--orange)', sistema: 'var(--purple)' };
+        list.innerHTML = items.map(n => {
+            const cat = _categorizaNotif(n);
+            const ico = iconMap[cat]; const col = colorMap[cat];
+            const ago = _timeAgo(n.date);
+            const hasProject = n.cid && n.pid;
+            return `<div class="inbox-item ${n.read ? '' : 'unread'}" onclick="onNotifClick('${n.key}','${n.cid||''}','${n.pid||''}')">
+                <div style="display:flex;align-items:flex-start;gap:10px;">
+                    <div style="width:34px;height:34px;border-radius:10px;background:${col}22;color:${col};display:flex;align-items:center;justify-content:center;flex-shrink:0;"><i class="ph-bold ${ico}"></i></div>
+                    <div style="flex:1;min-width:0;">
+                        <div class="inbox-title">${n.title||'Notificación'}</div>
+                        <div class="inbox-body">${n.body||''}</div>
+                        <div class="inbox-meta"><span>${ago}</span><div style="display:flex;align-items:center;gap:6px;">${hasProject ? `<button onclick="event.stopPropagation();abrirChat('${n.key}','${n.cid}','${n.pid}')" style="background:var(--blue);color:white;border:none;padding:3px 9px;border-radius:8px;font-size:10px;font-weight:800;cursor:pointer;">Chat</button>` : ''}<button onclick="event.stopPropagation();irAProyecto('${n.cid||''}','${n.pid||''}')" style="background:transparent;color:var(--blue);border:1px solid var(--blue);padding:3px 9px;border-radius:8px;font-size:10px;font-weight:800;cursor:pointer;">Ver proyecto</button>${!n.read?'<div class="inbox-unread-dot"></div>':''}</div></div>
+                    </div>
+                </div>
+            </div>`;
+        }).join('');
+    }
+
+    function _timeAgo(dateStr) {
+        if(!dateStr) return '';
+        const diff = Date.now() - new Date(dateStr).getTime();
+        const m = Math.floor(diff/60000); const h = Math.floor(m/60); const d = Math.floor(h/24);
+        if(d > 0) return `hace ${d}d`; if(h > 0) return `hace ${h}h`; if(m > 0) return `hace ${m}m`; return 'ahora';
+    }
+
+    function onNotifClick(key, cid, pid) {
+        // Marcar como leída
+        if(key) db.ref(`notificaciones/hub/${key}/read`).set(true);
+    }
+
+    function marcarTodasLeidas() {
+        const updates = {};
+        Object.keys(_allNotifs).forEach(k => { if(!_allNotifs[k].read) updates[`notificaciones/hub/${k}/read`] = true; });
+        if(Object.keys(updates).length) db.ref().update(updates);
+    }
+
+    function irAProyecto(cid, pid) {
+        if(!cid || !pid) return;
+        const url = `/dashboard-proyecto.html?cid=${cid}&pid=${pid}`;
+        window.open(url, '_blank');
+    }
+
+    // ════════════════════════════════════════════════
+    //  CHAT EN TIEMPO REAL
+    // ════════════════════════════════════════════════
+    let _chatCid = null; let _chatPid = null; let _chatListener = null;
+
+    function abrirChat(notifKey, cid, pid) {
+        // Marcar notif como leída
+        if(notifKey) db.ref(`notificaciones/hub/${notifKey}/read`).set(true);
+        _chatCid = cid; _chatPid = pid;
+
+        // Obtener nombre del proyecto
+        db.ref(`proyectos/${cid}/${pid}/nombre`).once('value', s => {
+            document.getElementById('chat-titulo').textContent = s.val() || 'Proyecto';
+        });
+        db.ref(`clientes/${cid}/nombre`).once('value', s => {
+            document.getElementById('chat-subtitulo').textContent = s.val() || cid;
+        });
+
+        // Limpiar listener anterior
+        if(_chatListener) { db.ref(_chatListener).off(); _chatListener = null; }
+
+        const chatRef = `proyectos/${cid}/${pid}/chat`;
+        _chatListener = chatRef;
+
+        document.getElementById('chat-messages').innerHTML = '';
+        db.ref(chatRef).orderByChild('ts').on('value', snap => {
+            const box = document.getElementById('chat-messages');
+            box.innerHTML = '';
+            if(snap.exists()) {
+                snap.forEach(ch => {
+                    const m = ch.val();
+                    const isSent = m.from === 'rubik';
+                    const time = m.ts ? new Date(m.ts).toLocaleTimeString('es-BO', {hour:'2-digit',minute:'2-digit'}) : '';
+                    box.innerHTML += `<div class="chat-msg ${isSent?'sent':'recv'}">
+                        <div>${(m.text||'').replace(/\n/g,'<br>')}</div>
+                        <div class="msg-meta">${m.fromLabel||''} · ${time}</div>
+                    </div>`;
+                });
+                box.scrollTop = box.scrollHeight;
+            }
+        });
+
+        document.getElementById('chat-panel').style.display = 'flex';
+        document.getElementById('chat-inp').focus();
+    }
+
+    function cerrarChat() {
+        if(_chatListener) { db.ref(_chatListener).off(); _chatListener = null; }
+        document.getElementById('chat-panel').style.display = 'none';
+        _chatCid = null; _chatPid = null;
+    }
+
+    function enviarChatDashboard() {
+        if(!_chatCid || !_chatPid) return;
+        const inp = document.getElementById('chat-inp');
+        const text = inp.value.trim();
+        if(!text) return;
+        const destino = document.getElementById('chat-destino').value;
+        const destinoLabel = { cliente: 'Para el cliente', trabajadores: 'Para trabajadores', supervisor: 'Para supervisor' }[destino] || destino;
+        inp.value = ''; inp.style.height = 'auto';
+        const msg = { text, from: 'rubik', fromLabel: 'Rubik', destino, destinoLabel, ts: new Date().toISOString() };
+        db.ref(`proyectos/${_chatCid}/${_chatPid}/chat`).push(msg);
+        // Notificar al cliente si es para él
+        if(destino === 'cliente') {
+            db.ref(`notificaciones/clientes/${_chatCid}`).push({
+                title: '💬 Mensaje de Rubik',
+                body: text.substring(0, 120),
+                date: new Date().toISOString(), read: false,
+                cid: _chatCid, pid: _chatPid
+            });
+        }
+    }
+
+    // ════════════════════════════════════════════════
+    //  CONTRATOS PENDIENTES
+    // ════════════════════════════════════════════════
+    let _contratos = []; // {cid, pid, proyecto, cliente, estado}
+    let _contratoActivo = null;
+
+    function initContratoScanner() {
+        db.ref('proyectos').on('value', async snap => {
+            _contratos = [];
+            const clientesNombres = {};
+
+            if (!snap.exists()) { renderContratos(); return; }
+
+            const promises = [];
+            snap.forEach(clientSnap => {
+                const cid = clientSnap.key;
+                promises.push(db.ref(`clientes/${cid}/nombre`).once('value').then(s => { clientesNombres[cid] = s.val() || cid; }));
+                clientSnap.forEach(proySnap => {
+                    const pid = proySnap.key;
+                    const p = proySnap.val();
+                    const estadosPendientes = ['requerimiento', 'propuesta_enviada', 'negociando'];
+                    if (estadosPendientes.includes(p.estado)) {
+                        _contratos.push({ cid, pid, p });
+                    }
+                });
+            });
+
+            await Promise.all(promises);
+            _contratos.forEach(c => { c.clienteNombre = clientesNombres[c.cid] || c.cid; });
+            renderContratos();
+        });
+    }
+
+    function renderContratos() {
+        const lista = document.getElementById('contratos-lista');
+        const badge = document.getElementById('contratos-badge');
+        if (!_contratos.length) {
+            lista.innerHTML = `<div style="background:var(--card);border:1px solid var(--border);border-radius:16px;padding:18px;text-align:center;color:var(--gray);font-size:13px;font-weight:600;"><i class="ph-fill ph-check-circle" style="font-size:24px;color:var(--green);display:block;margin-bottom:6px;"></i>Sin contratos pendientes</div>`;
+            badge.style.display = 'none';
+            return;
+        }
+        badge.textContent = _contratos.length;
+        badge.style.display = 'inline-flex';
+
+        const estadoConfig = {
+            requerimiento:     { color: 'var(--orange)', label: 'Nuevo requerimiento', icon: 'ph-clock' },
+            propuesta_enviada: { color: 'var(--blue)',   label: 'Propuesta enviada — esperando cliente', icon: 'ph-paper-plane-tilt' },
+            negociando:        { color: '#af52de',       label: 'Contraoferta del cliente', icon: 'ph-arrows-counter-clockwise' },
+        };
+
+        lista.innerHTML = _contratos.map(c => {
+            const cfg = estadoConfig[c.p.estado] || { color: 'var(--gray)', label: c.p.estado, icon: 'ph-file' };
+            const total = c.p.presupuesto && c.p.presupuesto.items
+                ? (Array.isArray(c.p.presupuesto.items) ? c.p.presupuesto.items : Object.values(c.p.presupuesto.items))
+                    .filter(it => it && it.type !== 'chapter')
+                    .reduce((s,it) => s + parseFloat(it.pu||0)*parseFloat(it.cant||1), 0)
+                : 0;
+            const contraoferta = c.p.negociacion && c.p.negociacion.contraoferta_cliente;
+            return `<div onclick="abrirContrato('${c.cid}','${c.pid}')" style="background:var(--card);border:1.5px solid ${cfg.color}33;border-left:4px solid ${cfg.color};border-radius:16px;padding:16px;cursor:pointer;transition:box-shadow 0.2s;" onmouseover="this.style.boxShadow='0 4px 20px rgba(0,0,0,0.08)'" onmouseout="this.style.boxShadow='none'">
+                <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">
+                    <div style="flex:1;min-width:0;">
+                        <div style="font-size:14px;font-weight:900;margin-bottom:2px;">${c.p.nombre||'Proyecto'}</div>
+                        <div style="font-size:12px;color:var(--gray);margin-bottom:8px;">${c.clienteNombre}</div>
+                        <div style="display:inline-flex;align-items:center;gap:5px;background:${cfg.color}18;color:${cfg.color};padding:4px 10px;border-radius:8px;font-size:11px;font-weight:800;">
+                            <i class="ph-bold ${cfg.icon}"></i> ${cfg.label}
+                        </div>
+                    </div>
+                    <div style="text-align:right;flex-shrink:0;">
+                        ${total ? `<div style="font-size:16px;font-weight:900;color:var(--text);">${total.toLocaleString('es-BO',{minimumFractionDigits:0})} Bs</div><div style="font-size:10px;color:var(--gray);">Presupuesto</div>` : '<div style="font-size:12px;color:var(--gray);">Sin presupuesto</div>'}
+                        ${contraoferta ? `<div style="margin-top:6px;font-size:13px;font-weight:900;color:#af52de;">${parseFloat(contraoferta).toLocaleString('es-BO',{minimumFractionDigits:0})} Bs</div><div style="font-size:10px;color:#af52de;">Contraoferta</div>` : ''}
+                    </div>
+                </div>
+                <div style="margin-top:12px;display:flex;gap:8px;">
+                    <button onclick="event.stopPropagation();abrirContrato('${c.cid}','${c.pid}')" style="flex:1;background:${cfg.color};color:white;border:none;padding:10px;border-radius:12px;font-size:12px;font-weight:800;cursor:pointer;">
+                        <i class="ph-fill ph-pencil"></i> Responder
+                    </button>
+                    <button onclick="event.stopPropagation();abrirChat('',\'${c.cid}\',\'${c.pid}\')" style="background:var(--bg);color:var(--gray);border:1px solid var(--border);padding:10px 14px;border-radius:12px;font-size:12px;font-weight:800;cursor:pointer;">
+                        <i class="ph-fill ph-chat-dots"></i>
+                    </button>
+                </div>
+            </div>`;
+        }).join('');
+    }
+
+    function abrirContrato(cid, pid) {
+        const entry = _contratos.find(c => c.cid === cid && c.pid === pid);
+        if (!entry) return;
+        _contratoActivo = { cid, pid, p: entry.p, clienteNombre: entry.clienteNombre };
+
+        document.getElementById('mod-contrato-titulo').textContent = entry.p.nombre || 'Proyecto';
+        document.getElementById('mod-contrato-cliente').textContent = entry.clienteNombre + ' · ' + (entry.p.estado || '');
+
+        // Info del proyecto
+        const total = entry.p.presupuesto && entry.p.presupuesto.items
+            ? (Array.isArray(entry.p.presupuesto.items) ? entry.p.presupuesto.items : Object.values(entry.p.presupuesto.items))
+                .filter(it => it && it.type !== 'chapter')
+                .reduce((s,it) => s + parseFloat(it.pu||0)*parseFloat(it.cant||1), 0)
+            : 0;
+        const desc = entry.p.descripcion || entry.p.presupuesto_estimado ? `Presupuesto estimado cliente: ${parseFloat(entry.p.presupuesto_estimado||0).toLocaleString('es-BO')} Bs` : '';
+        document.getElementById('mod-contrato-info').innerHTML = `
+            <b>Estado:</b> ${entry.p.estado}<br>
+            ${total ? `<b>Presupuesto Rubik:</b> ${total.toLocaleString('es-BO',{minimumFractionDigits:2})} Bs<br>` : ''}
+            ${entry.p.presupuesto_estimado ? `<b>Estimado cliente:</b> ${parseFloat(entry.p.presupuesto_estimado).toLocaleString('es-BO')} Bs<br>` : ''}
+            ${entry.p.descripcion ? `<b>Descripción:</b> ${entry.p.descripcion}` : ''}`;
+
+        // Contraoferta
+        const contraoferta = entry.p.negociacion && entry.p.negociacion.contraoferta_cliente;
+        const cBox = document.getElementById('mod-contrato-contraoferta-box');
+        if (contraoferta) {
+            cBox.style.display = 'block';
+            document.getElementById('mod-contrato-contraoferta-val').textContent = parseFloat(contraoferta).toLocaleString('es-BO', {minimumFractionDigits:2}) + ' Bs';
+        } else { cBox.style.display = 'none'; }
+
+        // Pre-llenar monto con total de presupuesto
+        const propuestaPrevia = entry.p.negociacion && entry.p.negociacion.propuesta_rubik;
+        document.getElementById('mod-contrato-monto').value = propuestaPrevia || (total ? Math.round(total) : '');
+        document.getElementById('mod-contrato-msg').value = '';
+        document.getElementById('mod-contrato').style.display = 'flex';
+    }
+
+    function cerrarContrato() {
+        document.getElementById('mod-contrato').style.display = 'none';
+        _contratoActivo = null;
+    }
+
+    function enviarPropuestaRubik() {
+        if (!_contratoActivo) return;
+        const monto = parseFloat(document.getElementById('mod-contrato-monto').value);
+        if (!monto || monto <= 0) return alert('Ingresa un monto válido.');
+        const msg = document.getElementById('mod-contrato-msg').value.trim();
+        const { cid, pid, p } = _contratoActivo;
+        const ts = new Date().toISOString();
+        const updates = {
+            [`proyectos/${cid}/${pid}/negociacion/propuesta_rubik`]: monto,
+            [`proyectos/${cid}/${pid}/negociacion/mensaje_rubik`]: msg || null,
+            [`proyectos/${cid}/${pid}/negociacion/ts_propuesta`]: ts,
+            [`proyectos/${cid}/${pid}/estado`]: 'propuesta_enviada',
+        };
+        db.ref().update(updates).then(() => {
+            // Notificar al cliente
+            db.ref(`notificaciones/clientes/${cid}`).push({
+                title: '📋 Rubik envió una propuesta para tu proyecto',
+                body: `Tu proyecto "${p.nombre||''}" tiene una propuesta de ${monto.toLocaleString('es-BO',{minimumFractionDigits:2})} Bs.${msg ? ' Mensaje: '+msg : ''} Ingresa a ver el presupuesto y aceptar.`,
+                ts, read: false, cid, pid, tipo: 'propuesta'
+            });
+            cerrarContrato();
+        });
+    }
+
+    function aceptarContraoferta() {
+        if (!_contratoActivo) return;
+        const { cid, pid, p } = _contratoActivo;
+        const contraoferta = p.negociacion && p.negociacion.contraoferta_cliente;
+        if (!contraoferta) return;
+        const ts = new Date().toISOString();
+        db.ref().update({
+            [`proyectos/${cid}/${pid}/monto_cierre`]: parseFloat(contraoferta),
+            [`proyectos/${cid}/${pid}/estado`]: 'contrato_firmado',
+            [`proyectos/${cid}/${pid}/fecha_contrato`]: ts,
+        }).then(() => {
+            db.ref(`notificaciones/clientes/${cid}`).push({
+                title: '🎉 ¡Rubik aceptó tu contraoferta!',
+                body: `Tu proyecto "${p.nombre||''}" queda confirmado por ${parseFloat(contraoferta).toLocaleString('es-BO',{minimumFractionDigits:2})} Bs. ¡A trabajar!`,
+                ts, read: false, cid, pid, tipo: 'contrato'
+            });
+            cerrarContrato();
+        });
+    }
+
+    function rechazarContraoferta() {
+        if (!_contratoActivo) return;
+        const { cid, pid, p } = _contratoActivo;
+        const ts = new Date().toISOString();
+        db.ref().update({
+            [`proyectos/${cid}/${pid}/negociacion/contraoferta_cliente`]: null,
+            [`proyectos/${cid}/${pid}/estado`]: 'propuesta_enviada',
+        }).then(() => {
+            db.ref(`notificaciones/clientes/${cid}`).push({
+                title: '↩️ Rubik no pudo aceptar tu contraoferta',
+                body: `Hemos rechazado la contraoferta para "${p.nombre||''}". Revisa el presupuesto y puedes intentar de nuevo.`,
+                ts, read: false, cid, pid, tipo: 'negociacion'
+            });
+            cerrarContrato();
+        });
+    }
+
+    function activarProyecto() {
+        if (!_contratoActivo) return;
+        const { cid, pid, p } = _contratoActivo;
+        const ts = new Date().toISOString();
+        const monto = parseFloat(document.getElementById('mod-contrato-monto').value) || 0;
+        const updates = {
+            [`proyectos/${cid}/${pid}/estado`]: 'planificacion',
+            [`proyectos/${cid}/${pid}/fecha_inicio`]: ts,
+        };
+        if (monto) updates[`proyectos/${cid}/${pid}/monto_cierre`] = monto;
+        db.ref().update(updates).then(() => {
+            db.ref(`notificaciones/clientes/${cid}`).push({
+                title: '🚀 ¡Tu proyecto está en marcha!',
+                body: `Rubik comenzó a planificar "${p.nombre||''}". Pronto verás el cronograma y avance en tu app.`,
+                ts, read: false, cid, pid, tipo: 'activacion'
+            });
+            cerrarContrato();
+        });
+    }
+
+    window.onload = function() { initDashboard(); initContratoScanner(); };
+</script>
+    <script src="/js/viewmode.js?v=1"></script>
+</body>
+</html>

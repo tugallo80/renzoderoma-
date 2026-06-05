@@ -1,0 +1,2278 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Presupuesto Maestro Rubik</title>
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.0/Sortable.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
+    
+    <script src="https://www.gstatic.com/firebasejs/9.1.3/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.1.3/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.1.3/firebase-database-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.1.3/firebase-storage-compat.js"></script>
+    <script>
+        window._rubikFirebaseConfig = window._rubikFirebaseConfig || {
+            apiKey: "AIzaSyDXYlofy31cDP14xVAVxWo_7TqXdSgsIjA",
+            authDomain: "rubik-bolivia.firebaseapp.com",
+            databaseURL: "https://rubik-bolivia-default-rtdb.firebaseio.com",
+            projectId: "rubik-bolivia",
+            storageBucket: "rubik-bolivia.firebasestorage.app",
+            messagingSenderId: "4153087958",
+            appId: "1:4153087958:web:cf2dd16106580ed6437677"
+        };
+        if (!firebase.apps.length) firebase.initializeApp(window._rubikFirebaseConfig);
+    </script>
+    <script src="/js/firecache.js?v=1"></script>
+    <script src="/js/auth-guard.js?v=1"></script>
+    <script src="/js/apu-utils.js?v=1"></script>
+    <script src="/js/viewmode.js?v=1"></script>
+
+    <style>
+        :root { --bg: #f4f4f7; --card: #fff; --text: #1a1a1a; --blue: #007aff; --green: #34c759; --red: #ff3b30; --gray: #8e8e93; --orange: #ff9500; --border: #d1d1d6; --purple: #af52de; }
+        body.dark-mode { --bg: #000; --card: #1c1c1e; --text: #fff; --border: #333; }
+        body { font-family: -apple-system, sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 10px; padding-bottom: 120px; }
+        .nav { display: flex; justify-content: space-between; margin-bottom: 15px; align-items: center; }
+        .btn-nav { background: var(--card); border: 1px solid var(--border); padding: 8px 12px; border-radius: 20px; cursor: pointer; color: var(--blue); font-weight: 700; display: flex; align-items: center; gap: 5px; }
+        .top-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 15px; }
+        .card { background: var(--card); padding: 10px; border-radius: 10px; border: 1px solid var(--border); font-size: 11px; }
+        .row { display: flex; justify-content: space-between; margin-bottom: 4px; align-items: center; }
+        .total-card { background: #1c1c1e; color: white; padding: 10px; border-radius: 10px; font-size: 11px; text-align: right; }
+        .inp-desc-val { background: transparent; color: white; border: none; border-bottom: 1px dashed gray; width: 60px; text-align: right; font-family: inherit; font-size: 11px; }
+        .big-total { font-size: 18px; font-weight: 800; color: var(--green); margin-top: 5px; border-top: 1px solid #444; padding-top: 5px; }
+        .cond-wrapper { display: flex; gap: 10px; overflow-x: auto; padding-bottom: 5px; margin-bottom: 15px; }
+        .cond-box { background: var(--card); padding: 8px; border-radius: 8px; border: 1px solid var(--border); min-width: 110px; flex-shrink: 0; }
+        .lbl { font-size: 9px; font-weight: 800; color: var(--gray); text-transform: uppercase; display: block; margin-bottom: 3px; }
+        .inp-cond { width: 100%; border: none; border-bottom: 1px solid #eee; background: transparent; color: var(--text); font-size: 11px; padding: 2px; }
+        .switch-row { display: flex; align-items: center; justify-content: space-between; font-size: 10px; font-weight: 700; margin-top: 2px; }
+        .toggle { appearance: none; width: 32px; height: 18px; background: var(--border); border-radius: 20px; position: relative; cursor: pointer; transition: 0.2s; }
+        .toggle:checked { background: var(--blue); }
+        .toggle:checked::after { left: 16px; }
+        .toggle::after { content: ''; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; background: white; border-radius: 50%; transition: 0.2s; }
+        .act-bar { display: flex; gap: 8px; overflow-x: auto; margin-bottom: 15px; }
+        .btn { padding: 10px 14px; border-radius: 8px; font-weight: 700; font-size: 11px; cursor: pointer; border: none; white-space: nowrap; display: flex; align-items: center; gap: 5px; }
+        .btn-dark { background: #1c1c1e; color: white; }
+        .btn-sec { background: var(--card); border: 1px solid var(--border); color: var(--text); }
+        
+        #budget-list { min-height: 200px; }
+        .chapter { background: var(--border); padding: 8px; border-radius: 6px; margin-top: 15px; margin-bottom: 8px; display: flex; align-items: center; }
+        .chap-handle { margin-right: 10px; cursor: grab; font-size: 18px; }
+        .chap-inp { background: transparent; border: none; font-weight: 800; text-transform: uppercase; width: 100%; color: var(--text); font-size: 12px; outline:none;}
+        .chap-toggle { cursor: pointer; color: var(--gray); font-size: 18px; margin-right: 8px; transition: 0.2s; }
+        .chap-total { font-size: 13px; font-weight: 800; color: var(--blue); margin-left: auto; margin-right: 15px; }
+        .item { background: var(--card); padding: 10px; border-radius: 10px; margin-bottom: 8px; border-left: 4px solid var(--blue); position: relative; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
+        .item-handle { position: absolute; left: 6px; top: 50%; transform: translateY(-50%); color: var(--gray); cursor: grab; font-size: 18px; }
+        .item-content { margin-left: 20px; }
+        .grid-desc { display: flex; gap: 5px; margin-bottom: 8px; position: relative; }
+        .inp-desc { width: 100%; border: none; border-bottom: 1px solid var(--border); background: transparent; font-weight: 600; color: var(--text); padding: 5px; font-size: 13px; outline:none;}
+        .sel-und { background: var(--bg); border: none; font-size: 10px; border-radius: 4px; color: var(--text); font-weight: 700; padding: 0 8px; outline:none;}
+        .suggestions { position: absolute; top: 100%; left: 0; width: 100%; background: var(--card); border: 1px solid var(--border); z-index: 500; max-height: 150px; overflow-y: auto; display: none; border-radius: 0 0 8px 8px; box-shadow: 0 4px 20px rgba(0,0,0,0.2); }
+        .suggestion-item { padding: 10px; font-size: 11px; border-bottom: 1px solid #eee; cursor: pointer; }
+        .grid-vals { display: grid; grid-template-columns: 1fr 1fr 1.5fr; gap: 8px; margin-bottom: 8px; align-items: start; }
+        .val-box { display: flex; flex-direction: column; }
+        .inp-num { background: var(--bg); border: 1px solid var(--border); color: var(--text); text-align: center; border-radius: 6px; padding: 8px; font-weight: 700; font-size: 13px; outline:none;}
+        .btn-mini { font-size: 10px; padding: 6px; border: none; border-radius: 5px; margin-top: 4px; cursor: pointer; width: 100%; color: white; font-weight: 800; text-transform: uppercase; }
+        .btn-blue { background-color: var(--blue) !important; }
+        .btn-orange { background-color: var(--orange) !important; } 
+        .feat-area { width: 100%; height: 45px; background: transparent; border: 1px solid var(--border); border-radius: 6px; font-size: 11px; color: var(--text); resize: none; padding: 5px; font-family: inherit; outline:none;}
+        .item-foot { display: flex; justify-content: flex-end; align-items: center; gap: 15px; border-top: 1px dashed var(--border); padding-top: 8px; margin-top: 5px; }
+        .icon-btn { font-size: 18px; cursor: pointer; color: var(--gray); transition: 0.2s; }
+        .total-lbl { font-weight: 800; font-size: 14px; color: var(--text); margin-right: auto; }
+        
+        .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); justify-content: center; align-items: center; backdrop-filter: blur(4px); z-index: 2000; }
+        .modal-box { background: var(--card); width: 90%; max-width: 650px; max-height: 90vh; overflow-y: auto; padding: 20px; border-radius: 20px; color: var(--text); position: relative; }
+        .apu-head { display: flex; justify-content: space-between; font-size: 10px; font-weight: 800; color: var(--blue); margin-bottom: 5px; text-transform: uppercase; }
+        .apu-row { display: grid; grid-template-columns: 2fr 0.5fr 0.8fr 0.8fr 0.8fr 25px; gap: 5px; margin-bottom: 8px; align-items: center; font-size: 11px; }
+        .mod-inp { border: 1px solid var(--border); background: var(--bg); color: var(--text); padding: 8px; border-radius: 6px; font-size: 12px; width: 100%; box-sizing: border-box; outline:none;}
+        .btn-add-row { width: 100%; padding: 10px; background: #e5e5ea; border: 1px dashed var(--gray); border-radius: 6px; color: var(--blue); font-weight: 800; font-size: 11px; cursor: pointer; margin-top: 5px; text-align: center; }
+        
+        .photo-opt { padding: 15px; border-bottom: 1px solid var(--border); cursor: pointer; display: flex; align-items: center; gap: 10px; font-size: 14px; font-weight: 600; transition:0.2s; }
+        .photo-opt:hover { background: var(--bg); }
+        .design-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 10px; max-height: 250px; overflow-y: auto; padding: 5px; }
+
+        .fab-col { position: fixed; bottom: 25px; right: 25px; display: flex; flex-direction: column; gap: 12px; align-items: flex-end; z-index: 100; }
+        .fab { width: 55px; height: 55px; border-radius: 50%; border: none; color: white; font-size: 26px; box-shadow: 0 5px 20px rgba(0,0,0,0.3); cursor: pointer; display: flex; align-items: center; justify-content: center; }
+        .f-main { background: var(--blue); } 
+        
+        #global-loader { display: none; position: fixed; top:0; left:0; width:100%; height:100%; background: rgba(0,0,0,0.85); backdrop-filter: blur(10px); z-index: 3000; justify-content: center; align-items: center; flex-direction: column; }
+        .spinner { border: 4px solid rgba(0,122,255,0.2); border-left-color: var(--blue); border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; margin-bottom: 15px; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        @keyframes anim-spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        .anim-spin { display: inline-block; animation: anim-spin 0.8s linear infinite; }
+        #ia-progress-panel { display:none; background:rgba(139,92,246,0.07); border:1.5px solid var(--purple); border-radius:12px; padding:16px; margin-top:12px; text-align:center; }
+        #ia-progress-panel.visible { display:block; }
+        .ia-prog-spinner { width:36px; height:36px; border:3px solid rgba(139,92,246,0.2); border-left-color:var(--purple); border-radius:50%; animation:spin 0.9s linear infinite; margin:0 auto 10px; }
+        .ia-prog-bar-wrap { background:rgba(139,92,246,0.15); border-radius:20px; height:6px; margin:10px 0 8px; overflow:hidden; }
+        .ia-prog-bar { height:100%; background:var(--purple); border-radius:20px; width:5%; transition:width 0.6s ease; }
+        .ia-prog-msg { font-size:12px; color:var(--purple); font-weight:700; min-height:18px; }
+        .ia-prog-sub { font-size:10px; color:var(--muted); margin-top:3px; }
+
+        /* ========================================================= */
+        /* VISTA MÓVIL — body[data-view="mobile"]                   */
+        /* ========================================================= */
+        body[data-view="mobile"] { padding: 10px; padding-bottom: 85px; }
+
+        /* --- Ocultar en móvil: barra de acciones superior y FAB (ya están abajo) --- */
+        body[data-view="mobile"] .act-bar { display: none !important; }
+        body[data-view="mobile"] .fab-col  { display: none !important; }
+
+        /* --- Nav: solo mostrar botón Atrás, ocultar el resto --- */
+        body[data-view="mobile"] .nav-hide-mobile { display: none !important; }
+
+        /* --- Top-grid: dos columnas ajustadas, no apilar --- */
+        body[data-view="mobile"] .top-grid { grid-template-columns: 1fr 1fr; gap: 8px; }
+        body[data-view="mobile"] .total-card { font-size: 11px; }
+        body[data-view="mobile"] .big-total { font-size: 17px; }
+
+        /* --- Ítem: descripción visible completa, sin corte --- */
+        body[data-view="mobile"] .item { padding: 8px 8px 8px 10px; }
+        body[data-view="mobile"] .item-content { margin-left: 16px; }
+        body[data-view="mobile"] .grid-desc { flex-wrap: wrap; gap: 4px; }
+        body[data-view="mobile"] .inp-desc { font-size: 12px; min-width: 0; flex: 1 1 100%; }
+        body[data-view="mobile"] .sel-und { flex-shrink: 0; font-size: 11px; }
+
+        /* --- Grid de valores en móvil: 3 cols ---
+           Col1 = CANT + botones apilados (angosta fija)
+           Col2 = P.UNIT + botones apilados (ancha para que el número no se corte)
+           Col3 = CARACTERÍSTICAS (resto del espacio) */
+        body[data-view="mobile"] .grid-vals {
+            grid-template-columns: 58px 90px 1fr;
+            gap: 6px;
+            align-items: start;
+        }
+        body[data-view="mobile"] .inp-num {
+            font-size: 13px; padding: 7px 4px;
+            width: 100%; box-sizing: border-box;
+            min-width: 0;
+        }
+        /* Botones CÓMPUTO/APU/COPIAR/PEGAR: full-width dentro de su val-box */
+        body[data-view="mobile"] .btn-mini {
+            font-size: 9px; padding: 5px 4px; letter-spacing: -0.3px;
+            width: 100% !important; white-space: nowrap; box-sizing: border-box;
+        }
+        /* CARACTERÍSTICAS: más alta para mostrar todo el texto */
+        body[data-view="mobile"] .feat-area { height: 80px; font-size: 10px; width: 100%; box-sizing: border-box; }
+        body[data-view="mobile"] .lbl { font-size: 8px; }
+
+        /* --- Barra de acciones fija inferior --- */
+        #mobile-action-bar { display: none; }
+        body[data-view="mobile"] #mobile-action-bar {
+            display: flex;
+            position: fixed; bottom: 0; left: 0; right: 0;
+            background: var(--card);
+            border-top: 1px solid var(--border);
+            padding: 6px 4px;
+            padding-bottom: max(6px, env(safe-area-inset-bottom));
+            z-index: 300;
+            justify-content: space-around;
+            align-items: center;
+        }
+        #mobile-action-bar .m-act-btn {
+            display: flex; flex-direction: column; align-items: center; gap: 1px;
+            background: none; border: none; color: var(--blue);
+            font-size: 9px; font-weight: 800;
+            cursor: pointer; padding: 4px 6px; border-radius: 8px; transition: 0.15s;
+            min-width: 44px;
+        }
+        #mobile-action-bar .m-act-btn i { font-size: 20px; }
+        #mobile-action-bar .m-act-btn:active { background: var(--bg); transform: scale(0.9); }
+        #mobile-action-bar .m-act-btn.green  { color: var(--green); }
+        #mobile-action-bar .m-act-btn.purple { color: var(--purple); }
+        #mobile-action-bar .m-act-btn.orange { color: var(--orange); }
+        #mobile-action-bar .m-act-btn.red    { color: var(--red); }
+
+        /* ESTILOS IA PRESUPUESTOS */
+        .ia-item-row { background: #1c1c1e; padding: 15px; border-radius: 12px; border: 1px dashed #444; margin-bottom: 10px; position: relative; display: flex; flex-direction: column; gap: 10px; }
+        .ia-item-row .btn-del-row { position: absolute; top: -8px; right: -8px; background: var(--red); color: white; border: none; border-radius: 50%; width: 24px; height: 24px; cursor: pointer; display: flex; justify-content: center; align-items: center; box-shadow: 0 2px 5px rgba(0,0,0,0.2); }
+        .ia-grid { display: grid; grid-template-columns: 2fr 1fr; gap: 10px; }
+        .ia-inp-lbl { font-size: 10px; font-weight: 800; color: #888; text-transform: uppercase; margin-bottom: 4px; display: block; }
+        .ia-inp-std { width: 100%; padding: 10px; border: 1px solid #333; background: #000; color: white; border-radius: 8px; font-size: 12px; box-sizing: border-box; outline:none; }
+        .ia-btn-upload { background: rgba(175,82,222,0.1); color: var(--purple); border: 1px solid var(--purple); padding: 8px 12px; border-radius: 8px; font-weight: 800; cursor: pointer; font-size: 11px; display: flex; align-items: center; gap: 5px; width: fit-content; }
+        .ia-img-preview { max-height: 60px; border-radius: 6px; display: none; object-fit: cover; border: 1px solid #333; }
+    </style>
+    <link rel="stylesheet" href="/css/responsive.css?v=1">
+</head>
+<body>
+
+    <div id="global-loader">
+        <div class="spinner"></div>
+        <div style="color:white; font-weight:bold; font-size:14px;" id="loader-title">Cargando Presupuesto...</div>
+    </div>
+
+    <div class="nav">
+        <button class="btn-nav" onclick="location.href='dashboard-proyecto.html'"><i class="ph-bold ph-caret-left"></i> Atrás</button>
+        <div class="nav-hide-mobile" style="font-weight:800; text-transform:uppercase; font-size:14px;">Presupuesto</div>
+        <div style="display:flex; gap:8px">
+            <button class="btn-nav" onclick="document.body.classList.toggle('dark-mode')"><i class="ph-fill ph-moon"></i></button>
+            <button class="btn-nav nav-hide-mobile" onclick="location.href='index.html'">Home</button>
+        </div>
+    </div>
+
+    <div class="top-grid">
+        <div class="card">
+            <div class="row"><span>Cliente:</span> <b id="h-cli">...</b></div>
+            <div class="row"><span>Proyecto:</span> <b id="h-pro">...</b></div>
+            <div class="row"><span>Fecha:</span> <input type="date" id="h-date" style="border:none; background:transparent; font-family:inherit; color:var(--blue); font-weight:700;" onchange="saveDB()"></div>
+        </div>
+        <div class="total-card">
+            <div class="row"><span>Subtotal:</span> <span id="t-sub">0,00</span></div>
+            <div class="row"><span style="color:var(--orange)">Descuento (Bs):</span> <input type="number" step="any" id="t-desc-val" class="inp-desc-val" value="0" onchange="calcGlobal(); saveDB()"></div>
+            <div class="row"><span>IVA 13%:</span> <span id="t-iva">0,00</span></div>
+            <div class="row"><span>IT 3%:</span> <span id="t-it">0,00</span></div>
+            <div class="big-total" id="t-total">0,00 Bs</div>
+        </div>
+    </div>
+
+    <div class="cond-wrapper">
+        <div class="cond-box"><span class="lbl">Forma Pago</span><input id="c-pago" class="inp-cond" placeholder="50% / 50%" onchange="saveDB()"></div>
+        <div class="cond-box"><span class="lbl">Validez</span><input id="c-validez" class="inp-cond" placeholder="15 días" onchange="saveDB()"></div>
+        <div class="cond-box"><span class="lbl">Montaje</span><div class="switch-row">NO <input type="checkbox" class="toggle" id="sw-mont" onchange="calcGlobal(); saveDB()"> SI</div></div>
+        <div class="cond-box"><span class="lbl">Desmontaje</span><div class="switch-row">NO <input type="checkbox" class="toggle" id="sw-desm" onchange="calcGlobal(); saveDB()"> SI</div></div>
+        <div class="cond-box"><span class="lbl">Impuestos</span><div class="switch-row">NO <input type="checkbox" class="toggle" id="sw-imp" onchange="calcGlobal(); saveDB()"> SI</div></div>
+    </div>
+
+    <div class="act-bar">
+        <button class="btn btn-dark" onclick="saveDB(true)"><i class="ph-bold ph-floppy-disk"></i> Forzar Guardado</button>
+        <button class="btn btn-sec" style="color:var(--orange); border-color:var(--orange);" onclick="syncDatabasePrices()"><i class="ph-bold ph-arrows-clockwise"></i> Actualizar Precios BD</button>
+        <button class="btn btn-sec" onclick="abrirModalPDF()"><i class="ph-bold ph-file-pdf"></i> PDF</button>
+        <button class="btn btn-sec" onclick="exportExcel()"><i class="ph-bold ph-file-xls"></i> Excel</button>
+        <button class="btn btn-sec" style="color:var(--purple); border-color:var(--purple);" onclick="abrirModalIABudget()"><i class="ph-bold ph-magic-wand"></i> Presupuesto IA</button>
+    </div>
+
+    <div id="budget-list"></div>
+    <div style="height:120px;"></div>
+
+    <div class="fab-col">
+        <button class="fab f-main" onclick="addChapter()" style="background:var(--text); width:45px; height:45px; font-size:16px;">T</button>
+        <button class="fab f-main" onclick="addItem()">+</button>
+    </div>
+
+    <datalist id="dl-unds"></datalist>
+    <datalist id="dl-materiales"></datalist>
+    <datalist id="dl-cargos"></datalist>
+    <datalist id="dl-otros"></datalist>
+    <datalist id="dl-items"></datalist>
+
+
+    <!-- Modal Re-generar ítem con IA -->
+    <div id="mod-regen-ia" class="modal" style="display:none; z-index:9600;">
+        <div class="modal-box" style="max-width:500px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
+                <h3 style="margin:0; color:var(--purple)"><i class="ph-bold ph-magic-wand"></i> Re-generar Ítem con IA</h3>
+                <i class="ph-bold ph-x" style="font-size:20px; cursor:pointer;" onclick="cerrarRegenIA()"></i>
+            </div>
+            <input type="hidden" id="regen-ia-nombre">
+            <div style="font-size:11px; color:var(--gray); margin-bottom:6px;">Ítem:</div>
+            <div id="regen-ia-nombre-lbl" style="font-weight:700; font-size:13px; color:var(--text); margin-bottom:12px; padding:8px; background:var(--card); border-radius:8px; border:1px solid var(--border);"></div>
+            <p style="font-size:12px; color:var(--gray); margin-bottom:6px;">Instrucciones para la IA (medidas, materiales, detalles):</p>
+            <textarea id="regen-ia-prompt" style="width:100%; height:160px; border:1.5px solid var(--purple); border-radius:10px; padding:12px; font-size:13px; font-family:inherit; resize:vertical; background:var(--card); color:var(--text); box-sizing:border-box;" placeholder="Describí el ítem..."></textarea>
+            <div style="margin-top:6px; font-size:11px; color:var(--gray);">Podés corregir medidas, materiales o cualquier detalle antes de regenerar.</div>
+            <button id="btn-regen-ia-exec" onclick="ejecutarRegenIA()" style="width:100%; margin-top:14px; padding:13px; background:var(--purple); color:#fff; border:none; border-radius:10px; font-size:14px; font-weight:700; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:8px;">
+                <i class="ph-bold ph-arrows-clockwise"></i> Volver a Generar
+            </button>
+        </div>
+    </div>
+
+    <!-- Modal PDF opciones -->
+    <div id="mod-pdf-opt" class="modal" style="display:none;">
+        <div class="modal-box" style="max-width:420px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:18px;">
+                <h3 style="margin:0">Exportar PDF</h3>
+                <i class="ph-bold ph-x" style="font-size:20px; cursor:pointer;" onclick="cerrarModalPDF()"></i>
+            </div>
+            <p style="color:var(--gray); font-size:13px; margin-bottom:16px;">¿Cómo querés generar el PDF?</p>
+            <div style="display:flex; flex-direction:column; gap:10px; margin-bottom:20px;">
+                <div id="pdf-opt-sin" class="pdf-opt-card selected" onclick="selectPDFOpt('sin')" style="border:2px solid var(--blue); border-radius:10px; padding:14px; cursor:pointer; background:rgba(0,122,255,0.07);">
+                    <div style="font-weight:700; margin-bottom:4px;">Sin impuestos por ítem</div>
+                    <div style="font-size:12px; color:var(--gray);">PDF limpio con subtotal + IVA/IT al final si aplica.</div>
+                </div>
+                <div id="pdf-opt-con" class="pdf-opt-card" onclick="selectPDFOpt('con')" style="border:2px solid var(--gray); border-radius:10px; padding:14px; cursor:pointer;">
+                    <div style="font-weight:700; margin-bottom:4px;">Con impuestos por ítem</div>
+                    <div style="font-size:12px; color:var(--gray);">Cada ítem muestra su precio con IVA/IT incluido.</div>
+                </div>
+            </div>
+            <button class="btn btn-dark" onclick="generarPDFSeleccionado()" style="width:100%; justify-content:center; padding:13px;">
+                <i class="ph-bold ph-file-pdf"></i> Generar PDF
+            </button>
+        </div>
+    </div>
+
+    <div id="mod-apu" class="modal">
+        <div class="modal-box" style="max-width:650px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
+                <h3 style="margin:0">Análisis Precio Unitario</h3>
+                <i class="ph-bold ph-x" style="font-size:20px; cursor:pointer" onclick="closeApu()"></i>
+            </div>
+            
+            <div style="background:#f9f9f9; padding:10px; border-radius:8px; margin-bottom:10px;">
+                <div class="apu-head"><span>SUB-ÍTEMS (Partidas Compuestas)</span></div><div id="apu-sub"></div><div class="btn-add-row" onclick="addApuRow('sub')" style="color:var(--orange); border-color:var(--orange);">+ AGREGAR SUB-ÍTEM</div>
+            </div>
+
+            <div style="background:#f9f9f9; padding:10px; border-radius:8px; margin-bottom:10px;">
+                <div class="apu-head"><span>MATERIALES E IMPRESIONES</span></div><div id="apu-mat"></div><div class="btn-add-row" onclick="addApuRow('mat')">+ AGREGAR MATERIAL</div>
+            </div>
+            
+            <div style="background:#f9f9f9; padding:10px; border-radius:8px; margin-bottom:10px;">
+                <div class="apu-head"><span>MANO DE OBRA (Rubros)</span></div><div id="apu-mo"></div><div class="btn-add-row" onclick="addApuRow('mo')">+ AGREGAR MANO DE OBRA</div>
+            </div>
+            
+            <div style="background:#f9f9f9; padding:10px; border-radius:8px; margin-bottom:10px;">
+                <div class="apu-head"><span>OTROS GASTOS (Logística, Herramientas...)</span></div><div id="apu-eq"></div><div class="btn-add-row" onclick="addApuRow('eq')">+ AGREGAR OTROS GASTOS</div>
+            </div>
+            
+            <div style="background:var(--bg); padding:10px; border-radius:8px; display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px;">
+                <div><span class="lbl">Costo Directo</span><input id="apu-dir" class="mod-inp" readonly></div>
+                <div><span class="lbl">Indirectos %</span><input type="number" step="any" id="apu-ind" class="mod-inp" value="10" onchange="recalcApu()"></div>
+                <div><span class="lbl">Utilidad %</span><input type="number" step="any" id="apu-util" class="mod-inp" value="15" onchange="recalcApu()"></div>
+                <div style="grid-column:span 3; text-align:right;"><span class="lbl">PRECIO FINAL</span><div id="apu-final" style="font-size:20px; font-weight:800; color:var(--blue)">0,00</div></div>
+            </div>
+            <button class="btn btn-dark" style="width:100%; margin-top:15px; justify-content:center" onclick="closeApu()">GUARDAR Y SALIR (ESC)</button>
+        </div>
+    </div>
+
+    <div id="mod-photo" class="modal">
+        <div class="modal-box" style="max-width:400px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
+                <h3 style="margin:0">Fotos y Anexos</h3>
+                <i class="ph-bold ph-x" style="font-size:20px; cursor:pointer" onclick="document.getElementById('mod-photo').style.display='none'"></i>
+            </div>
+            
+            <div id="photo-preview-list" style="display:flex; gap:10px; overflow-x:auto; margin-bottom:15px; padding-bottom:5px;"></div>
+            
+            <h4 style="margin-top:0; margin-bottom:10px; font-size:12px; color:var(--gray);">Agregar nueva imagen:</h4>
+            <div class="photo-opt" onclick="openDesignGallery()"><i class="ph-bold ph-images" style="color:var(--orange)"></i> Galería Diseño (Proyecto)</div>
+            <div class="photo-opt" onclick="triggerUpload()"><i class="ph-bold ph-upload" style="color:var(--blue)"></i> Subir desde Dispositivo</div>
+            <div class="photo-opt" onclick="pasteImageClick()"><i class="ph-bold ph-clipboard" style="color:var(--green)"></i> Pegar Portapapeles (Ctrl+V)</div>
+            
+            <div id="gallery-container" style="display:none; margin-top:10px; border-top:1px solid var(--border); padding-top:10px;">
+                <div style="font-size:10px; font-weight:bold; color:var(--gray); margin-bottom:5px;">SELECCIONA UNA IMAGEN O PLANO:</div>
+                <div id="design-thumbs" class="design-grid"></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal" id="mod-ia-budget" style="display: none; z-index: 9500; align-items: flex-start; padding-top: 40px; background: rgba(0,0,0,0.85); position: fixed; top: 0; left: 0; width: 100%; height: 100%; justify-content: center; backdrop-filter: blur(4px);">
+        <div class="modal-box" style="width: 90%; max-width: 650px; background: #111; border: 1px solid #333; color: white; border-radius: 20px; padding: 20px; max-height: 85vh; overflow-y: auto; position: relative;">
+            <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #333; padding-bottom:10px; margin-bottom:15px;">
+                <h3 style="margin:0; color:var(--purple); display:flex; align-items:center; gap:8px;"><i class="ph-fill ph-magic-wand" style="font-size:24px;"></i> Generador APU Inteligente</h3>
+                <i class="ph-bold ph-x" style="font-size:20px; cursor:pointer; color:var(--red);" onclick="cerrarModalIABudget()"></i>
+            </div>
+           <div style="font-size:12px; color:#aaa; margin-bottom:15px; font-weight:600; line-height:1.4;">Agrega los ítems que necesitas. La IA generará el APU detallado con materiales, mano de obra y 50% de utilidad, listos para revisar.</div>
+
+<div style="margin-bottom: 15px; padding: 10px; background: rgba(175,82,222,0.1); border: 1px dashed var(--purple); border-radius: 12px; display: flex; justify-content: space-between; align-items: center;">
+    <div style="font-size:12px; font-weight:600; color:var(--purple); display:flex; align-items:center; gap:5px;"><i class="ph-bold ph-file-pdf" style="font-size:18px;"></i> Cargar Pliego / Lista (PDF)</div>
+    <button class="btn-mini" style="background:var(--purple); width: auto; padding: 8px 12px;" onclick="document.getElementById('ia-pdf-upload').click()">Examinar PDF</button>
+    <input type="file" id="ia-pdf-upload" accept="application/pdf" style="display:none" onchange="handleIAPdfUpload(this)">
+</div>
+<div id="ia-pdf-name" style="font-size: 11px; color: var(--green); margin-bottom: 10px; display: none; font-weight:bold;">PDF cargado: <span id="ia-pdf-filename"></span> <i class="ph-bold ph-x" style="cursor:pointer; color:var(--red); font-size:14px; vertical-align:middle; margin-left:5px;" onclick="removeIAPdf()"></i></div>
+<div id="ia-items-container" style="display:flex; flex-direction:column; gap:10px; margin-bottom:15px; max-height: 45vh; overflow-y:auto; padding-right:5px;"></div>
+
+<button class="btn" style="background:transparent; color:var(--purple); border:1px dashed var(--purple); margin-bottom:15px; width: 100%; justify-content: center; padding: 12px; font-size:12px;" onclick="addIARow()"><i class="ph-bold ph-plus"></i> Añadir fila de ítem</button>
+
+<div id="ia-progress-panel">
+    <div class="ia-prog-spinner"></div>
+    <div class="ia-prog-bar-wrap"><div class="ia-prog-bar" id="ia-prog-bar"></div></div>
+    <div class="ia-prog-msg" id="ia-prog-msg">Iniciando...</div>
+    <div class="ia-prog-sub" id="ia-prog-sub">Esto puede tardar 20–40 segundos</div>
+</div>
+<button class="btn btn-dark" id="btn-ia-generate" onclick="generateIABudget()" style="background:var(--purple); width:100%; padding:15px; font-size:14px; justify-content:center;"><i class="ph-bold ph-check-circle"></i> Generar Presupuesto Completo</button>
+        </div>
+    </div>
+
+    <input type="file" id="file-up" style="display:none" accept="image/*" onchange="processPhotoUpload(this)">
+    <img loading="lazy" decoding="async" src="logo.jpg" id="logo-hidden" style="display:none;" crossorigin="anonymous">
+
+<script>
+    // Firebase ya inicializado en el <head>
+    if (!firebase.apps.length) firebase.initializeApp(window._rubikFirebaseConfig);
+    const db = firebase.database(); const storage = firebase.storage();
+
+    const urlParams = new URLSearchParams(window.location.search);
+    let cid = urlParams.get('cid') || localStorage.getItem('rubik_client_id');
+    let pid = urlParams.get('pid') || localStorage.getItem('rubik_current_pid');
+    let montoCierre = 0; // monto negociado desde el dashboard (si existe)
+    
+    // SEGURIDAD: Evitar rutas de base de datos nulas o corruptas
+    if(cid) localStorage.setItem('rubik_client_id', cid);
+    if(pid) localStorage.setItem('rubik_current_pid', pid);
+    if(!pid || !cid) { alert("Error de sesión: Cliente o Proyecto no identificado."); window.location.href="index.html"; }
+    
+    let data = []; let activeMod = null; let targetIdx = null; let sortableInstance;
+    let dbMats = {}; let dbItems = {}; let dbMo = {}; let dbOtros = {};
+    let saveTimeout;
+
+    setTimeout(() => { document.getElementById('global-loader').style.display = 'none'; }, 800);
+
+    // CORRECCIÓN MATEMÁTICA: Manejo seguro de decimales con coma o punto
+    function fMoney(num) { return parseFloat(num || 0).toLocaleString('es-BO', {minimumFractionDigits: 2, maximumFractionDigits: 2}); }
+    function stripZeros(num) { return Math.round((parseFloat(String(num).replace(',', '.')) || 0) * 100) / 100; }
+
+    document.getElementById('h-cli').innerText = localStorage.getItem('rubik_client_name') || "CLIENTE";
+    document.getElementById('h-pro').innerText = localStorage.getItem('rubik_current_pname') || "PROYECTO";
+
+    // ── Esperar auth antes de leer Firebase ──────────────────────────
+    (function arrancarCarga() {
+        var auth = firebase.auth();
+        if (auth.currentUser) { cargarPresupuesto(); return; }
+        var unsub = auth.onAuthStateChanged(function(user) {
+            unsub();
+            if (user) { cargarPresupuesto(); }
+            else { window.location.href = 'login.html'; }
+        });
+    })();
+
+    function cargarPresupuesto() {
+    // PERFORMANCE FIX: cargamos materiales, MO y otros en paralelo (liviano ~55KB total)
+    // Items APU (7.6MB) se carga de forma lazy solo cuando el usuario abre el modal de APU
+    Promise.all([
+        db.ref('base_datos/materiales').once('value'),
+        db.ref('base_datos/mano_obra').once('value'),
+        db.ref('base_datos/otros').once('value'),
+        db.ref('base_datos/unidades').once('value'),
+        db.ref('personal').once('value')
+    ]).then(([matSnap, moSnap, eqSnap, undSnap, persSnap]) => {
+        dbMats = matSnap.val() || {};
+        dbMo   = moSnap.val()  || {};
+        dbOtros = eqSnap.val() || {};
+        const dlMat = document.getElementById('dl-materiales');
+        Object.values(dbMats).forEach(m => { const opt = document.createElement('option'); opt.value = m.n || m.desc; dlMat.appendChild(opt); });
+        const dlCargos = document.getElementById('dl-cargos');
+        Object.values(dbMo).forEach(m => { const opt = document.createElement('option'); opt.value = m.desc || m.n; dlCargos.appendChild(opt); });
+        if(persSnap.exists()) persSnap.forEach(c => { let p = c.val(); if(p.especialidad) { p.especialidad.split(',').forEach(esp => { let t = esp.trim().toUpperCase(); if(t) { const opt = document.createElement('option'); opt.value = t; dlCargos.appendChild(opt); } }); } });
+        const dlOtros = document.getElementById('dl-otros');
+        Object.values(dbOtros).forEach(m => { const opt = document.createElement('option'); opt.value = m.desc || m.n; dlOtros.appendChild(opt); });
+        const dlUnds = document.getElementById('dl-unds');
+        dlUnds.innerHTML = '<option value="glb"><option value="pza"><option value="und"><option value="m2"><option value="ml"><option value="plancha"><option value="barra"><option value="kg"><option value="ltr"><option value="jornal"><option value="hr">';
+        if(undSnap.exists()) undSnap.forEach(c => { const opt = document.createElement('option'); opt.value = c.val().nombre; dlUnds.appendChild(opt); });
+    });
+
+    // Items APU: lazy load, se carga solo cuando se abre el modal de nuevo ítem
+    let itemsDbLoaded = false;
+    async function ensureItemsLoaded() {
+        if(itemsDbLoaded) return;
+        const snap = await db.ref('base_datos/items').once('value');
+        dbItems = snap.val() || {};
+        const dl = document.getElementById('dl-items');
+        Object.values(dbItems).forEach(item => { if(item.desc) { const opt = document.createElement('option'); opt.value = item.desc; dl.appendChild(opt); } });
+        itemsDbLoaded = true;
+    }
+
+    // Cargar monto de cierre negociado (si existe)
+    if(cid && pid) {
+        db.ref('proyectos/' + cid + '/' + pid + '/monto_cierre').once('value').then(snap => {
+            if(snap.exists()) {
+                montoCierre = parseFloat(snap.val()) || 0;
+                if(montoCierre > 0) {
+                    // Mostrar badge de monto negociado en la interfaz
+                    const totalEl = document.getElementById('t-total');
+                    if(totalEl) {
+                        const badge = document.createElement('div');
+                        badge.id = 'badge-monto-cierre';
+                        badge.style.cssText = 'font-size:11px;color:#fff;background:var(--green);border-radius:8px;padding:4px 10px;margin-top:4px;font-weight:700;';
+                        badge.innerHTML = `✓ Negociado: ${fMoney(montoCierre)} Bs`;
+                        totalEl.parentNode.insertBefore(badge, totalEl.nextSibling);
+                    }
+                }
+            }
+        }).catch(() => {});
+    }
+
+    db.ref('proyectos/' + cid + '/' + pid + '/presupuesto').once('value').then(snap => {
+        const d = snap.val();
+        if(d) {
+            data = d.items || [];
+            // Normalizar APU al cargar desde Firebase usando función centralizada
+            data.forEach(item => {
+                if (item && item.apu) {
+                    const norm = ApuUtils.normalizeApu(item.apu, item);
+                    item.apu.mat = norm.mat;
+                    item.apu.mo  = norm.mo;
+                    item.apu.eq  = norm.eq;
+                    item.apu.sub = norm.sub;
+                    if (norm.util) item.apu.util = norm.util;
+                    if (norm.ind)  item.apu.ind  = norm.ind;
+                }
+            });
+            document.getElementById('h-date').value = d.fecha || new Date().toISOString().split('T')[0];
+            if(d.cond) {
+                document.getElementById('c-pago').value = d.cond.pago || ''; document.getElementById('c-validez').value = d.cond.validez || '';
+                document.getElementById('sw-mont').checked = d.cond.montaje || false; document.getElementById('sw-desm').checked = d.cond.desmontaje || false;
+            }
+            document.getElementById('sw-imp').checked = d.impuestos || false; document.getElementById('t-desc-val').value = d.descuento || 0;
+            render();
+
+            if(urlParams.get('retApu')) {
+                let apuI = parseInt(urlParams.get('retApu'));
+                window.history.replaceState({}, document.title, window.location.pathname + `?cid=${cid}&pid=${pid}`);
+                openApu(apuI);
+            }
+        } else { document.getElementById('h-date').valueAsDate = new Date(); }
+        document.getElementById('global-loader').style.display = 'none';
+    });
+    } // fin cargarPresupuesto
+
+    // ==========================================
+    // SINCRONIZADOR MAESTRO DE PRECIOS
+    // ==========================================
+    async function syncDatabasePrices() {
+        if(!confirm("¿Sincronizar todo el presupuesto con los precios actuales de la Base de Datos? Esto recalculará todos los ítems y APUs.")) return;
+        
+        document.getElementById('loader-title').innerText = "Sincronizando Precios...";
+        document.getElementById('global-loader').style.display = 'flex';
+        
+        try {
+            // PERFORMANCE FIX: datos ya cargados al inicio, items con lazy load
+            await ensureItemsLoaded();
+
+            let count = 0;
+
+            data.forEach((item) => {
+                if (item.type === 'chapter') return;
+                let priceChanged = false;
+
+                if (item.apu) {
+                    let dir = 0;
+                    ['mat', 'mo', 'eq', 'sub'].forEach(t => {
+                        if (item.apu[t]) {
+                            item.apu[t].forEach(x => {
+                                let upV = (x.d || '').toUpperCase();
+                                let dbRef = null;
+                                if (t === 'mat') dbRef = Object.values(dbMats).find(m => (m.n||m.desc||'').toUpperCase() === upV);
+                                if (t === 'mo') dbRef = Object.values(dbMo).find(m => (m.n||m.desc||'').toUpperCase() === upV);
+                                if (t === 'eq') dbRef = Object.values(dbOtros).find(m => (m.n||m.desc||'').toUpperCase() === upV);
+                                if (t === 'sub') dbRef = Object.values(dbItems).find(m => (m.desc||'').toUpperCase() === upV);
+
+                                if (dbRef) {
+                                    let newP = stripZeros(dbRef.p || dbRef.pu || 0);
+                                    if (x.p !== newP) { x.p = newP; priceChanged = true; count++; }
+                                }
+                                dir += (stripZeros(x.q) * stripZeros(x.p));
+                            });
+                        }
+                    });
+                    
+                    if (priceChanged) {
+                        let ind = stripZeros(item.apu.ind) || 10;
+                        let util = stripZeros(item.apu.util) || 15;
+                        item.pu = stripZeros(dir * (1 + (ind/100)) * (1 + (util/100)));
+                    }
+                } else {
+                    let upV = (item.desc || '').toUpperCase();
+                    let dbRef = Object.values(dbItems).find(m => (m.desc||'').toUpperCase() === upV);
+                    if (dbRef) {
+                        let newP = stripZeros(dbRef.pu || 0);
+                        if (item.pu !== newP) { item.pu = newP; priceChanged = true; count++; }
+                    }
+                }
+            });
+
+            saveDB(true); render();
+            alert(`¡Sincronización Completa! Se actualizaron ${count} precios unitarios.`);
+        } catch (error) {
+            console.error(error); alert("Error al sincronizar precios.");
+        } finally {
+            document.getElementById('global-loader').style.display = 'none';
+        }
+    }
+
+    function saveUnitToDB(und) {
+        if(!und) return; let cleanKey = und.trim().toLowerCase().replace(/[^a-z0-9]/g, "");
+        if(cleanKey.length > 0) db.ref(`base_datos/unidades/${cleanKey}`).set({nombre: und.trim()});
+    }
+
+    function searchGlobal(input, idx) {
+        const val = input.value.toLowerCase(); const box = document.getElementById(`sugg-${idx}`);
+        if(val.length < 2) { box.style.display='none'; return; }
+        box.innerHTML = ""; let found = false;
+        Object.values(dbItems).forEach(item => {
+            if(item.desc && item.desc.toLowerCase().includes(val)) {
+                found = true; const div = document.createElement('div'); div.className = 'suggestion-item'; div.innerText = item.desc;
+                div.onmousedown = (e) => { 
+                    e.preventDefault(); data[idx].desc = item.desc; data[idx].und = item.und; data[idx].pu = item.pu; 
+                    if(item.apu) data[idx].apu = JSON.parse(JSON.stringify(item.apu)); else data[idx].apu = {mat:[], mo:[], eq:[], sub:[]}; 
+                    render(); saveDB(); 
+                }; box.appendChild(div);
+            }
+        });
+        box.style.display = found ? 'block' : 'none';
+    }
+
+    function copyComputo(i, apuType, apuIdx) {
+        let m = [];
+        if(apuType) {
+            if(data[i].apu && data[i].apu[apuType] && data[i].apu[apuType][apuIdx]) m = data[i].apu[apuType][apuIdx].measures || [];
+        } else { m = data[i].measures || []; }
+        
+        if(m.length === 0) return alert("Esta fila no tiene desglose de piezas/artes para copiar.");
+        localStorage.setItem('rubik_clipboard_computo', JSON.stringify(m));
+        alert("Cómputo copiado al portapapeles.");
+    }
+
+    function pasteComputo(i, apuType, apuIdx) {
+        let clip = localStorage.getItem('rubik_clipboard_computo');
+        if(!clip) return alert("El portapapeles está vacío. Copie un cómputo primero.");
+        
+        if(confirm("¿Pegar y reemplazar las piezas de esta fila? (Se recalculará automáticamente)")) {
+            let parsed = JSON.parse(clip);
+            if(apuType) {
+                if(!data[i].apu) data[i].apu = {};
+                if(!data[i].apu[apuType]) data[i].apu[apuType] = [];
+                data[i].apu[apuType][apuIdx].measures = parsed;
+            } else { data[i].measures = parsed; }
+            saveDB(true); irAComputo(i, apuType, apuIdx); 
+        }
+    }
+
+    function updateChapterTotalsUI() {
+        let currentChap = -1;
+        let tempTotals = {};
+        data.forEach((it, idx) => {
+            if(it.type === 'chapter') { currentChap = idx; tempTotals[currentChap] = 0; }
+            else if (currentChap >= 0) { tempTotals[currentChap] += (stripZeros(it.cant) * stripZeros(it.pu)); }
+        });
+        for(let cIdx in tempTotals) {
+            let el = document.getElementById('chap-tot-'+cIdx);
+            if(el) el.innerText = fMoney(tempTotals[cIdx]) + " Bs";
+        }
+    }
+
+    function render() {
+        const list = document.getElementById('budget-list'); 
+        let subtotal = 0; let chapTotals = {}; let currentChapIdx = -1;
+        let htmlBuffer = ""; 
+
+        data.forEach((item, i) => {
+            if (item.type === 'chapter') { currentChapIdx = i; chapTotals[currentChapIdx] = 0; } 
+            else if (currentChapIdx >= 0) { chapTotals[currentChapIdx] += (stripZeros(item.cant) * stripZeros(item.pu)); }
+        });
+
+        let isCollapsed = false;
+        data.forEach((item, i) => {
+            if(item.type === 'chapter') {
+                isCollapsed = item.collapsed || false;
+                htmlBuffer += `<div class="chapter" data-id="${i}"><i class="ph-bold ph-dots-six-vertical chap-handle"></i><i class="ph-bold ${isCollapsed ? 'ph-caret-right' : 'ph-caret-down'} chap-toggle" onclick="toggleChapter(${i})"></i><input id="chap-${i}" class="chap-inp" value="${item.name || ''}" onchange="upd(${i}, 'name', this.value)"><div class="chap-total" id="chap-tot-${i}">${fMoney(chapTotals[i])} Bs</div><i class="ph-bold ph-trash" style="color:var(--red); cursor:pointer;" onclick="del(${i})"></i></div>`;
+            } else {
+                const activo = item.activo !== false; // true por defecto
+                const c = stripZeros(item.cant); const p = stripZeros(item.pu);
+                const sub = c * p;
+                if (activo) subtotal += sub;
+                
+                let hasImg = item.img ? true : false;
+                if(item.cortes && item.cortes.length > 0) hasImg = true;
+                if(item.apu) { ['mat', 'sub', 'mo', 'eq'].forEach(type => { if(item.apu[type]) { item.apu[type].forEach(m => { if(m.corte_url) hasImg = true; }); } }); }
+                
+                const iconColor = hasImg ? 'var(--green)' : 'var(--gray)';
+                const displayStyle = isCollapsed ? 'display:none;' : '';
+                const inactiveStyle = activo ? '' : 'opacity:0.4; background:rgba(128,128,128,0.07);';
+                const eyeIcon = activo ? 'ph-eye' : 'ph-eye-slash';
+                const eyeColor = activo ? 'var(--blue)' : 'var(--gray)';
+                const descStyle = activo ? '' : 'text-decoration:line-through; color:var(--gray);';
+                
+                let visualCant = c.toString(); let visualPu = p.toString();
+                
+                htmlBuffer += `<div class="item" data-id="${i}" style="${displayStyle}${inactiveStyle}"><i class="ph-bold ph-dots-six-vertical item-handle"></i><div class="item-content"><div class="grid-desc"><input id="desc-${i}" class="inp-desc" value="${item.desc || ''}" placeholder="Descripción..." onkeyup="searchGlobal(this, ${i})" onchange="upd(${i}, 'desc', this.value)" onblur="setTimeout(()=>document.getElementById('sugg-${i}').style.display='none', 150)" style="${descStyle}"><div id="sugg-${i}" class="suggestions"></div><input list="dl-unds" id="und-${i}" class="sel-und" value="${item.und || 'glb'}" onchange="upd(${i}, 'und', this.value); saveUnitToDB(this.value);" style="width:60px; text-align:center;"></div><div class="grid-vals"><div class="val-box"><span class="lbl">CANT</span><input id="cant-${i}" class="inp-num" type="number" step="any" value="${visualCant}" oninput="upd(${i}, 'cant', this.value)">
+                
+                <button class="btn-mini btn-blue" onclick="irAComputo(${i})">CÓMPUTO</button>
+                <div style="display:flex; gap:2px; margin-top:2px;">
+                    <button class="btn-mini" style="background:#8e8e93; flex:1; padding:4px;" onclick="copyComputo(${i}, null, null)" title="Copiar Cómputo">COPIAR</button>
+                    <button class="btn-mini" style="background:#af52de; flex:1; padding:4px;" onclick="pasteComputo(${i}, null, null)" title="Pegar Cómputo">PEGAR</button>
+                </div>
+
+                </div><div class="val-box"><span class="lbl">P.UNIT</span><input id="pu-${i}" class="inp-num" type="number" step="any" value="${visualPu}" oninput="upd(${i}, 'pu', this.value)"><button class="btn-mini btn-orange" onclick="openApu(${i})">APU</button></div><div class="val-box"><span class="lbl">CARACTERÍSTICAS</span><textarea id="feat-${i}" class="feat-area" onchange="upd(${i}, 'feat', this.value)">${item.feat || ''}</textarea></div></div><div class="item-foot"><div class="total-lbl" id="tot-lbl-${i}" style="${activo ? '' : 'text-decoration:line-through; color:var(--gray);'}">TOTAL: ${fMoney(sub)}</div><i class="ph-bold ${eyeIcon} icon-btn" style="color:${eyeColor}" onclick="toggleActivo(${i})" title="${activo ? 'Desactivar ítem' : 'Activar ítem'}"></i><i class="ph-bold ph-image-square icon-btn" style="color:${iconColor}" onclick="openPhotoOpt(${i})"></i>${item.iaPrompt ? `<i class="ph-bold ph-magic-wand icon-btn" style="color:var(--purple)" onclick="abrirRegenIA(${i})" title="Re-generar con IA"></i>` : ''}<i class="ph-bold ph-copy icon-btn" onclick="dup(${i})"></i><i class="ph-bold ph-trash icon-btn" style="color:var(--red)" onclick="del(${i})"></i></div></div></div>`;
+            }
+        });
+        
+        list.innerHTML = htmlBuffer; 
+        calcGlobal(subtotal);
+        if(sortableInstance) sortableInstance.destroy();
+        sortableInstance = Sortable.create(list, { handle: '.chap-handle, .item-handle', animation: 150, onEnd: evt => { const it=data.splice(evt.oldIndex,1)[0]; data.splice(evt.newIndex,0,it); saveDB(true); render(); }});
+    }
+
+    function toggleChapter(i) { data[i].collapsed = !data[i].collapsed; saveDB(); render(); }
+    function toggleActivo(i) { data[i].activo = data[i].activo === false ? true : false; saveDB(); render(); }
+    function addItem() { data.push({type:'item', desc:'', und:'glb', cant:1, pu:0, feat:'', apu:{mat:[], mo:[], eq:[], sub:[]} }); saveDB(); render(); }
+    function addChapter() { data.push({type:'chapter', name:'CAPÍTULO', collapsed: false}); saveDB(); render(); }
+    function del(i) { if(confirm("¿Borrar?")) { clearTimeout(saveTimeout); data.splice(i,1); saveDB(true); render(); } }
+    function dup(i) { data.splice(i+1, 0, JSON.parse(JSON.stringify(data[i]))); saveDB(true); render(); }
+
+    function upd(i, f, v) { 
+        data[i][f] = (f==='pu' || f==='cant') ? stripZeros(v) : v; 
+        if(f === 'pu' || f === 'cant') {
+            let sub = stripZeros(data[i].cant) * stripZeros(data[i].pu);
+            let lbl = document.getElementById('tot-lbl-'+i);
+            if(lbl) lbl.innerText = "TOTAL: " + fMoney(sub);
+            updateChapterTotalsUI(); 
+            calcGlobal();
+        }
+        saveDB(); 
+    }
+
+    function calcGlobal(forceSub = null) {
+        let subtotal = forceSub !== null ? forceSub : 0;
+        if(forceSub === null) { data.forEach(i => { if(i.type !== 'chapter' && i.activo !== false) subtotal += (stripZeros(i.cant) * stripZeros(i.pu)); }); }
+        const desc = parseFloat(document.getElementById('t-desc-val').value) || 0; const baseImp = subtotal - desc; 
+        let iva = 0, it = 0; if(document.getElementById('sw-imp').checked) { iva = baseImp*0.13; it = baseImp*0.03; }
+        
+        const finalTotal = baseImp + iva + it;
+        document.getElementById('t-sub').innerText = fMoney(subtotal); document.getElementById('t-iva').innerText = fMoney(iva);
+        document.getElementById('t-it').innerText = fMoney(it); document.getElementById('t-total').innerText = fMoney(finalTotal) + " Bs";
+        
+        db.ref('proyectos/' + cid + '/' + pid + '/presupuesto_total').set(finalTotal);
+    }
+
+    function saveDB(force = false) {
+        clearTimeout(saveTimeout);
+        let execSave = () => {
+            let payload = { items: data, fecha: document.getElementById('h-date').value, impuestos: document.getElementById('sw-imp').checked, descuento: parseFloat(document.getElementById('t-desc-val').value) || 0, cond: { pago: document.getElementById('c-pago').value, validez: document.getElementById('c-validez').value, montaje: document.getElementById('sw-mont').checked, desmontaje: document.getElementById('sw-desm').checked } };
+            db.ref('proyectos/' + cid + '/' + pid + '/presupuesto').set(JSON.parse(JSON.stringify(payload)));
+        };
+        if(force) execSave(); else saveTimeout = setTimeout(execSave, 1000);
+    }
+
+    function irAComputo(idx, apuType=null, apuIdx=null) {
+        saveDB(true); 
+        let url = `computo.html?idx=${idx}&cid=${cid}&pid=${pid}`;
+        if(apuType) url += `&type=${apuType}&apuidx=${apuIdx}`;
+        window.location.href = url;
+    }
+
+    function openApu(i) {
+        targetIdx = i; activeMod = 'apu';
+        if(!data[i].apu) data[i].apu = {mat:[], mo:[], eq:[], sub:[]};
+        // Normalizar siempre al abrir — por si Firebase convirtió arrays a objetos {0:{},1:{}}
+        if (typeof ApuUtils !== 'undefined') {
+            const norm = ApuUtils.normalizeApu(data[i].apu, data[i]);
+            data[i].apu.mat = norm.mat;
+            data[i].apu.mo  = norm.mo;
+            data[i].apu.eq  = norm.eq;
+            data[i].apu.sub = norm.sub;
+            if (!data[i].apu.util) data[i].apu.util = norm.util;
+            if (!data[i].apu.ind)  data[i].apu.ind  = norm.ind;
+        }
+        renderApuList('sub'); renderApuList('mat'); renderApuList('mo'); renderApuList('eq');
+        document.getElementById('apu-ind').value = data[i].apu.ind != null ? stripZeros(data[i].apu.ind) : 10;
+        document.getElementById('apu-util').value = data[i].apu.util != null ? stripZeros(data[i].apu.util) : 15;
+        recalcApu(); document.getElementById('mod-apu').style.display = 'flex';
+    }
+
+    function renderApuList(type) {
+        const list = data[targetIdx].apu[type] || []; const box = document.getElementById('apu-'+type);
+        let htmlBuffer = `<div class="apu-row" style="font-weight:800; font-size:9px; color:gray;"><span>DESC</span><span>UND</span><span style="text-align:center;">CANT</span><span>PU</span><span>SUB</span><span></span></div>`;
+        let dlId = type === 'mo' ? 'dl-cargos' : (type === 'sub' ? 'dl-items' : (type === 'eq' ? 'dl-otros' : 'dl-materiales'));
+
+        list.forEach((el, idx) => {
+            let compBtn = (type==='mat' || type==='sub') ? `
+                <button class="btn-mini btn-blue" style="width:auto; padding:3px 6px;" onclick="irAComputo(${targetIdx}, '${type}', ${idx})" title="Abrir Cómputo">📐</button>
+                <button class="btn-mini" style="background:#8e8e93; width:auto; padding:3px 6px;" onclick="copyComputo(${targetIdx}, '${type}', ${idx})" title="Copiar Cómputo">©</button>
+                <button class="btn-mini" style="background:#af52de; width:auto; padding:3px 6px;" onclick="pasteComputo(${targetIdx}, '${type}', ${idx})" title="Pegar Cómputo">📋</button>` : '';
+                
+            let vQ = stripZeros(el.q).toString(); let vP = stripZeros(el.p).toString();
+            let sub = fMoney(stripZeros(el.q) * stripZeros(el.p));
+            
+            htmlBuffer += `
+                <div class="apu-row">
+                    <input id="apu-d-${type}-${idx}" class="mod-inp" list="${dlId}" value="${el.d || ''}" placeholder="Escribe y elige..." onchange="updApu('${type}',${idx},'d',this.value)">
+                    <input list="dl-unds" id="apu-u-${type}-${idx}" class="mod-inp" value="${el.u || ''}" placeholder="Und" onchange="updApu('${type}',${idx},'u',this.value); saveUnitToDB(this.value);" style="text-align:center;">
+                    
+                    <div style="display:flex; flex-direction:column; gap:2px; align-items:center;">
+                        <input id="apu-q-${type}-${idx}" type="number" step="any" class="mod-inp" value="${vQ}" oninput="updApu('${type}',${idx},'q',this.value)" style="text-align:center;">
+                        <div style="display:flex; gap:2px; width:100%; justify-content:center;">${compBtn}</div>
+                    </div>
+
+                    <input id="apu-p-${type}-${idx}" type="number" step="any" class="mod-inp" value="${vP}" oninput="updApu('${type}',${idx},'p',this.value)">
+                    <div id="apu-sub-${type}-${idx}" style="font-weight:700; text-align:right;">${sub}</div>
+                    <i class="ph-bold ph-x" style="color:var(--red); cursor:pointer" onclick="delApu('${type}',${idx})"></i>
+                </div>`;
+        });
+        box.innerHTML = htmlBuffer; 
+    }
+    
+    function addApuRow(type) { if(!data[targetIdx].apu) data[targetIdx].apu = {}; if(!data[targetIdx].apu[type]) data[targetIdx].apu[type] = []; data[targetIdx].apu[type].push({d:'', u: type==='mo'?'jornal':'und', q:1, p:0}); renderApuList(type); }
+    function delApu(type, idx) { data[targetIdx].apu[type].splice(idx,1); renderApuList(type); recalcApu(); }
+    
+    function updApu(t, i, f, v) { 
+        data[targetIdx].apu[t][i][f] = (f==='q'||f==='p') ? stripZeros(v) : v; 
+        if(f === 'd') {
+            const upV = v.toUpperCase();
+            if(t === 'mat' && dbMats) { const fd = Object.values(dbMats).find(m => (m.n||m.desc||'').toUpperCase() === upV); if(fd) { data[targetIdx].apu[t][i].u = fd.u||fd.und||'und'; data[targetIdx].apu[t][i].p = stripZeros(fd.p||fd.pu); document.getElementById(`apu-u-${t}-${i}`).value = data[targetIdx].apu[t][i].u; document.getElementById(`apu-p-${t}-${i}`).value = data[targetIdx].apu[t][i].p; } }
+            if(t === 'mo' && dbMo) { const fd = Object.values(dbMo).find(m => (m.n||m.desc||'').toUpperCase() === upV); if(fd) { data[targetIdx].apu[t][i].u = fd.u||fd.und||'jornal'; data[targetIdx].apu[t][i].p = stripZeros(fd.p||fd.pu); document.getElementById(`apu-u-${t}-${i}`).value = data[targetIdx].apu[t][i].u; document.getElementById(`apu-p-${t}-${i}`).value = data[targetIdx].apu[t][i].p; } }
+            if(t === 'eq' && dbOtros) { const fd = Object.values(dbOtros).find(m => (m.n||m.desc||'').toUpperCase() === upV); if(fd) { data[targetIdx].apu[t][i].u = fd.u||fd.und||'glb'; data[targetIdx].apu[t][i].p = stripZeros(fd.p||fd.pu); document.getElementById(`apu-u-${t}-${i}`).value = data[targetIdx].apu[t][i].u; document.getElementById(`apu-p-${t}-${i}`).value = data[targetIdx].apu[t][i].p; } }
+            if(t === 'sub' && dbItems) { const fd = Object.values(dbItems).find(x => (x.desc||'').toUpperCase() === upV); if(fd) { data[targetIdx].apu[t][i].u = fd.und||'glb'; data[targetIdx].apu[t][i].p = stripZeros(fd.pu); document.getElementById(`apu-u-${t}-${i}`).value = data[targetIdx].apu[t][i].u; document.getElementById(`apu-p-${t}-${i}`).value = data[targetIdx].apu[t][i].p; } }
+        }
+        if(f==='q' || f==='p' || f==='d') {
+            const sub = stripZeros(data[targetIdx].apu[t][i].q) * stripZeros(data[targetIdx].apu[t][i].p);
+            document.getElementById(`apu-sub-${t}-${i}`).innerText = fMoney(sub); recalcApu(); 
+        }
+    }
+
+    function recalcApu() {
+        const apu = data[targetIdx].apu; let dir = 0;
+        ['mat','mo','eq','sub'].forEach(t => { if(apu[t]) apu[t].forEach(x => dir += (stripZeros(x.q) * stripZeros(x.p))); });
+        document.getElementById('apu-dir').value = fMoney(dir);
+        const ind = parseFloat(document.getElementById('apu-ind').value) || 0; const util = parseFloat(document.getElementById('apu-util').value) || 0;
+        apu.ind = ind; apu.util = util;
+        document.getElementById('apu-final').innerText = fMoney(dir * (1 + (ind/100)) * (1 + (util/100)));
+    }
+    
+    function closeApu() { 
+        const apu = data[targetIdx].apu; let dir = 0;
+        ['mat','mo','eq','sub'].forEach(t => { if(apu[t]) apu[t].forEach(x => dir += (stripZeros(x.q) * stripZeros(x.p))); });
+        let finalP = dir * (1 + ((parseFloat(apu.ind)||0)/100)) * (1 + ((parseFloat(apu.util)||0)/100));
+
+        data[targetIdx].pu = stripZeros(finalP); 
+        let puInp = document.getElementById(`pu-${targetIdx}`); if(puInp) puInp.value = data[targetIdx].pu;
+        let lbl = document.getElementById(`tot-lbl-${targetIdx}`); if(lbl) lbl.innerText = "TOTAL: " + fMoney(data[targetIdx].cant * finalP);
+        updateChapterTotalsUI();
+        calcGlobal();
+        ['mat', 'mo', 'eq'].forEach(t => {
+            if(data[targetIdx].apu[t]) { data[targetIdx].apu[t].forEach(item => { if(item.d && item.d.trim().length > 1) { let path = t === 'mat' ? 'materiales' : (t === 'mo' ? 'mano_obra' : 'otros'); let key = item.d.toUpperCase().replace(/[.#$\[\]/]/g, ""); db.ref(`base_datos/${path}/${key}`).update({ desc: item.d, n: item.d, u: item.u, p: item.p }); } }); }
+        });
+        if (data[targetIdx].desc && data[targetIdx].desc.length > 3) { db.ref(`base_datos/items/${data[targetIdx].desc.replace(/[.#$\[\]/]/g, "")}`).set(JSON.parse(JSON.stringify(data[targetIdx]))); }
+        saveDB(true); document.getElementById('mod-apu').style.display = 'none'; activeMod=null; 
+    }
+
+    function openPhotoOpt(i) { 
+        targetIdx = i; const item = data[i]; const pList = document.getElementById('photo-preview-list'); pList.innerHTML = '';
+        let imgs = [];
+        if(item.img) imgs.push({ src: item.img, title: 'Foto Ppal', delArgs: `'main', null, null` });
+        if(item.cortes && Array.isArray(item.cortes)) item.cortes.forEach((c, idx) => imgs.push({ src: c, title: `Corte Ppal ${idx+1}`, delArgs: `'cortes', ${idx}, null` }));
+        if(item.apu) { ['mat', 'sub', 'mo', 'eq'].forEach(t => { if(item.apu[t] && Array.isArray(item.apu[t])) { item.apu[t].forEach((mat, mIdx) => { if(mat.corte_url) imgs.push({ src: mat.corte_url, title: `${mat.d||'Plano'}`, delArgs: `'apu', '${t}', ${mIdx}` }); }); } }); }
+
+        if(imgs.length > 0) {
+            imgs.forEach(im => { 
+                pList.innerHTML += `
+                <div style="position:relative; flex-shrink:0; text-align:center; width:80px;">
+                    <i class="ph-fill ph-x-circle" style="position:absolute; top:-5px; right:-5px; color:var(--red); font-size:20px; cursor:pointer; background:#fff; border-radius:50%; z-index:10;" onclick="deletePhoto(${i}, ${im.delArgs})"></i>
+                    <img loading="lazy" decoding="async" src="${im.src}" style="width:100%; height:80px; object-fit:cover; border-radius:8px; border:1px solid var(--border); cursor:pointer;" onclick="window.open('${im.src}','_blank')">
+                    <div style="font-size:9px; font-weight:700; margin-top:4px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="${im.title}">${im.title}</div>
+                </div>`; 
+            });
+        } else { pList.innerHTML = '<div style="font-size:11px; color:var(--gray); width:100%; text-align:center;">No hay imágenes adjuntas.</div>'; }
+        document.getElementById('mod-photo').style.display='flex'; 
+    }
+
+    function deletePhoto(itemIdx, type, idx1, idx2) {
+        if(!confirm("¿Desea eliminar esta imagen?")) return;
+        const item = data[itemIdx];
+        if(type === 'main') { delete item.img; } else if(type === 'cortes') { item.cortes.splice(idx1, 1); } else if(type === 'apu') { delete item.apu[idx1][idx2].corte_url; }
+        saveDB(true); render(); openPhotoOpt(itemIdx);
+    }
+
+    function triggerUpload() { document.getElementById('file-up').click(); }
+    
+    async function processPhotoUpload(inp) { 
+        if(inp.files[0]) { 
+            document.getElementById('loader-title').innerText = "Subiendo..."; document.getElementById('global-loader').style.display='flex'; 
+            try { 
+                const b64 = await compressImage(inp.files[0], 800, 0.7); 
+                const snap = await storage.ref(`presupuesto/${pid}_img_${Date.now()}.jpg`).putString(b64, 'data_url'); 
+                const url = await snap.ref.getDownloadURL(); 
+                saveImageToItem(url); 
+            } catch(e) { alert("Error al subir"); } 
+            finally { document.getElementById('global-loader').style.display='none'; inp.value = ""; document.getElementById('mod-photo').style.display='none';} 
+        } 
+    }
+
+    document.addEventListener('paste', async e => { 
+        if(document.getElementById('mod-photo').style.display === 'flex' && targetIdx !== null) { 
+            if(e.clipboardData.files.length > 0) { 
+                document.getElementById('loader-title').innerText = "Pegando..."; document.getElementById('global-loader').style.display='flex';
+                let file = e.clipboardData.files[0];
+                try {
+                    const b64 = await compressImage(file, 800, 0.7); 
+                    const snap = await storage.ref(`presupuesto/${pid}_img_${Date.now()}.jpg`).putString(b64, 'data_url'); 
+                    const url = await snap.ref.getDownloadURL();
+                    saveImageToItem(url);
+                } catch(err) { alert("Error al pegar imagen."); }
+                finally { document.getElementById('global-loader').style.display='none'; document.getElementById('mod-photo').style.display='none'; }
+            } 
+        } 
+    });
+
+    async function pasteImageClick() { 
+        try { 
+            const items = await navigator.clipboard.read(); 
+            for (const item of items) { 
+                if (item.types.some(type => type.startsWith('image/'))) { 
+                    const blob = await item.getType(item.types.find(type => type.startsWith('image/'))); 
+                    document.getElementById('loader-title').innerText = "Pegando..."; document.getElementById('global-loader').style.display='flex';
+                    const file = new File([blob], "paste.jpg", {type: blob.type});
+                    const b64 = await compressImage(file, 800, 0.7);
+                    const snap = await storage.ref(`presupuesto/${pid}_img_${Date.now()}.jpg`).putString(b64, 'data_url'); 
+                    const url = await snap.ref.getDownloadURL(); 
+                    saveImageToItem(url);
+                    document.getElementById('global-loader').style.display='none';
+                    document.getElementById('mod-photo').style.display='none'; 
+                    return; 
+                } 
+            } 
+            alert("No hay imagen en portapapeles. Prueba usando Ctrl+V"); 
+        } catch (e) { alert("Pega usando Ctrl+V directamente en la pantalla."); } 
+    }
+
+    function openDesignGallery() {
+        const cont = document.getElementById('gallery-container'); const grid = document.getElementById('design-thumbs');
+        cont.style.display = 'block'; grid.innerHTML = '<div style="color:gray; font-size:10px;">Cargando...</div>';
+        db.ref(`proyectos/${cid}/${pid}/diseno`).once('value', snap => {
+            const d = snap.val(); grid.innerHTML = ''; if(!d) { grid.innerHTML = 'Sin diseños aun.'; return; }
+            let images = [];
+            if(d.renders) Object.values(d.renders).forEach(i => images.push(i.url));
+            if(d.fotos) Object.values(d.fotos).forEach(i => images.push(i.url));
+            if(d.planos) Object.values(d.planos).forEach(i => { if(i.url && (i.url.startsWith('http') || i.url.startsWith('data:image'))) images.push(i.url); });
+            
+            if(images.length === 0) { grid.innerHTML = 'Sin imágenes ni planos.'; return; }
+            images.forEach(imgUrl => { 
+                const img = document.createElement('div'); 
+                img.style.cssText = "position:relative; width:100%; padding-bottom:100%; border-radius:8px; overflow:hidden; cursor:pointer; background:#eee; border:1px solid var(--border);";
+                img.innerHTML = `<img loading="lazy" decoding="async" src="${imgUrl}" style="position:absolute; top:0; left:0; width:100%; height:100%; object-fit:cover;">`; 
+                img.onclick = () => { saveImageToItem(imgUrl); document.getElementById('mod-photo').style.display = 'none'; }; 
+                grid.appendChild(img); 
+            });
+        });
+    }
+
+    function saveImageToItem(url) { 
+        let item = data[targetIdx]; 
+        if(!item.img) { item.img = url; } else { if(!item.cortes) item.cortes = []; item.cortes.push(url); } 
+        saveDB(true); render(); openPhotoOpt(targetIdx); 
+    }
+
+    function compressImage(file, max, q) { return new Promise(res => { const r = new FileReader(); r.onload = e => { const i = new Image(); i.onload = () => { const c = document.createElement('canvas'); let s = i.width>max ? max/i.width : 1; c.width = i.width*s; c.height = i.height*s; c.getContext('2d').drawImage(i, 0, 0, c.width, c.height); res(c.toDataURL('image/jpeg', q)); }; i.src = e.target.result; }; r.readAsDataURL(file); }); }
+
+    // Comprime un data-URL base64 existente (no File) — para imágenes ya cargadas en el DOM
+    function _compressB64(dataUrl, maxPx, quality) {
+        return new Promise(resolve => {
+            const img = new Image();
+            img.onload = () => {
+                const scale = img.width > maxPx ? maxPx / img.width : 1;
+                const w = Math.round(img.width * scale);
+                const h = Math.round(img.height * scale);
+                const c = document.createElement('canvas');
+                c.width = w; c.height = h;
+                c.getContext('2d').drawImage(img, 0, 0, w, h);
+                resolve(c.toDataURL('image/jpeg', quality));
+            };
+            img.onerror = () => resolve(dataUrl); // fallback sin comprimir
+            img.src = dataUrl;
+        });
+    }
+    
+    function exportExcel() {
+        let csv = "DESCRIPCION,UNIDAD,CANTIDAD,PRECIO UNITARIO,TOTAL\n";
+        data.forEach(row => { if(row.type!=='chapter' && row.activo !== false) { csv += `"${row.desc || ''}","${row.und || ''}",${stripZeros(row.cant)},${stripZeros(row.pu)},${(stripZeros(row.cant)*stripZeros(row.pu)).toFixed(2)}\n`; } });
+        let safeName = (document.getElementById('h-pro').innerText || 'Proyecto').replace(/[^a-zA-Z0-9_\- ]/g, "").trim();
+        const link = document.createElement("a"); link.href = "data:text/csv;charset=utf-8," + encodeURI(csv); link.download = `presupuesto_${safeName}.csv`; document.body.appendChild(link); link.click();
+    }
+    
+    function getBase64ImageFromUrl(imageUrl) { return new Promise((resolve, reject) => { var img = new Image(); img.crossOrigin = "Anonymous"; img.onload = function() { var canvas = document.createElement("canvas"); canvas.width = img.width; canvas.height = img.height; canvas.getContext("2d").drawImage(img, 0, 0); resolve(canvas.toDataURL("image/jpeg")); }; img.onerror = function() { resolve(null); }; img.src = imageUrl; }); }
+    
+    function getLogoBase64() {
+        try {
+            const img = document.getElementById('logo-hidden');
+            if (!img || !img.complete || img.naturalWidth === 0) return null;
+            const canvas = document.createElement('canvas');
+            canvas.width = img.naturalWidth;
+            canvas.height = img.naturalHeight;
+            canvas.getContext('2d').drawImage(img, 0, 0);
+            return canvas.toDataURL('image/jpeg');
+        } catch(e) {
+            console.warn("Canvas bloqueó logo. Se omitirá en el PDF.");
+            return null;
+        }
+    }
+
+    // Versión async para landscape PDF — usa fetch+blob, evita restricciones CORS del canvas
+    async function getLogoBase64Async() {
+        try {
+            const img = document.getElementById('logo-hidden');
+            const src = img ? img.src : 'logo.jpg';
+            const res = await fetch(src);
+            if (!res.ok) return null;
+            const blob = await res.blob();
+            return await new Promise(resolve => {
+                const reader = new FileReader();
+                reader.onload = () => resolve(reader.result); // data:image/jpeg;base64,...
+                reader.onerror = () => resolve(null);
+                reader.readAsDataURL(blob);
+            });
+        } catch(e) {
+            console.warn("No se pudo cargar logo:", e);
+            return null;
+        }
+    }
+
+    async function exportPDF() {
+        try {
+            document.getElementById('loader-title').innerText = "Generando PDF..."; 
+            document.getElementById('global-loader').style.display='flex';
+            
+            if (!window.jspdf || !window.jspdf.jsPDF) throw new Error("La librería PDF no cargó.");
+            
+            const { jsPDF } = window.jspdf; 
+            const doc = new jsPDF();
+            
+            const logoB64 = getLogoBase64(); 
+            if(logoB64) { doc.addImage(logoB64, 'JPEG', 165, 10, 30, 15); }
+            
+            doc.setFontSize(16); doc.setFont(undefined, 'bold'); doc.text("PRESUPUESTO MAESTRO", 14, 20); 
+            doc.setFontSize(10); doc.setFont(undefined, 'normal');
+            
+            let pNameStr = (document.getElementById('h-pro').innerText || 'PROYECTO').toUpperCase().replace(/\n/g, ' '); 
+            let cNameStr = (document.getElementById('h-cli').innerText || 'CLIENTE').toUpperCase().replace(/\n/g, ' ');
+            let dateStrVal = document.getElementById('h-date').value || new Date().toLocaleDateString();
+
+            doc.text(`Cliente: ${cNameStr}`, 14, 30); doc.text(`Proyecto: ${pNameStr}`, 14, 35); doc.text(`Fecha: ${dateStrVal}`, 14, 40);
+            
+            const rows = []; const anexos = []; let subtotal = 0;
+            
+            data.forEach(item => {
+                if(item.type === 'chapter') { 
+                    let chapName = (item.name || 'CAPÍTULO').toUpperCase();
+                    rows.push([{content: chapName, colSpan: 5, styles: {fillColor: [220,220,220], fontStyle:'bold'}}]); 
+                } 
+                else {
+                    // Saltar ítems inactivos (ojito apagado)
+                    if(item.activo === false) return;
+                    let desc = item.desc || '-'; 
+                    if(item.feat) { const lineas = item.feat.split('\n'); lineas.forEach(linea => { const t = linea.trim().replace(/^[-–•*]+\s*/, ''); if(t) desc += `\n• ${t}`; }); }
+                    if(item.img) anexos.push({ desc: (item.desc || 'Item') + " (Ref)", img: item.img });
+                    if(item.cortes && Array.isArray(item.cortes)) item.cortes.forEach((c, idx) => anexos.push({ desc: (item.desc || 'Item') + ` (Corte Ppal ${idx+1})`, img: c }));
+                    if(item.apu) { ['mat', 'sub', 'mo', 'eq'].forEach(t => { if(item.apu[t] && Array.isArray(item.apu[t])) { item.apu[t].forEach(mat => { if(mat.corte_url) anexos.push({ desc: (item.desc || 'Item') + ` - Plano: ${mat.d || ''}`, img: mat.corte_url }); }); } }); }
+                    
+                    let cant = stripZeros(item.cant); let pu = stripZeros(item.pu); const totalItem = cant * pu; subtotal += totalItem; 
+                    rows.push([desc, item.und || 'glb', cant, fMoney(pu), fMoney(totalItem)]);
+                }
+            });
+
+            if (typeof doc.autoTable !== 'function') throw new Error("La librería de Tablas no cargó.");
+
+            doc.autoTable({ startY: 45, head: [['Descripción', 'Und', 'Cant', 'P.U. (Bs)', 'Total (Bs)']], body: rows, styles: { cellPadding: 3 } });
+            const descVal = parseFloat(document.getElementById('t-desc-val').value) || 0;
+            const base = subtotal - descVal;
+            const conImp = document.getElementById('sw-imp').checked;
+            // Calcular espacio necesario para el bloque de totales + condiciones
+            const _espacioTotal = 10 + 5 + (descVal>0?5:0) + (conImp?10:0) + (montoCierre>0?18:12) + 30;
+            let finalY = doc.lastAutoTable.finalY + 5;
+            // Si no cabe el bloque completo en la página actual, agregar fila de total a la tabla misma
+            // usando una fila especial, y luego continuar en nueva página solo si hay imágenes
+            if (finalY + _espacioTotal > 285) {
+                // Agregar el total como última fila de la tabla en la página actual
+                doc.autoTable({
+                    startY: finalY,
+                    body: [
+                        [{ content: '', colSpan: 3 },
+                         { content: 'Subtotal:', styles: { halign: 'right', fontStyle: 'bold' } },
+                         { content: fMoney(subtotal) + ' Bs', styles: { halign: 'right', fontStyle: 'bold' } }],
+                        ...(descVal > 0 ? [[{ content: '', colSpan: 3 },
+                         { content: 'Descuento:', styles: { halign: 'right' } },
+                         { content: '- ' + fMoney(descVal) + ' Bs', styles: { halign: 'right' } }]] : []),
+                        ...(conImp ? [
+                            [{ content: '', colSpan: 3 },
+                             { content: 'IVA (13%):', styles: { halign: 'right' } },
+                             { content: fMoney(base*0.13) + ' Bs', styles: { halign: 'right' } }],
+                            [{ content: '', colSpan: 3 },
+                             { content: 'IT (3%):', styles: { halign: 'right' } },
+                             { content: fMoney(base*0.03) + ' Bs', styles: { halign: 'right' } }]
+                        ] : []),
+                        [{ content: '', colSpan: 3 },
+                         { content: montoCierre > 0 ? 'PRECIO NEGOCIADO:' : 'TOTAL FINAL:', styles: { halign: 'right', fontStyle: 'bold', fontSize: 11, textColor: montoCierre > 0 ? [34,139,34] : [0,0,200] } },
+                         { content: fMoney(montoCierre > 0 ? montoCierre : (conImp ? base*1.16 : subtotal)) + ' Bs', styles: { halign: 'right', fontStyle: 'bold', fontSize: 11, textColor: montoCierre > 0 ? [34,139,34] : [0,0,200] } }]
+                    ],
+                    theme: 'plain',
+                    styles: { fontSize: 9, cellPadding: 2 },
+                    columnStyles: { 0:{cellWidth:70}, 1:{cellWidth:15}, 2:{cellWidth:15}, 3:{cellWidth:45}, 4:{cellWidth:40} }
+                });
+                finalY = doc.lastAutoTable.finalY + 8;
+            } else {
+                finalY += 5;
+                doc.setFontSize(9); doc.setFont(undefined, 'normal');
+                doc.text(`Subtotal:`, 140, finalY); doc.text(`${fMoney(subtotal)} Bs`, 195, finalY, {align:'right'}); finalY += 5;
+                if(descVal > 0) { doc.text(`Descuento:`, 140, finalY); doc.text(`- ${fMoney(descVal)} Bs`, 195, finalY, {align:'right'}); finalY += 5; }
+                if(conImp) { doc.text(`IVA (13%):`, 140, finalY); doc.text(`${fMoney(base*0.13)} Bs`, 195, finalY, {align:'right'}); finalY += 5; doc.text(`IT (3%):`, 140, finalY); doc.text(`${fMoney(base*0.03)} Bs`, 195, finalY, {align:'right'}); finalY += 5; }
+                if(montoCierre > 0) {
+                    // Caja verde destacada para precio negociado
+                    doc.setFillColor(34, 139, 34);
+                    doc.rect(130, finalY - 1, 65, 9, 'F');
+                    doc.setFontSize(10); doc.setFont(undefined, 'bold'); doc.setTextColor(255, 255, 255);
+                    doc.text(`PRECIO NEGOCIADO:`, 132, finalY + 5);
+                    doc.text(`${fMoney(montoCierre)} Bs`, 193, finalY + 5, {align:'right'});
+                    doc.setTextColor(0, 0, 0); finalY += 12;
+                } else {
+                    doc.setFontSize(11); doc.setFont(undefined, 'bold');
+                    doc.setFillColor(0, 0, 200); doc.rect(130, finalY - 1, 65, 9, 'F');
+                    doc.setTextColor(255,255,255);
+                    doc.text(`TOTAL FINAL:`, 132, finalY + 5);
+                    doc.text(`${fMoney(conImp ? base*1.16 : subtotal)} Bs`, 193, finalY + 5, {align:'right'});
+                    doc.setTextColor(0,0,0); finalY += 12;
+                }
+            }
+
+            doc.setFontSize(11); doc.setFont(undefined, 'bold'); doc.text("CONDICIONES:", 14, finalY); finalY+=7; doc.setFontSize(9); doc.setFont(undefined, 'normal');
+            doc.text(`• Pago: ${document.getElementById('c-pago').value || '-'}`, 14, finalY); finalY+=5; doc.text(`• Validez: ${document.getElementById('c-validez').value || '-'}`, 14, finalY); finalY+=5;
+            if(document.getElementById('sw-mont').checked) { doc.text(`• Incluye Montaje`, 14, finalY); finalY+=5; }
+            if(document.getElementById('sw-desm').checked) { doc.text(`• Incluye Desmontaje`, 14, finalY); finalY+=5; }
+
+            if(anexos.length > 0) {
+                doc.addPage(); doc.setFontSize(16); doc.setFont(undefined, 'bold'); doc.text("ANEXO FOTOGRÁFICO Y PLANOS", 14, 20); let py = 30;
+                for(let i=0; i<anexos.length; i++) {
+                    let it = anexos[i]; if(py > 200) { doc.addPage(); py = 20; }
+                    doc.setDrawColor(200); doc.rect(14, py, 180, 100); doc.setFontSize(11); doc.setFont(undefined, 'bold'); doc.text(`${i+1}. ${it.desc}`, 16, py+10);
+                    try { let b64 = await getBase64ImageFromUrl(it.img); if(b64) { const ratio = doc.getImageProperties(b64).width / doc.getImageProperties(b64).height; let w = 160, h = w / ratio; if(h > 80) { h = 80; w = h * ratio; } doc.addImage(b64, 'JPEG', 14 + (180-w)/2, py + 15 + (85-h)/2, w, h); } } catch(e){} py += 110;
+                }
+            }
+            
+            const dDate = new Date(); const mm = String(dDate.getMonth() + 1).padStart(2, '0'); const dd = String(dDate.getDate()).padStart(2, '0');
+            let safeProName = pNameStr.replace(/[^a-zA-Z0-9_\- ]/g, "").trim().replace(/ /g, '_');
+            let safeCliName = cNameStr.replace(/[^a-zA-Z0-9_\- ]/g, "").trim().replace(/ /g, '_');
+            let finalFileName = `${mm}${dd}_${safeProName}_${safeCliName}.pdf`;
+
+            doc.save(finalFileName);
+            
+        } catch (error) { 
+            console.error(error); 
+            alert("Error Técnico: " + error.message); 
+        } finally { 
+            document.getElementById('global-loader').style.display='none'; 
+        }
+    }
+
+    // ── Modal PDF con opciones de impuestos ──────────────────────────────
+    function abrirModalPDF() {
+        document.getElementById('mod-pdf-opt').style.display = 'flex';
+    }
+
+    function cerrarModalPDF() {
+        document.getElementById('mod-pdf-opt').style.display = 'none';
+    }
+
+    function selectPDFOpt(opt) {
+        document.querySelectorAll('.pdf-opt-card').forEach(c => {
+            c.classList.remove('selected');
+            c.style.border = '2px solid var(--gray)';
+            c.style.background = '';
+        });
+        const sel = document.getElementById('pdf-opt-' + opt);
+        sel.classList.add('selected');
+        sel.style.border = '2px solid var(--blue)';
+        sel.style.background = 'rgba(0,122,255,0.07)';
+        window._pdfOpt = opt;
+    }
+
+    function generarPDFSeleccionado() {
+        const opt = window._pdfOpt || 'sin';
+        cerrarModalPDF();
+        if (opt === 'sin') {
+            exportPDF();
+        } else {
+            exportPDFConImpuestosPorItem();
+        }
+    }
+
+    async function exportPDFConImpuestosPorItem() {
+        try {
+            document.getElementById('loader-title').innerText = "Generando PDF con impuestos...";
+            document.getElementById('global-loader').style.display = 'flex';
+
+            if (!window.jspdf || !window.jspdf.jsPDF) throw new Error("La librería PDF no cargó.");
+            const { jsPDF } = window.jspdf;
+            // A4 landscape = 297 x 210 mm  (margins: left 14, right 14 → usable 269mm)
+            const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+
+            // ── Header ───────────────────────────────────────────────────────
+            const logoB64 = await getLogoBase64Async();
+            if (logoB64) {
+                // Top-right corner landscape A4: x=247, y=8, w=36, h=18
+                doc.addImage(logoB64, 'JPEG', 247, 8, 36, 18);
+            }
+
+            // Thin accent line under header area
+            doc.setDrawColor(30, 58, 95); doc.setLineWidth(0.5);
+            doc.line(14, 42, 283, 42);
+
+            doc.setFontSize(15); doc.setFont(undefined, 'bold'); doc.setTextColor(30, 58, 95);
+            doc.text("PRESUPUESTO CON IMPUESTOS", 14, 17);
+            doc.setFontSize(8.5); doc.setFont(undefined, 'normal'); doc.setTextColor(60, 60, 60);
+
+            let pNameStr = (document.getElementById('h-pro').innerText || 'PROYECTO').toUpperCase().replace(/\n/g, ' ');
+            let cNameStr = (document.getElementById('h-cli').innerText || 'CLIENTE').toUpperCase().replace(/\n/g, ' ');
+            let dateStrVal = document.getElementById('h-date').value || new Date().toLocaleDateString();
+
+            doc.text(`Cliente: ${cNameStr}`, 14, 25);
+            doc.text(`Proyecto: ${pNameStr}`, 14, 31);
+            doc.text(`Fecha: ${dateStrVal}`, 14, 37);
+            doc.setTextColor(0, 0, 0); // reset
+
+            // ── Build rows ───────────────────────────────────────────────────
+            const IVA_RATE = 0.13;
+            const IT_RATE = 0.03;
+
+            const rows = [];
+            const anexos = [];
+            let sumTotal = 0, sumIVA = 0, sumIT = 0, sumConImp = 0;
+
+            data.forEach(item => {
+                if (item.type === 'chapter') {
+                    let chapName = (item.name || 'CAPÍTULO').toUpperCase();
+                    rows.push([{
+                        content: chapName, colSpan: 8,
+                        styles: { fillColor: [30, 58, 95], textColor: 255, fontStyle: 'bold', fontSize: 7.5 }
+                    }]);
+                } else {
+                    if (item.activo === false) return;
+                    let desc = item.desc || '-';
+                    if (item.feat) {
+                        const lineas = item.feat.split('\n');
+                        lineas.forEach(l => { const t = l.trim().replace(/^[-–•*]+\s*/, ''); if (t) desc += `\n• ${t}`; });
+                    }
+                    // Recolectar imágenes — igual que exportPDF()
+                    if (item.img) anexos.push({ desc: (item.desc || 'Item') + " (Ref)", img: item.img });
+                    if (item.cortes && Array.isArray(item.cortes)) {
+                        item.cortes.forEach((c, idx) => anexos.push({ desc: (item.desc || 'Item') + ` (Corte Ppal ${idx+1})`, img: c }));
+                    }
+                    if (item.apu) {
+                        ['mat', 'sub', 'mo', 'eq'].forEach(t => {
+                            if (item.apu[t] && Array.isArray(item.apu[t])) {
+                                item.apu[t].forEach(mat => { if (mat.corte_url) anexos.push({ desc: (item.desc || 'Item') + ` - Plano: ${mat.d || ''}`, img: mat.corte_url }); });
+                            }
+                        });
+                    }
+
+                    const cant = stripZeros(item.cant);
+                    const pu   = stripZeros(item.pu);
+                    const total   = cant * pu;
+                    const iva     = total * IVA_RATE;
+                    const it      = total * IT_RATE;
+                    const conImp  = total + iva + it;
+
+                    sumTotal  += total;
+                    sumIVA    += iva;
+                    sumIT     += it;
+                    sumConImp += conImp;
+
+                    rows.push([
+                        desc,
+                        item.und || 'glb',
+                        cant,
+                        fMoney(pu),
+                        // col 4: separator antes de impuestos — borde izquierdo grueso via didDrawCell
+                        fMoney(total),
+                        fMoney(iva),
+                        fMoney(it),
+                        { content: fMoney(conImp), styles: { fontStyle: 'bold', textColor: [0, 110, 0] } }
+                    ]);
+                }
+            });
+
+            // Fila de totales al final
+            rows.push([
+                { content: 'TOTALES', colSpan: 4, styles: { fontStyle: 'bold', halign: 'right', fillColor: [235, 240, 250], textColor: [30, 58, 95] } },
+                { content: fMoney(sumTotal), styles: { fontStyle: 'bold', fillColor: [235, 240, 250] } },
+                { content: fMoney(sumIVA),   styles: { fontStyle: 'bold', fillColor: [235, 240, 250] } },
+                { content: fMoney(sumIT),    styles: { fontStyle: 'bold', fillColor: [235, 240, 250] } },
+                { content: fMoney(sumConImp), styles: { fontStyle: 'bold', textColor: [0, 100, 0], fillColor: [210, 245, 220] } }
+            ]);
+
+            if (typeof doc.autoTable !== 'function') throw new Error("La librería de Tablas no cargó.");
+
+            // Anchuras: 14 + 85 + 15 + 18 + 28 + 30 + 25 + 22 + 31 + 14 = 282 ✓ (269mm usable)
+            doc.autoTable({
+                startY: 45,
+                margin: { left: 14, right: 14 },
+                head: [[
+                    { content: 'Descripción' },
+                    { content: 'Und', styles: { halign: 'center' } },
+                    { content: 'Cant', styles: { halign: 'center' } },
+                    { content: 'P.U. (Bs)', styles: { halign: 'right' } },
+                    { content: 'Total (Bs)', styles: { halign: 'right' } },
+                    { content: 'IVA 13%', styles: { halign: 'right' } },
+                    { content: 'IT 3%',   styles: { halign: 'right' } },
+                    { content: 'Total c/Imp', styles: { halign: 'right' } }
+                ]],
+                body: rows,
+                styles: {
+                    cellPadding: { top: 2, bottom: 2, left: 3, right: 3 },
+                    fontSize: 7,
+                    lineColor: [210, 215, 225],
+                    lineWidth: 0.2
+                },
+                headStyles: {
+                    fillColor: [30, 58, 95],
+                    textColor: 255,
+                    fontStyle: 'bold',
+                    fontSize: 7.5,
+                    lineWidth: 0
+                },
+                alternateRowStyles: { fillColor: [248, 250, 252] },
+                columnStyles: {
+                    0: { cellWidth: 88 },
+                    1: { cellWidth: 15, halign: 'center' },
+                    2: { cellWidth: 18, halign: 'center' },
+                    3: { cellWidth: 28, halign: 'right' },
+                    // col 4 = Total — tiene borde izquierdo de separación
+                    4: { cellWidth: 30, halign: 'right' },
+                    5: { cellWidth: 25, halign: 'right' },
+                    6: { cellWidth: 22, halign: 'right' },
+                    // col 7 = Total c/Imp — columna destacada
+                    7: { cellWidth: 33, halign: 'right', fillColor: [245, 255, 248] }
+                },
+                // Separador visual entre "Total" y bloque de impuestos, y antes de "Total c/Imp"
+                didDrawCell: function(d) {
+                    if (d.section === 'body' || d.section === 'head') {
+                        // Línea azul sutil a la izquierda de col 4 (Total) — separa datos base de impuestos
+                        if (d.column.index === 4) {
+                            doc.setDrawColor(100, 130, 180);
+                            doc.setLineWidth(0.5);
+                            doc.line(d.cell.x, d.cell.y, d.cell.x, d.cell.y + d.cell.height);
+                        }
+                        // Línea verde sutil a la izquierda de col 7 (Total c/Imp)
+                        if (d.column.index === 7) {
+                            doc.setDrawColor(40, 160, 80);
+                            doc.setLineWidth(0.6);
+                            doc.line(d.cell.x, d.cell.y, d.cell.x, d.cell.y + d.cell.height);
+                        }
+                    }
+                }
+            });
+
+            // ── Condiciones (igual que exportPDF) ───────────────────────────
+            let finalY = doc.lastAutoTable.finalY + 8;
+            if (finalY > 185) { doc.addPage(); finalY = 20; }
+            const descVal = parseFloat(document.getElementById('t-desc-val').value) || 0;
+
+            doc.setFontSize(8); doc.setFont(undefined, 'normal');
+            doc.text(`Subtotal:`, 200, finalY); doc.text(`${fMoney(sumTotal)} Bs`, 283, finalY, { align: 'right' }); finalY += 5;
+            if (descVal > 0) { doc.text(`Descuento:`, 200, finalY); doc.text(`- ${fMoney(descVal)} Bs`, 283, finalY, { align: 'right' }); finalY += 5; }
+            doc.text(`IVA (13%):`, 200, finalY); doc.text(`${fMoney(sumIVA)} Bs`, 283, finalY, { align: 'right' }); finalY += 5;
+            doc.text(`IT (3%):`,   200, finalY); doc.text(`${fMoney(sumIT)} Bs`, 283, finalY, { align: 'right' }); finalY += 5;
+            doc.setFontSize(9); doc.setFont(undefined, 'bold'); doc.setTextColor(0, 100, 0);
+            doc.text(`TOTAL CON IMPUESTOS:`, 200, finalY + 2); doc.text(`${fMoney(sumConImp)} Bs`, 283, finalY + 2, { align: 'right' });
+            doc.setTextColor(0, 0, 0); doc.setFont(undefined, 'normal'); doc.setFontSize(8);
+
+            finalY += 12;
+            if (finalY > 190) { doc.addPage(); finalY = 20; }
+            doc.setFontSize(9); doc.setFont(undefined, 'bold'); doc.text("CONDICIONES:", 14, finalY); finalY += 6;
+            doc.setFontSize(8); doc.setFont(undefined, 'normal');
+            doc.text(`• Pago: ${document.getElementById('c-pago').value || '-'}`, 14, finalY); finalY += 5;
+            doc.text(`• Validez: ${document.getElementById('c-validez').value || '-'}`, 14, finalY); finalY += 5;
+            if (document.getElementById('sw-mont').checked) { doc.text(`• Incluye Montaje`, 14, finalY); finalY += 5; }
+            if (document.getElementById('sw-desm').checked) { doc.text(`• Incluye Desmontaje`, 14, finalY); finalY += 5; }
+
+            // ── Anexo fotográfico (idéntico a exportPDF) ─────────────────────
+            if (anexos.length > 0) {
+                doc.addPage();
+                doc.setFontSize(14); doc.setFont(undefined, 'bold'); doc.setTextColor(30, 58, 95);
+                doc.text("ANEXO FOTOGRÁFICO Y PLANOS", 14, 18);
+                doc.setTextColor(0, 0, 0);
+                // landscape usable: 269mm wide → imágenes pueden ser más anchas
+                let py = 28;
+                for (let i = 0; i < anexos.length; i++) {
+                    let it = anexos[i];
+                    if (py > 165) { doc.addPage(); py = 20; }
+                    doc.setDrawColor(200); doc.setLineWidth(0.3);
+                    doc.rect(14, py, 268, 120);
+                    doc.setFontSize(9); doc.setFont(undefined, 'bold');
+                    doc.text(`${i + 1}. ${it.desc}`, 16, py + 10);
+                    try {
+                        let b64 = await getBase64ImageFromUrl(it.img);
+                        if (b64) {
+                            const props = doc.getImageProperties(b64);
+                            const ratio = props.width / props.height;
+                            let w = 240, h = w / ratio;
+                            if (h > 100) { h = 100; w = h * ratio; }
+                            doc.addImage(b64, 'JPEG', 14 + (268 - w) / 2, py + 14 + (106 - h) / 2, w, h);
+                        }
+                    } catch (e) {}
+                    py += 128;
+                }
+            }
+
+            // ── Guardar ──────────────────────────────────────────────────────
+            const dDate = new Date();
+            const mm = String(dDate.getMonth() + 1).padStart(2, '0');
+            const dd = String(dDate.getDate()).padStart(2, '0');
+            let safeProName = pNameStr.replace(/[^a-zA-Z0-9_\- ]/g, "").trim().replace(/ /g, '_');
+            let safeCliName = cNameStr.replace(/[^a-zA-Z0-9_\- ]/g, "").trim().replace(/ /g, '_');
+            doc.save(`${mm}${dd}_${safeProName}_${safeCliName}_CON_IMP.pdf`);
+
+        } catch (error) {
+            console.error(error);
+            alert("Error Técnico: " + error.message);
+        } finally {
+            document.getElementById('global-loader').style.display = 'none';
+        }
+    }
+
+
+    document.addEventListener('keydown', e => {
+        if(e.key === 'Escape') {
+            if(activeMod==='apu') { closeApu(); }
+            else if(document.getElementById('mod-photo').style.display === 'flex') { document.getElementById('mod-photo').style.display = 'none'; }
+        }
+    });
+    let currentIAPdfBase64 = null;
+    let iaRowCounter = 0;
+
+    // --- CONFIGURACIÓN DE MODAL ---
+    window.abrirModalIABudget = function() {
+        currentIAPdfBase64 = null;
+        const container = document.getElementById('ia-items-container');
+        if(container) container.innerHTML = '';
+        
+        if(document.getElementById('ia-pdf-filename')) document.getElementById('ia-pdf-filename').style.display = 'none';
+
+        addIARow();
+        document.getElementById('mod-ia-budget').style.display = 'flex';
+    }
+
+
+    // ── Re-generar ítem individual con IA ────────────────────────────
+    let _regenIdx = null;
+
+    window.abrirRegenIA = function(i) {
+        _regenIdx = i;
+        let instrucciones = '';
+        try {
+            const parsed = JSON.parse(data[i].iaPrompt || '{}');
+            instrucciones = parsed.instrucciones || parsed.nombre || data[i].iaPrompt || '';
+        } catch(e) {
+            // prompt viejo sin JSON — limpiar pipes
+            instrucciones = (data[i].iaPrompt || data[i].desc || '').split('|').pop().trim();
+        }
+        document.getElementById('regen-ia-prompt').value = instrucciones;
+        document.getElementById('regen-ia-nombre').value = data[i].desc || '';
+        document.getElementById('regen-ia-nombre-lbl').innerText = data[i].desc || '';
+        document.getElementById('mod-regen-ia').style.display = 'flex';
+    }
+
+    window.cerrarRegenIA = function() {
+        document.getElementById('mod-regen-ia').style.display = 'none';
+        _regenIdx = null;
+    }
+
+    window.ejecutarRegenIA = async function() {
+        if(_regenIdx === null) return;
+        const idx = _regenIdx;
+        const promptText = document.getElementById('regen-ia-prompt').value.trim();
+        if(!promptText) return alert('Escribí el prompt antes de generar.');
+
+        const btn = document.getElementById('btn-regen-ia-exec');
+        btn.disabled = true;
+        btn.innerHTML = '<i class="ph-bold ph-spinner-gap anim-spin"></i> Generando...';
+
+        try {
+            let catalogoMat = Object.values(dbMats).map(m => `${m.n || m.desc}: ${m.p || m.pu} Bs/${m.u || m.und}`).join(", ");
+            let catalogoMo  = Object.values(dbMo).map(m => `${m.n || m.desc}: ${m.p || m.pu} Bs`).join(", ");
+
+            // Precio actual del ítem para dar referencia a la IA (evita inconsistencias)
+            const _puActual = parseFloat(data[idx]?.pu) || 0;
+            const _puRef = _puActual > 0 ? `Precio anterior de referencia: ${_puActual.toFixed(2)} Bs/u (si tu cálculo difiere más del 30%, revisá las cantidades).` : '';
+
+            const sysPrompt = `REGLA ABSOLUTA: Responde SOLO con un array JSON válido de exactamente UN ítem. Sin texto antes ni después. Sin markdown. Sin comentarios dentro del JSON.
+CAMPOS OBLIGATORIOS:
+- desc: string con nombre técnico del ítem
+- cant: número
+- und: string (glb, m2, ml, pza, etc.)
+- feat: string con características orientadas AL CLIENTE. Cada línea empieza con "- " y separadas por \\n. OBLIGATORIO, mínimo 4 líneas, máximo 8 líneas.
+  ✅ feat incluye SOLO: qué es el ítem, materiales principales (sin cantidades exactas), acabado, dimensiones generales, tipo de iluminación si lleva.
+  ❌ feat NUNCA incluye: metros lineales, perímetros calculados, cantidades de remaches/barras/costillas, mermas, fórmulas, cálculos intermedios, precios, ni ningún dato de producción.
+  EJEMPLO CORRECTO: "- Bastidor tubín 20×20mm, 6.00m × 2.20m\\n- Lona backlight impresa digitalmente\\n- Neon flex RGB perimetral\\n- Letras corpóreas \\"72H\\" en foam 3mm con neon en cantos\\n- Pedestal cilíndrico forrado en foam con adhesivo impreso"
+  EJEMPLO INCORRECTO (PROHIBIDO): "- Tubin total: 39.40 ml\\n- Remaches: 180 pzas\\n- Área lona: 13.20m2 × 1.08 = 14.26m2" ← esto es para el APU, no para el cliente.
+- apu: objeto con mat, mo, eq, sub como arrays de {d, u, q, p} donde p es el precio numérico
+- util: 50 (entero)
+- ind: 10 (entero)
+IMPORTANTE: En los objetos de apu usar EXACTAMENTE los campos d, u, q, p (no usar "item", "pz", "prec" ni otros nombres).
+${_puRef}
+
+CÁLCULO DE ÁREAS — REGLA CRÍTICA:
+Cuando el usuario describe MÚLTIPLES PIEZAS con dimensiones, calculá CADA grupo por separado:
+  "2 piezas de 11m×1.2m y 2 de 9m×1.2m" → (2×11×1.2) + (2×9×1.2) = 26.4 + 21.6 = 48 m2
+NUNCA uses solo el ancho de una pieza cuando hay varias — multiplicá siempre por la cantidad de cada grupo.
+Mostrá el desglose en feat: "- Área: (2×11×1.2) + (2×9×1.2) = 48 m2 + 8% merma tensado = 51.8 m2"`;
+
+
+            // Obtener nombre del ítem desde el input oculto
+            const _itemNombre = document.getElementById('regen-ia-nombre').value || data[idx].desc || 'ítem';
+            const _cleanPrompt = promptText.trim();
+
+            // Cargar reglas técnicas de Firebase para este ítem
+            let _reglasTextoRegen = '';
+            try {
+                const snapR = await db.ref('config_ia/reglas_tecnicas').once('value');
+                if (snapR.exists()) {
+                    const rVals = Object.values(snapR.val()).filter(r => r.activa !== false);
+                    if (rVals.length > 0) {
+                        _reglasTextoRegen = '\n\nREGLAS TÉCNICAS OBLIGATORIAS DE RUBIK:\n';
+                        rVals.forEach(r => { _reglasTextoRegen += `• [${r.cat}] ${r.nombre}: ${r.texto}\n`; });
+                    }
+                }
+            } catch(e) {}
+
+            const userPrompt = `ERES EL ESTIMADOR DE COSTOS APU DE RUBIK BOLIVIA — empresa de señalética, bastidores, stands y publicidad física en Santa Cruz, Bolivia.
+BASE DE DATOS DE PRECIOS:
+  Materiales: ${catalogoMat || '(usá precios de mercado Santa Cruz)'}
+  Mano de obra: ${catalogoMo || '(usá tarifas de mercado Santa Cruz)'}
+${_reglasTextoRegen}
+Ítem a cotizar: ${_itemNombre}
+Instrucciones específicas: ${_cleanPrompt}
+
+PROCESO OBLIGATORIO ANTES DE GENERAR EL JSON:
+① LEER: ¿Qué incluye ESTE ítem específicamente? Solo los componentes mencionados en nombre + prompt + imagen.
+② GEOMETRÍA: Calculá áreas, perímetros y ml según las dimensiones. Cada cantidad del APU sale de un cálculo real.
+③ BASE DE DATOS: Para cada material/MO, buscá primero en el catálogo Rubik. Usá ese precio exacto. Si no está, usá precio de mercado boliviano.
+④ APU: Solo materiales de ESTE ítem. Si el ítem es un bastidor → no meter foam de letras. Si es letras → no meter lona ni tubín de bastidor.
+⑤ VERIFICACIÓN: ¿Las cantidades son coherentes con las dimensiones?
+⑥ feat: 4-8 líneas para el cliente. Sin cálculos, sin ml de insumos, sin remaches ni mermas.
+⑦ RECIÉN AHÍ: Generar el JSON.
+
+No cambies el nombre del ítem — el desc lo pone el usuario.
+
+Devolvé exactamente este formato (sin texto adicional):
+[{"desc":"NOMBRE TÉCNICO","cant":1,"und":"glb","feat":"- Característica 1\\n- Área: (2×11×1.2)+(2×9×1.2) = 48 m2\\n- Característica 3","apu":{"mat":[{"d":"MATERIAL","u":"und","q":1,"p":50}],"mo":[{"d":"MANO DE OBRA","u":"hr","q":4,"p":12.5}],"eq":[],"sub":[]},"util":50,"ind":10}]`;
+
+            const token = firebase.auth().currentUser ? await firebase.auth().currentUser.getIdToken() : null;
+            const headers = { 'Content-Type': 'application/json' };
+            if(token) headers['Authorization'] = 'Bearer ' + token;
+
+            const resp = await fetch('/api/gemini', {
+                method: 'POST', headers,
+                body: JSON.stringify({
+                    systemInstruction: { parts: [{ text: sysPrompt }] },
+                    contents: [{ role: 'user', parts: [{ text: userPrompt }] }]
+                })
+            });
+            if(!resp.ok) throw new Error(`HTTP ${resp.status}`);
+            const respData = await resp.json();
+            let raw = respData?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+            raw = raw.replace(/```json|```/g, '').trim();
+            const start = raw.indexOf('['), end = raw.lastIndexOf(']');
+            if(start === -1 || end === -1) throw new Error('Formato inválido — la IA no devolvió JSON');
+            let items;
+            try { items = JSON.parse(raw.slice(start, end+1)); }
+            catch(e) {
+                // Intentar limpiar caracteres problemáticos
+                let cleaned = '';
+                const chunk = raw.slice(start, end+1);
+                for(let ci=0; ci<chunk.length; ci++) { const cc=chunk.charCodeAt(ci); cleaned += (cc<32&&cc!==9&&cc!==10&&cc!==13)?' ':chunk[ci]; }
+                cleaned = cleaned.replace(/,(\s*[}\]])/g, '$1');
+                items = JSON.parse(cleaned);
+            }
+            if(!Array.isArray(items) || items.length === 0) throw new Error('Array vacío');
+
+            const it = items[0];
+            const apuObj = ApuUtils.normalizeApu(it.apu, it);
+            const pu = ApuUtils.calcPuFromApu(apuObj);
+            const _feat = Array.isArray(it.feat) ? it.feat.join('\n') : (it.feat || '');
+            const _featCleanRegen = (_feat || '').replace(/\\n/g, '\n').trim();
+            const _featFinalRegen = _featCleanRegen || `- Ítem regenerado por IA\n- Verificar características manualmente`;
+
+            // Reemplazar el ítem — preservar desc original del usuario, solo actualizar apu/feat/pu
+            data[idx] = {
+                ...data[idx],
+                desc: data[idx].desc || it.desc || it.nombre || '',  // siempre prioridad al desc que ya tenía
+                und:  it.und || data[idx].und,
+                feat: _featFinalRegen,
+                pu:   Math.round(pu * 100) / 100,
+                apu:  apuObj,
+                iaPrompt: promptText
+            };
+
+            saveDB(true);
+            render();
+            cerrarRegenIA();
+
+        } catch(err) {
+            alert('Error al regenerar: ' + (err.message || err));
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="ph-bold ph-arrows-clockwise"></i> Volver a Generar';
+        }
+    }
+
+    window.cerrarModalIABudget = function() {
+        document.getElementById('mod-ia-budget').style.display = 'none';
+    }
+
+    // --- CARGA DE PDF ---
+    window.handleIAPdfUpload = function(inp) {
+        if (inp.files && inp.files[0]) {
+            const file = inp.files[0];
+            const lbl = document.getElementById('ia-pdf-filename');
+            lbl.innerText = file.name;
+            lbl.style.display = 'block';
+            const reader = new FileReader();
+            reader.onload = (e) => { currentIAPdfBase64 = e.target.result; };
+            reader.readAsDataURL(file);
+        }
+    }
+
+    // --- FILAS MANUALES MULTI-FOTO (PASTE Y UPLOAD) ---
+    window.addIARow = function() {
+        iaRowCounter++;
+        const idActual = iaRowCounter;
+        const container = document.getElementById('ia-items-container');
+        const row = document.createElement('div');
+        row.className = 'ia-item-row';
+        row.style = "background:#1c1c1e; padding:15px; border-radius:8px; margin-bottom:10px; border:1px solid #333; position:relative;";
+        
+        row.innerHTML = `
+            <button class="btn-del-row" onclick="this.parentElement.remove()" style="position:absolute; right:10px; top:10px; background:none; border:none; color:#ff4444; cursor:pointer;"><i class="ph-bold ph-x"></i></button>
+            <div style="display:grid; grid-template-columns: 1fr 80px; gap:10px; margin-bottom:10px;">
+                <div>
+                    <span style="font-size:10px; color:#888; display:block; margin-bottom:4px;">Ítem / Tarea</span>
+                    <input type="text" class="ia-inp-name" placeholder="Ej: Letrero Sony..." style="width:100%; background:#000; color:#fff; border:1px solid #444; padding:8px; border-radius:4px;">
+                </div>
+                <div>
+                    <span style="font-size:10px; color:#888; display:block; margin-bottom:4px;">Cant.</span>
+                    <input type="number" class="ia-inp-cant" value="1" style="width:100%; background:#000; color:#fff; border:1px solid #444; padding:8px; border-radius:4px;">
+                </div>
+            </div>
+            <div>
+                <span style="font-size:10px; color:#888; display:block; margin-bottom:4px;">Instrucciones o PEGA AQUÍ TUS CAPTURAS (Ctrl+V)</span>
+                <textarea class="ia-inp-prompt" placeholder="Describe el ítem o pega varias imágenes aquí..." 
+                    style="width:100%; background:#000; color:#fff; border:1px solid #444; padding:8px; border-radius:4px; height:60px; font-size:12px; resize:none;"></textarea>
+            </div>
+            <div style="display:flex; align-items:center; gap:10px; margin-top:10px;">
+                <input type="file" id="ia-file-${idActual}" accept="image/*" multiple style="display:none" onchange="window.handleIARowPhoto(this, ${idActual})">
+                <button type="button" onclick="document.getElementById('ia-file-${idActual}').click()" style="background:#333; color:#fff; border:none; padding:5px 10px; border-radius:4px; cursor:pointer; font-size:11px;"><i class="ph-bold ph-camera"></i> Subir Foto(s)</button>
+            </div>
+            <div id="ia-img-container-${idActual}" style="display:flex; gap:10px; margin-top:10px; flex-wrap:wrap;"></div>
+        `;
+
+        // LÓGICA DE PEGADO MÚLTIPLE (PASTE)
+        const txtArea = row.querySelector('.ia-inp-prompt');
+        txtArea.addEventListener('paste', function(e) {
+            const items = (e.clipboardData || e.originalEvent.clipboardData).items;
+            for (let item of items) {
+                if (item.type.indexOf("image") !== -1) {
+                    const blob = item.getAsFile();
+                    const reader = new FileReader();
+                    reader.onload = (event) => {
+                        const imgContainer = document.getElementById(`ia-img-container-${idActual}`);
+                        const newImg = document.createElement('img');
+                        newImg.src = event.target.result;
+                        newImg.style = "height:60px; border-radius:4px; border:1px solid #555; object-fit:cover;";
+                        newImg.className = "ia-row-image-data"; // Etiqueta clave para que la IA la lea
+                        imgContainer.appendChild(newImg);
+                    };
+                    reader.readAsDataURL(blob);
+                }
+            }
+        });
+
+        container.appendChild(row);
+        container.scrollTop = container.scrollHeight;
+    }
+
+    // LÓGICA DE SUBIDA MÚLTIPLE (BOTÓN EXAMINAR)
+    window.handleIARowPhoto = function(inp, id) {
+        if (inp.files && inp.files.length > 0) {
+            const imgContainer = document.getElementById(`ia-img-container-${id}`);
+            Array.from(inp.files).forEach(file => {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    const newImg = document.createElement('img');
+                    newImg.src = e.target.result;
+                    newImg.style = "height:60px; border-radius:4px; border:1px solid #555; object-fit:cover;";
+                    newImg.className = "ia-row-image-data";
+                    imgContainer.appendChild(newImg);
+                };
+                reader.readAsDataURL(file);
+            });
+            inp.value = ''; // Resetea el input para poder subir más después
+        }
+    }
+
+    function extraerJSONLimpio(textoCrudo) {
+        let textoLimpio = textoCrudo.replace(/```json/gi, '').replace(/```/g, '').trim();
+        const inicioIndex = textoLimpio.indexOf('[');
+        const finIndex = textoLimpio.lastIndexOf(']');
+        if (inicioIndex !== -1 && finIndex !== -1) {
+            return JSON.parse(textoLimpio.substring(inicioIndex, finIndex + 1));
+        }
+        throw new Error("La IA no devolvió un formato válido.");
+    }
+
+   // --- GENERACIÓN CON GEMINI 2.5 FLASH (CONECTADO A DB MAESTRA) ---
+    // ── Helpers del panel de progreso ──
+    const _iaFrases = [
+        ['🔍 Analizando ítems y fotos...', 'Leyendo dimensiones y materiales'],
+        ['📐 Calculando geometría...', 'Perímetros, áreas, volúmenes'],
+        ['🗄️ Consultando base de datos...', 'Buscando precios Rubik Bolivia'],
+        ['🧮 Armando APU detallado...', 'Materiales + mano de obra + utilidad'],
+        ['⚙️ Verificando cantidades...', 'Control de precios y mermas'],
+        ['✍️ Generando presupuesto...', 'Casi listo, un momento más'],
+    ];
+    let _iaProgInterval = null;
+    function _iaProgStart() {
+        const panel = document.getElementById('ia-progress-panel');
+        const bar   = document.getElementById('ia-prog-bar');
+        const msg   = document.getElementById('ia-prog-msg');
+        const sub   = document.getElementById('ia-prog-sub');
+        panel.classList.add('visible');
+        let step = 0, pct = 5;
+        bar.style.width = pct + '%';
+        msg.textContent = _iaFrases[0][0];
+        sub.textContent = _iaFrases[0][1];
+        _iaProgInterval = setInterval(() => {
+            step = (step + 1) % _iaFrases.length;
+            pct  = Math.min(pct + Math.random() * 14 + 6, 90);
+            bar.style.width = pct + '%';
+            msg.textContent = _iaFrases[step][0];
+            sub.textContent = _iaFrases[step][1];
+        }, 4000);
+    }
+    function _iaProgEnd(ok) {
+        clearInterval(_iaProgInterval);
+        const panel = document.getElementById('ia-progress-panel');
+        const bar   = document.getElementById('ia-prog-bar');
+        const msg   = document.getElementById('ia-prog-msg');
+        const sub   = document.getElementById('ia-prog-sub');
+        bar.style.width = '100%';
+        if (ok) {
+            msg.textContent = '✅ ¡Presupuesto generado!';
+            sub.textContent = 'Revisá los ítems abajo';
+            bar.style.background = 'var(--green)';
+        } else {
+            msg.textContent = '❌ Error al generar';
+            sub.textContent = 'Revisá tu conexión e intentá de nuevo';
+            bar.style.background = '#e74c3c';
+        }
+        setTimeout(() => {
+            panel.classList.remove('visible');
+            bar.style.background = 'var(--purple)';
+        }, 2500);
+    }
+
+    window.generateIABudget = async function() {
+        const rows = document.querySelectorAll('.ia-item-row');
+        const btnGen = document.getElementById('btn-ia-generate');
+        btnGen.disabled = true;
+        btnGen.innerHTML = '<i class="ph-bold ph-spinner-gap anim-spin"></i> Generando...';
+        _iaProgStart();
+
+        let parts = [];
+
+        // 1. CREAR EL CATÁLOGO DE LA BASE DE DATOS PARA ENVIARSELO A LA IA
+        // Esto le da a la IA los precios exactos que tienes guardados.
+        let catalogoMat = Object.values(dbMats).map(m => `${m.n || m.desc}: ${m.p || m.pu} Bs/${m.u || m.und}`).join(", ");
+        let catalogoMo = Object.values(dbMo).map(m => `${m.n || m.desc}: ${m.p || m.pu} Bs`).join(", ");
+
+        let textPrompt = `ERES EL ESTIMADOR DE COSTOS APU DE RUBIK BOLIVIA — empresa de señalética, fabricación de stands, letreros luminosos, BTL y publicidad física en Santa Cruz, Bolivia.
+
+════════════════════════════════════════════════════════════════
+PROCESO DE ESTIMACIÓN OBLIGATORIO — seguí estos pasos EN ORDEN
+════════════════════════════════════════════════════════════════
+Para cada ítem, antes de generar el JSON, ejecutá mentalmente este proceso:
+
+PASO 1 — LEER Y ENTENDER:
+  Analizá el nombre del ítem, el prompt del usuario y todas las imágenes adjuntas.
+  Identificá: ¿Qué es el ítem? ¿Cuáles son sus dimensiones? ¿De qué materiales está hecho?
+
+PASO 2 — GEOMETRÍA (calcular cantidades reales):
+  Aplicá los BLOQUEs A-G de más abajo según corresponda.
+  Calculá áreas, perímetros, ml de tubín, etc. con las fórmulas exactas.
+  Las cantidades en el APU deben salir de estos cálculos — NUNCA inventarlas.
+
+PASO 3 — BUSCAR EN BASE DE DATOS:
+  Para cada material/MO calculado, buscar PRIMERO en el catálogo Rubik:
+  Materiales: ${catalogoMat || '(vacío — usá precios de mercado Santa Cruz)'}
+  Mano de obra: ${catalogoMo || '(vacío — usá tarifas de mercado Santa Cruz)'}
+  → Si aparece en catálogo: usar ESE nombre y precio exacto.
+  → Si NO aparece: crear nombre técnico corto + precio realista mercado boliviano.
+
+PASO 4 — ARMAR EL APU:
+  Listar cada material por separado con su cantidad calculada en PASO 2 y precio de PASO 3.
+  Listar mano de obra con horas o m2 reales según el ítem.
+  util=50, ind=10 siempre.
+
+PASO 5 — VERIFICAR CONSISTENCIA:
+  ¿Las cantidades de materiales son coherentes con las dimensiones del ítem?
+  ¿El precio unitario final es razonable para el mercado boliviano?
+  Si el mismo ítem se cotizara 3 veces con el mismo proceso → el precio debería variar máximo 10%.
+
+PASO 6 — GENERAR feat PARA EL CLIENTE:
+  4 a 8 líneas describiendo QUÉ ES el ítem para el cliente:
+  materialidad principal, acabado, dimensiones generales, iluminación si aplica.
+  PROHIBIDO en feat: cantidades exactas de insumos, ml calculados, remaches, mermas, fórmulas.
+
+PASO 7 — DEVOLVER JSON:
+  Solo después de completar los pasos anteriores, generar el array JSON.
+
+════════════════════════════════════════════════════════════════
+REGLA MAESTRA DE MATERIALES — LEER ANTES DE ARMAR EL APU
+════════════════════════════════════════════════════════════════
+Cada ítem es INDEPENDIENTE. Solo incluir en el APU los materiales que se deriven
+DIRECTAMENTE de lo que describe ese ítem específico (nombre + prompt + imágenes).
+
+REGLA: Si el ítem NO menciona un componente → NO va en el APU de ese ítem.
+  ✅ Ítem "Bastidor con lona" → tubín, lona, remaches, pintura, MO estructura y tensado.
+  ❌ Ítem "Bastidor con lona" → NO incluir foam de letras, acrílico, LED strip de letras, pedestal. Esos son de OTRO ítem.
+  ✅ Ítem "Letras corpóreas 72H" → foam, neon flex cantos, pintura, MO corte y ensamble.
+  ❌ Ítem "Letras corpóreas 72H" → NO incluir tubín de bastidor, lona, remaches. Esos son de OTRO ítem.
+
+Si el usuario cargó UN ítem que incluye TODO (bastidor + letras + pedestal) → entonces sí incluir todos.
+Si cargó ítems SEPARADOS → cada uno lleva solo sus materiales.
+
+════════════════════════════════════════════════════════════════
+REGLAS ADICIONALES:
+════════════════════════════════════════════════════════════════
+1. FORMATO: Devolvé SOLO el array JSON. Sin texto, sin markdown, sin explicaciones.
+2. CANTIDADES: Las del usuario son la cantidad de ítems a producir, no las dimensiones.
+3. APU DETALLADO: "mat" lista CADA componente por separado.
+   ✅ CORRECTO: [{"d":"TUBIN 20X20X0.8","u":"barra","q":3,"p":55}, {"d":"LONA BACKLIGHT 510g","u":"m2","q":2,"p":85}]
+   ❌ PROHIBIDO: {"d":"Materiales varios","u":"glb","q":1,"p":500}
+4. util=50, ind=10 siempre. ENTEROS, no decimales.
+5. FOTOS: Analizá todas las imágenes para dimensiones, acabados y complejidad.
+6. CONTROL DE PRECIOS — verificá antes de generar:
+   Neon flex hasta 1.5m: 800–2000 Bs | Caja de luz 1.2×0.6m: 400–900 Bs | Acrílico iluminado: 600–1500 Bs/m2
+   Si el pu supera el doble del límite superior → revisá cantidades, estás sobreestimando materiales.
+   Neon flex cursiva texto 1.20m → entre 5 y 8 ml total (no más de 15 ml en ningún caso para ese tamaño).
+9. CONTORNOS Y METROS LINEALES — OBLIGATORIO cuando el ítem lleve neon flex, canal de letra, perfil aluminio, marco o tubo doblado:
+   Calculá el perímetro/contorno ANTES de asignar cantidades:
+   → Rectángulo: ml = 2×(base+altura). Ej: 1.20×0.40m → 3.20 ml base, +15% curvas = 3.68 ml
+   → Círculo: ml = π×diámetro × 1.15
+   → Texto bloque/sans: ml = nro_letras × altura_letra_m × 3.5 × 1.15
+   → Texto cursiva/script: ml = nro_letras × altura_letra_m × 2.5 × 1.8 × 1.15  (letra 25cm alto → ~0.6ml/letra)
+   → Letra canal suelta: I,L,T = altura×3 ml | A,N,U = altura×4 ml | B,R,S,E = altura×5 ml
+   Siempre mostrá el cálculo en feat: "- Contorno estimado: X.X ml → con merma: Y.Y ml"
+   Componentes neon flex: NEON FLEX LED 12V (ml) + FUENTE PODER 12V (pza) + CONTROLADOR RGB (pza) + CANAL NEON FLEX (ml)
+
+════════════════════════════════════════════════════════════════
+MOTOR DE GEOMETRÍA VOLUMÉTRICA — EXPERTO INDUSTRIA PUBLICITARIA
+════════════════════════════════════════════════════════════════
+Sos un ingeniero de costos experto en señalética, publicidad exterior, stands, muebles de activación y estructuras metálicas de Bolivia. Antes de calcular cantidades en el APU, SIEMPRE realizá el desglose geométrico completo.
+
+══════════════════════════════════════
+BLOQUE A — LETRAS CORPÓREAS (3D)
+══════════════════════════════════════
+Una letra corpórea tiene 3 superficies a costear: TAPA FRONTAL + CANTO LATERAL + RESPALDO (si aplica).
+
+A1. COEFICIENTES DE ÁREA POR LETRA (fracción del bounding box alto×ancho_prop):
+  Ancho proporcional estándar = alto × factor_ancho:
+  I → factor_ancho=0.25, área_coef=0.85  | L → factor_ancho=0.55, área_coef=0.55
+  T → factor_ancho=0.65, área_coef=0.55  | J → factor_ancho=0.45, área_coef=0.55
+  F → factor_ancho=0.60, área_coef=0.55  | E → factor_ancho=0.60, área_coef=0.60
+  C → factor_ancho=0.70, área_coef=0.72  | G → factor_ancho=0.70, área_coef=0.72
+  O → factor_ancho=0.80, área_coef=0.78  | Q → factor_ancho=0.80, área_coef=0.78
+  U → factor_ancho=0.75, área_coef=0.68  | D → factor_ancho=0.70, área_coef=0.72
+  H → factor_ancho=0.70, área_coef=0.65  | N → factor_ancho=0.75, área_coef=0.78
+  M → factor_ancho=0.90, área_coef=0.82  | W → factor_ancho=0.90, área_coef=0.80
+  V → factor_ancho=0.75, área_coef=0.60  | A → factor_ancho=0.75, área_coef=0.65
+  K → factor_ancho=0.70, área_coef=0.65  | X → factor_ancho=0.75, área_coef=0.60
+  Y → factor_ancho=0.65, área_coef=0.55  | Z → factor_ancho=0.70, área_coef=0.62
+  P → factor_ancho=0.65, área_coef=0.65  | R → factor_ancho=0.65, área_coef=0.68
+  B → factor_ancho=0.65, área_coef=0.70  | S → factor_ancho=0.65, área_coef=0.65
+  Números (0-9) promedio → factor_ancho=0.65, área_coef=0.72
+  Cursiva/script: multiplicar área_coef × 0.85 (menos relleno, más curvas)
+
+A2. FÓRMULAS LETRAS CORPÓREAS:
+  área_tapa = alto_m × (alto_m × factor_ancho) × área_coef  [m2 por letra]
+  perímetro_letra = alto_m × factor_ancho × 2 + alto_m × 2  × coef_complejidad
+    coef_complejidad: I/L/T=2.5 | C/O/U/D=3.2 | A/N/H/V=3.0 | B/R/S/E=3.8 | M/W=3.5
+  área_canto = perímetro_letra × grosor_canto_m  [m2 por letra]
+  área_respaldo = área_tapa × 0.85  (si lleva fondo, ej. caja iluminada)
+
+A3. MATERIALES SEGÚN TIPO DE LETRA:
+  → ACRÍLICO SÓLIDO: frente acrílico 3-6mm (m2) + corte CNC/láser (ml perímetro) + pegamento + tornillos espácer
+  → ACRÍLICO ILUMINADA: frente acrílico translúcido 3mm + canto PVC foam 5-8mm + LED strip interior (perímetro×1.1 ml) + fuente poder + difusor acrílico fondo
+  → PVC FOAM (letras económicas): plancha PVC foam 10-19mm (m2 tapa) + pintura vinílica
+  → ACERO INOX ESPEJO: plancha acero 1.2mm frente (m2) + doblez CNC canto (ml) + soldadura TIG + pulido
+  → MDF PINTADO: plancha MDF 15-18mm (m2) + masilla + pintura duco + vinilo de corte cara
+  → ALUMINIO COMPUESTO (ACM): plancha ACM 3mm (m2) + marco aluminio omega (ml perímetro) + vinilo impreso
+
+A4. EJEMPLO LETRERO "RUBIK" 5 letras, 30cm alto, acrílico iluminado, canto 6cm:
+  R(0.68×0.65×0.09)=0.040m2 | U(0.68×0.75×0.09)=0.046m2 | B(0.68×0.65×0.09)=0.040m2 | I(0.68×0.25×0.09)=0.015m2 | K(0.68×0.70×0.09)=0.043m2
+  Total tapa = 0.184 m2 → +10% merma corte = 0.202 m2
+  Perímetro total: R(3.8×0.30=1.14) + U(3.0×0.30=0.90) + B(3.8×0.30=1.14) + I(2.5×0.30=0.75) + K(3.0×0.30=0.90) = 4.83 ml
+  Canto 6cm: 4.83 × 0.06 = 0.29 m2 PVC foam
+  LED strip interior: 4.83 × 1.1 = 5.31 ml
+  mat: acrílico translúcido 3mm 0.202m2 + PVC foam 10mm 0.29m2 + LED strip 5.31ml + fuente 60W 1pza
+
+══════════════════════════════════════
+BLOQUE B — CAJAS DE LUZ / BACKING / TOTEM
+══════════════════════════════════════
+B1. SUPERFICIES A CALCULAR:
+  → CARA(S) VISIBLE(S): ancho × alto [m2] — puede ser 1, 2 o 4 caras
+  → CANTOS/LATERALES: 2×(ancho+alto) × profundidad [m2 chapa o tubin]
+  → FONDO INTERNO: ancho × alto (si lleva fondo)
+  → ESTRUCTURA INTERNA: perímetro × 2 barras (marcos internos)
+
+B2. MATERIALES ESTÁNDAR CAJA DE LUZ:
+  Estructura: tubín 20×20×0.8mm — barras necesarias = ceil(perímetro_ext / 5.8) barras (barras 6m con merma)
+  Cara visible: lona backlight (m2 cara + 5% tensado) o acrílico translúcido
+  Fondo: plancha galvanizada 1/40 (m2) o MDF 9mm
+  Iluminación: LED strip 5050 — filas = ceil(alto_m / 0.12); ml_led = filas × ancho_m × 1.1
+  Pintura: 0.1 ltr duco por m2 de estructura metálica
+  
+B3. EJEMPLO CAJA DE LUZ DOBLE CARA 1.20×0.60m, prof 12cm:
+  Cara frontal+trasera: 2 × (1.20×0.60) = 1.44 m2 lona backlight
+  Cantos: 2×(1.20+0.60)×0.12 = 0.432 m2 plancha galvanizada
+  Estructura: perímetro 2×(1.20+0.60)=3.60ml → 2 marcos = 7.2ml tubin → ceil(7.2/5.8)=2 barras
+  LED: filas=ceil(0.60/0.12)=5 filas × 1.20m × 1.1 = 6.6 ml LED strip
+
+══════════════════════════════════════
+BLOQUE C — STANDS / MUEBLES DE ACTIVACIÓN
+══════════════════════════════════════
+C1. DESCOMPOSICIÓN EN PIEZAS:
+  Todo mueble/stand se descompone en: BASE + CUERPO LATERAL×2 + FONDO + TAPA + PUERTAS/FRENTES + REPISAS + ESTRUCTURA
+  Para cada pieza calcular: largo × ancho [m2] + orillas/cantos [ml]
+
+C2. MATERIALES PRINCIPALES:
+  → MDF 15mm: tableros 1.22×2.44m (2.98m2). Calcular piezas necesarias con optimización de corte.
+    Rendimiento real MDF: área_útil = 2.98 × 0.85 (15% merma y cortes)
+  → MELAMÍNICO 15mm: mismo tamaño. Incluir tapacantos PVC 22mm (ml de todos los cantos visibles)
+  → ALUMINIO EXTRUSIÓN: perfiles 6m. ml necesarios = suma de todos los largueros
+  → METACRILATO/ACRÍLICO: frentes transparentes, calcular cada panel por separado
+  → VIDRIO: espesor según tamaño (4mm hasta 0.5m2, 6mm hasta 1.5m2, 8mm más grande)
+  → TUBÍN ESTRUCTURA: calcular ml totales de todos los miembros + nodos de soldadura
+
+C3. MUEBLE ESTÁNDAR: MOSTRADOR 1.20×0.50×0.90m MDF melamínico:
+  Piezas: tapa(1.20×0.50=0.60m2) + base(1.20×0.50=0.60m2) + 2 laterales(0.90×0.50=0.45m2 c/u) + fondo(1.20×0.88=1.056m2) + repisa(1.20×0.48=0.576m2)
+  Total MDF: 3.276m2 → tableros = ceil(3.276/2.53)=2 tableros melamínico
+  Tapacantos: cantos visibles: 2×(1.20+0.50+0.90+0.50+0.88)=8.96ml tapacanto PVC
+  Herrajes: 2 bisagras+1 jaladera por puerta, 4 patas niveladoras
+
+C4. STAND DE ACTIVACIÓN (estructura metálica + grafica):
+  Estructura: calcular ml de cada miembro (verticales + horizontales + diagonales)
+    barras_6m = ceil(total_ml / 5.8)
+  Paneles gráficos: cada cara = ancho × alto [m2 lona o ACM]
+  Bases y patas: planchas de anclaje, tornillería, taco químico si va al piso
+
+══════════════════════════════════════
+BLOQUE D — ESTRUCTURAS METÁLICAS
+══════════════════════════════════════
+D1. PERFILES Y RENDIMIENTOS:
+  Tubín cuadrado 20×20×0.8: barra 6m → 5.8ml útiles. Peso ~0.8kg/m
+  Tubín cuadrado 40×40×1.2: barra 6m → 5.8ml útiles. Peso ~1.8kg/m
+  Tubín rectangular 40×20×1.0: barra 6m → 5.8ml útiles
+  Tubo redondo 1": barra 6m → 5.8ml útiles. Peso ~0.7kg/m
+  Ángulo 25×25×3: barra 6m → 5.8ml útiles
+  Platina 25×3mm: barra 6m. Para bases y refuerzos
+  Plancha galvanizada 1/40 (0.8mm): 1.22×2.44m = 2.98m2
+  Plancha negra 1/16 (1.6mm): 1.22×2.44m = 2.98m2
+
+D2. CÁLCULO DE SOLDADURA:
+  Nodos de soldadura = puntos de unión entre miembros
+  Tiempo soldador: nodo simple=15min, nodo reforzado=25min, unión compleja=45min
+  Incluir consumibles: electrodos (1 electrodo por 15min) o hilo MIG (0.1kg/hr)
+
+D3. TRATAMIENTO SUPERFICIAL:
+  Granallado: si > 2m2 de estructura
+  Anticorrosivo: 0.08 ltr/m2 de estructura
+  Pintura duco: 0.12 ltr/m2 (2 manos)
+  Pintura electrostática: cotizar como servicio externo si aplica
+
+══════════════════════════════════════
+BLOQUE E — IMPRESIÓN GRAN FORMATO
+══════════════════════════════════════
+E1. ÁREAS DE IMPRESIÓN — FÓRMULA OBLIGATORIA (no inventes el valor):
+
+  CASO A — Piezas iguales: cant × ancho × alto × 1.08
+    Ejemplo: 4 bastidores de 3m×1.2m → 4 × 3 × 1.2 × 1.08 = 15.55 m2
+
+  CASO B — Piezas con dimensiones diferentes: sumar cada grupo por separado
+    PASO 1: Para CADA grupo: cant_grupo × ancho_grupo × alto_grupo
+    PASO 2: área_total = (suma de todos los grupos) × 1.08
+    EJEMPLO: "2 piezas de 11m×1.2m y 2 piezas de 9m×1.2m"
+      → Grupo 1: 2 × 11 × 1.2 = 26.4 m2
+      → Grupo 2: 2 × 9 × 1.2 = 21.6 m2
+      → Total sin merma: 26.4 + 21.6 = 48.0 m2
+      → Con 8% merma tensado: 48.0 × 1.08 = 51.84 m2
+    EJEMPLO 2: "6 bastidores (17.3 + 7.5 + 6.5 + 5.5 + 4.5 + 43)m × 2.1m (todos misma altura)"
+      → suma_anchos = 84.3m → área = 84.3 × 2.1 × 1.08 = 191.2 m2
+
+  REGLA CRÍTICA: NUNCA uses solo el ancho de UNA pieza cuando hay varias. SIEMPRE multiplicá por la cantidad de cada grupo.
+  PROHIBIDO: aplicar merma adicional, redondear hacia arriba más del 8%, o inventar m2.
+  Mostrá el cálculo en feat línea a línea: "- Área lona: (Grupo1: NxAxH) + (Grupo2: NxAxH) = X m2 × 1.08 = Y m2"
+
+E2. MATERIALES SEGÚN SOPORTE:
+  Lona mate 440g: ~35-45 Bs/m2 | Lona backlight 510g: ~75-90 Bs/m2
+  Lona mesh 70%: ~55-70 Bs/m2 | Adhesivo vinílico cast: ~85-110 Bs/m2
+  Adhesivo microperforado: ~95-120 Bs/m2 | Canvas/tela sublimada: ~120-150 Bs/m2
+  Instalación lona en estructura: 15-25 Bs/m2 | Instalación adhesivo: 25-45 Bs/m2
+
+══════════════════════════════════════
+BLOQUE F — REGLAS DE APLICACIÓN
+══════════════════════════════════════
+F1. SIEMPRE en feat mostrar el desglose geométrico:
+  "- Tapa frontal letras: X.XX m2 (Y letras × coef)"
+  "- Canto lateral Xcm: X.XX m2"
+  "- Perímetro total: X.XX ml"
+  "- LED interior: X.XX ml"
+  "- Estructura: X barras tubín XX×XX"
+
+F2. PROFUNDIDADES ESTÁNDAR DE LA INDUSTRIA:
+  Caja de luz simple: 8-12cm | Caja de luz doble: 12-20cm
+  Letra acrílica corpórea sin luz: 3-5cm canto | Con luz: 6-10cm canto
+  Letra PVC foam: 1-3cm | Letra acero inox: 3-6cm
+  Mostrador/mueble bajo: 85-95cm alto | Mueble alto: 180-200cm
+  Stand portátil: 200-250cm alto | Totem interior: 150-180cm
+  Bastidor de lona tensada: profundidad 7-12cm
+
+F3. MATERIALES POR PIEZAS COMPLEJAS — preguntar si no se especifica:
+  "¿El canto de las letras es PVC foam pintado, acrílico, o acero?"
+  "¿La estructura del stand va pintada, cromada o forrada en ACM?"
+  "¿El mostrador lleva vidrio frontal, acrílico o MDF con vinilo?"
+  Pero si hay imagen adjunta → deducir de la imagen sin preguntar.
+\n\n`;
+
+        // ── BLOQUE G — Reglas Técnicas personalizadas (desde Firebase) ──
+        try {
+            const snapReglas = await db.ref('config_ia/reglas_tecnicas').once('value');
+            if (snapReglas.exists()) {
+                const reglas = snapReglas.val();
+                const activas = Object.values(reglas).filter(r => r.activa !== false);
+                if (activas.length > 0) {
+                    // Agrupar por categoría
+                    const porCat = {};
+                    activas.forEach(r => {
+                        const cat = r.cat || 'General';
+                        if (!porCat[cat]) porCat[cat] = [];
+                        porCat[cat].push(r);
+                    });
+                    textPrompt += `══════════════════════════════════════\nBLOQUE G — REGLAS TÉCNICAS DE RUBIK BOLIVIA\n══════════════════════════════════════\n`;
+                    textPrompt += `ESTAS REGLAS SON OBLIGATORIAS — aplicalas siempre que el ítem pertenezca a la categoría indicada:\n\n`;
+                    for (const [cat, items] of Object.entries(porCat)) {
+                        textPrompt += `[${cat.toUpperCase()}]\n`;
+                        items.forEach(r => {
+                            textPrompt += `• ${r.nombre}: ${r.texto}\n`;
+                        });
+                        textPrompt += `\n`;
+                    }
+                    textPrompt += `\n\n`;
+                }
+            }
+        } catch(e) { /* Si falla Firebase, continúa sin reglas */ }
+
+        // 2. Procesar Filas Manuales y TODAS sus fotos (async para comprimir imágenes)
+        for (let index = 0; index < rows.length; index++) {
+            const row = rows[index];
+            const name = row.querySelector('.ia-inp-name').value.trim();
+            const cant = row.querySelector('.ia-inp-cant').value;
+            const prompt = row.querySelector('.ia-inp-prompt').value.trim();
+
+            if(name) {
+                textPrompt += `ÍTEM ${index+1}: ${name} (Cantidad: ${cant}).\nInstrucciones del usuario: ${prompt}\n`;
+
+                const rowImages = row.querySelectorAll('.ia-row-image-data');
+                // Comprimir TODAS las imágenes a un tamaño muy pequeño (512px / 0.4)
+                // El límite de Firebase Hosting es 10MB — con prompt largo + imágenes hay que ser agresivo
+                const MAX_IMG_BYTES = 800000; // 800KB por imagen en base64
+                const MAX_TOTAL_IMG_PARTS = 3; // máximo 3 imágenes en total
+                let imgCount = 0;
+                for (let imgIdx = 0; imgIdx < rowImages.length && imgCount < MAX_TOTAL_IMG_PARTS; imgIdx++) {
+                    const imgEl = rowImages[imgIdx];
+                    const b64Full = imgEl.src;
+                    if (!b64Full || !b64Full.startsWith('data:')) continue;
+                    // Comprimir escalonadamente hasta quedar bajo el límite
+                    let comp = await _compressB64(b64Full, 512, 0.45);
+                    if (comp.split(',')[1].length > MAX_IMG_BYTES) {
+                        comp = await _compressB64(b64Full, 400, 0.35);
+                    }
+                    if (comp.split(',')[1].length > MAX_IMG_BYTES) {
+                        comp = await _compressB64(b64Full, 300, 0.3);
+                    }
+                    parts.push({ inlineData: { data: comp.split(',')[1], mimeType: 'image/jpeg' } });
+                    textPrompt += `-> FOTO ADJUNTA ${imgIdx+1} PARA ÍTEM ${index+1}.\n`;
+                    imgCount++;
+                }
+            }
+        }
+
+        // 3. Adjuntar PDF si existe
+        if(currentIAPdfBase64) {
+            parts.push({ inlineData: { data: currentIAPdfBase64.split(',')[1], mimeType: "application/pdf" } });
+            textPrompt += `\nDOCUMENTO PDF ADJUNTO: Extrae los ítems de aquí también.\n`;
+        }
+
+        // 4. Armar el JSON final de la petición
+        const sysPrompt = `REGLA ABSOLUTA: Responde SOLO con un array JSON válido. Cero texto antes o después. Cero markdown.
+CAMPOS OBLIGATORIOS por ítem:
+- "desc": string — usá EXACTAMENTE el nombre que el usuario escribió para ese ítem, sin cambiarlo ni traducirlo
+- "cant": número — cantidad exacta indicada por el usuario
+- "und": string — unidad (glb, m2, ml, pza, etc.)
+- "feat": string — OBLIGATORIO, NUNCA vacío. Descripción orientada AL CLIENTE. Cada línea empieza con "- ". Mínimo 4 líneas, máximo 8 líneas.
+  ✅ Incluir: qué es el ítem, materiales principales (sin cantidades), acabado superficial, dimensiones generales, iluminación si aplica, cantidad si es set.
+  ❌ PROHIBIDO en feat: metros lineales de insumos, perímetros calculados, cantidad de remaches/barras/costillas, mermas, fórmulas, cálculos intermedios, precios. Todo eso va en el APU.
+  ✅ Ej correcto: "- Bastidor tubín 20×20mm, 3.00m × 2.00m\\n- Lona backlight impresa digitalmente\\n- Acabado pintura duco\\n- Neon flex RGB perimetral"
+  ❌ Ej PROHIBIDO: "- Tubin: 39.4 ml\\n- Remaches: 180 pzas\\n- Área lona: 13.2m2 × 1.08 = 14.26m2"
+- "apu": objeto con mat, mo, eq, sub como arrays
+  - mat: [{"d":"NOMBRE MATERIAL","u":"und","q":1,"p":0}]
+  - mo:  [{"d":"NOMBRE MO","u":"jornal","q":1,"p":0}]
+  - eq:  []
+  - sub: []
+- "util": 50
+- "ind": 10
+EJEMPLO VÁLIDO:
+[{"desc":"BASTIDOR TUBIN CON LONA","cant":1,"und":"glb","feat":"- Estructura tubín 20x20x1mm\\n- Lona backlight 510g\\n- Impresión digital una cara","apu":{"mat":[{"d":"TUBIN 20X20X1","u":"barra","q":3,"p":55}],"mo":[{"d":"SOLDADOR","u":"jornal","q":1,"p":250}],"eq":[],"sub":[]},"util":50,"ind":10}]`;
+
+        parts.unshift({ text: textPrompt });
+
+        try {
+            const token = firebase.auth().currentUser
+                ? await firebase.auth().currentUser.getIdToken()
+                : null;
+            const headers = { 'Content-Type': 'application/json' };
+            if (token) headers['Authorization'] = 'Bearer ' + token;
+
+            const _reqBody = JSON.stringify({
+                systemInstruction: { parts: [{ text: sysPrompt }] },
+                contents: [{ role: 'user', parts }]
+            });
+
+            // Verificar tamaño antes de enviar — Firebase Hosting limita a ~10MB
+            const _payloadKB = Math.round(_reqBody.length / 1024);
+            console.log('[Budget] Payload size:', _payloadKB, 'KB');
+            if (_payloadKB > 7000) {
+                throw new Error(`Las imágenes adjuntas son demasiado pesadas (${_payloadKB} KB total). Intentá con menos imágenes o usá solo 1-2 fotos de referencia.`);
+            }
+
+            const resp = await fetch('/api/gemini', { method: 'POST', headers, body: _reqBody });
+
+            if (!resp.ok) {
+                if (resp.status === 502) {
+                    throw new Error(`Error de servidor (502) — el payload pesa ${_payloadKB} KB. Intentá con menos imágenes o un prompt más corto.`);
+                }
+                throw new Error(`HTTP ${resp.status}`);
+            }
+            const respData = await resp.json();
+
+            let raw = '';
+            if (respData?.candidates?.[0]?.content?.parts?.[0]?.text) {
+                raw = respData.candidates[0].content.parts[0].text;
+            } else if (typeof respData === 'string') {
+                raw = respData;
+            }
+
+            raw = raw.replace(/```json|```/g, '').trim();
+            console.log('[IA Budget] Raw response (primeros 500 chars):', raw.substring(0, 500));
+
+            // Extrae el array JSON balanceado — ignora texto antes y después
+            function _extractBalancedArray(str) {
+                const start = str.indexOf('[');
+                if (start === -1) return null;
+                let depth = 0, inStr = false, esc = false;
+                for (let i = start; i < str.length; i++) {
+                    const ch = str[i];
+                    if (esc) { esc = false; continue; }
+                    if (ch === '\\' && inStr) { esc = true; continue; }
+                    if (ch === '"') { inStr = !inStr; continue; }
+                    if (inStr) continue;
+                    if (ch === '[' || ch === '{') depth++;
+                    else if (ch === ']' || ch === '}') {
+                        depth--;
+                        if (depth === 0) return str.slice(start, i + 1);
+                    }
+                }
+                return null;
+            }
+
+            let items;
+            let extracted = _extractBalancedArray(raw);
+            try {
+                if (!extracted) throw new Error('Sin array JSON balanceado');
+                items = JSON.parse(extracted);
+            } catch(parseErr) {
+                console.warn('[IA Budget] Parse error, limpiando:', parseErr.message);
+                // Limpiar caracteres problemáticos y reintentar
+                let cleaned = (extracted || raw)
+                    .replace(/[\x00-\x1F\x7F]/g, ' ')
+                    .replace(/,(\s*[}\]])/g, '$1')
+                    .replace(/([^\\])\\([^"\\\/bfnrtu])/g, '$1 $2');
+                let extracted2 = _extractBalancedArray(cleaned);
+                if (!extracted2) throw new Error('No se pudo extraer JSON válido de la respuesta. Intentá de nuevo.');
+                items = JSON.parse(extracted2);
+            }
+            if (!Array.isArray(items) || items.length === 0) throw new Error('La IA no generó ítems. Intentá con un prompt más simple.');
+
+            // Validar que al menos el primer ítem tiene APU con datos
+            const _primerApu = ApuUtils.normalizeApu(items[0]?.apu, items[0]);
+            const _apuVacio = _primerApu.mat.length === 0 && _primerApu.mo.length === 0;
+            if (_apuVacio) {
+                console.warn('[IA Budget] APU vacío detectado. Raw del primer ítem:', JSON.stringify(items[0]).substring(0, 300));
+                // Mostrar advertencia pero continuar — el usuario verá el APU vacío y puede editarlo
+                console.warn('[IA Budget] Tip: La IA devolvió el ítem sin materiales. Verificá el prompt o usá Re-generar en el ítem.');
+            }
+
+            // Capturar nombres, prompts E IMÁGENES de las filas
+            const _iaRowData = [];
+            document.querySelectorAll('.ia-item-row').forEach(row => {
+                const n = row.querySelector('.ia-inp-name')?.value?.trim() || '';
+                const p = row.querySelector('.ia-inp-prompt')?.value?.trim() || '';
+                const c = row.querySelector('.ia-inp-cant')?.value || '1';
+                // Capturar primera imagen de la fila (si existe)
+                const imgEl = row.querySelector('.ia-row-image-data');
+                const imgB64 = imgEl ? imgEl.src : null; // data:image/...;base64,...
+                if(n) _iaRowData.push({ nombre: n, instrucciones: p, cant: c, imgB64 });
+            });
+
+            // Subir imágenes a Firebase Storage y obtener URLs antes de crear los ítems
+            const _iaRowImgUrls = [];
+            for (const rowDat of _iaRowData) {
+                if (rowDat.imgB64 && rowDat.imgB64.startsWith('data:')) {
+                    try {
+                        const _snap = await storage.ref(`presupuesto/${pid}_ia_ref_${Date.now()}_${Math.random().toString(36).substr(2,5)}.jpg`).putString(rowDat.imgB64, 'data_url');
+                        _iaRowImgUrls.push(await _snap.ref.getDownloadURL());
+                    } catch(_e) { _iaRowImgUrls.push(null); }
+                } else {
+                    _iaRowImgUrls.push(null);
+                }
+            }
+
+            items.forEach((it, _itIdx) => {
+                const apuObj = ApuUtils.normalizeApu(it.apu, it);
+                const pu = ApuUtils.calcPuFromApu(apuObj);
+                // Preservar el nombre que escribió el usuario — la IA no debe sobreescribirlo
+                const _rowOriginal = _iaRowData[_itIdx] || _iaRowData[0] || {};
+                const _descOriginal = _rowOriginal.nombre || '';
+                const _descIA = it.desc || it.nombre || it.name || it.title || '';
+                const _desc = _descOriginal || _descIA; // prioridad al nombre del usuario
+                const _feat = Array.isArray(it.feat)
+                    ? it.feat.join('\n')
+                    : (it.feat || it.caracteristicas || it.features || '');
+                const _featClean = (_feat || '').replace(/\\n/g, '\n');
+                // Si feat llegó vacío, generar un placeholder mínimo para no dejar en blanco
+                const _featFinal = _featClean.trim() || `- Ítem generado por IA\n- Verificar características manualmente`;
+                const _imgUrl = _iaRowImgUrls[_itIdx] || null;
+                const _newItem = {
+                    type: 'item',
+                    desc: _desc,
+                    cant: parseFloat(it.cant || it.cantidad || _rowOriginal.cant || 1) || 1,
+                    und:  it.und || it.unidad || it.unit || 'glb',
+                    feat: _featFinal,
+                    pu:   Math.round(pu * 100) / 100,
+                    apu:  apuObj,
+                    iaPrompt: JSON.stringify({ nombre: _descOriginal, instrucciones: _rowOriginal.instrucciones || '' })
+                };
+                if (_imgUrl) _newItem.img = _imgUrl;
+                data.push(_newItem);
+            });
+            saveDB(true);
+            render();
+            cerrarModalIABudget();
+            _iaProgEnd(true);
+
+        } catch(err) {
+            console.error('generateIABudget error:', err);
+            _iaProgEnd(false);
+            alert('Error al generar: ' + (err.message || err));
+        } finally {
+            btnGen.disabled = false;
+            btnGen.innerHTML = '<i class="ph-bold ph-check-circle"></i> Generar Presupuesto Completo';
+        }
+    };
+</script>
+
+<!-- mobile-action-bar presupuesto -->
+<div id="mobile-action-bar">
+    <button class="m-act-btn" onclick="addChapter()"><i class="ph-bold ph-text-t"></i><span>Cap&#237;tulo</span></button>
+    <button class="m-act-btn green" onclick="addItem()"><i class="ph-bold ph-plus-circle"></i><span>&#205;tem</span></button>
+    <button class="m-act-btn purple" onclick="abrirModalIABudget()"><i class="ph-bold ph-magic-wand"></i><span>IA</span></button>
+    <button class="m-act-btn orange" onclick="syncDatabasePrices()"><i class="ph-bold ph-arrows-clockwise"></i><span>Precios</span></button>
+    <button class="m-act-btn" onclick="abrirModalPDF()"><i class="ph-bold ph-file-pdf"></i><span>PDF</span></button>
+</div>
+</body>
+</html>
+

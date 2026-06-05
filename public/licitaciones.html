@@ -1,0 +1,1476 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Licitaciones y Asignaciones - Rubik OS</title>
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.1.3/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.1.3/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.1.3/firebase-database-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.1.3/firebase-storage-compat.js"></script>
+    <script>
+        window._rubikFirebaseConfig = window._rubikFirebaseConfig || {
+            apiKey: "AIzaSyDXYlofy31cDP14xVAVxWo_7TqXdSgsIjA",
+            authDomain: "rubik-bolivia.firebaseapp.com",
+            databaseURL: "https://rubik-bolivia-default-rtdb.firebaseio.com",
+            projectId: "rubik-bolivia",
+            storageBucket: "rubik-bolivia.firebasestorage.app",
+            messagingSenderId: "4153087958",
+            appId: "1:4153087958:web:cf2dd16106580ed6437677"
+        };
+        if (!firebase.apps.length) firebase.initializeApp(window._rubikFirebaseConfig);
+    </script>
+    <script src="/js/firecache.js?v=1"></script>
+    <script src="/js/auth-guard.js?v=1"></script>
+    <style>
+        :root { --bg: #f4f4f7; --card: #fff; --text: #1a1a1a; --blue: #007aff; --green: #34c759; --red: #ff3b30; --orange: #ff9500; --purple: #af52de; --gold: #f1c40f; --gray: #8e8e93; --border: #d1d1d6; }
+        body.dark-mode { --bg: #000; --card: #1c1c1e; --text: #fff; --border: #333; }
+        body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 20px; padding-bottom: 100px; }
+        .nav { display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px; }
+        .btn-nav { background: var(--card); border: 1px solid var(--border); padding: 8px 14px; border-radius: 20px; font-weight: 700; color: var(--blue); cursor: pointer; display: flex; align-items: center; gap: 5px; }
+        .header-title { font-size: 24px; font-weight: 900; margin-bottom: 5px; }
+        .header-sub { font-size: 12px; color: var(--gray); font-weight: 700; text-transform: uppercase; margin-bottom: 20px; }
+        .board-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; }
+        .col-board { background: rgba(0,0,0,0.02); border: 1px dashed var(--border); border-radius: 16px; padding: 15px; }
+        .col-title { font-size: 13px; font-weight: 800; text-transform: uppercase; color: var(--gray); margin-bottom: 15px; }
+        .lic-card { background: var(--card); border-radius: 14px; padding: 15px; margin-bottom: 10px; border: 1px solid var(--border); box-shadow: 0 4px 10px rgba(0,0,0,0.03); }
+        .lic-head { display: flex; justify-content: space-between; margin-bottom: 10px; align-items: flex-start; }
+        .lic-wk { font-weight: 900; font-size: 14px; color: var(--blue); display:flex; flex-direction:column; gap:4px; }
+        .lic-date { font-size: 11px; color: var(--gray); font-weight: 600; }
+        .lic-body { font-size: 12px; color: var(--text); margin-bottom: 10px; }
+        .lic-total { font-size: 18px; font-weight: 900; color: var(--green); text-align: right; margin-bottom: 10px; }
+        .btn-action { width: 100%; padding: 12px; border-radius: 10px; font-weight: 800; font-size: 12px; cursor: pointer; border: none; text-transform: uppercase; transition: 0.2s; }
+        .btn-rev { background: rgba(255,149,0,0.1); color: var(--orange); }
+        .btn-done { background: rgba(52,199,89,0.1); color: var(--green); }
+        
+        .btn-del-lic { background: rgba(255,59,48,0.1); color: var(--red); border: none; width: 28px; height: 28px; border-radius: 8px; cursor: pointer; display: flex; justify-content: center; align-items: center; font-size: 14px; transition: 0.2s; }
+        .btn-del-lic:hover { filter: brightness(0.8); }
+        
+        .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); z-index: 2000; justify-content: center; align-items: center; backdrop-filter: blur(4px); }
+        .modal-box { background: var(--card); width: 90%; max-width: 600px; max-height: 90vh; overflow-y: auto; padding: 25px; border-radius: 20px; position: relative; }
+        .inp-lbl { font-size: 11px; font-weight: 800; color: var(--gray); text-transform: uppercase; display: block; margin-bottom: 8px; padding-left: 5px; margin-top: 15px;}
+        .inp-std { width: 100%; padding: 14px; border: 1px solid var(--border); background: var(--bg); color: var(--text); border-radius: 12px; font-size: 13px; box-sizing: border-box; font-weight: 700; margin-bottom: 15px; outline:none;}
+        
+        .item-row { display: flex; align-items: center; justify-content: space-between; background: var(--bg); padding: 12px; border-radius: 12px; margin-bottom: 8px; font-size: 12px; border-left: 4px solid var(--blue); border-top: 1px solid var(--border); border-right: 1px solid var(--border); border-bottom: 1px solid var(--border); transition: opacity 0.2s; }
+        .item-row.apu-row { border-left-color: var(--orange); margin-left: 20px; }
+        /* Filas de ítems YA asignados a otra licitación — tono diferente para identificarlos rápido */
+        .item-row.assigned-row { background: rgba(255, 149, 0, 0.08); border-left-color: var(--orange); opacity: 0.72; }
+        .item-row.assigned-row:hover { opacity: 1; }
+        .item-row.assigned-row b { color: var(--gray); }
+        .item-row.assigned-row.apu-row { background: rgba(255, 149, 0, 0.12); }
+        .chk-box { width: 24px; height: 24px; cursor: pointer; }
+        .empty-msg { text-align: center; color: var(--gray); font-size: 11px; padding: 20px; border: 1px dashed var(--border); border-radius: 12px;}
+
+        .bat-container { background: rgba(0,0,0,0.03); border: 1px dashed var(--border); border-radius: 12px; padding: 15px; margin-bottom: 15px; display: none; }
+        .bat-bar-bg { height: 12px; background: var(--border); border-radius: 10px; overflow: hidden; margin-top: 10px; position: relative; }
+        .bat-bar-fill { height: 100%; background: var(--blue); width: 0%; transition: 0.3s; }
+        .bat-bar-fill.golden { background: linear-gradient(90deg, var(--gold), var(--orange)); }
+        .bat-info { display: flex; justify-content: space-between; font-size: 11px; font-weight: 800; color: var(--text); margin-top: 5px; }
+        .badge-mo { font-size: 10px; background: rgba(52,199,89,0.1); color: var(--green); padding: 3px 6px; border-radius: 4px; font-weight: 900; display:inline-block;}
+        
+        #loader { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); z-index: 3000; justify-content: center; align-items: center; flex-direction: column; color: white; font-weight: 800;}
+        .spinner { width: 40px; height: 40px; border: 4px solid rgba(255,255,255,0.3); border-top: 4px solid var(--blue); border-radius: 50%; animation: spin 1s linear infinite; margin-bottom: 15px; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+        /* ── ARTES GRÁFICOS EN LICITACIONES ── */
+        .mat-price-bar { display: flex; align-items: center; justify-content: space-between; background: rgba(175,82,222,0.07); border: 1px solid rgba(175,82,222,0.25); border-radius: 12px; padding: 10px 14px; margin-bottom: 8px; gap: 10px; }
+        .mat-price-bar .mat-label { font-size: 11px; font-weight: 900; color: var(--purple); text-transform: uppercase; flex: 1; }
+        .mat-price-bar input { width: 90px; padding: 6px 10px; border: 1.5px solid var(--purple); border-radius: 8px; font-size: 13px; font-weight: 900; color: var(--purple); background: var(--bg); text-align: right; outline: none; flex-shrink: 0; }
+        .mat-price-bar .mat-m2-total { font-size: 10px; color: var(--gray); font-weight: 700; text-align: right; min-width: 70px; }
+        .art-lic-card { display: flex; align-items: center; gap: 12px; background: var(--bg); border: 1px solid var(--border); border-left: 4px solid var(--purple); border-radius: 12px; padding: 12px; margin-bottom: 8px; }
+        .art-lic-card .art-thumb { width: 48px; height: 48px; border-radius: 8px; object-fit: cover; border: 1px solid var(--border); flex-shrink: 0; }
+        .art-lic-card .art-thumb-empty { width: 48px; height: 48px; border-radius: 8px; background: var(--card); border: 1px dashed var(--border); flex-shrink: 0; display: flex; align-items: center; justify-content: center; color: var(--gray); font-size: 20px; }
+        .art-lic-info { flex: 1; min-width: 0; }
+        .art-lic-info .art-parent { font-size: 9px; font-weight: 800; color: var(--gray); text-transform: uppercase; }
+        .art-lic-info .art-nombre { font-size: 13px; font-weight: 900; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .art-lic-info .art-dims { font-size: 10px; color: var(--gray); }
+        .art-lic-meta { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; flex-shrink: 0; }
+        .art-lic-mat-badge { font-size: 9px; font-weight: 900; background: rgba(175,82,222,0.1); color: var(--purple); padding: 3px 7px; border-radius: 6px; }
+        .art-lic-m2 { font-size: 12px; font-weight: 900; color: var(--blue); }
+        .art-lic-subtotal { font-size: 11px; font-weight: 800; color: var(--green); }
+        .art-lic-chk { width: 22px; height: 22px; cursor: pointer; flex-shrink: 0; accent-color: var(--purple); }
+        .btn-sel-all-arts { width: 100%; padding: 9px; background: rgba(175,82,222,0.08); border: 1.5px dashed var(--purple); border-radius: 10px; color: var(--purple); font-weight: 900; font-size: 11px; cursor: pointer; margin-bottom: 10px; text-transform: uppercase; }
+        .grafico-section-title { font-size: 10px; font-weight: 900; color: var(--gray); text-transform: uppercase; margin: 12px 0 6px; display: flex; align-items: center; gap: 6px; }
+        .grafico-section-title::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+
+        /* ESTILOS IA FLOTANTE */
+        .fab-ai-btn { position: fixed; bottom: 25px; right: 20px; width: 65px; height: 65px; border-radius: 50%; background: #000; box-shadow: 0 8px 25px rgba(0,122,255,0.4); cursor: pointer; z-index: 900; display: flex; align-items: center; justify-content: center; border: 2px solid var(--card); padding:0; -webkit-tap-highlight-color: transparent;}
+        .fab-ai-btn img { width: 100%; height: 100%; object-fit: cover; }
+        .chat-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #000000; z-index: 9500; flex-direction: column; }
+        .chat-header { background: #1c1c1e; padding: 15px 20px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #38383a; }
+        .chat-body { flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 15px; }
+        .msg { max-width: 85%; padding: 12px 16px; border-radius: 18px; font-size: 14px; line-height: 1.4; word-wrap: break-word; color:white;}
+        .msg-ai { background: #1c1c1e; border: 1px solid #38383a; align-self: flex-start; border-bottom-left-radius: 4px; }
+        .msg-user { background: var(--blue); align-self: flex-end; border-bottom-right-radius: 4px; }
+        .chat-footer { background: #1c1c1e; padding: 15px; border-top: 1px solid #38383a; display: flex; gap: 10px; align-items: flex-end; }
+        .chat-input { flex: 1; background: #000; border: 1px solid #38383a; color: white; padding: 12px; border-radius: 16px; font-size: 14px; outline: none; resize: none;}
+        .btn-ai-action { background: var(--blue); color: white; border: none; width: 42px; height: 42px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 20px; cursor: pointer; flex-shrink:0; }
+        .typing-indicator { display: none; align-self: flex-start; background: #1c1c1e; padding: 12px 16px; border-radius: 20px; border-bottom-left-radius: 4px; border: 1px solid #38383a;}
+        .dot { height: 8px; width: 8px; background: #8e8e93; border-radius: 50%; display: inline-block; animation: blink 1.4s infinite both; margin: 0 2px;}
+        .dot:nth-child(2) { animation-delay: 0.2s; } .dot:nth-child(3) { animation-delay: 0.4s; }
+        @keyframes blink { 0% { opacity: 0.2; transform:scale(0.8);} 20% { opacity: 1; transform:scale(1);} 100% { opacity: 0.2; transform:scale(0.8); } }
+    </style>
+    <link rel="stylesheet" href="/css/responsive.css?v=1">
+</head>
+<body>
+
+    <div id="loader"><div class="spinner"></div><div id="loader-text">Procesando...</div></div>
+
+    <div class="nav">
+        <button class="btn-nav" onclick="location.href='dashboard-proyecto.html'"><i class="ph-bold ph-caret-left"></i> Atrás</button>
+        <button class="btn-nav" onclick="openNewLic()"><i class="ph-bold ph-plus"></i> Nueva Asignación</button>
+        <button class="btn-nav" style="border:none; background:transparent;" onclick="document.body.classList.toggle('dark-mode')"><i class="ph-fill ph-moon"></i></button>
+    </div>
+
+    <div>
+        <div class="header-title" id="h-pro">Cargando Proyecto...</div>
+        <div class="header-sub">Contratos Externos y Asignaciones Internas</div>
+    </div>
+
+    <div class="board-grid">
+        <div class="col-board">
+            <div class="col-title">Enviadas / Esperando <span id="c-pend" style="color:var(--blue)">0</span></div>
+            <div id="l-pend"></div>
+        </div>
+        <div class="col-board">
+            <div class="col-title" style="color:var(--orange)">Revisión / Negociación <span id="c-rev" style="color:var(--orange)">0</span></div>
+            <div id="l-rev"></div>
+        </div>
+        <div class="col-board">
+            <div class="col-title" style="color:var(--green)">Tratos y Asignaciones Aprobadas <span id="c-ap" style="color:var(--green)">0</span></div>
+            <div id="l-ap"></div>
+        </div>
+    </div>
+
+    <!-- ══ PANEL UTILIDAD REAL DEL PROYECTO ════════════════════════════════ -->
+    <div id="panel-utilidad" style="background:var(--card);border:1px solid var(--border);border-radius:16px;padding:20px;margin-top:20px;margin-bottom:20px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:10px;">
+            <div>
+                <div style="font-size:16px;font-weight:900;">📊 Utilidad Real del Proyecto</div>
+                <div style="font-size:11px;color:var(--gray);font-weight:700;margin-top:2px;">Licitaciones aprobadas − Costo real materiales (APU Producción) − Mano de obra</div>
+            </div>
+            <button onclick="calcularUtilidadReal()" style="background:var(--blue);color:white;border:none;padding:10px 18px;border-radius:10px;font-weight:800;font-size:12px;cursor:pointer;display:flex;align-items:center;gap:6px;">
+                <i class="ph-bold ph-calculator"></i> Calcular
+            </button>
+        </div>
+        <div id="utilidad-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:14px;">
+            <div class="util-kpi" style="background:rgba(0,122,255,0.08);border:1px solid rgba(0,122,255,0.2);border-radius:12px;padding:12px;text-align:center;">
+                <div style="font-size:9px;font-weight:800;color:var(--gray);text-transform:uppercase;">💰 Total cobrado</div>
+                <div id="util-cobrado" style="font-size:17px;font-weight:900;color:var(--blue);">—</div>
+            </div>
+            <div class="util-kpi" style="background:rgba(255,59,48,0.08);border:1px solid rgba(255,59,48,0.2);border-radius:12px;padding:12px;text-align:center;">
+                <div style="font-size:9px;font-weight:800;color:var(--gray);text-transform:uppercase;">🔩 Costo Materiales</div>
+                <div id="util-mat" style="font-size:17px;font-weight:900;color:var(--red);">—</div>
+            </div>
+            <div class="util-kpi" style="background:rgba(255,149,0,0.08);border:1px solid rgba(255,149,0,0.2);border-radius:12px;padding:12px;text-align:center;">
+                <div style="font-size:9px;font-weight:800;color:var(--gray);text-transform:uppercase;">👷 Costo Mano Obra</div>
+                <div id="util-mo" style="font-size:17px;font-weight:900;color:var(--orange);">—</div>
+            </div>
+            <div class="util-kpi" style="background:rgba(255,59,48,0.06);border:1px solid rgba(255,59,48,0.15);border-radius:12px;padding:12px;text-align:center;">
+                <div style="font-size:9px;font-weight:800;color:var(--gray);text-transform:uppercase;">🏦 Impuestos (IVA+IT)</div>
+                <div id="util-imp" style="font-size:17px;font-weight:900;color:var(--red);">—</div>
+            </div>
+            <div class="util-kpi" id="util-result-card" style="background:rgba(52,199,89,0.08);border:2px solid var(--green);border-radius:12px;padding:12px;text-align:center;">
+                <div style="font-size:9px;font-weight:800;color:var(--gray);text-transform:uppercase;">✅ Utilidad Neta</div>
+                <div id="util-neta" style="font-size:20px;font-weight:900;color:var(--green);">—</div>
+                <div id="util-margen" style="font-size:11px;font-weight:700;color:var(--gray);margin-top:2px;"></div>
+            </div>
+        </div>
+        <div id="utilidad-detalle" style="display:none;font-size:11px;color:var(--gray);border-top:1px dashed var(--border);padding-top:12px;"></div>
+    </div>
+
+    <div id="mod-new-lic" class="modal">
+        <div class="modal-box">
+            <i class="ph-bold ph-x" style="position:absolute; top:20px; right:20px; font-size:20px; cursor:pointer;" onclick="document.getElementById('mod-new-lic').style.display='none'"></i>
+            <h3 style="margin-top:0;" id="tit-modal-lic">Crear Licitación</h3>
+            
+            <label class="inp-lbl" style="color:var(--blue);">1. Rubro / Tipo de Trabajo</label>
+            <select id="lic-tipo" class="inp-std" onchange="loadWorkers()">
+                <option value="obra">Taller / Estructuras / Ensamblaje</option>
+                <option value="graficos">Impresión / Gráficos / Adhesivos</option>
+                <option value="supervision">Supervisión de Obra</option>
+            </select>
+
+            <label class="inp-lbl" style="color:var(--blue);">2. Selecciona al Trabajador o Empresa</label>
+            <select id="lic-worker" class="inp-std" onchange="loadItemsForLic()"></select>
+
+            <div id="box-modo-interno" style="display:none; justify-content:space-between; align-items:center; background:rgba(0,122,255,0.05); padding:12px 15px; border-radius:12px; margin-bottom:15px; border:1px dashed var(--blue);">
+                <label class="inp-lbl" style="color:var(--blue); margin:0;">Modalidad de Asignación</label>
+                <select id="lic-modo-interno" class="inp-std" style="width:auto; padding:6px 10px; margin:0; font-size:11px; font-weight:800; border-color:var(--blue); color:var(--blue); outline:none; cursor:pointer;" onchange="updateModoInterno()">
+                    <option value="directa">Directa (Fijar Tareas Ahora)</option>
+                    <option value="licitacion">Licitación (A Cotizar por ellos)</option>
+                </select>
+            </div>
+
+            <div id="bat-box" class="bat-container">
+                <div style="font-size:12px; font-weight:900;"><i class="ph-fill ph-chart-polar"></i> Medidor de Producción Mensual</div>
+                <div style="font-size:10px; color:var(--gray);">Sueldo Fijo: <span id="bat-sueldo">0</span> Bs</div>
+                <div class="bat-bar-bg"><div class="bat-bar-fill" id="bat-fill"></div></div>
+                <div class="bat-info">
+                    <span>M.O. Asignada: <span id="bat-acum" style="color:var(--blue)">0 Bs</span></span>
+                    <span id="bat-faltante" style="color:var(--orange)">Faltan 0 Bs</span>
+                </div>
+            </div>
+
+            <!-- PANEL PRECIOS MATERIALES — solo visible en modo gráfico -->
+            <div id="box-grafico-precios" style="display:none; background:rgba(175,82,222,0.05); border:1px solid rgba(175,82,222,0.2); border-radius:14px; padding:14px; margin-top:14px; margin-bottom:4px;">
+                <div style="font-size:12px; font-weight:900; color:var(--purple); margin-bottom:10px;"><i class="ph-bold ph-paint-roller"></i> Precios de Materiales (Bs / m²)</div>
+                <div id="mat-prices-list"></div>
+            </div>
+
+            <div style="display:flex; justify-content:space-between; align-items:flex-end; margin-bottom: 8px; margin-top: 15px;">
+                <label class="inp-lbl" style="color:var(--blue); margin:0;">3. Partes Requeridas / Costos Meta</label>
+                <select id="filter-assigned" class="inp-std" style="width:auto; padding:6px 10px; margin:0; font-size:11px; font-weight:800; border-color:var(--blue); color:var(--blue); outline:none; cursor:pointer;" onchange="applyFilter()">
+                    <option value="pending">Solo Libres / Pendientes</option>
+                    <option value="all">Mostrar Todos los Ítems</option>
+                </select>
+            </div>
+            
+            <div style="display:flex; justify-content:space-between; align-items:center; background:rgba(0,122,255,0.1); padding:12px 15px; border-radius:12px; margin-bottom:10px; border:1px solid var(--blue);">
+                <div style="font-size:11px; font-weight:800; color:var(--blue); text-transform:uppercase;">Total Base / Costo Meta</div>
+                <div id="lbl-total-ref" style="font-size:18px; font-weight:900; color:var(--blue);">0,00 Bs</div>
+            </div>
+
+            <div id="lic-items" style="max-height:400px; overflow-y:auto; margin-bottom:15px; padding:5px; border-radius:12px;"></div>
+
+            <div id="box-supervision-oferta" style="display:none; justify-content:space-between; align-items:center; background:rgba(175,82,222,0.1); padding:12px 15px; border-radius:12px; margin-bottom:15px; border:1px solid var(--purple);">
+                <div style="font-size:11px; font-weight:800; color:var(--purple); text-transform:uppercase;">Oferta Económica por Supervisión</div>
+                <input type="number" id="lic-oferta-supervision" class="inp-std" style="width:120px; font-size:18px; font-weight:900; color:var(--purple); border-color:var(--purple); margin:0; padding:6px; text-align:right;" placeholder="0 Bs">
+            </div>
+
+            <div style="background:rgba(255,149,0,0.08); border:1px solid rgba(255,149,0,0.3); border-radius:12px; padding:12px 15px; margin-bottom:10px;">
+                <div style="display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:0;" id="lic-periodo-row">
+                    <div>
+                        <div style="font-size:11px; font-weight:900; color:var(--orange); text-transform:uppercase; margin-bottom:2px;"><i class="ph-bold ph-calendar-blank"></i> Período de Planilla</div>
+                        <div style="font-size:10px; color:var(--gray);">Mes que aparecerá en Tesorería</div>
+                    </div>
+                    <input type="month" id="lic-periodo" class="inp-std" style="width:auto; margin:0; padding:8px 10px; font-size:13px; font-weight:800; border-color:var(--orange); color:var(--orange);" oninput="_licSplitRecalc()">
+                </div>
+                <!-- Toggle prorrateo dos meses -->
+                <div style="display:flex; align-items:center; gap:8px; margin-top:10px; cursor:pointer;" onclick="_licToggleSplit()">
+                    <div id="lic-split-toggle" style="width:36px; height:20px; border-radius:10px; background:#333; position:relative; transition:background 0.2s; flex-shrink:0;">
+                        <div id="lic-split-knob" style="position:absolute; top:3px; left:3px; width:14px; height:14px; border-radius:50%; background:#fff; transition:left 0.2s;"></div>
+                    </div>
+                    <span style="font-size:11px; color:var(--gray); font-weight:700;">Pago en dos meses (proyecto cruza fin de mes)</span>
+                </div>
+                <!-- Panel prorrateo (oculto por defecto) -->
+                <div id="lic-split-panel" style="display:none; margin-top:12px; border-top:1px solid rgba(255,149,0,0.2); padding-top:12px;">
+                    <div style="font-size:10px; color:var(--orange); font-weight:900; margin-bottom:8px; text-transform:uppercase;">Dividir el monto entre dos meses</div>
+                    <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:8px;">
+                        <div>
+                            <div style="font-size:9px; color:var(--gray); font-weight:700; margin-bottom:3px;">MES 1 (período arriba)</div>
+                            <div style="display:flex; align-items:center; gap:5px;">
+                                <input type="number" id="lic-split-m1" placeholder="Bs" min="0" class="inp-std" style="margin:0; padding:7px 8px; font-size:13px; font-weight:800; border-color:var(--blue);" oninput="_licSplitRecalc()">
+                                <span style="font-size:10px; color:var(--gray);">Bs</span>
+                            </div>
+                        </div>
+                        <div>
+                            <div style="font-size:9px; color:var(--gray); font-weight:700; margin-bottom:3px;">MES 2</div>
+                            <input type="month" id="lic-split-periodo2" class="inp-std" style="margin:0; padding:7px 8px; font-size:12px; font-weight:800; border-color:var(--purple); color:var(--purple); width:100%; box-sizing:border-box;">
+                        </div>
+                    </div>
+                    <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+                        <div style="display:flex; align-items:center; gap:5px;">
+                            <input type="number" id="lic-split-m2" placeholder="Bs" min="0" class="inp-std" style="margin:0; padding:7px 8px; font-size:13px; font-weight:800; border-color:var(--purple);" oninput="_licSplitRecalc()">
+                            <span style="font-size:10px; color:var(--gray);">Bs</span>
+                        </div>
+                        <div id="lic-split-status" style="font-size:10px; font-weight:700; display:flex; align-items:center; padding:5px 8px; border-radius:8px; background:rgba(52,199,89,0.1); color:var(--green);">Total: — Bs</div>
+                    </div>
+                </div>
+            </div>
+            <button class="btn-action btn-done" id="btn-submit-lic" style="background:var(--blue); color:white; margin-top:0; font-size:14px; padding:15px;" onclick="createLicitacion()"><i class="ph-bold ph-paper-plane-tilt"></i> Guardar y Procesar</button>
+        </div>
+    </div>
+
+    <div id="mod-review" class="modal">
+        <div class="modal-box">
+            <i class="ph-bold ph-x" style="position:absolute; top:20px; right:20px; font-size:20px; cursor:pointer;" onclick="document.getElementById('mod-review').style.display='none'"></i>
+            <h3 style="margin-top:0;">Revisar Cotización</h3>
+            <div id="review-worker" style="font-size:12px; font-weight:800; color:var(--blue); margin-bottom:15px;"></div>
+            <div id="review-items" style="margin-bottom:15px; max-height: 250px; overflow-y: auto;"></div>
+            <label class="inp-lbl">TOTAL GLOBAL OFERTADO (Bs)</label>
+            <input type="number" id="review-total" class="inp-std" style="font-size:24px; color:var(--green); font-weight:900;">
+            <div style="display:flex; gap:10px;">
+                <button class="btn-action btn-done" style="flex:1;" onclick="aprobarLicitacion()">Aprobar Trato</button>
+                <button class="btn-action btn-rev" style="flex:1;" onclick="enviarContraOferta()">Contra Ofertar</button>
+            </div>
+        </div>
+    </div>
+
+    <button class="fab-ai-btn" onclick="openAIChat()"><img loading="lazy" decoding="async" src="IA RUBIK BOTON.png" onerror="this.src='./IA RUBIK BOTON.png'" alt="Rubik IA"></button>
+    <div class="chat-overlay" id="ai-chat-modal">
+        <div class="chat-header">
+            <div style="font-weight: 900; font-size: 15px; display: flex; align-items: center; gap: 8px; color:white;"><img loading="lazy" decoding="async" src="IA RUBIK BOTON.png" style="width: 28px; border-radius: 50%;"> IA Licitaciones</div>
+            <button style="background:var(--card); color:var(--text); border:none; padding: 6px 12px; border-radius:8px; font-weight:bold; cursor:pointer; font-size:12px;" onclick="closeAIChat()">Cerrar</button>
+        </div>
+        <div class="chat-body" id="ai-chat-box">
+            <div class="msg msg-ai">Hola CEO. Estoy leyendo los APUs libres y la lista de personal disponible. Puedo ayudarte a elegir la mejor combinación o revisar ofertas.</div>
+        </div>
+        <div class="typing-indicator" id="ai-typing" style="margin-left: 20px;"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div>
+        <div class="chat-footer">
+            <textarea id="ai-user-input" class="chat-input" rows="1" placeholder="Ej: ¿Qué items de gráficos están libres?"></textarea>
+            <button class="btn-ai-action" onclick="sendAIMessage()"><i class="ph-bold ph-paper-plane-right"></i></button>
+        </div>
+    </div>
+
+<script>
+    // Firebase ya inicializado en el <head>
+    if (!firebase.apps.length) firebase.initializeApp(window._rubikFirebaseConfig);
+    const db = firebase.database(); const storage = firebase.storage();
+
+    const cid = localStorage.getItem('rubik_client_id');
+    const pid = localStorage.getItem('rubik_current_pid');
+    const pName = localStorage.getItem('rubik_current_pname') || 'Proyecto';
+
+    if(!cid || !pid) window.location.href = "index.html";
+    document.getElementById('h-pro').innerText = pName;
+
+    let workers = {}; let currentLics = {}; let globalItems = [];
+    let isInternalWorkerActive = false; let currentWorkerSueldo = 0; let totalAcumuladoMes = 0;
+    let currentReviewLicId = null; let currentReviewWorkerId = null;
+    let editingLicId = null; let pendingPrefillTareas = null;
+    // Artes gráficos para licitaciones
+    let _licArtsData = {};   // { itemIdx: [{id,nombre,base,altura,cantidad,material,precio,imgRef,parentDesc},...] }
+    let _licMatPrices = {};  // { 'Lona': 45, 'Adhesivo': 50, ... }
+    let _isGraphicMode = false;
+
+    function fMoney(num) { return parseFloat(num || 0).toLocaleString('es-BO', {minimumFractionDigits: 2, maximumFractionDigits: 2}); }
+    function getValidObjects(obj) { if(!obj) return []; return Object.values(obj).filter(x => x != null && typeof x === 'object'); }
+    function getValidKeys(obj) { if(!obj) return []; return Object.keys(obj).filter(k => obj[k] != null && typeof obj[k] === 'object'); }
+    function isGraphicTarget(desc, unit) { let u = String(unit || '').toLowerCase().trim(); let d = String(desc || '').toLowerCase().trim(); return (u.indexOf('m2') !== -1 || u.indexOf('mt2') !== -1 || /lona|vinil|adhesivo|impresi|banner|microperforado/.test(d)); }
+
+    function showLoader(txt) { document.getElementById('loader-text').innerText = txt; document.getElementById('loader').style.display = 'flex'; }
+    function hideLoader() { document.getElementById('loader').style.display = 'none'; }
+
+    db.ref('personal').once('value', snap => { workers = snap.val() || {}; loadWorkers(); });
+
+    function loadWorkers() {
+        const sel = document.getElementById('lic-worker');
+        let isGraphicReq = document.getElementById('lic-tipo').value === 'graficos';
+        let isSupervisionReq = document.getElementById('lic-tipo').value === 'supervision';
+        let html = '<option value="">Selecciona al Trabajador / Empresa...</option>';
+        
+        Object.keys(workers).forEach(k => {
+            let v = workers[k]; let wTipo = (v.tipo || '').toLowerCase(); let match = false;
+            if(isGraphicReq) { if(wTipo.includes('grafico') || wTipo.includes('impresi')) match = true; } 
+            else if (isSupervisionReq) { if(wTipo === 'supervisor') match = true; } 
+            else { if(!wTipo.includes('grafico') && !wTipo.includes('impresi') && wTipo !== 'supervisor') match = true; }
+            if(match) { let badge = wTipo.includes('interno') || wTipo.includes('planta') ? '🏢 INTERNO' : (wTipo === 'supervisor' ? '📋 SUPERVISOR' : '🚚 EXTERNO'); html += `<option value="${k}">${v.nombre} [${badge}] - ${v.especialidad||'Gral'}</option>`; }
+        });
+        sel.innerHTML = html; document.getElementById('lic-items').innerHTML = '<div class="empty-msg">Selecciona un trabajador primero.</div>'; document.getElementById('lbl-total-ref').innerText = '0,00 Bs';
+    }
+
+    function openNewLic() {
+        editingLicId = null; pendingPrefillTareas = null;
+        _licArtsData = {}; _licMatPrices = {}; _isGraphicMode = false;
+        document.getElementById('filter-assigned').value = 'pending';
+        document.getElementById('mod-new-lic').style.display = 'flex'; document.getElementById('bat-box').style.display = 'none';
+        document.getElementById('box-modo-interno').style.display = 'none'; document.getElementById('box-supervision-oferta').style.display = 'none';
+        document.getElementById('box-grafico-precios').style.display = 'none';
+        document.getElementById('lic-oferta-supervision').value = ''; document.getElementById('tit-modal-lic').innerText = "Crear Licitación";
+        // Período por defecto = mes actual
+        document.getElementById('lic-periodo').value = new Date().toISOString().substring(0, 7);
+        // Resetear prorrateo
+        _licSplitReset();
+        loadWorkers();
+    }
+
+    window.updateModoInterno = function() {
+        if(!isInternalWorkerActive) return;
+        let modo = document.getElementById('lic-modo-interno').value;
+        if(modo === 'directa') { document.getElementById('tit-modal-lic').innerText = editingLicId ? "Editar Asignación Directa" : "Asignación Directa de Taller"; document.getElementById('btn-submit-lic').innerHTML = `<i class="ph-bold ph-check-circle"></i> Guardar y Asignar Tareas`; document.getElementById('btn-submit-lic').style.background = "var(--green)"; document.getElementById('bat-box').style.display = 'block'; } 
+        else { document.getElementById('tit-modal-lic').innerText = "Enviar Licitación Interna"; document.getElementById('btn-submit-lic').innerHTML = `<i class="ph-bold ph-paper-plane-tilt"></i> Enviar a Cotizar`; document.getElementById('btn-submit-lic').style.background = "var(--blue)"; document.getElementById('bat-box').style.display = 'none'; }
+    }
+
+    // ─────────────────────────────────────────────
+    // ARTES GRÁFICOS — helpers
+    // ─────────────────────────────────────────────
+    function detectMaterialLic(name) {
+        let n = (name || '').toLowerCase();
+        if (n.includes('lona mate') || n.includes('lona m.')) return 'Lona Mate';
+        if (n.includes('lona')) return 'Lona';
+        if (n.includes('adhesivo mate') || n.includes('adh. mate')) return 'Adhesivo Mate';
+        if (n.includes('adhesivo') || n.includes('adhesiv') || n.includes('adh')) return 'Adhesivo';
+        if (n.includes('microperforado') || n.includes('micro')) return 'Microperforado';
+        if (n.includes('vinil') || n.includes('vinyl')) return 'Vinil';
+        if (n.includes('banner')) return 'Banner';
+        if (n.includes('tela')) return 'Tela';
+        return 'Lona';
+    }
+
+    function calcArtM2Lic(art) {
+        return ((parseFloat(art.base) || 0) / 100) * ((parseFloat(art.altura) || 0) / 100) * (parseFloat(art.cantidad) || 1);
+    }
+
+    // Lee artes: primero desde artes_data en Firebase (fuente de verdad),
+    // como fallback reconstruye desde APU si no hay datos guardados.
+    async function loadArtsForGraphicLic() {
+        _licArtsData = {};
+
+        const [artsSnap, itemsSnap] = await Promise.all([
+            db.ref(`proyectos/${cid}/${pid}/artes_data`).once('value'),
+            db.ref(`proyectos/${cid}/${pid}/presupuesto/items`).once('value')
+        ]);
+        const savedArts = artsSnap.val() || {};
+        const items     = itemsSnap.val() || {};
+
+        console.log('[LIC] artes_data en Firebase:', savedArts);
+        console.log('[LIC] items:', Object.keys(items).length);
+
+        // ── 1. Cargar artes guardados desde produccion.html (artes_data) ──
+        Object.keys(savedArts).forEach(idx => {
+            let saved = savedArts[idx];
+            // Firebase convierte arrays a objetos {0:{...}, 1:{...}} — normalizar
+            if (saved && !Array.isArray(saved) && typeof saved === 'object') {
+                saved = Object.values(saved).filter(x => x != null);
+            }
+            if (!saved || !Array.isArray(saved) || saved.length === 0) return;
+            const it = items[idx];
+            const parentDesc = it ? (it.desc || ('Ítem ' + idx)) : ('Ítem ' + idx);
+            _licArtsData[idx] = saved.map(a => ({
+                id:         a.id       || ('a_' + idx + '_' + Math.random()),
+                nombre:     a.nombre   || '',
+                base:       parseFloat(a.base)    || 0,
+                altura:     parseFloat(a.altura)  || 0,
+                cantidad:   parseFloat(a.cantidad) || 1,
+                material:   a.material || detectMaterialLic(a.nombre || ''),
+                precio:     parseFloat(a.precio)  || 0,
+                imgRef:     a.imgRef   || '',
+                parentDesc: parentDesc
+            }));
+            console.log(`[LIC] idx=${idx} → ${_licArtsData[idx].length} artes cargados desde Firebase`);
+        });
+
+        // ── 2. También fusionar artes en memoria (misma sesión) si los hay ──
+        if (window._artsData && Object.keys(window._artsData).length > 0) {
+            for (const idx in window._artsData) {
+                const memArts = (window._artsData[idx] || []).filter(a => a.id);
+                if (memArts.length === 0) continue;
+                const it = items[idx];
+                const parentDesc = it ? (it.desc || ('Ítem ' + idx)) : ('Ítem ' + idx);
+                if (!_licArtsData[idx]) {
+                    // No había en Firebase, usar memoria
+                    _licArtsData[idx] = memArts.map(a => ({
+                        id: a.id, nombre: a.nombre || '', base: parseFloat(a.base)||0,
+                        altura: parseFloat(a.altura)||0, cantidad: parseFloat(a.cantidad)||1,
+                        material: a.material || detectMaterialLic(a.nombre||''),
+                        precio: parseFloat(a.precio)||0, imgRef: a.imgRef||'', parentDesc
+                    }));
+                } else {
+                    // Fusionar: agregar artes IA que no estén en Firebase aún
+                    memArts.forEach(ma => {
+                        if (!_licArtsData[idx].some(a => a.id === ma.id)) {
+                            _licArtsData[idx].push({
+                                id: ma.id, nombre: ma.nombre||'', base: parseFloat(ma.base)||0,
+                                altura: parseFloat(ma.altura)||0, cantidad: parseFloat(ma.cantidad)||1,
+                                material: ma.material||detectMaterialLic(ma.nombre||''),
+                                precio: parseFloat(ma.precio)||0, imgRef: ma.imgRef||'', parentDesc
+                            });
+                        }
+                    });
+                }
+            }
+        }
+
+        // ── 3. Fallback: mostrar TODOS los ítems del presupuesto como artes seleccionables ──
+        // En modo gráfico mostramos todos los ítems (no solo los que pasan isGraphicTarget)
+        // para que el usuario pueda seleccionar lo que necesita aunque el APU no tenga keywords.
+        Object.keys(items).forEach(i => {
+            if (_licArtsData[i] && _licArtsData[i].length > 0) return;
+            const it = items[i];
+            if (!it || it.type === 'chapter') return;
+            let arts = [];
+            // Intentar extraer artes desde APU mat/sub (sin filtro isGraphicTarget)
+            const addFromApu = (apuSection) => {
+                if (!apuSection) return;
+                Object.values(apuSection).forEach(m => {
+                    if (!m || !m.d) return;
+                    const mat = detectMaterialLic(m.d);
+                    let baseVal = 0, altVal = 0;
+                    if (m.measures) {
+                        const mk = Object.values(m.measures)[0];
+                        if (mk) { baseVal = parseFloat(mk.b)||0; altVal = parseFloat(mk.h)||0; }
+                    }
+                    // Solo agregar materiales con dimensiones o que pasen isGraphicTarget
+                    const u = (m.u || '').toLowerCase();
+                    if (isGraphicTarget(m.d, u) || baseVal > 0) {
+                        arts.push({ id: 'apu_'+i+'_'+arts.length, nombre: m.d, base: baseVal, altura: altVal, cantidad: parseFloat(m.q||it.cant)||1, material: mat, precio: parseFloat(m.p||m.pu)||0, imgRef: '', parentDesc: it.desc });
+                    }
+                });
+            };
+            if (it.apu) { addFromApu(it.apu.mat); addFromApu(it.apu.sub); }
+            // Si no hay artes del APU, agregar el ítem mismo como arte genérico
+            if (arts.length === 0) {
+                arts.push({ id: 'item_'+i, nombre: it.desc, base: 0, altura: 0, cantidad: parseFloat(it.cant)||1, material: detectMaterialLic(it.desc), precio: parseFloat(it.pu)||0, imgRef: it.img||'', parentDesc: it.desc });
+            }
+            if (arts.length > 0) {
+                _licArtsData[i] = arts;
+                console.log(`[LIC] idx=${i} → ${arts.length} artes (fallback APU/item)`);
+            }
+        });
+
+        const totalIdxConArtes = Object.keys(_licArtsData).length;
+        const totalArtsCount = Object.values(_licArtsData).reduce((s,a)=>s+a.length,0);
+        console.log(`[LIC] Total índices con artes: ${totalIdxConArtes} | Total artes: ${totalArtsCount}`);
+    }
+
+    // Construye los precios por material a partir de los artes cargados
+    function buildMatPrices() {
+        let mats = new Set();
+        Object.values(_licArtsData).forEach(arts => arts.forEach(a => mats.add(a.material)));
+        mats.forEach(mat => {
+            if (!(_licMatPrices[mat] !== undefined)) {
+                // Tomar precio promedio de artes de ese material
+                let arts = []; Object.values(_licArtsData).forEach(aa => aa.forEach(a => { if (a.material === mat && a.precio > 0) arts.push(a.precio); }));
+                _licMatPrices[mat] = arts.length ? (arts.reduce((s, p) => s + p, 0) / arts.length) : 0;
+            }
+        });
+    }
+
+    function renderMatPricesBar() {
+        let html = '';
+        let mats = new Set();
+        Object.values(_licArtsData).forEach(arts => arts.forEach(a => mats.add(a.material)));
+        mats.forEach(mat => {
+            let totalM2 = 0;
+            Object.values(_licArtsData).forEach(arts => arts.forEach(a => { if (a.material === mat) totalM2 += calcArtM2Lic(a); }));
+            html += `<div class="mat-price-bar">
+                <span class="mat-label"><i class="ph-bold ph-paint-roller"></i> ${mat}</span>
+                <span class="mat-m2-total">${totalM2.toFixed(2)} m²</span>
+                <div style="display:flex; align-items:center; gap:4px;">
+                    <input type="number" id="mprice_${mat.replace(/\s/g,'_')}" value="${(_licMatPrices[mat]||0).toFixed(0)}" min="0" step="1"
+                        oninput="updateMatPrice('${mat.replace(/\s/g,'_')}','${mat}')" onclick="event.stopPropagation()">
+                    <span style="font-size:10px; color:var(--purple); font-weight:800;">Bs/m²</span>
+                </div>
+            </div>`;
+        });
+        document.getElementById('mat-prices-list').innerHTML = html || '<div class="empty-msg">Sin materiales detectados.</div>';
+    }
+
+    window.updateMatPrice = function(matKey, mat) {
+        let inp = document.getElementById('mprice_' + matKey);
+        if (inp) { _licMatPrices[mat] = parseFloat(inp.value) || 0; }
+        recalcularSeleccionGrafica();
+    };
+
+    function renderArtsForLic() {
+        let html = '';
+        // Botón seleccionar todos
+        html += `<button class="btn-sel-all-arts" onclick="toggleSelectAllArts()"><i class="ph-bold ph-check-square"></i> Seleccionar / Deseleccionar Todos los Artes</button>`;
+
+        let totalArts = 0;
+        Object.keys(_licArtsData).forEach(idx => {
+            let arts = _licArtsData[idx];
+            if (!arts || arts.length === 0) return;
+
+            // Calcular totales del ítem para mostrar en header
+            let itemM2 = 0, itemArtsConDims = 0;
+            arts.forEach(a => {
+                const m2 = calcArtM2Lic(a);
+                itemM2 += m2;
+                if (a.base > 0 || a.altura > 0) itemArtsConDims++;
+            });
+            totalArts += arts.length;
+
+            let parentDesc = (arts[0] && arts[0].parentDesc) || ('Ítem ' + idx);
+            const groupId = 'lic-group-' + idx;
+
+            // ── Header del ítem maestro (colapsable) ──
+            html += `<div style="background:rgba(0,122,255,0.04); border:1px solid rgba(0,122,255,0.2); border-radius:10px; margin-bottom:6px; overflow:hidden;">
+                <div style="display:flex; align-items:center; gap:10px; padding:10px 14px; cursor:pointer; user-select:none;" onclick="toggleLicGroup('${groupId}')">
+                    <input type="checkbox" class="art-lic-chk-group" id="grp-chk-${idx}" data-groupidx="${idx}"
+                        checked onclick="event.stopPropagation(); toggleGroupCheck('${idx}')" style="width:16px; height:16px; cursor:pointer; flex-shrink:0;">
+                    <div style="flex:1; min-width:0;">
+                        <div style="font-size:12px; font-weight:900; color:var(--blue); text-transform:uppercase; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${parentDesc}</div>
+                        <div style="font-size:10px; color:var(--gray); font-weight:700; margin-top:2px;">
+                            ${arts.length} arte(s) · <span id="lic-item-m2-${idx}">${itemM2.toFixed(2)}</span> m² total
+                        </div>
+                    </div>
+                    <i class="ph-bold ph-caret-down" id="lic-caret-${groupId}" style="color:var(--blue); transition:0.25s; flex-shrink:0; transform:rotate(-90deg);"></i>
+                </div>
+                <div id="${groupId}" style="display:none; border-top:1px solid var(--border); padding:6px 8px; background:var(--card);">`;
+
+            // ── Artes del ítem ──
+            arts.forEach((art, artI) => {
+                let m2 = calcArtM2Lic(art);
+                let precio = _licMatPrices[art.material] || art.precio || 0;
+                let subtotal = m2 * precio;
+                const tieneImg = art.imgRef && (art.imgRef.startsWith('data:image') || art.imgRef.startsWith('http'));
+                let thumbHtml = tieneImg
+                    ? `<img class="art-thumb" src="${art.imgRef}" style="width:44px; height:44px; border-radius:6px; object-fit:cover; flex-shrink:0;">`
+                    : `<div style="width:44px; height:44px; border-radius:6px; background:var(--bg); border:1px dashed var(--border); display:flex; align-items:center; justify-content:center; flex-shrink:0; color:var(--gray); font-size:18px;"><i class="ph-bold ph-image"></i></div>`;
+
+                const hasDims = art.base > 0 || art.altura > 0;
+                const dimsText = hasDims
+                    ? `${art.base}×${art.altura} cm × ${art.cantidad} u`
+                    : `Sin dims · ${art.cantidad} u`;
+
+                html += `<div class="art-lic-card" id="art-lic-card-${idx}-${artI}"
+                    style="display:flex; align-items:center; gap:10px; padding:8px 10px; border-radius:8px; border:1px solid var(--border); margin-bottom:5px; background:var(--card);">
+                    <input type="checkbox" class="art-lic-chk" id="art-chk-${idx}-${artI}"
+                        data-idx="${idx}" data-arti="${artI}" checked
+                        onchange="recalcularSeleccionGrafica()" style="width:16px; height:16px; cursor:pointer; flex-shrink:0;">
+                    ${thumbHtml}
+                    <div style="flex:1; min-width:0;">
+                        <div style="font-size:11px; font-weight:900; color:var(--text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${art.nombre || '(sin nombre)'}</div>
+                        <div style="font-size:10px; color:var(--gray); font-weight:700; margin-top:2px;">${dimsText}</div>
+                    </div>
+                    <div style="display:flex; flex-direction:column; align-items:flex-end; gap:3px; flex-shrink:0;">
+                        <span style="font-size:9px; font-weight:900; padding:2px 7px; border-radius:5px; background:${getMaterialColorLic(art.material)}22; color:${getMaterialColorLic(art.material)};">${art.material}</span>
+                        <span style="font-size:10px; font-weight:900; color:var(--blue);">${m2.toFixed(2)} m²</span>
+                        <span style="font-size:10px; font-weight:800; color:var(--green);" id="art-sub-${idx}-${artI}">${fMoney(subtotal)} Bs</span>
+                    </div>
+                </div>`;
+            });
+
+            html += `</div></div>`; // cierre group body + group container
+        });
+
+        if (totalArts === 0) html = '<div class="empty-msg" style="text-align:center; padding:30px 20px; color:var(--gray); font-size:12px; font-weight:700;">No hay artes cargados.<br>Ve a <b>Producción → Área de Impresión</b> y cargá los artes primero con la IA o manualmente.</div>';
+        document.getElementById('lic-items').innerHTML = html;
+        recalcularSeleccionGrafica();
+    }
+
+    // Colapsar/expandir grupo de artes
+    window.toggleLicGroup = function(groupId) {
+        const el = document.getElementById(groupId);
+        const caret = document.getElementById('lic-caret-' + groupId);
+        if (!el) return;
+        const open = el.style.display !== 'none';
+        el.style.display = open ? 'none' : 'block';
+        if (caret) caret.style.transform = open ? 'rotate(-90deg)' : 'rotate(0deg)';
+    };
+
+    // Marcar/desmarcar todos los artes de un ítem
+    window.toggleGroupCheck = function(idx) {
+        const grpChk = document.getElementById('grp-chk-' + idx);
+        if (!grpChk) return;
+        const checked = grpChk.checked;
+        (_licArtsData[idx] || []).forEach((_, artI) => {
+            const chk = document.getElementById(`art-chk-${idx}-${artI}`);
+            if (chk) chk.checked = checked;
+        });
+        recalcularSeleccionGrafica();
+    };
+
+    // Color por material (igual que produccion.html)
+    function getMaterialColorLic(mat) {
+        const colors = { 'Lona':'#007aff','Lona Mate':'#5856d6','Lona Backlight':'#ff9500','Lona Mesh':'#34c759','Adhesivo Vinílico':'#ff3b30','Adhesivo Mate':'#af52de','Adhesivo Transparente':'#64d2ff','Banner':'#ff6b00','Microperforado':'#30b0c7','Tela Sublimada':'#e91e8c','PVC Foam':'#8e8e93','Otro':'#636366' };
+        return colors[mat] || '#636366';
+    }
+
+    window.toggleSelectAllArts = function() {
+        let chks = document.querySelectorAll('.art-lic-chk');
+        let allChecked = Array.from(chks).every(c => c.checked);
+        chks.forEach(c => { c.checked = !allChecked; });
+        recalcularSeleccionGrafica();
+    };
+
+    function recalcularSeleccionGrafica() {
+        let total = 0;
+        Object.keys(_licArtsData).forEach(idx => {
+            (_licArtsData[idx] || []).forEach((art, artI) => {
+                let chk = document.getElementById(`art-chk-${idx}-${artI}`);
+                let m2 = calcArtM2Lic(art);
+                let precio = _licMatPrices[art.material] || art.precio || 0;
+                let subtotal = m2 * precio;
+                let subEl = document.getElementById(`art-sub-${idx}-${artI}`);
+                if (subEl) subEl.innerText = fMoney(subtotal) + ' Bs';
+                if (chk && chk.checked) total += subtotal;
+            });
+        });
+        document.getElementById('lbl-total-ref').innerText = fMoney(total) + ' Bs';
+    }
+
+    // ─────────────────────────────────────────────
+
+    function loadItemsForLic() {
+        let wId = document.getElementById('lic-worker').value;
+        const boxGrafico = document.getElementById('box-grafico-precios');
+        const filterRow  = document.getElementById('filter-assigned').parentElement;
+        if(!wId) {
+            document.getElementById('lic-items').innerHTML = '<div class="empty-msg">Selecciona un trabajador primero.</div>';
+            document.getElementById('bat-box').style.display = 'none';
+            document.getElementById('box-modo-interno').style.display = 'none';
+            document.getElementById('box-supervision-oferta').style.display = 'none';
+            document.getElementById('lbl-total-ref').innerText = '0,00 Bs';
+            boxGrafico.style.display = 'none'; _isGraphicMode = false; return;
+        }
+
+        let worker = workers[wId]; let wTipo = (worker.tipo || '').toLowerCase();
+        let isGraphicWorker = wTipo.includes('grafico') || wTipo.includes('impresi');
+        let isSupervisionWorker = wTipo === 'supervisor';
+        isInternalWorkerActive = wTipo.includes('interno') || wTipo.includes('planta');
+        currentWorkerSueldo = parseFloat(worker.sueldo) || 0;
+        _isGraphicMode = isGraphicWorker;
+
+        // Mostrar/ocultar panel de precios materiales y filtro
+        boxGrafico.style.display = isGraphicWorker ? 'block' : 'none';
+        // Ocultar filtro de asignados en modo gráfico (no aplica)
+        filterRow.style.display = isGraphicWorker ? 'none' : 'flex';
+
+        if (isSupervisionWorker) {
+            document.getElementById('box-modo-interno').style.display = 'none';
+            document.getElementById('box-supervision-oferta').style.display = 'flex';
+            document.getElementById('tit-modal-lic').innerText = editingLicId ? "Editar Licitación Supervisión" : "Asignar Supervisión";
+            document.getElementById('btn-submit-lic').innerHTML = `<i class="ph-bold ph-paper-plane-tilt"></i> Enviar Oferta a Supervisor`;
+            document.getElementById('btn-submit-lic').style.background = "var(--purple)";
+            document.getElementById('bat-box').style.display = 'none';
+        } else if (isInternalWorkerActive) {
+            document.getElementById('box-modo-interno').style.display = 'flex';
+            document.getElementById('box-supervision-oferta').style.display = 'none';
+            updateModoInterno();
+            document.getElementById('bat-sueldo').innerText = fMoney(currentWorkerSueldo);
+            totalAcumuladoMes = 0;
+            db.ref(`personal/${wId}/solicitudes`).once('value').then(s => {
+                let acum = 0;
+                if(s.exists()){ s.forEach(c => { let sol = c.val(); if(sol.is_internal_assignment && (sol.estado === 'aprobado' || sol.estado === 'terminado' || sol.estado === 'adjudicado')) { if(editingLicId && c.key === editingLicId) return; acum += parseFloat(sol.precio_final || sol.precio_propuesto || 0); } }); }
+                totalAcumuladoMes = acum; recalcularSeleccionInterna();
+            });
+        } else {
+            document.getElementById('box-modo-interno').style.display = 'none';
+            document.getElementById('box-supervision-oferta').style.display = 'none';
+            document.getElementById('tit-modal-lic').innerText = editingLicId ? "Editar Licitación" : (pendingPrefillTareas ? "Duplicar a Licitación Externa" : (isGraphicWorker ? "Licitación de Impresión / Gráficos" : "Crear Licitación Externa"));
+            document.getElementById('btn-submit-lic').innerHTML = `<i class="ph-bold ph-paper-plane-tilt"></i> Guardar y Procesar`;
+            document.getElementById('btn-submit-lic').style.background = isGraphicWorker ? "var(--purple)" : "var(--blue)";
+            document.getElementById('bat-box').style.display = 'none';
+        }
+
+        // ── MODO GRÁFICO: cargar artes ──
+        if (isGraphicWorker) {
+            document.getElementById('lic-items').innerHTML = '<div class="empty-msg"><div class="spinner" style="width:24px;height:24px;border-width:3px;margin:0 auto 8px;"></div>Cargando artes...</div>';
+            _licMatPrices = {}; // reiniciar precios para que buildMatPrices los inicialice desde APU
+            loadArtsForGraphicLic().then(() => {
+                buildMatPrices();
+                renderMatPricesBar();
+                renderArtsForLic();
+                // Prefill precios si viene de edición
+                if (editingLicId && currentLics[editingLicId] && currentLics[editingLicId].mat_prices) {
+                    let saved = currentLics[editingLicId].mat_prices;
+                    for (let mat in saved) { _licMatPrices[mat] = saved[mat]; }
+                    renderMatPricesBar();
+                    recalcularSeleccionGrafica();
+                }
+                if (editingLicId && currentLics[editingLicId] && currentLics[editingLicId].tareas) {
+                    prefillArtsSelection(currentLics[editingLicId].tareas);
+                }
+            });
+            return;
+        }
+
+        // ── MODO NORMAL: items / MO ──
+        let filterMode = document.getElementById('filter-assigned').value || 'pending';
+        let assignedIndices = new Set();
+        Object.keys(currentLics).forEach(licKey => {
+            if (editingLicId && licKey === editingLicId) return;
+            let lic = currentLics[licKey];
+            if(lic.estado !== 'rechazado' && lic.estado !== 'eliminado') {
+                if(lic.tareas) { Object.values(lic.tareas).forEach(t => { if(t.originIdx !== undefined) { if (parseFloat(t.pu) > 0 || lic.is_internal_assignment || lic.is_supervision) { assignedIndices.add(t.originIdx.toString()); } } }); }
+            }
+        });
+
+        db.ref(`proyectos/${cid}/${pid}/presupuesto/items`).once('value', snap => {
+            globalItems = snap.val() || []; let html = '';
+            getValidKeys(globalItems).forEach(i => {
+                let it = globalItems[i]; if(!it || it.type === 'chapter') return;
+                let isAlreadyLicitado = assignedIndices.has(i.toString());
+                let thumbImg = it.img || (it.op_images ? Object.values(it.op_images)[0] : null) || (it.cortes ? Object.values(it.cortes)[0] : null);
+                let thumbHtml = thumbImg ? `<img loading="lazy" decoding="async" src="${thumbImg}" style="width:45px; height:45px; object-fit:cover; border-radius:8px; margin-right:12px; border:1px solid var(--border); flex-shrink:0;">` : `<div style="width:45px; height:45px; border-radius:8px; background:var(--bg); border:1px dashed var(--border); margin-right:12px; flex-shrink:0; display:flex; justify-content:center; align-items:center; font-size:20px; color:var(--gray);"><i class="ph-bold ph-image-square"></i></div>`;
+
+                // Preferir prod_apu.mo (cantidades reales de producción) sobre apu.mo (por unidad del APU)
+                const _moSource = (it.prod_apu && it.prod_apu.mo && it.prod_apu.mo.length > 0)
+                    ? it.prod_apu.mo   // ya tiene cant total real
+                    : (it.apu && it.apu.mo ? getValidObjects(it.apu.mo) : []);
+                const _usandoProdApu = !!(it.prod_apu && it.prod_apu.mo && it.prod_apu.mo.length > 0);
+
+                let moRequired = []; let totalMoItemBase = 0;
+                _moSource.forEach(mo => {
+                    if(mo.d) {
+                        moRequired.push(mo.d.trim());
+                        // prod_apu ya tiene cant total; apu tiene cant por unidad → multiplicar por cant ítem
+                        const qReal = _usandoProdApu
+                            ? parseFloat(mo.q||0)
+                            : parseFloat(mo.q||0) * (parseFloat(it.cant)||1);
+                        totalMoItemBase += qReal * parseFloat(mo.p||0);
+                    }
+                });
+                let totalMoGlobalItem = totalMoItemBase; // prod_apu ya es total; apu ya multiplicó arriba
+
+                if(true) { // show all non-chapter items in normal mode
+                    let displayStyle = (filterMode === 'pending' && isAlreadyLicitado) ? 'none' : 'flex';
+                    let assignedClass = isAlreadyLicitado ? 'assigned-row' : '';
+                    let badgeAlready = isAlreadyLicitado ? `<span style="background:var(--orange); color:white; font-size:8px; padding:3px 6px; border-radius:4px; margin-left:5px; vertical-align:middle; font-weight:900;">YA ASIGNADO</span>` : '';
+                    let badgeMo = (isInternalWorkerActive && totalMoGlobalItem > 0) ? `<div class="badge-mo">Bolsa MO: +${fMoney(totalMoGlobalItem)} Bs</div>` : '';
+                    let reqTxt = (moRequired.length > 0 && !isSupervisionWorker) ? `<br><span style="font-size:9px; color:var(--orange);">M.O: ${moRequired.join(', ')}</span>` : '';
+                    let basePriceMain = it.pu || 0;
+                    let puFieldMain = `<div style="display:flex; flex-direction:column; align-items:flex-end; gap:4px; margin-top:8px;">
+<span style="font-size:9px; font-weight:800; color:var(--gray);">P.U. REF/BASE (Bs):</span>
+<input type="number" id="pu_main_${i}" class="inp-std" style="width:75px; padding:6px; margin:0; text-align:right; border-color:var(--blue);" value="${basePriceMain}" oninput="recalcularSeleccionInterna()" onclick="event.stopPropagation()">
+<span style="font-size:9px; color:var(--gray);">× ${it.cant} ${it.und} =</span>
+<span id="sub_main_${i}" style="font-size:11px; font-weight:800; color:var(--blue);">${(parseFloat(basePriceMain||0)*parseFloat(it.cant||0)).toFixed(0)} Bs</span>
+<span style="font-size:9px; font-weight:800; color:var(--green); margin-top:4px;">PROPONGO PAGAR:</span>
+<input type="number" id="propuesto_main_${i}" class="inp-std" style="width:75px; padding:5px; margin:0; text-align:right; border-color:var(--green); background:rgba(52,199,89,0.08);" placeholder="Total" oninput="recalcularSeleccionInterna()" onclick="event.stopPropagation()">
+</div>`;
+                    html += `<label class="item-row ${assignedClass}" style="align-items:flex-start; display:${displayStyle};"><div style="display:flex; flex-grow:1; align-items:center;">${thumbHtml}<div><b>${it.desc}</b> ${badgeAlready} <span style="font-size:9px; color:var(--blue); display:block; margin-top:2px;">(Ítem Principal)</span><span style="color:var(--gray)">${it.cant} ${it.und}</span>${reqTxt} <div style="margin-top:4px;">${badgeMo}</div></div></div><div style="display:flex; flex-direction:column; align-items:flex-end;"><input type="checkbox" class="chk-box lic-chk" data-type="main" data-idx="${i}" data-movalue="${totalMoGlobalItem}" onchange="recalcularSeleccionInterna()">${puFieldMain}</div></label>`;
+
+                    if(_moSource.length > 0 && !isSupervisionWorker) {
+                        _moSource.forEach((apu, aIdx) => {
+                            if (!apu.d) return;
+                            let subBadgeMo = (isInternalWorkerActive && totalMoGlobalItem > 0) ? `<div class="badge-mo">Bolsa MO: Activa</div>` : '';
+                            // prod_apu ya tiene cant total; apu tiene cant por unidad
+                            const cantTotal_display = _usandoProdApu
+                                ? parseFloat(apu.q||0)
+                                : parseFloat(apu.q||0) * parseFloat(it.cant||1);
+                            // Badge de fuente para saber de dónde viene
+                            const fuenteBadge = _usandoProdApu
+                                ? `<span style="font-size:8px;background:#1a3a1a;color:var(--green);padding:2px 5px;border-radius:4px;margin-left:4px;">PROD</span>`
+                                : `<span style="font-size:8px;background:#2a2a1a;color:var(--orange);padding:2px 5px;border-radius:4px;margin-left:4px;">APU</span>`;
+                            let puField = `<div style="display:flex; flex-direction:column; align-items:flex-end; gap:4px; margin-top:8px;">
+<span style="font-size:9px; font-weight:800; color:var(--gray);">P.U. REF/BASE (Bs):</span>
+<input type="number" id="pu_${i}_mo_${aIdx}" class="inp-std" style="width:75px; padding:6px; margin:0; text-align:right; border-color:var(--orange);" value="${apu.p || 0}" oninput="recalcularSeleccionInterna()" onclick="event.stopPropagation()">
+<span style="font-size:9px; color:var(--gray);">× ${cantTotal_display.toFixed(2)} ${apu.u} =</span>
+<span id="sub_${i}_mo_${aIdx}" style="font-size:11px; font-weight:800; color:var(--orange);">${(parseFloat(apu.p||0)*cantTotal_display).toFixed(0)} Bs</span>
+<span style="font-size:9px; font-weight:800; color:var(--green); margin-top:4px;">PROPONGO PAGAR:</span>
+<input type="number" id="propuesto_${i}_mo_${aIdx}" class="inp-std" style="width:75px; padding:5px; margin:0; text-align:right; border-color:var(--green); background:rgba(52,199,89,0.08);" placeholder="Total" oninput="recalcularSeleccionInterna()" onclick="event.stopPropagation()">
+</div>`;
+                            html += `<label class="item-row apu-row ${assignedClass}" style="align-items:flex-start; display:${displayStyle};"><div style="display:flex; flex-grow:1; align-items:center;">${thumbHtml}<div><span style="font-size:10px; font-weight:800; color:var(--gray); text-transform:uppercase;">PERTENECE A: ${it.desc} &gt;</span><br><b style="font-size:14px;">${apu.d}</b>${fuenteBadge} ${badgeAlready}<br><span style="color:var(--gray)">Cant. real: ${cantTotal_display.toFixed(2)} ${apu.u}</span> <div style="margin-top:4px;">${subBadgeMo}</div></div></div><div style="display:flex; flex-direction:column; align-items:flex-end;"><input type="checkbox" class="chk-box lic-chk" data-type="mo" data-idx="${i}" data-apuidx="${aIdx}" data-cant="${cantTotal_display}" data-movalue="0" onchange="recalcularSeleccionInterna()">${puField}</div></label>`;
+                        });
+                    }
+                }
+            });
+            document.getElementById('lic-items').innerHTML = html || '<div class="empty-msg">No hay ítems disponibles bajo este filtro. Intenta cambiar a "Mostrar Todos".</div>';
+
+            if(editingLicId && currentLics[editingLicId]) { prefillForm(currentLics[editingLicId].tareas); }
+            else if(pendingPrefillTareas) { prefillForm(pendingPrefillTareas); pendingPrefillTareas = null; }
+            else { recalcularSeleccionInterna(); }
+        });
+    }
+
+    // Prefill selección de artes cuando se edita una licitación gráfica
+    function prefillArtsSelection(tareasData) {
+        setTimeout(() => {
+            // Desmarcar todos primero
+            document.querySelectorAll('.art-lic-chk').forEach(c => { c.checked = false; });
+            // Solo marcar los que están en tareas
+            for (let tk in tareasData) {
+                let t = tareasData[tk];
+                if (t.originType === 'art' && t.originIdx !== undefined && t.artI !== undefined) {
+                    let chk = document.getElementById(`art-chk-${t.originIdx}-${t.artI}`);
+                    if (chk) chk.checked = true;
+                }
+            }
+            recalcularSeleccionGrafica();
+        }, 100);
+    }
+
+    window.applyFilter = function() {
+        let mode = document.getElementById('filter-assigned').value;
+        document.querySelectorAll('.assigned-row').forEach(row => { row.style.display = (mode === 'pending') ? 'none' : 'flex'; });
+    }
+
+    function prefillForm(tareasData) {
+        setTimeout(() => {
+            for(let tk in tareasData) {
+                let t = tareasData[tk];
+                if (t.originType === 'mo') {
+                    let chk = document.querySelector(`.lic-chk[data-idx="${t.originIdx}"][data-apuidx="${t.originApuidx}"]`); if (chk) chk.checked = true;
+                    let puInp = document.getElementById(`pu_${t.originIdx}_mo_${t.originApuidx}`); if (puInp) puInp.value = t.pu;
+                } else {
+                    let chk = document.querySelector(`.lic-chk[data-idx="${t.originIdx}"][data-type="main"]`); if (chk) chk.checked = true;
+                    let puInp = document.getElementById(`pu_main_${t.originIdx}`); if (puInp) puInp.value = t.pu;
+                }
+            }
+            recalcularSeleccionInterna();
+        }, 100);
+    }
+
+    // ── PRORRATEO DOS MESES ──────────────────────────────────────────────────
+    let _licSplitActive = false;
+
+    function _licSplitReset() {
+        _licSplitActive = false;
+        const tog = document.getElementById('lic-split-toggle');
+        const knob = document.getElementById('lic-split-knob');
+        const panel = document.getElementById('lic-split-panel');
+        if (tog) tog.style.background = '#333';
+        if (knob) knob.style.left = '3px';
+        if (panel) panel.style.display = 'none';
+        const m2Input = document.getElementById('lic-split-periodo2');
+        if (m2Input) {
+            // Mes siguiente al periodo seleccionado
+            const p1 = document.getElementById('lic-periodo')?.value || new Date().toISOString().substring(0,7);
+            const [y, m] = p1.split('-').map(Number);
+            const nextM = m === 12 ? 1 : m + 1;
+            const nextY = m === 12 ? y + 1 : y;
+            m2Input.value = `${nextY}-${String(nextM).padStart(2,'0')}`;
+        }
+        const m1 = document.getElementById('lic-split-m1');
+        const m2 = document.getElementById('lic-split-m2');
+        if (m1) m1.value = '';
+        if (m2) m2.value = '';
+        _licSplitRecalc();
+    }
+
+    window._licToggleSplit = function() {
+        _licSplitActive = !_licSplitActive;
+        const tog = document.getElementById('lic-split-toggle');
+        const knob = document.getElementById('lic-split-knob');
+        const panel = document.getElementById('lic-split-panel');
+        tog.style.background = _licSplitActive ? 'var(--orange)' : '#333';
+        knob.style.left = _licSplitActive ? '19px' : '3px';
+        panel.style.display = _licSplitActive ? 'block' : 'none';
+        if (_licSplitActive) {
+            // Sugerir mes siguiente automáticamente
+            const p1 = document.getElementById('lic-periodo')?.value || new Date().toISOString().substring(0,7);
+            const [y, m] = p1.split('-').map(Number);
+            const nextM = m === 12 ? 1 : m + 1;
+            const nextY = m === 12 ? y + 1 : y;
+            document.getElementById('lic-split-periodo2').value = `${nextY}-${String(nextM).padStart(2,'0')}`;
+            _licSplitRecalc();
+        }
+    };
+
+    window._licSplitRecalc = function() {
+        if (!_licSplitActive) return;
+        const total = parseFloat(document.querySelector('.lic-chk:checked') ? 0 : 0); // no usado aún
+        const m1 = parseFloat(document.getElementById('lic-split-m1')?.value) || 0;
+        const m2 = parseFloat(document.getElementById('lic-split-m2')?.value) || 0;
+        const suma = m1 + m2;
+        const statusEl = document.getElementById('lic-split-status');
+        if (!statusEl) return;
+        statusEl.textContent = `Total: ${suma.toFixed(2)} Bs`;
+        statusEl.style.background = suma > 0 ? 'rgba(52,199,89,0.12)' : 'rgba(255,149,0,0.1)';
+        statusEl.style.color = suma > 0 ? 'var(--green)' : 'var(--gray)';
+    };
+    // ────────────────────────────────────────────────────────────────────────
+
+    function recalcularSeleccionInterna() {
+        let sum = 0;
+        // Actualizar todos los subtotales visibles (checked o no)
+        document.querySelectorAll('.lic-chk').forEach(chk => {
+            let type = chk.getAttribute('data-type'); let idx = chk.getAttribute('data-idx');
+            if(type === 'mo') {
+                let aIdx = chk.getAttribute('data-apuidx'); let cant = parseFloat(chk.getAttribute('data-cant')) || 0;
+                let puInput = document.getElementById(`pu_${idx}_mo_${aIdx}`); let pu = parseFloat(puInput ? puInput.value : 0) || 0;
+                let subSpan = document.getElementById(`sub_${idx}_mo_${aIdx}`);
+                if(subSpan) subSpan.innerText = (cant * pu).toFixed(0) + ' Bs';
+            } else if(type === 'main') {
+                let cantInput = parseFloat(globalItems[idx] ? globalItems[idx].cant : 0) || 0;
+                let puInput = document.getElementById(`pu_main_${idx}`); let pu = parseFloat(puInput ? puInput.value : 0) || 0;
+                let subSpan = document.getElementById(`sub_main_${idx}`);
+                if(subSpan) subSpan.innerText = (cantInput * pu).toFixed(0) + ' Bs';
+            }
+        });
+        // Sumar: si tiene "propuesto", usar ese; sino usar pu*cant
+        document.querySelectorAll('.lic-chk:checked').forEach(chk => {
+            let type = chk.getAttribute('data-type'); let idx = chk.getAttribute('data-idx');
+            if(type === 'mo') {
+                let aIdx = chk.getAttribute('data-apuidx'); let cant = parseFloat(chk.getAttribute('data-cant')) || 0;
+                let puInput = document.getElementById(`pu_${idx}_mo_${aIdx}`); let pu = parseFloat(puInput ? puInput.value : 0) || 0;
+                let propInput = document.getElementById(`propuesto_${idx}_mo_${aIdx}`); let prop = propInput ? parseFloat(propInput.value) : NaN;
+                sum += isNaN(prop) || propInput.value === '' ? (cant * pu) : prop;
+            } else if(type === 'main') {
+                let cantInput = parseFloat(globalItems[idx] ? globalItems[idx].cant : 0) || 0;
+                let puInput = document.getElementById(`pu_main_${idx}`); let pu = parseFloat(puInput ? puInput.value : 0) || 0;
+                let propInput = document.getElementById(`propuesto_main_${idx}`); let prop = propInput ? parseFloat(propInput.value) : NaN;
+                sum += isNaN(prop) || propInput.value === '' ? (cantInput * pu) : prop;
+            }
+        });
+        document.getElementById('lbl-total-ref').innerText = fMoney(sum) + ' Bs';
+        if(isInternalWorkerActive && document.getElementById('lic-modo-interno').value === 'directa') { actualizarBarraRendimiento(sum); }
+    }
+
+    function actualizarBarraRendimiento(montoAsignado) {
+        let granTotal = totalAcumuladoMes + montoAsignado;
+        document.getElementById('bat-acum').innerText = `${fMoney(granTotal)} Bs`;
+        let barFill = document.getElementById('bat-fill'); let faltanteTxt = document.getElementById('bat-faltante');
+        if(currentWorkerSueldo === 0) { barFill.style.width = '100%'; faltanteTxt.innerText = "Trabajador sin sueldo"; return; }
+        let porcentaje = (granTotal / currentWorkerSueldo) * 100;
+        if(porcentaje >= 100) { barFill.style.width = '100%'; barFill.classList.add('golden'); let cancheo = granTotal - currentWorkerSueldo; faltanteTxt.innerHTML = `<i class="ph-fill ph-star"></i> ¡Sueldo Cubierto! Cancheo: +${fMoney(cancheo)} Bs`; faltanteTxt.style.color = "var(--gold)"; } 
+        else { barFill.style.width = Math.min(porcentaje, 100) + '%'; barFill.classList.remove('golden'); let resta = currentWorkerSueldo - granTotal; faltanteTxt.innerText = `Faltan ${fMoney(resta)} Bs`; faltanteTxt.style.color = "var(--orange)"; }
+    }
+
+    function generateCleanBaseLink() { return window.location.origin + window.location.pathname.replace(/[^\/]*$/, ''); }
+
+    async function autoAssignGantt(workerName, tareasArray) {
+        try {
+            let snap = await db.ref(`proyectos/${cid}/${pid}/gantt/items`).once('value'); let gData = snap.val() || {}; let updates = {}; let todayStr = new Date().toISOString().split('T')[0];
+            for(let tK in tareasArray) {
+                let t = tareasArray[tK]; let idx = t.originIdx; let subtasks = (gData[idx] && gData[idx].subtasks) ? gData[idx].subtasks : {};
+                let foundKey = null; for(let sK in subtasks) { if(subtasks[sK].name === t.task_name) { foundKey = sK; break; } }
+                if(foundKey) { updates[`proyectos/${cid}/${pid}/gantt/items/${idx}/subtasks/${foundKey}/worker`] = workerName; } 
+                else { let newKey = db.ref().push().key; let endD = (t.fecha_entrega && t.fecha_entrega !== 'Sin fecha') ? t.fecha_entrega : todayStr; updates[`proyectos/${cid}/${pid}/gantt/items/${idx}/subtasks/${newKey}`] = { name: t.task_name, start: todayStr, end: endD, progress: 0, worker: workerName }; }
+            }
+            if(Object.keys(updates).length > 0) await db.ref().update(updates);
+        } catch(e) { console.error("Error GANTT:", e); }
+    }
+
+    async function createLicitacion() {
+        const workerId = document.getElementById('lic-worker').value;
+        if(!workerId) return alert("Selecciona un contratista/trabajador de la lista.");
+        let worker = workers[workerId]; let wTipo = (worker.tipo || '').toLowerCase();
+        let isGraphic = wTipo.includes('grafico') || wTipo.includes('impresi'); let isSupervision = wTipo === 'supervisor';
+        let isInternal = wTipo.includes('interno') || wTipo.includes('planta'); let isLicitacionInterna = isInternal && document.getElementById('lic-modo-interno').value === 'licitacion';
+
+        let tareas = {}; let count = 0; let totalMoAsignado = 0; let countedIndices = new Set();
+
+        // ── MODO GRÁFICO: construir tareas desde artes seleccionados ──
+        if (isGraphic) {
+            document.querySelectorAll('.art-lic-chk:checked').forEach(chk => {
+                let idx = chk.getAttribute('data-idx');
+                let artI = parseInt(chk.getAttribute('data-arti'));
+                let art = (_licArtsData[idx] || [])[artI];
+                if (!art) return;
+                let m2 = calcArtM2Lic(art);
+                let precio = _licMatPrices[art.material] || art.precio || 0;
+                let subtotal = m2 * precio;
+                let tKey = `art_${idx}_${artI}`;
+                tareas[tKey] = {
+                    parent_desc: art.parentDesc || ('Ítem ' + idx),
+                    task_name: art.nombre || '(arte)',
+                    desc: `${art.parentDesc || ''} → ${art.nombre} (${art.material})`,
+                    cant: m2,
+                    und: 'm²',
+                    pu: precio,
+                    subtotal: subtotal,
+                    material: art.material,
+                    base_cm: art.base,
+                    altura_cm: art.altura,
+                    cantidad_piezas: art.cantidad,
+                    img: art.imgRef || null,
+                    originIdx: idx,
+                    originType: 'art',
+                    artI: artI,
+                    fecha_entrega: 'Sin fecha'
+                };
+                totalMoAsignado += subtotal;
+                countedIndices.add(idx);
+                count++;
+            });
+
+            if(count === 0) return alert("Selecciona al menos 1 arte de impresión.");
+        } else {
+            // ── MODO NORMAL: items / MO ──
+            document.querySelectorAll('.lic-chk:checked').forEach(chk => {
+                let type = chk.getAttribute('data-type'); let idx = chk.getAttribute('data-idx'); let it = globalItems[idx];
+                if(!countedIndices.has(idx) && type !== 'mo') { countedIndices.add(idx); }
+                // Usar prod_apu.mat si existe, sino apu.mat
+                const _matSrc = (it.prod_apu && it.prod_apu.mat && it.prod_apu.mat.length > 0) ? it.prod_apu.mat : (it.apu && it.apu.mat ? Object.values(it.apu.mat) : []);
+                let matList = []; _matSrc.forEach(m => { if(m.d) matList.push(`• ${m.d} : ${m.q} ${m.u}`); });
+                let matsStr = matList.join('\n'); let featStr = it.feat || '';
+
+                if (type === 'mo') {
+                    let aIdx = chk.getAttribute('data-apuidx');
+                    // Resolver MO desde prod_apu si existe, sino desde apu
+                    const _moSrcGuard = (it.prod_apu && it.prod_apu.mo && it.prod_apu.mo.length > 0) ? it.prod_apu.mo : (it.apu && it.apu.mo ? getValidObjects(it.apu.mo) : []);
+                    let mo = _moSrcGuard[aIdx] || {};
+                    let cantTotal = parseFloat(chk.getAttribute('data-cant')) || 0;
+                    let puInput = document.getElementById(`pu_${idx}_mo_${aIdx}`); let puAsignado = puInput ? (parseFloat(puInput.value) || 0) : 0; let propInput = document.getElementById(`propuesto_${idx}_mo_${aIdx}`); let subtotalAsignado = (propInput && propInput.value !== '') ? parseFloat(propInput.value) : (cantTotal * puAsignado); totalMoAsignado += subtotalAsignado;
+                    tareas[`mo_${idx}_${aIdx}`] = { parent_desc: it.desc, task_name: mo.d, desc: `${it.desc} -> ${mo.d} (M.O.)`, cant: cantTotal, und: mo.u, pu: puAsignado, subtotal: subtotalAsignado, feat: featStr, mats: matsStr, measures: it.measures || [], img: it.img || null, cortes: it.cortes || [], op_images: it.op_images || [], originIdx: idx, originType: 'mo', originAput: 'mo', originApuidx: aIdx, fecha_entrega: it.prod_entrega || it.print_entrega || it.gantt_end || 'Sin fecha' };
+                } else if(type === 'main') {
+                    let puInputMain = document.getElementById(`pu_main_${idx}`); let puMain = puInputMain ? (parseFloat(puInputMain.value) || 0) : 0; let propInputMain = document.getElementById(`propuesto_main_${idx}`); let subMain = (propInputMain && propInputMain.value !== '') ? parseFloat(propInputMain.value) : (puMain * parseFloat(it.cant || 0)); totalMoAsignado += subMain;
+                    const cantMain = parseFloat(it.cant || 1);
+                    const puMainReal = (propInputMain && propInputMain.value !== '') ? (subMain / (cantMain || 1)) : puMain;
+                    tareas[`m_${idx}`] = { parent_desc: 'ÍTEM PRINCIPAL', task_name: it.desc, desc: it.desc, cant: cantMain, und: it.und, pu: puMainReal, subtotal: subMain, feat: featStr, mats: matsStr, measures: it.measures || [], img: it.img || null, cortes: it.cortes || [], op_images: it.op_images || [], originIdx: idx, originType: 'main', fecha_entrega: it.prod_entrega || it.print_entrega || it.gantt_end || 'Sin fecha' };
+                }
+                count++;
+            });
+            if(count === 0) return alert("Selecciona al menos 1 ítem o Mano de Obra.");
+        }
+
+        let oldLic = editingLicId ? currentLics[editingLicId] : null; let finalLicKey = editingLicId || db.ref(`proyectos/${cid}/${pid}/licitaciones`).push().key;
+        let payload = oldLic ? JSON.parse(JSON.stringify(oldLic)) : {};
+        
+        payload.id = finalLicKey; payload.pid = pid; payload.cid = cid; payload.pName = pName; payload.worker_id = workerId; payload.worker_name = worker.nombre; payload.is_grafico = isGraphic; payload.is_supervision = isSupervision; payload.is_internal_assignment = isInternal; payload.tareas = tareas;
+        if (isGraphic) { payload.mat_prices = Object.assign({}, _licMatPrices); }
+
+        if (isSupervision) {
+            let ofertaSup = parseFloat(document.getElementById('lic-oferta-supervision').value) || 0; if(ofertaSup <= 0) return alert("Ingresa tu propuesta económica por la supervisión.");
+            payload.precio_propuesto = ofertaSup; payload.costo_meta_general = totalMoAsignado; if (!oldLic) payload.estado = 'enviado';
+        } else if (!oldLic) { payload.estado = isInternal ? (isLicitacionInterna ? 'enviado' : 'aprobado') : 'enviado'; payload.precio_propuesto = totalMoAsignado; } 
+        else { payload.precio_propuesto = totalMoAsignado; }
+        
+        if(!oldLic) payload.fecha_envio = new Date().toISOString();
+        // Período de planilla — siempre se guarda (permite cambiar en ediciones)
+        payload.periodo = document.getElementById('lic-periodo').value || new Date().toISOString().substring(0, 7);
+        // Prorrateo dos meses
+        if (_licSplitActive) {
+            const _sm1 = parseFloat(document.getElementById('lic-split-m1')?.value) || 0;
+            const _sm2 = parseFloat(document.getElementById('lic-split-m2')?.value) || 0;
+            const _sp2 = document.getElementById('lic-split-periodo2')?.value || '';
+            if (_sm1 > 0 && _sm2 > 0 && _sp2) {
+                payload.periodo_split = {
+                    p1: { periodo: payload.periodo, monto: _sm1 },
+                    p2: { periodo: _sp2,            monto: _sm2 }
+                };
+            } else {
+                delete payload.periodo_split; // incompleto → ignorar
+            }
+        } else {
+            delete payload.periodo_split;
+        }
+        if(editingLicId && oldLic && oldLic.worker_id !== workerId) { await db.ref(`personal/${oldLic.worker_id}/solicitudes/${editingLicId}`).remove(); }
+
+        await db.ref(`proyectos/${cid}/${pid}/licitaciones/${finalLicKey}`).set(payload); await db.ref(`personal/${workerId}/solicitudes/${finalLicKey}`).set(payload);
+
+        if(payload.estado === 'aprobado' || payload.estado === 'adjudicado' || payload.estado === 'terminado') {
+            countedIndices.forEach(idx => {
+                let targetField = isGraphic ? 'print_resp' : 'prod_resp';
+                db.ref(`proyectos/${cid}/${pid}/presupuesto/items/${idx}/${targetField}`).once('value').then(s => { let currentResp = s.val() || ''; if(!currentResp.includes(worker.nombre)) { let newResp = currentResp ? currentResp + ', ' + worker.nombre : worker.nombre; db.ref(`proyectos/${cid}/${pid}/presupuesto/items/${idx}/${targetField}`).set(newResp); } });
+            });
+            await autoAssignGantt(worker.nombre, tareas); alert("¡Asignación editada y sincronizada al Cronograma Gantt!");
+        } else { alert("¡Licitación Guardada / Enviada exitosamente!"); }
+
+        document.getElementById('mod-new-lic').style.display = 'none'; editingLicId = null;
+
+        if(worker.telefono && (!isInternal || isSupervision)) { 
+            const fileName = isSupervision ? 'supervisor-dashboard.html' : (isGraphic ? 'proveedor-grafico.html' : 'contratista/index.html');
+            const basePath = generateCleanBaseLink(); const linkApp = `${basePath}${fileName}?wid=${workerId}&lic=${finalLicKey}`; let msg = '';
+            if(payload.estado === 'aprobado' || payload.estado === 'adjudicado') { msg = encodeURIComponent(`Hola ${worker.nombre},\n\nSe han actualizado las tareas de tu contrato en el proyecto *${pName}*.\n\n👉 Revisa los cambios en tu portal:\n${linkApp}`); } 
+            else { msg = encodeURIComponent(`Hola ${worker.nombre},\n\nTienes una solicitud de trabajo/supervisión para el proyecto *${pName}*.\n\n👉 Entra a cotizarla/aceptarla aquí:\n${linkApp}`); }
+            window.open(`https://wa.me/${worker.telefono}?text=${msg}`, '_blank');
+        }
+    }
+
+    function editarLicitacion(key) {
+        editingLicId = key; let lic = currentLics[key]; document.getElementById('filter-assigned').value = 'all'; document.getElementById('lic-tipo').value = lic.is_supervision ? 'supervision' : (lic.is_grafico ? 'graficos' : 'obra');
+        loadWorkers();
+        setTimeout(() => {
+            document.getElementById('lic-worker').value = lic.worker_id;
+            if(lic.is_supervision) { document.getElementById('lic-oferta-supervision').value = lic.precio_propuesto || ''; }
+            if(lic.is_internal_assignment && !lic.is_supervision) { document.getElementById('box-modo-interno').style.display = 'flex'; document.getElementById('lic-modo-interno').value = (lic.estado === 'enviado' || lic.estado === 'espera_cotizacion' || lic.estado === 'contra_oferta' || lic.estado === 'revisado') ? 'licitacion' : 'directa'; }
+            // Cargar período guardado o inferirlo de fecha_envio
+            const periodoGuardado = lic.periodo || (lic.fecha_envio || lic.fecha || '').substring(0, 7);
+            document.getElementById('lic-periodo').value = periodoGuardado || new Date().toISOString().substring(0, 7);
+            // Restaurar prorrateo si existe
+            _licSplitReset();
+            if (lic.periodo_split && lic.periodo_split.p1 && lic.periodo_split.p2) {
+                _licToggleSplit();
+                document.getElementById('lic-split-m1').value = lic.periodo_split.p1.monto || '';
+                document.getElementById('lic-split-periodo2').value = lic.periodo_split.p2.periodo || '';
+                document.getElementById('lic-split-m2').value = lic.periodo_split.p2.monto || '';
+                _licSplitRecalc();
+            }
+            loadItemsForLic();
+        }, 150);
+        document.getElementById('mod-new-lic').style.display = 'flex'; document.getElementById('tit-modal-lic').innerText = "Editar Licitación / Asignación";
+    }
+
+    function duplicarLicitacion(key) {
+        let lic = currentLics[key]; editingLicId = null; pendingPrefillTareas = lic.tareas; document.getElementById('filter-assigned').value = 'all'; document.getElementById('lic-tipo').value = lic.is_supervision ? 'supervision' : (lic.is_grafico ? 'graficos' : 'obra');
+        loadWorkers(); document.getElementById('mod-new-lic').style.display = 'flex'; document.getElementById('tit-modal-lic').innerText = "Copiar Licitación (Selecciona Destinatario)";
+    }
+
+    window.eliminarLicitacion = function(licId, workerId, estado, precio) {
+        if(!confirm("¿Estás seguro de ANULAR/ELIMINAR esta asignación?\nEsto la borrará del panel del trabajador y revertirá los saldos financieros.")) return;
+        db.ref(`proyectos/${cid}/${pid}/licitaciones/${licId}`).remove(); db.ref(`personal/${workerId}/solicitudes/${licId}`).remove();
+        if(estado === 'aprobado' || estado === 'adjudicado' || estado === 'terminado') { db.ref(`proyectos/${cid}/${pid}/gasto_total`).once('value', s => { let actual = parseFloat(s.val()) || 0; let resta = actual - parseFloat(precio || 0); db.ref(`proyectos/${cid}/${pid}/gasto_total`).set(resta < 0 ? 0 : resta); }); }
+    };
+
+    function loadLicitaciones() {
+        db.ref(`proyectos/${cid}/${pid}/licitaciones`).on('value', snap => {
+            currentLics = snap.val() || {};
+            let lPend = document.getElementById('l-pend'); lPend.innerHTML = ''; let cPend = 0;
+            let lRev = document.getElementById('l-rev'); lRev.innerHTML = ''; let cRev = 0;
+            let lAp = document.getElementById('l-ap'); lAp.innerHTML = ''; let cAp = 0;
+
+            Object.keys(currentLics).forEach(key => {
+                let lic = currentLics[key];
+                let itemStr = Object.values(lic.tareas || {}).map(t => {
+                    let thumb = t.img || (t.op_images ? Object.values(t.op_images)[0] : null) || (t.cortes ? Object.values(t.cortes)[0] : null) || '';
+                    let thumbHtml = thumb ? `<img loading="lazy" decoding="async" src="${thumb}" style="width:36px; height:36px; object-fit:cover; border-radius:6px; border:1px solid var(--border); flex-shrink:0;">` : `<div style="width:36px; height:36px; border-radius:6px; background:var(--bg); border:1px dashed var(--border); flex-shrink:0; display:flex; justify-content:center; align-items:center; font-size:16px; color:var(--gray);"><i class="ph-bold ph-image-square"></i></div>`;
+                    let cantDisplay = t.originType === 'art' ? (parseFloat(t.cant)||0).toFixed(3) : t.cant;
+                    let matBadge = t.material ? `<span style="font-size:8px; background:rgba(175,82,222,0.12); color:var(--purple); padding:2px 5px; border-radius:4px; font-weight:900;">${t.material}</span>` : '';
+                    return `<div style="display:flex; align-items:center; gap:10px; margin-bottom:8px; background:var(--bg); padding:8px; border-radius:8px;">${thumbHtml}<div style="line-height:1.3; flex-grow:1;"><span style="font-size:9px; color:var(--gray); font-weight:800; text-transform:uppercase;">${t.parent_desc || 'Ítem General'}</span><br><span style="font-size:12px; font-weight:900; color:var(--text);">${t.task_name || t.desc}</span> ${matBadge}<br><span style="font-size:10px; font-weight:700; color:var(--blue);">${cantDisplay} ${t.und}</span></div></div>`;
+                }).join('');
+
+                let isInt = lic.is_internal_assignment; let isSup = lic.is_supervision;
+                let badgeType = isInt ? `<span style="font-size:9px; background:var(--blue); color:white; padding:3px 6px; border-radius:4px;">ASIGNACIÓN INTERNA</span>` : '';
+                if(isSup) badgeType = `<span style="font-size:9px; background:var(--purple); color:white; padding:3px 6px; border-radius:4px;">SUPERVISIÓN</span>`;
+                
+                let totalStr = lic.precio_propuesto > 0 ? fMoney(lic.precio_propuesto) + ' Bs' : 'Esperando Precio...';
+                if(isInt && lic.estado === 'aprobado' && !isSup) totalStr = `<span style="color:var(--gray); font-size:10px;">Bolsa M.O.:</span> ` + totalStr;
+
+                if(isSup) totalStr = `<span style="color:var(--gray); font-size:10px;">Propuesta Supervisión:</span> ` + totalStr;
+                if(lic.is_grafico) badgeType += `<span style="font-size:9px; background:rgba(175,82,222,0.15); color:var(--purple); padding:3px 6px; border-radius:4px; margin-left:4px;">GRÁFICO</span>`;
+
+                let pagos = lic.pagos ? Object.values(lic.pagos) : [];
+                let totalPagado = pagos.reduce((s,p)=>s+parseFloat(p.monto||0),0);
+                let totalFinal = parseFloat(lic.precio_final||lic.precio_propuesto||0);
+                let saldoPend = totalFinal - totalPagado;
+                let saldoBadge = (totalFinal > 0 && saldoPend > 0 && (lic.estado==='aprobado'||lic.estado==='adjudicado'||lic.estado==='terminado')) ?
+                    `<span style="font-size:9px;background:rgba(255,59,48,0.12);color:var(--red);padding:3px 6px;border-radius:4px;font-weight:900;">Saldo: ${fMoney(saldoPend)} Bs</span>` : '';
+
+                let card = `<div class="lic-card">
+                    <div class="lic-head">
+                        <div class="lic-wk">
+                            ${lic.worker_name || lic.worker_id}
+                            <div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:3px;">${badgeType}${saldoBadge}</div>
+                        </div>
+                        <div style="display:flex;gap:6px;align-items:center;">
+                            <button class="btn-del-lic" onclick="eliminarLicitacion('${key}','${lic.worker_id}','${lic.estado}',${lic.precio_final||lic.precio_propuesto||0})" title="Eliminar"><i class="ph-bold ph-trash"></i></button>
+                        </div>
+                    </div>
+                    <div class="lic-body">${itemStr || '<span style="color:var(--gray);font-size:11px;">Sin ítems</span>'}</div>
+                    <div class="lic-total">${totalStr}</div>`;
+
+                let estado = lic.estado || 'pendiente';
+                if(estado==='enviado'||estado==='espera_cotizacion'||estado==='pendiente') {
+                    card += `<button class="btn-action btn-rev" onclick="editarLicitacion('${key}')"><i class="ph-bold ph-pencil-simple"></i> Revisar / Aprobar</button>`;
+                    lPend.innerHTML += card + '</div>'; cPend++;
+                } else if(estado==='contra_oferta'||estado==='revisado'||estado==='adjudicado') {
+                    card += `<button class="btn-action btn-rev" onclick="editarLicitacion('${key}')"><i class="ph-bold ph-pencil-simple"></i> Ver / Editar</button>`;
+                    card += `<button class="btn-action btn-done" style="margin-top:6px;" onclick="editarLicitacion('${key}')"><i class="ph-bold ph-check-circle"></i> Gestionar</button>`;
+                    lRev.innerHTML += card + '</div>'; cRev++;
+                } else if(estado==='aprobado'||estado==='terminado') {
+                    card += `<button class="btn-action btn-done" onclick="editarLicitacion('${key}')"><i class="ph-bold ph-pencil-simple"></i> Ver / Editar</button>`;
+                    if(estado==='aprobado') card += `<button class="btn-action btn-rev" style="margin-top:6px;background:rgba(52,199,89,0.15);color:var(--green);" onclick="marcarTerminado('${key}','${lic.worker_id}')"><i class="ph-bold ph-check-fat"></i> Marcar Terminada</button>`;
+                    lAp.innerHTML += card + '</div>'; cAp++;
+                }
+            });
+            document.getElementById('c-pend').innerText = cPend;
+            document.getElementById('c-rev').innerText = cRev;
+            document.getElementById('c-ap').innerText = cAp;
+        });
+    }
+
+    window.marcarTerminado = async function(licId, workerId) {
+        if(!confirm('¿Marcar esta licitación como TERMINADA?')) return;
+        let upd = { estado: 'terminado', fecha_terminado: Date.now() };
+        await db.ref(`proyectos/${cid}/${pid}/licitaciones/${licId}`).update(upd);
+        await db.ref(`personal/${workerId}/solicitudes/${licId}`).update(upd);
+    };
+
+    // ─────────────────────────────────────────────
+    // GANTT AUTO-ASSIGN
+
+
+    // ─────────────────────────────────────────────
+    // REVIEW MODAL
+    // ─────────────────────────────────────────────
+    window.openReviewModal = function(licId, workerId) {
+        currentReviewLicId = licId; currentReviewWorkerId = workerId;
+        let lic = currentLics[licId]; if (!lic) return;
+        let worker = workers[workerId] || {};
+        document.getElementById('review-worker').innerText = (worker.nombre || workerId) + ' — ' + (lic.periodo || '');
+        document.getElementById('review-total').value = lic.precio_propuesto || '';
+        let html = '';
+        Object.values(lic.tareas || {}).forEach(t => {
+            html += `<div class="item-row" style="margin-bottom:5px;">
+                <div style="flex:1;">
+                    <b style="font-size:12px;">${t.task_name||t.desc||'—'}</b><br>
+                    <span style="font-size:10px;color:var(--gray);">${parseFloat(t.cant||0).toFixed(2)} ${t.und||'u'} × ${fMoney(t.pu)} = <b>${fMoney(t.subtotal)} Bs</b></span>
+                </div>
+            </div>`;
+        });
+        document.getElementById('review-items').innerHTML = html || '<div class="empty-msg">Sin ítems</div>';
+        document.getElementById('mod-review').style.display = 'flex';
+    };
+
+    window.aprobarLicitacion = async function() {
+        if (!currentReviewLicId) return;
+        let precio = parseFloat(document.getElementById('review-total').value) || 0;
+        if (precio <= 0) return alert('Ingresa el precio final aprobado.');
+        showLoader('Aprobando...');
+        let upd = { estado: 'aprobado', precio_final: precio, fecha_aprobacion: Date.now() };
+        await db.ref(`proyectos/${cid}/${pid}/licitaciones/${currentReviewLicId}`).update(upd);
+        if (currentReviewWorkerId) await db.ref(`personal/${currentReviewWorkerId}/solicitudes/${currentReviewLicId}`).update(upd);
+        hideLoader();
+        document.getElementById('mod-review').style.display = 'none';
+    };
+
+    window.enviarContraOferta = async function() {
+        if (!currentReviewLicId) return;
+        let precio = parseFloat(document.getElementById('review-total').value) || 0;
+        if (precio <= 0) return alert('Ingresa tu contra oferta.');
+        showLoader('Enviando contra oferta...');
+        let upd = { estado: 'contra_oferta', precio_contra: precio };
+        await db.ref(`proyectos/${cid}/${pid}/licitaciones/${currentReviewLicId}`).update(upd);
+        if (currentReviewWorkerId) await db.ref(`personal/${currentReviewWorkerId}/solicitudes/${currentReviewLicId}`).update(upd);
+        hideLoader();
+        document.getElementById('mod-review').style.display = 'none';
+    };
+
+    // ─────────────────────────────────────────────
+    // CHAT IA FLOTANTE — usa IDs del HTML existente
+    // ─────────────────────────────────────────────
+    let _chatHistory = [];
+
+    // openAIChat() — llamado por el FAB button
+    window.openAIChat = function() {
+        document.getElementById('ai-chat-modal').style.display = 'flex';
+    };
+
+    // closeAIChat() — llamado por el botón Cerrar dentro del chat
+    window.closeAIChat = function() {
+        document.getElementById('ai-chat-modal').style.display = 'none';
+    };
+
+    // Alias por compatibilidad
+    window.cerrarChat = window.closeAIChat;
+
+    function _addChatMsg(role, text) {
+        _chatHistory.push({role, text});
+        let div = document.createElement('div');
+        div.className = 'msg msg-' + (role === 'ai' ? 'ai' : 'user');
+        div.textContent = text;
+        let body = document.getElementById('ai-chat-box');
+        if (body) { body.appendChild(div); body.scrollTop = body.scrollHeight; }
+    }
+
+    window.sendAIMessage = async function() {
+        let inp = document.getElementById('ai-user-input');
+        let msg = inp ? inp.value.trim() : '';
+        if (!msg) return;
+        inp.value = '';
+        _addChatMsg('user', msg);
+        let typing = document.getElementById('ai-typing');
+        if (typing) typing.style.display = 'flex';
+        try {
+            let user = firebase.auth().currentUser;
+            if (!user) throw new Error('No autenticado');
+            let token = await user.getIdToken();
+            // Construir resumen de licitaciones para contexto IA
+            let resumenLics = '';
+            try {
+                const licsArr = Object.values(currentLics || {}).map(l => ({
+                    trabajador: l.worker_name || l.trabajador_nombre || 'S/N',
+                    estado: l.estado || 'pendiente',
+                    tipo: l.is_grafico ? 'gráfica' : l.is_supervision ? 'supervisión' : 'obra',
+                    monto: parseFloat(l.precio_propuesto || l.precio_final || 0).toFixed(2),
+                    anticipos: l.anticipos ? Object.values(l.anticipos).reduce((s,a)=>s+parseFloat(a.monto||0),0).toFixed(2) : '0.00',
+                    periodo: l.periodo || '',
+                    tareas: l.tareas ? Object.values(l.tareas).map(t=>t.task_name||t.desc||'').filter(Boolean).slice(0,4).join(', ') : ''
+                }));
+                resumenLics = licsArr.length > 0 ? JSON.stringify(licsArr) : 'Sin licitaciones registradas.';
+            } catch(_) { resumenLics = 'No disponible'; }
+
+            let context = `Eres el Asistente de Licitaciones de RUBIK Bolivia. Estás en la pantalla de licitaciones del proyecto "${pName}".
+Sos directo, técnico y conciso. Respondés en 2-4 oraciones salvo que se pida más detalle.
+
+REGLAS:
+- Usá los datos reales del proyecto para responder (no inventes montos ni nombres).
+- Si preguntan por saldos: monto - anticipos = deuda.
+- Si preguntan por estados: pendiente/enviado/revisado/adjudicado/terminado.
+- Si no hay datos suficientes, decilo claramente y sugerí qué cargar en el sistema.
+
+LICITACIONES ACTUALES DEL PROYECTO:
+\${resumenLics}`;
+            let resp = await fetch('/api/gemini', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+                body: JSON.stringify({
+                    prompt: msg,
+                    context,
+                    history: _chatHistory.slice(-8).map(m => ({ role: m.role === 'ai' ? 'model' : 'user', parts: [{ text: m.text }] }))
+                })
+            });
+            let data = await resp.json();
+            _addChatMsg('ai', data.text || data.error || 'Sin respuesta');
+        } catch(e) { _addChatMsg('ai', 'Error: ' + e.message); }
+        if (typing) typing.style.display = 'none';
+    };
+
+    // Alias por compatibilidad
+    window.enviarMensajeChat = window.sendAIMessage;
+
+    const _chatInpEl = document.getElementById('ai-user-input');
+    if (_chatInpEl) {
+        _chatInpEl.addEventListener('keydown', e => {
+            if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); window.sendAIMessage(); }
+        });
+    }
+
+    // INIT
+    (function arrancarCarga() {
+        var auth = firebase.auth();
+        if (auth.currentUser) { loadLicitaciones(); return; }
+        var unsub = auth.onAuthStateChanged(function(user) {
+            unsub();
+            if (user) { loadLicitaciones(); }
+            else { window.location.href = 'login.html'; }
+        });
+    })();
+
+    
+    // ════ UTILIDAD REAL DEL PROYECTO ════════════════════════════════════════
+    window.calcularUtilidadReal = async function() {
+        const btnCalc = document.querySelector('[onclick="calcularUtilidadReal()"]');
+        if (btnCalc) { btnCalc.disabled = true; btnCalc.innerHTML = '<i class="ph-bold ph-spinner"></i> Calculando...'; }
+        try {
+            // 1. Total cobrado = suma de licitaciones aprobadas
+            let totalCobrado = 0;
+            Object.values(currentLics || {}).forEach(lic => {
+                if (lic.estado === 'aprobado') {
+                    const tareas = Object.values(lic.tareas || {});
+                    tareas.forEach(t => {
+                        const monto = parseFloat(t.propuesto || t.pu || 0) * (parseFloat(t.cant) || 1);
+                        totalCobrado += monto;
+                    });
+                }
+            });
+
+            // 2. Costo materiales y MO desde prod_apu
+            const itemsSnap = await db.ref(`proyectos/${cid}/${pid}/presupuesto/items`).once('value');
+            const items = itemsSnap.val() || {};
+            let costoMat = 0, costoMo = 0;
+            let detalleLines = [];
+
+            Object.keys(items).forEach(idx => {
+                const it = items[idx];
+                if (!it || it.type === 'chapter') return;
+                if (!it.prod_apu) return;
+
+                let itemMat = 0, itemMo = 0;
+                (it.prod_apu.mat || []).forEach(m => {
+                    // Usar precio real de compras si existe, sino precio base
+                    const p = parseFloat(m.p_real || m.p || 0);
+                    const q = parseFloat(m.q || 0);
+                    itemMat += q * p;
+                });
+                (it.prod_apu.mo || []).forEach(m => {
+                    itemMo += parseFloat(m.q || 0) * parseFloat(m.p || 0);
+                });
+                costoMat += itemMat;
+                costoMo += itemMo;
+                if (itemMat + itemMo > 0) {
+                    detalleLines.push(`• ${it.desc || 'Ítem'}: Mat ${fMoney(itemMat)} Bs + MO ${fMoney(itemMo)} Bs = <b>${fMoney(itemMat+itemMo)} Bs</b>`);
+                }
+            });
+
+            // 3. Impuestos sobre lo cobrado (IVA 13% + IT 3% = 16%)
+            const impuestos = totalCobrado * 0.16;
+            const costosTotal = costoMat + costoMo + impuestos;
+            const utilidadNeta = totalCobrado - costosTotal;
+            const margen = totalCobrado > 0 ? (utilidadNeta / totalCobrado * 100) : 0;
+
+            // 4. Render
+            document.getElementById('util-cobrado').textContent = fMoney(totalCobrado) + ' Bs';
+            document.getElementById('util-mat').textContent = fMoney(costoMat) + ' Bs';
+            document.getElementById('util-mo').textContent = fMoney(costoMo) + ' Bs';
+            document.getElementById('util-imp').textContent = fMoney(impuestos) + ' Bs';
+            document.getElementById('util-neta').textContent = fMoney(utilidadNeta) + ' Bs';
+            document.getElementById('util-neta').style.color = utilidadNeta >= 0 ? 'var(--green)' : 'var(--red)';
+            document.getElementById('util-result-card').style.borderColor = utilidadNeta >= 0 ? 'var(--green)' : 'var(--red)';
+            document.getElementById('util-margen').textContent = `Margen: ${margen.toFixed(1)}%`;
+
+            const detalleEl = document.getElementById('utilidad-detalle');
+            if (detalleLines.length > 0) {
+                detalleEl.innerHTML = '<b style="font-size:11px;color:var(--text);">Desglose por ítem (prod_apu):</b><br>' + detalleLines.join('<br>');
+                detalleEl.style.display = 'block';
+            } else {
+                detalleEl.innerHTML = '<i>No hay ítems con APU de producción aún. Ve a Producción → ficha de cada ítem para ajustar materiales y MO.</i>';
+                detalleEl.style.display = 'block';
+            }
+        } catch(e) {
+            console.error(e);
+            alert('Error al calcular: ' + e.message);
+        } finally {
+            if (btnCalc) { btnCalc.disabled = false; btnCalc.innerHTML = '<i class="ph-bold ph-calculator"></i> Calcular'; }
+        }
+    };
+
+</script>
+</body>
+</html>

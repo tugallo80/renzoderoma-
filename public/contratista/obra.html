@@ -1,0 +1,496 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Panel de Obra - Rubik OS</title>
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.1.3/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.1.3/firebase-database-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.1.3/firebase-storage-compat.js"></script>
+    <script>
+        window._rubikFirebaseConfig = window._rubikFirebaseConfig || {
+            apiKey: "AIzaSyDXYlofy31cDP14xVAVxWo_7TqXdSgsIjA",
+            authDomain: "rubik-bolivia.firebaseapp.com",
+            databaseURL: "https://rubik-bolivia-default-rtdb.firebaseio.com",
+            projectId: "rubik-bolivia",
+            storageBucket: "rubik-bolivia.firebasestorage.app",
+            messagingSenderId: "4153087958",
+            appId: "1:4153087958:web:cf2dd16106580ed6437677"
+        };
+        if (!firebase.apps.length) firebase.initializeApp(window._rubikFirebaseConfig);
+    </script>
+    <script src="/js/firecache.js?v=1"></script>
+
+    <style>
+        :root { --bg: #f2f2f7; --card: #ffffff; --text: #1c1c1e; --blue: #007aff; --green: #34c759; --orange: #ff9500; --red: #ff3b30; --gray: #8e8e93; --border: #e5e5ea; }
+        body { font-family: -apple-system, sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 20px; padding-bottom: 100px; -webkit-tap-highlight-color: transparent;}
+        
+        .nav { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; position: sticky; top: 0; background: var(--bg); padding-top: 10px; z-index: 100;}
+        .btn-nav { background: var(--card); border: 1px solid var(--border); padding: 10px 15px; border-radius: 16px; font-weight: 800; color: var(--text); cursor: pointer; display: flex; align-items: center; gap: 6px; box-shadow: 0 4px 10px rgba(0,0,0,0.03);}
+        
+        .header { margin-bottom: 25px; }
+        .proj-title { font-size: 24px; font-weight: 900; margin: 0; color: var(--blue); line-height: 1.1;}
+        .proj-sub { font-size: 12px; font-weight: 800; color: var(--gray); text-transform: uppercase; margin-top: 5px;}
+
+        .tabs-wrap { background: var(--border); padding: 4px; border-radius: 16px; display: flex; margin-bottom: 20px; overflow-x: auto; scrollbar-width: none;}
+        .tabs-wrap::-webkit-scrollbar { display: none; }
+        .tab-btn { flex: 1; min-width:max-content; padding: 12px 15px; border: none; background: transparent; font-weight: 800; font-size: 12px; border-radius: 12px; color: var(--gray); cursor: pointer; transition: 0.3s; text-align: center;}
+        .tab-btn.active { background: var(--card); color: var(--text); box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+
+        .chapter-header { background: var(--blue); padding: 12px 15px; border-radius: 8px; font-weight: 900; font-size: 13px; margin-bottom: 10px; text-transform: uppercase; color: white; cursor: pointer; display: flex; justify-content: space-between; align-items: center; margin-top:15px;}
+        .chapter-content { display: block; overflow: hidden; margin-bottom: 20px; }
+
+        .task-card { background: var(--card); border-radius: 16px; padding: 15px; margin-bottom: 12px; border: 1px solid var(--border); box-shadow: 0 4px 10px rgba(0,0,0,0.02);}
+        .t-name { font-size: 16px; font-weight: 900; margin-bottom: 8px; line-height: 1.2;}
+        .t-feat { font-size: 11px; color: var(--gray); margin-bottom: 10px; line-height: 1.4; background: var(--bg); padding: 10px; border-radius: 8px; white-space: pre-wrap;}
+        .t-metrics { display: flex; justify-content: space-between; font-size: 12px; font-weight: 800; color: var(--gray); background: var(--bg); padding: 8px 12px; border-radius: 8px;}
+        .t-metrics span b { color: var(--text); font-size: 14px;}
+
+        .grid-gallery { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
+        .g-item { width: 100%; aspect-ratio: 1; border-radius: 12px; object-fit: cover; border: 1px solid var(--border); background: var(--card); cursor: pointer; box-shadow: 0 4px 10px rgba(0,0,0,0.05);}
+
+        .btn-main { background: var(--blue); color: white; border: none; padding: 16px; border-radius: 16px; font-weight: 900; font-size: 15px; width: 100%; cursor: pointer; display: flex; justify-content: center; align-items: center; gap: 8px; margin-bottom: 20px;}
+        .empty-msg { text-align: center; color: var(--gray); font-size: 13px; padding: 30px; font-weight: 700; border: 2px dashed var(--border); border-radius: 16px;}
+
+        /* Formulario Compras */
+        .compra-row { display: grid; grid-template-columns: 2fr 1fr 1.5fr 30px; gap: 5px; align-items: center; margin-bottom: 8px; background:var(--card); padding:10px; border-radius:8px; border:1px solid var(--border);}
+        .inp-c { width: 100%; padding: 8px; border: 1px solid var(--border); border-radius: 6px; font-size: 12px; font-weight: 700; box-sizing: border-box; background:var(--bg); outline:none;}
+        .btn-del { color: white; background: var(--red); border: none; border-radius: 6px; padding: 8px; font-weight: bold; cursor: pointer; display:flex; align-items:center; justify-content:center;}
+
+        .photo-viewer { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.95); z-index: 3000; flex-direction: column; }
+        .pv-nav { display: flex; justify-content: space-between; padding: 20px; position: absolute; width: 100%; box-sizing: border-box; z-index: 3010;}
+        .btn-black { background: rgba(255,255,255,0.2); backdrop-filter: blur(10px); color: white; border: none; padding: 10px 20px; border-radius: 12px; font-weight: 800; cursor: pointer; display:flex; gap:6px; align-items:center;}
+        .pv-img { width: 100%; height: 100%; object-fit: contain; position: absolute; top: 0; left: 0; }
+        
+        .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); z-index: 2000; justify-content: center; align-items: center; backdrop-filter: blur(4px); }
+        .modal-box { background: var(--card); width: 90%; max-width: 400px; padding: 25px; border-radius: 24px; position: relative; box-sizing: border-box;}
+        
+        #global-loader { display: none; position: fixed; top:0; left:0; width:100%; height:100%; background: rgba(0,0,0,0.85); backdrop-filter: blur(10px); z-index: 4000; justify-content: center; align-items: center; flex-direction: column; color:white;}
+        .spinner { border: 4px solid rgba(255,255,255,0.2); border-left-color: var(--blue); border-radius: 50%; width: 50px; height: 50px; animation: spin 1s linear infinite; margin-bottom: 15px; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    </style>
+    <link rel="stylesheet" href="/css/responsive.css?v=1">
+</head>
+<body>
+
+    <div id="global-loader"><div class="spinner"></div><div style="font-weight:900; font-size:16px;" id="loader-text">Sincronizando Obra...</div></div>
+
+    <div class="nav">
+        <button class="btn-nav" onclick="window.history.back()"><i class="ph-bold ph-caret-left"></i> Volver</button>
+        <div style="font-weight:900; font-size:12px; color:var(--gray);">PORTAL DE OBRA</div>
+    </div>
+
+    <div class="header">
+        <h1 class="proj-title" id="h-pro">Cargando...</h1>
+        <div class="proj-sub">Panel de Control de Asignaciones</div>
+    </div>
+
+    <div class="tabs-wrap">
+        <button class="tab-btn active" id="tab-tareas" onclick="switchTab('tareas')">Tareas</button>
+        <button class="tab-btn" id="tab-planos" onclick="switchTab('planos')">Planos</button>
+        <button class="tab-btn" id="tab-avances" onclick="switchTab('avances')">Cronograma</button>
+        <button class="tab-btn" id="tab-compras" onclick="switchTab('compras')">Compras</button>
+    </div>
+
+    <div id="panel-tareas"></div>
+    <div id="panel-planos" style="display:none;"></div>
+    <div id="panel-avances" style="display:none;"></div>
+    
+    <div id="panel-compras" style="display:none;">
+        <div style="background:var(--card); padding:15px; border-radius:16px; margin-bottom:15px; border:1px solid var(--border);">
+            <h3 style="margin-top:0; margin-bottom:5px; color:var(--blue);"><i class="ph-bold ph-shopping-cart"></i> Solicitud de Materiales</h3>
+            <p style="font-size:11px; color:var(--gray); font-weight:600; margin-bottom:15px;">Registra los materiales que necesitas comprar. Se enviará a la matriz para su aprobación y desembolso.</p>
+            
+            <div id="compra-list"></div>
+            
+            <button class="btn-main" style="background:var(--bg); color:var(--blue); border:1px dashed var(--blue); box-shadow:none; padding:10px; margin-bottom:15px; font-size:12px;" onclick="addCompraRow()">+ Agregar Material</button>
+            
+            <div style="display:flex; justify-content:space-between; font-size:16px; font-weight:900; margin-bottom:15px; border-top:1px dashed var(--border); padding-top:10px;">
+                <span>TOTAL:</span>
+                <span id="compra-total-lbl" style="color:var(--green);">0.00 Bs</span>
+            </div>
+            
+            <button class="btn-main btn-green" onclick="enviarSolicitudCompra()"><i class="ph-bold ph-paper-plane-tilt"></i> Enviar Solicitud a Matriz</button>
+        </div>
+    </div>
+
+    <div id="photo-viewer" class="photo-viewer">
+        <div class="pv-nav">
+            <button class="btn-black" onclick="cerrarVisorFotos()"><i class="ph-bold ph-caret-left"></i> Volver</button>
+            <button class="btn-black" id="btn-del-foto" style="background:var(--red); display:none;" onclick="eliminarFotoGantt()"><i class="ph-bold ph-trash"></i> Eliminar</button>
+        </div>
+        <img loading="lazy" decoding="async" id="pv-img" class="pv-img">
+    </div>
+
+<script>
+    // Firebase ya inicializado en el <head>
+    if (!firebase.apps.length) firebase.initializeApp(window._rubikFirebaseConfig);
+    const db = firebase.database(); const storage = firebase.storage();
+
+    const urlParams = new URLSearchParams(window.location.search);
+    const wid = urlParams.get('wid'); const cid = urlParams.get('cid'); const pid = urlParams.get('pid');
+
+    if(!wid || !cid || !pid) {
+        document.getElementById('h-pro').innerText = "Error de Enlace";
+        document.getElementById('global-loader').style.display = 'none';
+    }
+
+    let userName = "Trabajador";
+    let ganttData = {}; let allItems = [];
+    let currentGanttTarget = null; let currentUploadFile = null;
+    let reqItems = [];
+
+    // MEMORIA DE PESTAÑAS DEL GANTT
+    let chapterStates = {};
+
+    window.onload = async () => {
+        if(wid && cid && pid) {
+            await cargarNombreProyectoYUsuario(); 
+            cargarMisTareasYPlanos();
+            cargarGantt();
+            addCompraRow(); 
+        }
+    };
+
+    function switchTab(tab) {
+        ['tareas', 'planos', 'avances', 'compras'].forEach(t => { 
+            document.getElementById(`tab-${t}`).classList.remove('active'); 
+            document.getElementById(`panel-${t}`).style.display = 'none'; 
+        });
+        document.getElementById(`tab-${tab}`).classList.add('active'); 
+        document.getElementById(`panel-${tab}`).style.display = 'block';
+    }
+
+    function toggleChapter(id) {
+        let el = document.getElementById(id); let icon = document.getElementById('icon-' + id);
+        if(el.style.display === 'none') { 
+            el.style.display = 'block'; icon.style.transform = 'rotate(0deg)'; 
+            chapterStates[id] = 'block'; 
+        } else { 
+            el.style.display = 'none'; icon.style.transform = 'rotate(-90deg)'; 
+            chapterStates[id] = 'none'; 
+        }
+    }
+
+    async function cargarNombreProyectoYUsuario() {
+        let p1 = db.ref(`proyectos/${cid}/${pid}/nombre`).once('value').then(snap => { if(snap.exists()) document.getElementById('h-pro').innerText = snap.val(); });
+        let p2 = db.ref(`personal/${wid}/nombre`).once('value').then(snap => { if(snap.exists()) userName = snap.val(); });
+        db.ref(`proyectos/${cid}/${pid}/presupuesto/items`).on('value', snap => { allItems = snap.val() || []; });
+        
+        await Promise.all([p1, p2]);
+    }
+
+    function cargarMisTareasYPlanos() {
+        db.ref(`personal/${wid}/solicitudes`).on('value', snap => {
+            const contTareas = document.getElementById('panel-tareas');
+            const contPlanos = document.getElementById('panel-planos');
+            contTareas.innerHTML = ''; contPlanos.innerHTML = '';
+            
+            let hasTareas = false;
+            let tareasGroup = {}; let planosGroup = {};
+
+            if(snap.exists()) {
+                snap.forEach(child => {
+                    let sol = child.val();
+                    let solPid = sol.proyecto_id || sol.pid;
+                    if(solPid === pid && (sol.estado === 'adjudicado' || sol.estado === 'aprobado' || sol.estado === 'terminado')) {
+                        if(sol.tareas) {
+                            Object.keys(sol.tareas).forEach(tKey => {
+                                hasTareas = true; let t = sol.tareas[tKey];
+                                let parent = t.parent_desc || 'ÍTEM GENERAL';
+                                
+                                if(!tareasGroup[parent]) tareasGroup[parent] = [];
+                                tareasGroup[parent].push(t);
+
+                                let imgs = [];
+                                if(t.img) imgs.push(t.img);
+                                if(t.cortes) { if(Array.isArray(t.cortes)) imgs.push(...t.cortes); else Object.values(t.cortes).forEach(c => imgs.push(c)); }
+                                if(t.op_images) { if(Array.isArray(t.op_images)) imgs.push(...t.op_images); else Object.values(t.op_images).forEach(c => imgs.push(c)); }
+                                
+                                if(imgs.length > 0) {
+                                    if(!planosGroup[parent]) planosGroup[parent] = [];
+                                    imgs.forEach(url => { if(url && url !== "null" && !planosGroup[parent].includes(url)) planosGroup[parent].push(url); });
+                                }
+                            });
+                        }
+                    }
+                });
+            }
+
+            if(!hasTareas) contTareas.innerHTML = '<div class="empty-msg">Aún no tienes tareas aprobadas en este proyecto.</div>';
+            else {
+                Object.keys(tareasGroup).forEach((parent, i) => {
+                    let hId = `chap-t-${i}`;
+                    let html = `<div class="chapter-header" onclick="toggleChapter('${hId}')"><span>${parent}</span><i class="ph-bold ph-caret-down" id="icon-${hId}" style="transition:0.3s;"></i></div><div id="${hId}" style="display:block; margin-bottom:15px;">`;
+                    tareasGroup[parent].forEach(t => {
+                        let featHtml = t.feat ? `<div class="t-feat"><b style="color:var(--blue);">ESPECIFICACIONES:</b><br>${t.feat}</div>` : '';
+                        let matsHtml = t.mats ? `<div class="t-feat"><b style="color:var(--orange);">MATERIALES BASE:</b><br>${t.mats}</div>` : '';
+                        html += `
+                        <div class="task-card">
+                            <div class="t-name">${t.task_name || t.desc}</div>
+                            ${featHtml} ${matsHtml}
+                            <div class="t-metrics"><span>Cant: <b>${t.cant} ${t.und}</b></span><span>P.U: <b>${t.pu || 0} Bs</b></span></div>
+                        </div>`;
+                    });
+                    html += `</div>`; contTareas.innerHTML += html;
+                });
+            }
+
+            if(Object.keys(planosGroup).length > 0) {
+                Object.keys(planosGroup).forEach((parent, i) => {
+                    let hId = `chap-p-${i}`;
+                    let imgsHtml = planosGroup[parent].map(url => `<img loading="lazy" decoding="async" src="${url}" class="g-item" onclick="verImagenFullNormal('${url}')">`).join('');
+                    contPlanos.innerHTML += `
+                    <div class="chapter-header" onclick="toggleChapter('${hId}')"><span>${parent}</span><i class="ph-bold ph-caret-down" id="icon-${hId}" style="transition:0.3s;"></i></div>
+                    <div id="${hId}" style="display:block; margin-bottom:15px;"><div class="grid-gallery">${imgsHtml}</div></div>`;
+                });
+            } else { contPlanos.innerHTML = '<div class="empty-msg">No hay planos asociados.</div>'; }
+
+            document.getElementById('global-loader').style.display = 'none';
+        });
+    }
+
+    function cargarGantt() {
+        db.ref(`proyectos/${cid}/${pid}/gantt/items`).on('value', snap => {
+            ganttData = snap.val() || {};
+            const cont = document.getElementById('panel-avances'); cont.innerHTML = '';
+            let hasGantt = false; let ganttGroup = {};
+
+            let safeUserName = String(userName).trim().toLowerCase();
+            let safeWid = String(wid).trim().toLowerCase();
+            let safeWidSpaces = safeWid.replace(/_/g, ' ');
+
+            Object.keys(ganttData).forEach(itemIdx => {
+                let gItem = ganttData[itemIdx];
+                let parentDesc = allItems[itemIdx] ? allItems[itemIdx].desc : 'ÍTEM GENERAL';
+                if(gItem && gItem.subtasks) {
+                    Object.keys(gItem.subtasks).forEach(sKey => {
+                        let sub = gItem.subtasks[sKey];
+                        let safeWorker = String(sub.worker || "").trim().toLowerCase();
+                        let safeWorkerUnderscores = safeWorker.replace(/\s+/g, '_');
+                        
+                        if(safeWorker === safeUserName || safeWorker === safeWid || safeWorker === safeWidSpaces || safeWorkerUnderscores === safeWid) {
+                            hasGantt = true;
+                            if(!ganttGroup[parentDesc]) ganttGroup[parentDesc] = [];
+                            ganttGroup[parentDesc].push({sKey, sub, itemIdx});
+                        }
+                    });
+                }
+            });
+
+            if(!hasGantt) { cont.innerHTML = '<div class="empty-msg">No tienes tareas en el cronograma oficial de la matriz.</div>'; return; }
+
+            // ==========================================
+            // LÓGICA DE BARRA GLOBAL Y PROMEDIOS
+            // ==========================================
+            let globalSum = 0; let globalCount = 0;
+            let chapterStats = {};
+
+            Object.keys(ganttGroup).forEach(parent => {
+                let cSum = 0; let cCount = 0;
+                ganttGroup[parent].forEach(g => {
+                    let prog = parseInt(g.sub.progress || 0);
+                    cSum += prog; cCount++;
+                    globalSum += prog; globalCount++;
+                });
+                chapterStats[parent] = cCount > 0 ? Math.round(cSum / cCount) : 0;
+            });
+
+            let globalAvg = globalCount > 0 ? Math.round(globalSum / globalCount) : 0;
+            let todayStr = new Date().toISOString().split('T')[0];
+
+            let html = `
+                <div style="background: linear-gradient(135deg, var(--blue), #5ac8fa); border-radius: 16px; padding: 20px; color: white; margin-bottom: 20px; box-shadow: 0 8px 20px rgba(0,122,255,0.2);">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+                        <div style="font-size:12px; font-weight:800; text-transform:uppercase;">Avance General Asignado</div>
+                        <div style="font-size:32px; font-weight:900;">${globalAvg}%</div>
+                    </div>
+                    <div style="height:8px; background:rgba(255,255,255,0.3); border-radius:4px; overflow:hidden;">
+                        <div style="height:100%; background:#fff; width:${globalAvg}%; transition:width 1s;"></div>
+                    </div>
+                </div>
+                <input type="file" id="gantt-file-upload" style="display:none" accept="image/*" capture="environment" onchange="processGanttPhoto(this)">
+            `;
+
+            Object.keys(ganttGroup).forEach((parent, i) => {
+                let hId = `chap-g-${i}`;
+                let disp = chapterStates[hId] === 'none' ? 'none' : 'block';
+                let rot = chapterStates[hId] === 'none' ? 'rotate(-90deg)' : 'rotate(0deg)';
+                let avgChapter = chapterStats[parent];
+
+                html += `<div class="chapter-header" onclick="toggleChapter('${hId}')">
+                    <span style="flex:1;">${parent}</span>
+                    <span style="background:rgba(255,255,255,0.2); padding:2px 8px; border-radius:10px; font-size:11px; margin-right:10px;">${avgChapter}%</span>
+                    <i class="ph-bold ph-caret-down" id="icon-${hId}" style="transition:0.3s; transform:${rot};"></i>
+                </div><div id="${hId}" style="display:${disp}; margin-bottom:15px;">`;
+                
+                ganttGroup[parent].forEach(g => {
+                    let sub = g.sub; let itemIdx = g.itemIdx; let sKey = g.sKey;
+                    let photosHtml = '';
+                    
+                    if(sub.photos) { 
+                        Object.keys(sub.photos).forEach(pKey => { 
+                            let p = sub.photos[pKey];
+                            photosHtml += `<img loading="lazy" decoding="async" src="${p.url}" style="width:60px; height:60px; object-fit:cover; border-radius:8px; cursor:pointer; flex-shrink:0; border:1px solid var(--border);" onclick="verImagenGantt('${p.url}', '${itemIdx}', '${sKey}', '${pKey}')">`; 
+                        }); 
+                    }
+                    
+                    let start = sub.start ? new Date(sub.start + 'T12:00:00').toLocaleDateString('es-ES', {day:'numeric', month:'short'}) : 'Sin fecha';
+                    let end = sub.end ? new Date(sub.end + 'T12:00:00').toLocaleDateString('es-ES', {day:'numeric', month:'short'}) : 'Sin fecha';
+
+                    let isDelayed = (sub.end && sub.end < todayStr && (sub.progress || 0) < 100);
+                    let delayBadge = isDelayed ? `<div style="background:rgba(255,59,48,0.1); color:var(--red); font-size:10px; font-weight:900; padding:4px 8px; border-radius:6px; display:inline-block; margin-bottom:10px;"><i class="ph-bold ph-warning-circle"></i> Retrasado según cronograma</div>` : '';
+                    let borderStyle = isDelayed ? 'border: 2px solid var(--red);' : 'border: 1px solid var(--border);';
+
+                    html += `
+                    <div class="task-card" style="${borderStyle}">
+                        ${delayBadge}
+                        <div class="t-name">${sub.name}</div>
+                        <div style="font-size:11px; color:var(--gray); margin-bottom:15px; font-weight:800;"><span style="color:var(--orange);">Inicio: ${start}</span> &nbsp;&rarr;&nbsp; <span style="color:var(--green);">Fin: ${end}</span></div>
+                        <div style="font-size:10px; font-weight:800; color:var(--gray); margin-bottom:5px;">REPORTE DE AVANCE:</div>
+                        <div style="display:flex; align-items:center; gap:10px; margin-bottom:15px; background:var(--bg); padding:10px; border-radius:8px;">
+                            <input type="range" min="0" max="100" value="${sub.progress || 0}" style="flex:1;" onchange="updateGanttProgress('${itemIdx}', '${sKey}', this.value)">
+                            <span id="lbl-prog-${sKey}" style="font-weight:900; font-size:14px; color:var(--blue); width:40px; text-align:right;">${sub.progress || 0}%</span>
+                        </div>
+                        <div style="font-size:10px; font-weight:800; color:var(--gray); margin-bottom:5px;">REGISTRO FOTOGRÁFICO:</div>
+                        <div style="display:flex; gap:8px; overflow-x:auto; margin-bottom:10px; padding-bottom:5px;">${photosHtml}</div>
+                        <button class="btn-main" style="padding:10px; font-size:12px; margin-bottom:0; background:var(--card); color:var(--blue); border:1px dashed var(--blue); box-shadow:none;" onclick="openGanttPhoto('${itemIdx}', '${sKey}')"><i class="ph-bold ph-camera"></i> Subir Foto de Avance</button>
+                    </div>`;
+                });
+                html += `</div>`;
+            });
+            cont.innerHTML = html;
+        });
+    }
+
+    function updateGanttProgress(itemIdx, subKey, value) {
+        document.getElementById(`lbl-prog-${subKey}`).innerText = value + '%';
+        db.ref(`proyectos/${cid}/${pid}/gantt/items/${itemIdx}/subtasks/${subKey}/progress`).set(value);
+    }
+
+    function openGanttPhoto(itemIdx, subKey) { currentGanttTarget = { itemIdx, subKey }; document.getElementById('gantt-file-upload').click(); }
+
+    function compressImage(file, max, q) { 
+        return new Promise(res => { const r = new FileReader(); r.onload = e => { const i = new Image(); i.onload = () => { const c = document.createElement('canvas'); let s = i.width > max ? max / i.width : 1; c.width = i.width * s; c.height = i.height * s; c.getContext('2d').drawImage(i, 0, 0, c.width, c.height); res(c.toDataURL('image/jpeg', q)); }; i.src = e.target.result; }; r.readAsDataURL(file); }); 
+    }
+
+    async function processGanttPhoto(inp) {
+        if(inp.files[0] && currentGanttTarget) {
+            document.getElementById('loader-text').innerText = "Subiendo foto..."; document.getElementById('global-loader').style.display = 'flex';
+            try {
+                const b64 = await compressImage(inp.files[0], 800, 0.7);
+                const snapUpload = await storage.ref(`avances/${pid}/${wid}_${Date.now()}.jpg`).putString(b64, 'data_url');
+                const url = await snapUpload.ref.getDownloadURL();
+                let {itemIdx, subKey} = currentGanttTarget;
+                await db.ref(`proyectos/${cid}/${pid}/gantt/items/${itemIdx}/subtasks/${subKey}/photos`).push({ url: url, timestamp: Date.now() });
+            } catch(e) { alert("Error subiendo foto."); } 
+            finally { document.getElementById('global-loader').style.display = 'none'; inp.value = ''; currentGanttTarget = null; }
+        }
+    }
+
+    // ==========================================
+    // VISOR DE FOTOS Y ELIMINACIÓN
+    // ==========================================
+    let currentPhotoDeleteTarget = null;
+
+    function verImagenFullNormal(url) {
+        document.getElementById('pv-img').src = url; 
+        document.getElementById('btn-del-foto').style.display = 'none';
+        document.getElementById('photo-viewer').style.display = 'flex'; 
+    }
+
+    function verImagenGantt(url, itemIdx, sKey, pKey) {
+        document.getElementById('pv-img').src = url; 
+        currentPhotoDeleteTarget = { itemIdx, sKey, pKey };
+        document.getElementById('btn-del-foto').style.display = 'flex'; 
+        document.getElementById('photo-viewer').style.display = 'flex'; 
+    }
+
+    function cerrarVisorFotos() {
+        document.getElementById('photo-viewer').style.display = 'none';
+        document.getElementById('pv-img').src = '';
+        currentPhotoDeleteTarget = null;
+    }
+
+    function eliminarFotoGantt() {
+        if(!currentPhotoDeleteTarget) return;
+        if(!confirm("¿Seguro que deseas eliminar esta foto de tu reporte?")) return;
+        let {itemIdx, sKey, pKey} = currentPhotoDeleteTarget;
+        db.ref(`proyectos/${cid}/${pid}/gantt/items/${itemIdx}/subtasks/${sKey}/photos/${pKey}`).remove().then(() => {
+            cerrarVisorFotos();
+        });
+    }
+
+    // ==========================================
+    // MÓDULO DE SOLICITUD DE COMPRAS
+    // ==========================================
+    function addCompraRow() {
+        let id = Date.now();
+        reqItems.push({id: id, mat: '', cant: 1, pu: 0});
+        renderCompraRows();
+    }
+
+    function delCompraRow(id) {
+        reqItems = reqItems.filter(i => i.id !== id);
+        renderCompraRows();
+    }
+
+    function updCompra(id, field, value) {
+        let item = reqItems.find(i => i.id === id);
+        if(item) {
+            item[field] = (field === 'cant' || field === 'pu') ? (parseFloat(value) || 0) : value;
+            renderCompraRows();
+        }
+    }
+
+    function renderCompraRows() {
+        const list = document.getElementById('compra-list'); list.innerHTML = '';
+        let total = 0;
+        reqItems.forEach(it => {
+            let sub = it.cant * it.pu; total += sub;
+            list.innerHTML += `
+            <div class="compra-row">
+                <div><div style="font-size:9px; color:var(--gray); font-weight:800; margin-bottom:2px;">MATERIAL / DETALLE</div><input type="text" class="inp-c" value="${it.mat}" onchange="updCompra(${it.id}, 'mat', this.value)" placeholder="Ej: Electrodos"></div>
+                <div><div style="font-size:9px; color:var(--gray); font-weight:800; margin-bottom:2px;">CANT</div><input type="number" class="inp-c" value="${it.cant}" onchange="updCompra(${it.id}, 'cant', this.value)" style="text-align:center;"></div>
+                <div><div style="font-size:9px; color:var(--gray); font-weight:800; margin-bottom:2px;">P.U (Bs)</div><input type="number" class="inp-c" value="${it.pu > 0 ? it.pu : ''}" onchange="updCompra(${it.id}, 'pu', this.value)" placeholder="0.00" style="text-align:center;"></div>
+                <button class="btn-del" onclick="delCompraRow(${it.id})"><i class="ph-bold ph-trash"></i></button>
+            </div>`;
+        });
+        document.getElementById('compra-total-lbl').innerText = total.toFixed(2) + " Bs";
+    }
+
+    async function enviarSolicitudCompra() {
+        let total = reqItems.reduce((acc, it) => acc + (it.cant * it.pu), 0);
+        let validItems = reqItems.filter(it => it.mat.trim() !== '' && it.pu > 0);
+        
+        if(validItems.length === 0) return alert("Agrega al menos un material con precio para enviar la solicitud.");
+        if(!confirm("¿Enviar solicitud de compra a la oficina matriz?")) return;
+
+        document.getElementById('loader-text').innerText = "Enviando Solicitud..."; document.getElementById('global-loader').style.display = 'flex';
+        
+        try {
+            await db.ref(`proyectos/${cid}/${pid}/solicitudes_compra`).push({
+                wid: wid,
+                worker_name: userName,
+                timestamp: Date.now(),
+                estado: 'pendiente',
+                items: validItems,
+                total: total
+            });
+
+            reqItems = []; addCompraRow(); // Reset UI
+            
+            db.ref('config/admin_phone').once('value').then(snap => { 
+                let num = snap.val() || "59176868833"; num = num.replace(/\D/g, ''); if(!num.startsWith("591")) num = "591" + num; 
+                let msg = encodeURIComponent(`¡Hola Oficina! 👋\nHe registrado una *Solicitud de Compra* de materiales por *${total.toFixed(2)} Bs* para el proyecto *${document.getElementById('h-pro').innerText}*.\n\n👉 Por favor revisa y aprueba el desembolso en el módulo de Compras de Rubik OS.`);
+                window.location.href = `https://wa.me/${num}?text=${msg}`;
+            });
+
+        } catch(e) { alert("Error enviando solicitud."); }
+        finally { document.getElementById('global-loader').style.display = 'none'; }
+    }
+</script>
+    <script src="/js/viewmode.js?v=1"></script>
+</body>
+</html>

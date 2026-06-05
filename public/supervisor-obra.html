@@ -1,0 +1,820 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Gestión Operativa - Supervisor</title>
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.1.3/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.1.3/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.1.3/firebase-database-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.1.3/firebase-storage-compat.js"></script>
+    <script>
+        window._rubikFirebaseConfig = window._rubikFirebaseConfig || {
+            apiKey: "AIzaSyDXYlofy31cDP14xVAVxWo_7TqXdSgsIjA",
+            authDomain: "rubik-bolivia.firebaseapp.com",
+            databaseURL: "https://rubik-bolivia-default-rtdb.firebaseio.com",
+            projectId: "rubik-bolivia",
+            storageBucket: "rubik-bolivia.firebasestorage.app",
+            messagingSenderId: "4153087958",
+            appId: "1:4153087958:web:cf2dd16106580ed6437677"
+        };
+        if (!firebase.apps.length) firebase.initializeApp(window._rubikFirebaseConfig);
+    </script>
+    <script src="/js/firecache.js?v=1"></script>
+    <script src="/js/auth-guard.js?v=1"></script>
+
+    <style>
+        :root { --bg: #f2f2f7; --card: #ffffff; --text: #1c1c1e; --blue: #007aff; --green: #34c759; --orange: #ff9500; --red: #ff3b30; --purple: #af52de; --gray: #8e8e93; --border: #e5e5ea; }
+        body { font-family: -apple-system, sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 20px; padding-bottom: 100px; -webkit-tap-highlight-color: transparent;}
+        
+        .nav { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; position: sticky; top: 0; background: var(--bg); padding-top: 10px; z-index: 100;}
+        .btn-nav { background: var(--card); border: 1px solid var(--border); padding: 10px 15px; border-radius: 16px; font-weight: 800; color: var(--text); cursor: pointer; display: flex; align-items: center; gap: 6px; box-shadow: 0 4px 10px rgba(0,0,0,0.03);}
+        
+        .header { margin-bottom: 20px; }
+        .proj-title { font-size: 24px; font-weight: 900; margin: 0; color: var(--blue); line-height: 1.1;}
+        .proj-sub { font-size: 12px; font-weight: 800; color: var(--gray); text-transform: uppercase; margin-top: 5px;}
+
+        /* CAJA AZUL: AVANCE GENERAL */
+        .prog-box { background: linear-gradient(135deg, var(--blue), #5856d6); border-radius: 22px; padding: 20px; color: white; margin-bottom: 20px; box-shadow: 0 10px 25px rgba(0,122,255,0.2); }
+        .prog-label { font-size: 12px; font-weight: 800; text-transform: uppercase; opacity: 0.9; margin-bottom: 8px; display: block; }
+        .prog-val { font-size: 36px; font-weight: 900; margin-bottom: 15px; }
+        .prog-bar-bg-main { height: 10px; background: rgba(255,255,255,0.2); border-radius: 10px; overflow: hidden; }
+        .prog-bar-fill-main { height: 100%; background: #fff; transition: width 0.8s cubic-bezier(0.1, 0.8, 0.2, 1); width: 0%; }
+
+        /* TABS Y BUSCADOR */
+        .tabs-wrap { background: var(--border); padding: 4px; border-radius: 14px; display: flex; margin-bottom: 15px; overflow-x: auto; scrollbar-width: none;}
+        .tabs-wrap::-webkit-scrollbar { display: none; }
+        .tab-btn { flex: 1; min-width:max-content; padding: 12px 10px; border: none; background: transparent; font-weight: 800; font-size: 11px; border-radius: 10px; color: var(--gray); cursor: pointer; transition: 0.3s; text-align: center; text-transform: uppercase;}
+        .tab-btn.active { background: var(--card); color: var(--text); box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+        
+        .search-bar { width: 100%; padding: 14px 15px; background: var(--card); border: 1px solid var(--border); border-radius: 14px; font-size: 14px; font-weight: bold; margin-bottom: 20px; box-sizing: border-box; outline: none; color: var(--text); box-shadow: 0 4px 10px rgba(0,0,0,0.02);}
+
+        /* ACORDEÓN POR ÍTEM */
+        .item-header { background: var(--blue); padding: 14px 15px; border-radius: 12px; font-weight: 900; font-size: 13px; margin-bottom: 10px; text-transform: uppercase; color: white; cursor: pointer; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 4px 10px rgba(0,122,255,0.2); line-height: 1.3;}
+        .item-content { display: none; overflow: hidden; margin-bottom: 20px; padding: 0 5px; }
+
+        /* TARJETAS INTERNAS */
+        .gantt-subtask { background: var(--card); padding: 15px; border-radius: 16px; margin-bottom: 12px; border: 1px solid var(--border); box-shadow: 0 4px 10px rgba(0,0,0,0.02);}
+        .g-name { font-size: 14px; font-weight: 900; color: var(--text); margin-bottom: 10px; line-height:1.2; }
+        
+        /* SLIDERS Y FOTOS */
+        .inp-range { width: 100%; -webkit-appearance: none; height: 8px; border-radius: 5px; background: var(--border); outline: none; margin-bottom: 15px; }
+        .inp-range::-webkit-slider-thumb { -webkit-appearance: none; width: 24px; height: 24px; border-radius: 50%; background: var(--blue); border: 3px solid white; box-shadow: 0 2px 5px rgba(0,0,0,0.2); cursor: pointer; }
+        
+        .grid-gallery { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 10px;}
+        .g-item { width: 100%; aspect-ratio: 1; border-radius: 10px; object-fit: cover; border: 1px solid var(--border); background: var(--bg); cursor: pointer; box-shadow: 0 2px 5px rgba(0,0,0,0.05);}
+
+        .btn-main { background: var(--blue); color: white; border: none; padding: 12px; border-radius: 12px; font-weight: 900; font-size: 13px; width: 100%; cursor: pointer; display: flex; justify-content: center; align-items: center; gap: 8px; transition: 0.2s;}
+        .btn-green { background: var(--green); }
+        
+        .inp-gasto { width: 100%; padding: 10px 12px; border: 1px solid var(--border); background: var(--bg); color: var(--text); border-radius: 10px; font-weight: 800; font-size: 14px; box-sizing: border-box; outline: none; }
+        .inp-gasto:focus { border-color: var(--green); }
+
+        .empty-msg { text-align: center; color: var(--gray); font-size: 13px; padding: 30px; font-weight: 700; border: 2px dashed var(--border); border-radius: 16px;}
+
+        /* VISOR DE FOTOS */
+        .photo-viewer { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.95); z-index: 3000; flex-direction: column; }
+        .pv-nav { display: flex; justify-content: space-between; align-items: center; padding: 14px; padding-top: max(14px, env(safe-area-inset-top)); position: absolute; width: 100%; box-sizing: border-box; z-index: 3010; background: linear-gradient(to bottom, rgba(0,0,0,0.65) 0%, transparent 100%);}
+        .pv-nav-actions { display: flex; gap: 8px; align-items: center; }
+        .btn-black { background: rgba(255,255,255,0.18); backdrop-filter: blur(10px); color: white; border: none; padding: 10px 14px; border-radius: 12px; font-weight: 800; cursor: pointer; display:flex; gap:6px; align-items:center; font-size:13px; -webkit-tap-highlight-color:transparent;}
+        .btn-black.green { background: rgba(52,199,89,0.35); }
+        .btn-black.whatsapp { background: rgba(37,211,102,0.35); }
+        .pv-img { width: 100%; height: 100%; object-fit: contain; position: absolute; top: 0; left: 0; }
+        
+        #global-loader { display: none; position: fixed; top:0; left:0; width:100%; height:100%; background: rgba(0,0,0,0.9); backdrop-filter: blur(10px); z-index: 4000; justify-content: center; align-items: center; flex-direction: column; color:white;}
+        .spinner { border: 4px solid rgba(255,255,255,0.2); border-left-color: var(--blue); border-radius: 50%; width: 50px; height: 50px; animation: spin 1s linear infinite; margin-bottom: 15px; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+        /* ========================================== */
+        /* NUEVOS ESTILOS PARA LA IA DEL SUPERVISOR   */
+        /* ========================================== */
+        .fab-ai-btn { position: fixed; bottom: 25px; right: 20px; width: 65px; height: 65px; border-radius: 50%; background: #000; box-shadow: 0 8px 25px rgba(0,122,255,0.4); cursor: pointer; z-index: 1000; transition: transform 0.2s; padding: 0; border: 2px solid var(--card); overflow: hidden; display: flex; align-items: center; justify-content: center; -webkit-tap-highlight-color: transparent;}
+        .fab-ai-btn img { width: 100%; height: 100%; object-fit: cover; }
+        .fab-ai-btn:active { transform: scale(0.9); }
+
+        .chat-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #000000; z-index: 2000; flex-direction: column; }
+        .chat-header { background: #1c1c1e; padding: 15px 20px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #38383a; }
+        .chat-body { flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 15px; }
+        
+        .msg { max-width: 85%; padding: 12px 16px; border-radius: 18px; font-size: 14px; line-height: 1.4; word-wrap: break-word; }
+        .msg-ai { background: #1c1c1e; color: #ffffff; border: 1px solid #38383a; align-self: flex-start; border-bottom-left-radius: 4px; }
+        .msg-user { background: var(--blue); color: white; align-self: flex-end; border-bottom-right-radius: 4px; }
+        
+        .chat-footer { background: #1c1c1e; padding: 15px; border-top: 1px solid #38383a; display: flex; gap: 10px; align-items: flex-end; }
+        .chat-input { flex: 1; background: #000; border: 1px solid #38383a; color: white; padding: 12px; border-radius: 16px; font-size: 14px; outline: none; resize: none; max-height: 100px; font-family: inherit; }
+        .chat-input:focus { border-color: var(--blue); }
+        .btn-ai-action { background: var(--blue); color: white; border: none; width: 42px; height: 42px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 20px; cursor: pointer; flex-shrink:0; }
+        .btn-ai-action.cam { background: #000; color: #8e8e93; border: 1px solid #38383a; }
+        
+        .chat-img-preview { max-width: 100px; border-radius: 8px; display: none; border: 1px solid #38383a; object-fit: cover;}
+        .ai-thumbnail { max-width: 100%; border-radius: 12px; cursor: pointer; border: 1px solid rgba(255,255,255,0.2); margin-top: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.3);}
+        .typing-indicator { display: none; align-self: flex-start; background: #1c1c1e; padding: 12px 16px; border-radius: 20px; border-bottom-left-radius: 4px; border: 1px solid #38383a;}
+        .dot { height: 8px; width: 8px; background: #8e8e93; border-radius: 50%; display: inline-block; animation: blink 1.4s infinite both; margin: 0 2px;}
+        .dot:nth-child(2) { animation-delay: 0.2s; } .dot:nth-child(3) { animation-delay: 0.4s; }
+        @keyframes blink { 0% { opacity: 0.2; transform:scale(0.8);} 20% { opacity: 1; transform:scale(1);} 100% { opacity: 0.2; transform:scale(0.8); } }
+    </style>
+    <link rel="stylesheet" href="/css/responsive.css?v=1">
+</head>
+<body>
+
+    <div id="global-loader"><div class="spinner"></div><div style="font-weight:900; font-size:16px;" id="loader-text">Sincronizando Matriz...</div></div>
+
+    <div class="nav">
+        <button class="btn-nav" onclick="window.location.href='supervisor-index.html'"><i class="ph-bold ph-caret-left"></i> Mis Obras</button>
+        <div style="font-weight:900; font-size:12px; color:var(--gray);"><i class="ph-fill ph-shield-check" style="color:var(--blue)"></i> MODO SUPERVISOR</div>
+    </div>
+
+    <div class="header">
+        <h1 class="proj-title" id="h-pro">Cargando...</h1>
+        <div class="proj-sub">Control Operativo en Terreno</div>
+    </div>
+
+    <div class="prog-box">
+        <span class="prog-label">Avance General del Proyecto</span>
+        <div class="prog-val" id="val-prog-gral">0%</div>
+        <div class="prog-bar-bg-main"><div class="prog-bar-fill-main" id="bar-prog-gral"></div></div>
+    </div>
+
+    <div class="tabs-wrap">
+        <button class="tab-btn active" id="tab-gantt" onclick="switchTab('gantt')">Cronograma</button>
+        <button class="tab-btn" id="tab-planos" onclick="switchTab('planos')">Diseños</button>
+        <button class="tab-btn" id="tab-prod" onclick="switchTab('prod')">Producción</button>
+        <button class="tab-btn" id="tab-comp" onclick="switchTab('comp')">Compras</button>
+    </div>
+
+    <input type="text" id="search-box" class="search-bar" placeholder="🔍 Buscar ítem o tarea..." onkeyup="filtrarContenido()">
+
+    <div id="panel-gantt" class="tab-content"></div>
+    <div id="panel-planos" class="tab-content" style="display:none;"></div>
+    <div id="panel-prod" class="tab-content" style="display:none;"></div>
+    <div id="panel-comp" class="tab-content" style="display:none;"></div>
+
+    <div id="photo-viewer" class="photo-viewer">
+        <div class="pv-nav">
+            <button class="btn-black" onclick="cerrarVisorFotos()"><i class="ph-bold ph-caret-left"></i> Atrás</button>
+            <div class="pv-nav-actions">
+                <button class="btn-black green" onclick="guardarFotoVisor()"><i class="ph-bold ph-download-simple"></i> Guardar</button>
+                <button class="btn-black whatsapp" onclick="compartirFotoWhatsapp()"><i class="ph-bold ph-whatsapp-logo"></i> Enviar</button>
+                <button class="btn-black" id="btn-del-foto" style="background:rgba(255,59,48,0.35); display:none;" onclick="eliminarFotoGantt()"><i class="ph-bold ph-trash"></i></button>
+            </div>
+        </div>
+        <img loading="lazy" decoding="async" id="pv-img" class="pv-img">
+    </div>
+
+    <input type="file" id="gantt-photo-upload" style="display:none" accept="image/*" capture="environment" onchange="processGanttPhoto(this)">
+
+    <button class="fab-ai-btn" onclick="openAIChat()">
+        <img loading="lazy" decoding="async" src="IA RUBIK BOTON.png" alt="Rubik IA">
+    </button>
+
+    <div class="chat-overlay" id="ai-chat-modal">
+        <div class="chat-header">
+            <div style="font-weight: 900; font-size: 15px; display: flex; align-items: center; gap: 8px; color:white;">
+                <img loading="lazy" decoding="async" src="IA RUBIK BOTON.png" style="width: 28px; border-radius: 50%;"> Rubik IA Supervisor
+            </div>
+            <button class="btn-black" style="background:var(--card); color:var(--text); padding: 6px 12px; font-size:12px;" onclick="closeAIChat()">Cerrar</button>
+        </div>
+        <div class="chat-body" id="ai-chat-box">
+            <div class="msg msg-ai">Hola. Estoy enlazada al diseño, producción y cronograma de esta obra. Puedo aclarar dudas técnicas, escanear facturas o mostrarte planos específicos. ¿Qué necesitas?</div>
+        </div>
+        
+        <div class="typing-indicator" id="ai-typing" style="margin-left: 20px;"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div>
+
+        <div style="padding: 0 15px; display:flex; justify-content:flex-end;">
+            <div style="position:relative; display:inline-block;">
+                <img loading="lazy" decoding="async" id="ai-img-preview" class="chat-img-preview">
+                <div id="ai-img-remove" onclick="removeAIImage()" style="display:none; position:absolute; top:-8px; right:-8px; background:var(--red); color:white; border-radius:50%; width:24px; height:24px; text-align:center; line-height:24px; cursor:pointer; font-size:12px; font-weight:bold; box-shadow:0 2px 5px rgba(0,0,0,0.5);">X</div>
+            </div>
+        </div>
+        
+        <div class="chat-footer">
+            <button class="btn-ai-action cam" onclick="document.getElementById('ai-file-upload').click()"><i class="ph-bold ph-camera"></i></button>
+            <input type="file" id="ai-file-upload" accept="image/*" capture="environment" style="display:none" onchange="handleAIImage(this)">
+            
+            <textarea id="ai-user-input" class="chat-input" rows="1" placeholder="Pregunta algo o adjunta foto..."></textarea>
+            
+            <button class="btn-ai-action" onclick="sendAIMessage()"><i class="ph-bold ph-paper-plane-right"></i></button>
+        </div>
+    </div>
+
+<script>
+    // Firebase ya inicializado en el <head>
+    if (!firebase.apps.length) firebase.initializeApp(window._rubikFirebaseConfig);
+    const db = firebase.database(); const storage = firebase.storage();
+
+    const urlParams = new URLSearchParams(window.location.search);
+    const cid = urlParams.get('cid'); const pid = urlParams.get('pid'); const wid = urlParams.get('wid');
+
+    if(!cid || !pid) {
+        document.getElementById('h-pro').innerText = "Error de Enlace";
+        document.getElementById('global-loader').style.display = 'none';
+    }
+
+    let pItems = [];
+    let gItems = [];
+    let currentGanttTarget = null;
+    let currentPhotoDeleteTarget = null;
+
+    window.onload = () => {
+        if(cid && pid) cargarDatosMaestros();
+    };
+
+    function switchTab(tab) {
+        ['gantt', 'planos', 'prod', 'comp'].forEach(t => { 
+            document.getElementById(`tab-${t}`).classList.remove('active'); 
+            document.getElementById(`panel-${t}`).style.display = 'none'; 
+        });
+        document.getElementById(`tab-${tab}`).classList.add('active'); 
+        document.getElementById(`panel-${tab}`).style.display = 'block';
+        filtrarContenido(); 
+    }
+
+    function toggleChap(id) {
+        let el = document.getElementById(id); let icon = document.getElementById('icon-' + id);
+        if(el.style.display === 'block') { 
+            el.style.display = 'none'; icon.style.transform = 'rotate(-90deg)';
+        } else { 
+            el.style.display = 'block'; icon.style.transform = 'rotate(0deg)';
+        }
+    }
+
+    function filtrarContenido() {
+        const search = document.getElementById('search-box').value.toLowerCase().trim();
+        document.querySelectorAll('.tab-content[style*="display: block"] .searchable-item').forEach(item => {
+            const textData = item.getAttribute('data-search') || "";
+            if(textData.includes(search)) item.style.display = 'block';
+            else item.style.display = 'none';
+        });
+    }
+
+    function cargarDatosMaestros() {
+        db.ref(`proyectos/${cid}/${pid}`).on('value', snap => {
+            if(!snap.exists()) return;
+            const p = snap.val();
+            
+            // CONEXIÓN MAESTRA PARA LA IA
+            window.rubikContext = p; 
+
+            document.getElementById('h-pro').innerText = p.nombre;
+            
+            pItems = (p.presupuesto && p.presupuesto.items) ? p.presupuesto.items : [];
+            gItems = (p.gantt && p.gantt.items) ? p.gantt.items : [];
+
+            renderGantt();
+            renderDisenos();
+            renderProduccion();
+            renderCompras();
+
+            document.getElementById('global-loader').style.display = 'none';
+        });
+    }
+
+    // ==========================================
+    // RENDER 1: GANTT (CONTROL DE AVANCES)
+    // ==========================================
+    function renderGantt() {
+        const cont = document.getElementById('panel-gantt');
+        let sumProg = 0; let countProg = 0;
+        let html = '';
+        let hasContent = false;
+
+        pItems.forEach((it, idx) => {
+            if(!it || it.type === 'chapter') return;
+            let gItem = gItems[idx];
+            
+            if(gItem && gItem.subtasks) {
+                Object.values(gItem.subtasks).forEach(sub => {
+                    sumProg += parseInt(sub.progress || 0); countProg++;
+                });
+            }
+
+            if(!gItem || !gItem.subtasks) return; 
+
+            hasContent = true;
+            let itemName = it.desc || 'Ítem sin nombre';
+            let searchString = itemName.toLowerCase();
+            let subtasksHtml = '';
+
+            Object.keys(gItem.subtasks).forEach(sKey => {
+                let sub = gItem.subtasks[sKey];
+                let prog = sub.progress || 0;
+                searchString += " " + (sub.name || "").toLowerCase();
+                
+                let photosHtml = '';
+                if(sub.photos) {
+                    Object.keys(sub.photos).forEach(pKey => {
+                        let p = sub.photos[pKey];
+                        photosHtml += `<img loading="lazy" decoding="async" src="${p.url}" class="g-item" onclick="verImagenGantt('${p.url}', '${idx}', '${sKey}', '${pKey}')">`;
+                    });
+                }
+
+                subtasksHtml += `
+                <div class="gantt-subtask">
+                    <div style="font-size:10px; color:var(--gray); font-weight:800; margin-bottom:2px; text-transform:uppercase;">Tarea Asignada:</div>
+                    <div class="g-name">${sub.name}</div>
+                    
+                    <div style="display:flex; align-items:center; gap:15px; margin-bottom:10px;">
+                        <input type="range" class="inp-range" min="0" max="100" value="${prog}" id="slider-${idx}-${sKey}" oninput="document.getElementById('lbl-${idx}-${sKey}').innerText = this.value + '%'">
+                        <span id="lbl-${idx}-${sKey}" style="font-weight:900; font-size:16px; color:var(--blue); width:45px; text-align:right;">${prog}%</span>
+                    </div>
+                    
+                    <div style="display:flex; gap:10px; margin-bottom:15px;">
+                        <button class="btn-main btn-green" style="padding:10px; font-size:11px;" onclick="confirmarAvanceGantt(${idx}, '${sKey}')"><i class="ph-bold ph-check"></i> Dictar Avance</button>
+                        <button class="btn-main" style="padding:10px; font-size:11px; background:var(--bg); color:var(--text); border:1px solid var(--border);" onclick="openGanttPhoto(${idx}, '${sKey}')"><i class="ph-bold ph-camera"></i> Subir Foto</button>
+                    </div>
+                    
+                    ${photosHtml !== '' ? `<div style="font-size:10px; font-weight:800; color:var(--gray); margin-bottom:8px; text-transform:uppercase;">Registro Fotográfico:</div><div class="grid-gallery">${photosHtml}</div>` : ''}
+                </div>`;
+            });
+
+            html += `
+            <div class="searchable-item" data-search="${searchString}">
+                <div class="item-header" onclick="toggleChap('gantt-c-${idx}')">
+                    <span style="flex:1; padding-right:10px;">${itemName}</span>
+                    <i class="ph-bold ph-caret-down" id="icon-gantt-c-${idx}" style="transition:0.3s; transform:rotate(-90deg);"></i>
+                </div>
+                <div id="gantt-c-${idx}" class="item-content">${subtasksHtml}</div>
+            </div>`;
+        });
+
+        let avg = countProg > 0 ? Math.round(sumProg / countProg) : 0;
+        document.getElementById('val-prog-gral').innerText = avg + "%";
+        document.getElementById('bar-prog-gral').style.width = avg + "%";
+
+        cont.innerHTML = hasContent ? html : '<div class="empty-msg">No hay tareas programadas en el cronograma.</div>';
+    }
+
+    function confirmarAvanceGantt(itemIdx, sKey) {
+        let val = document.getElementById(`slider-${itemIdx}-${sKey}`).value;
+        db.ref(`proyectos/${cid}/${pid}/gantt/items/${itemIdx}/subtasks/${sKey}/progress`).set(parseInt(val)).then(() => {
+            alert("✅ Avance guardado exitosamente en la matriz de la obra.");
+        });
+    }
+
+    // ==========================================
+    // RENDER 2: DISEÑOS Y PLANOS
+    // ==========================================
+    function renderDisenos() {
+        const cont = document.getElementById('panel-planos');
+        let html = '';
+        let hasContent = false;
+
+        pItems.forEach((it, idx) => {
+            if(!it || it.type === 'chapter') return;
+            
+            let imgs = [];
+            if(it.img) imgs.push(it.img);
+            if(it.cortes) { if(Array.isArray(it.cortes)) imgs.push(...it.cortes); else Object.values(it.cortes).forEach(c=>imgs.push(c)); }
+            if(it.op_images) { if(Array.isArray(it.op_images)) imgs.push(...it.op_images); else Object.values(it.op_images).forEach(c=>imgs.push(c)); }
+            
+            if(imgs.length === 0) return;
+
+            hasContent = true;
+            let itemName = it.desc || 'Ítem sin nombre';
+            let searchString = itemName.toLowerCase();
+            let imgsHtml = imgs.map(url => `<img loading="lazy" decoding="async" src="${url}" class="g-item" onclick="verImagenNormal('${url}')">`).join('');
+
+            html += `
+            <div class="searchable-item" data-search="${searchString}">
+                <div class="item-header" style="background:var(--purple);" onclick="toggleChap('planos-c-${idx}')">
+                    <span style="flex:1; padding-right:10px;">${itemName}</span>
+                    <i class="ph-bold ph-caret-down" id="icon-planos-c-${idx}" style="transition:0.3s; transform:rotate(-90deg);"></i>
+                </div>
+                <div id="planos-c-${idx}" class="item-content">
+                    <div class="gantt-subtask" style="border-left: 3px solid var(--purple);">
+                        <div style="font-size:11px; font-weight:800; color:var(--gray); margin-bottom:10px; text-transform:uppercase;">Galería de Planos, Cortes y Renders:</div>
+                        <div class="grid-gallery">${imgsHtml}</div>
+                    </div>
+                </div>
+            </div>`;
+        });
+
+        cont.innerHTML = hasContent ? html : '<div class="empty-msg">No hay planos ni diseños cargados en el presupuesto maestro.</div>';
+    }
+
+    // ==========================================
+    // RENDER 3: PRODUCCIÓN
+    // ==========================================
+    function renderProduccion() {
+        const cont = document.getElementById('panel-prod');
+        let html = '';
+        let hasContent = false;
+
+        pItems.forEach((it, idx) => {
+            if(!it || it.type === 'chapter') return;
+            
+            hasContent = true;
+            let itemName = it.desc || 'Ítem sin nombre';
+            let searchString = itemName.toLowerCase() + " " + (it.feat||"").toLowerCase();
+
+            let featHtml = it.feat ? `<div style="font-size:13px; color:var(--text); margin-bottom:15px; line-height:1.4; white-space:pre-wrap;"><b>Especificaciones / Órden:</b><br>${it.feat}</div>` : '<div style="font-size:12px; color:var(--gray); margin-bottom:10px;">No hay especificaciones detalladas.</div>';
+            
+            let matsHtml = '';
+            if(it.apu && it.apu.mat) {
+                matsHtml = '<ul style="margin:0; padding-left:20px; font-size:12px; color:var(--text); line-height:1.5;">';
+                Object.values(it.apu.mat).forEach(m => { if(m.d) matsHtml += `<li><b>${m.q} ${m.u}</b> - ${m.d}</li>`; });
+                matsHtml += '</ul>';
+                matsHtml = `<div style="background:var(--bg); padding:12px; border-radius:10px; border:1px dashed var(--border);"><div style="font-size:11px; font-weight:800; color:var(--gray); text-transform:uppercase; margin-bottom:8px;">Materiales Calculados en Presupuesto:</div>${matsHtml}</div>`;
+            }
+
+            html += `
+            <div class="searchable-item" data-search="${searchString}">
+                <div class="item-header" style="background:var(--text);" onclick="toggleChap('prod-c-${idx}')">
+                    <span style="flex:1; padding-right:10px;">${itemName}</span>
+                    <i class="ph-bold ph-caret-down" id="icon-prod-c-${idx}" style="transition:0.3s; transform:rotate(-90deg);"></i>
+                </div>
+                <div id="prod-c-${idx}" class="item-content">
+                    <div class="gantt-subtask" style="border-left: 3px solid var(--text);">
+                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+                            <span style="font-size:11px; font-weight:800; color:var(--gray); text-transform:uppercase;">Detalles de Ejecución</span>
+                            <span style="background:rgba(0,0,0,0.05); color:var(--text); padding:4px 10px; border-radius:8px; font-size:12px; font-weight:900;">${it.cant} ${it.und}</span>
+                        </div>
+                        ${featHtml}
+                        ${matsHtml}
+                    </div>
+                </div>
+            </div>`;
+        });
+
+        cont.innerHTML = hasContent ? html : '<div class="empty-msg">No hay ítems registrados en producción.</div>';
+    }
+
+    // ==========================================
+    // RENDER 4: COMPRAS Y REQUERIMIENTOS 
+    // ==========================================
+    function renderCompras() {
+        const cont = document.getElementById('panel-comp');
+        let html = '';
+        let hasContent = false;
+
+        pItems.forEach((it, idx) => {
+            if(!it || it.type === 'chapter') return;
+            
+            let materials = [];
+            if(it.compras_requeridas) {
+                materials = Object.values(it.compras_requeridas);
+            } else if(it.apu && it.apu.mat) {
+                materials = Object.values(it.apu.mat).filter(m => m.d);
+            }
+
+            if(materials.length === 0) return;
+
+            hasContent = true;
+            let itemName = it.desc || 'Ítem sin nombre';
+            let searchString = itemName.toLowerCase();
+
+            let matsHtml = '';
+            materials.forEach((m, mIdx) => {
+                let nameMat = m.d || m.nombre || 'Material';
+                let qMat = m.q || m.cant || 0;
+                let uMat = m.u || m.und || 'und';
+                searchString += " " + nameMat.toLowerCase();
+
+                matsHtml += `
+                <div style="display:flex; flex-direction:column; padding:15px 0; border-bottom:1px dashed var(--border);">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+                        <div style="font-size:14px; font-weight:900; color:var(--text);">${nameMat}</div>
+                        <div style="font-size:12px; font-weight:900; color:var(--orange); background:rgba(255,149,0,0.1); padding:4px 8px; border-radius:6px;">${qMat} ${uMat}</div>
+                    </div>
+                    <div style="display:flex; gap:10px;">
+                        <input type="number" id="mat-price-${idx}-${mIdx}" class="inp-gasto" style="margin:0; flex:1;" placeholder="Precio cotizado (Bs)">
+                        <button class="btn-main btn-green" style="margin:0; width:auto; padding:0 15px;" onclick="pedirFondoMaterial('${nameMat}', '${qMat} ${uMat}', 'mat-price-${idx}-${mIdx}')"><i class="ph-bold ph-paper-plane-right"></i> Pedir Pago</button>
+                    </div>
+                </div>`;
+            });
+
+            html += `
+            <div class="searchable-item" data-search="${searchString}">
+                <div class="item-header" style="background:var(--orange);" onclick="toggleChap('comp-c-${idx}')">
+                    <span style="flex:1; padding-right:10px;">${itemName}</span>
+                    <i class="ph-bold ph-caret-down" id="icon-comp-c-${idx}" style="transition:0.3s; transform:rotate(-90deg);"></i>
+                </div>
+                <div id="comp-c-${idx}" class="item-content">
+                    <div class="gantt-subtask" style="border-left: 3px solid var(--orange);">
+                        <div style="font-size:11px; font-weight:800; color:var(--gray); margin-bottom:5px; text-transform:uppercase;">Insumos y Materiales de este Ítem:</div>
+                        ${matsHtml}
+                    </div>
+                </div>
+            </div>`;
+        });
+
+        cont.innerHTML = hasContent ? html : '<div class="empty-msg">No hay requerimientos de materiales registrados en esta obra.</div>';
+    }
+
+    function pedirFondoMaterial(nombreMat, cantMat, inputId) {
+        let precio = parseFloat(document.getElementById(inputId).value);
+        if(!precio || precio <= 0) return alert("Por favor, ingresa el precio cotizado en Bolivianos (Bs).");
+
+        document.getElementById('global-loader').style.display = 'flex';
+        document.getElementById('loader-text').innerText = "Enviando solicitud...";
+
+        const payload = {
+            proyecto: document.getElementById('h-pro').innerText,
+            pid: pid, 
+            descripcion: `COMPRA: ${nombreMat} (${cantMat})`,
+            monto: precio,
+            monto_total: precio,
+            fecha_registro: new Date().toLocaleString('es-BO'),
+            estado: 'pendiente',
+            auditado: false, 
+            timestamp: Date.now()
+        };
+
+        db.ref(`caja_chica/${wid}/gastos`).push(payload).then(() => {
+            document.getElementById(inputId).value = '';
+            document.getElementById('global-loader').style.display = 'none';
+            
+            db.ref('config/admin_phone').once('value').then(snap => { 
+                let num = snap.val() || "59176868833"; 
+                num = num.replace(/\D/g, ''); 
+                if(!num.startsWith("591")) num = "591" + num; 
+                
+                let pName = document.getElementById('h-pro').innerText;
+                let msg = encodeURIComponent(`¡Hola Oficina! 👋\nYa coticé el material: *${nombreMat} (${cantMat})* para el proyecto *${pName}*.\n\n💰 El precio es de: *${precio.toFixed(2)} Bs*.\n\n👉 Por favor, revisa mis solicitudes en Tesorería para proceder con el desembolso o transferencia.`);
+                window.open(`https://wa.me/${num}?text=${msg}`, '_blank');
+            });
+        });
+    }
+
+    // ==========================================
+    // SISTEMA FOTOGRÁFICO Y VISOR
+    // ==========================================
+    function openGanttPhoto(itemIdx, subKey) { 
+        currentGanttTarget = { itemIdx, subKey }; 
+        document.getElementById('gantt-photo-upload').click(); 
+    }
+
+    function compressImage(file, max, q) { 
+        return new Promise(res => { const r = new FileReader(); r.onload = e => { const i = new Image(); i.onload = () => { const c = document.createElement('canvas'); let s = i.width > max ? max / i.width : 1; c.width = i.width * s; c.height = i.height * s; c.getContext('2d').drawImage(i, 0, 0, c.width, c.height); res(c.toDataURL('image/jpeg', q)); }; i.src = e.target.result; }; r.readAsDataURL(file); }); 
+    }
+
+    async function processGanttPhoto(inp) {
+        if(inp.files[0] && currentGanttTarget) {
+            document.getElementById('loader-text').innerText = "Subiendo reporte fotográfico..."; 
+            document.getElementById('global-loader').style.display = 'flex';
+            try {
+                const b64 = await compressImage(inp.files[0], 800, 0.7);
+                const snapUpload = await storage.ref(`avances/${pid}/sup_${Date.now()}.jpg`).putString(b64, 'data_url');
+                const url = await snapUpload.ref.getDownloadURL();
+                let {itemIdx, subKey} = currentGanttTarget;
+                await db.ref(`proyectos/${cid}/${pid}/gantt/items/${itemIdx}/subtasks/${subKey}/photos`).push({ url: url, timestamp: Date.now(), by_supervisor: true });
+            } catch(e) { alert("Error subiendo foto."); } 
+            finally { document.getElementById('global-loader').style.display = 'none'; inp.value = ''; currentGanttTarget = null; }
+        }
+    }
+
+    function verImagenNormal(url) {
+        document.getElementById('pv-img').src = url; 
+        document.getElementById('btn-del-foto').style.display = 'none';
+        document.getElementById('photo-viewer').style.display = 'flex'; 
+    }
+
+    function verImagenGantt(url, itemIdx, sKey, pKey) {
+        document.getElementById('pv-img').src = url; 
+        currentPhotoDeleteTarget = { itemIdx, sKey, pKey };
+        document.getElementById('btn-del-foto').style.display = 'flex'; 
+        document.getElementById('photo-viewer').style.display = 'flex'; 
+    }
+
+    function cerrarVisorFotos() {
+        document.getElementById('photo-viewer').style.display = 'none';
+        document.getElementById('pv-img').src = '';
+        currentPhotoDeleteTarget = null;
+    }
+
+    function eliminarFotoGantt() {
+        if(!currentPhotoDeleteTarget) return;
+        if(!confirm("¿Seguro que deseas eliminar esta foto del reporte?")) return;
+        let {itemIdx, sKey, pKey} = currentPhotoDeleteTarget;
+        db.ref(`proyectos/${cid}/${pid}/gantt/items/${itemIdx}/subtasks/${sKey}/photos/${pKey}`).remove().then(() => {
+            cerrarVisorFotos();
+        });
+    }
+
+    // ─── Guardar imagen en el dispositivo ────────────────────────────────────
+    async function guardarFotoVisor() {
+        const url = document.getElementById('pv-img').src;
+        if (!url) return;
+        try {
+            const resp = await fetch(url);
+            const blob = await resp.blob();
+            // Web Share API con archivo — en iOS guarda directo a Fotos
+            if (navigator.canShare && navigator.canShare({ files: [new File([blob], 'foto.jpg', { type: blob.type })] })) {
+                const file = new File([blob], 'Rubik_Foto_' + Date.now() + '.jpg', { type: blob.type });
+                await navigator.share({ files: [file], title: 'Foto de obra - Rubik OS' });
+                return;
+            }
+            // Fallback: descarga clásica
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = 'Rubik_Foto_' + Date.now() + '.jpg';
+            document.body.appendChild(a); a.click();
+            URL.revokeObjectURL(a.href); a.remove();
+        } catch(e) {
+            if (e.name !== 'AbortError') window.open(url, '_blank');
+        }
+    }
+
+    // ─── Enviar por WhatsApp ──────────────────────────────────────────────────
+    async function compartirFotoWhatsapp() {
+        const url = document.getElementById('pv-img').src;
+        if (!url) return;
+        try {
+            const resp = await fetch(url);
+            const blob = await resp.blob();
+            const file = new File([blob], 'Rubik_Foto_' + Date.now() + '.jpg', { type: blob.type });
+            if (navigator.canShare && navigator.canShare({ files: [file] })) {
+                await navigator.share({ files: [file], title: 'Foto de obra', text: '📸 Foto de obra desde Rubik OS' });
+                return;
+            }
+            // Fallback: link por WhatsApp
+            const texto = encodeURIComponent('📸 Foto de obra Rubik OS: ' + url);
+            window.open('https://wa.me/?text=' + texto, '_blank');
+        } catch(e) {
+            if (e.name !== 'AbortError') {
+                const texto = encodeURIComponent('📸 Foto de obra Rubik OS: ' + url);
+                window.open('https://wa.me/?text=' + texto, '_blank');
+            }
+        }
+    }
+</script>
+
+<script>
+    // IA via proxy /api/gemini
+
+    // Caché de prompt (10 min) e historial multi-turn (8 turnos)
+    let _supPromptCache = null, _supPromptTs = 0;
+    const SUP_PROMPT_TTL = 10 * 60 * 1000;
+    let _supHistorial = [];
+
+    let currentAIImage = null;
+
+    window.openAIChat = function() {
+        document.getElementById('ai-chat-modal').style.display = 'flex';
+    }
+    
+    window.closeAIChat = function() {
+        document.getElementById('ai-chat-modal').style.display = 'none';
+    }
+
+    window.handleAIImage = function(inp) {
+        if (inp.files && inp.files[0]) {
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                currentAIImage = e.target.result;
+                document.getElementById('ai-img-preview').src = currentAIImage;
+                document.getElementById('ai-img-preview').style.display = 'block';
+                document.getElementById('ai-img-remove').style.display = 'block';
+            };
+            reader.readAsDataURL(inp.files[0]);
+        }
+        inp.value = '';
+    }
+
+    window.removeAIImage = function() {
+        currentAIImage = null;
+        document.getElementById('ai-img-preview').style.display = 'none';
+        document.getElementById('ai-img-remove').style.display = 'none';
+    }
+
+    window.sendAIMessage = async function() {
+        const input = document.getElementById('ai-user-input');
+        const text = input.value.trim();
+        if(!text && !currentAIImage) return;
+
+        const chatBox = document.getElementById('ai-chat-box');
+        const typing = document.getElementById('ai-typing');
+        const btnSend = document.querySelector('.btn-ai-action');
+        
+        const userMsg = document.createElement('div');
+        userMsg.className = 'msg msg-user';
+        userMsg.innerHTML = (currentAIImage ? `<img loading="lazy" decoding="async" src="${currentAIImage}" class="msg-img">` : '') + text.replace(/\n/g, '<br>');
+        chatBox.appendChild(userMsg);
+        
+        const imageToSend = currentAIImage;
+        input.value = '';
+        window.removeAIImage();
+        chatBox.scrollTop = chatBox.scrollHeight;
+
+        typing.style.display = 'block';
+        chatBox.appendChild(typing);
+        btnSend.disabled = true;
+
+        // Construir contexto de la obra
+        const p = window.rubikContext;
+        let contextData = "Cargando datos...";
+        if(p) {
+            let disenos = [], produccion = [], gantt = [], compras = [];
+            if(p.presupuesto && p.presupuesto.items) {
+                p.presupuesto.items.forEach(it => {
+                    if(!it || it.type === 'chapter') return;
+                    let imgs = [];
+                    if(it.img) imgs.push(it.img);
+                    if(it.cortes) Object.values(it.cortes).forEach(c=>imgs.push(c));
+                    if(it.op_images) Object.values(it.op_images).forEach(c=>imgs.push(c));
+                    if(imgs.length > 0) disenos.push({ item: it.desc, urls: imgs });
+                    produccion.push({ item: it.desc, cantidad: `${it.cant} ${it.und}`, especificaciones: it.feat || "Ninguna" });
+                    let mats = [];
+                    if(it.compras_requeridas) mats = Object.values(it.compras_requeridas);
+                    else if(it.apu && it.apu.mat) mats = Object.values(it.apu.mat).filter(m=>m.d);
+                    if(mats.length > 0) compras.push({ item: it.desc, materiales: mats.map(m => `${m.q||m.cant||0} ${m.u||m.und||'und'} de ${m.d||m.nombre}`) });
+                });
+            }
+            if(p.gantt && p.gantt.items) {
+                p.gantt.items.forEach((it) => {
+                    if(it && it.subtasks) {
+                        Object.values(it.subtasks).forEach(sub => {
+                            gantt.push({ tarea: sub.name, inicio: sub.start, fin: sub.end, avance: (sub.progress||0)+"%", responsable: sub.worker || "Sin asignar" });
+                        });
+                    }
+                });
+            }
+            contextData = JSON.stringify({ obra: p.nombre, disenos, produccion, gantt, compras });
+        }
+
+        // Prompt cacheado 10 min
+        let sysPromptBase;
+        const ahora = Date.now();
+        if (_supPromptCache && (ahora - _supPromptTs) < SUP_PROMPT_TTL) {
+            sysPromptBase = _supPromptCache;
+        } else {
+            const defaultPrompt = `Eres Rubik IA, el asistente personal del Supervisor de Obra de Rubik Bolivia.
+REGLAS:
+1. Eres experto en ingeniería, arquitectura y logística de campo.
+2. Respuestas MUY breves, objetivas y al grano. Soluciones técnicas concretas.
+3. Si te adjuntan una foto (factura, recibo, material o avance de obra), analízala con cuidado.
+4. ACCESO A DISEÑOS: Si piden un plano/corte, busca en [disenos] del contexto y muestra la URL así: ![Plano](URL)
+5. Usas el historial de conversación para mantener contexto entre mensajes.`;
+            try {
+                const snap = await firebase.database().ref('config_ia/prompts/supervisor_consultor').once('value');
+                sysPromptBase = (snap.exists() && snap.val()) ? snap.val() : defaultPrompt;
+            } catch(e) { sysPromptBase = defaultPrompt; }
+            _supPromptCache = sysPromptBase;
+            _supPromptTs = ahora;
+        }
+
+        // Historial multi-turn (últimos 8 turnos)
+        let historialTxt = '';
+        if (_supHistorial.length > 0) {
+            historialTxt = '\nHISTORIAL CONVERSACIÓN:\n' + _supHistorial.slice(-8).map(h => `${h.role === 'user' ? 'SUPERVISOR' : 'IA'}: ${h.text}`).join('\n') + '\n';
+        }
+
+        const sysPrompt = sysPromptBase + historialTxt + `\n\nBASE DE DATOS EN TIEMPO REAL DE ESTA OBRA:\n${contextData}`;
+
+        try {
+            let parts = [];
+            if (imageToSend) {
+                const base64Data = imageToSend.split(',')[1];
+                const mimeType = imageToSend.split(';')[0].split(':')[1];
+                parts.push({ inlineData: { data: base64Data, mimeType: mimeType } });
+            }
+            parts.push({ text: sysPrompt + "\n\nSUPERVISOR DICE: " + (text || "Analiza la imagen adjunta.") });
+
+            // Proxy /api/gemini
+            const _imgSup = parts.find(p => p.inlineData);
+            const _txtSup = parts.find(p => p.text);
+            const _bodySup = { prompt: _txtSup ? _txtSup.text : (sysPrompt + "\n\nSUPERVISOR DICE: Analiza."), model: 'gemini-2.5-flash' };
+            if (_imgSup) _bodySup.image = _imgSup.inlineData;
+            const _tokSup = await firebase.auth().currentUser.getIdToken();
+            const _resSup = await fetch('/api/gemini', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + _tokSup },
+                body: JSON.stringify(_bodySup)
+            });
+            const _dataSup = await _resSup.json();
+            if (!_resSup.ok) throw new Error(_dataSup.error || 'Gemini error');
+            let aiText = _dataSup.text || (_dataSup.candidates?.[0]?.content?.parts?.[0]?.text) || '';
+
+            // Guardar en historial
+            _supHistorial.push({ role: 'user', text: text || '[imagen]' });
+            _supHistorial.push({ role: 'assistant', text: aiText.replace(/<[^>]+>/g, '') });
+            if (_supHistorial.length > 16) _supHistorial = _supHistorial.slice(-16);
+
+            // Transformar Markdown de imágenes en HTML
+            aiText = aiText.replace(/!\[.*?\]\((.*?)\)/g, `<br><img loading="lazy" decoding="async" src="$1" class="ai-thumbnail" onclick="verImagenNormal('$1')"><br>`);
+
+            typing.style.display = 'none';
+            const aiMsg = document.createElement('div');
+            aiMsg.className = 'msg msg-ai';
+            chatBox.appendChild(aiMsg);
+            chatBox.scrollTop = chatBox.scrollHeight;
+            await typewriterAppend(aiMsg, aiText, 10);
+            chatBox.scrollTop = chatBox.scrollHeight;
+
+        } catch (e) {
+            typing.style.display = 'none';
+            const errMsg = document.createElement('div');
+            errMsg.className = 'msg msg-ai';
+            errMsg.style.color = 'var(--red)';
+            errMsg.innerText = "Error de conexión. Por favor, intenta de nuevo.";
+            chatBox.appendChild(errMsg);
+            console.error("AI Error:", e);
+        }
+
+        btnSend.disabled = false;
+    }
+</script>
+    <script src="/js/viewmode.js?v=1"></script>
+</body>
+</html>

@@ -1,0 +1,1558 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Compras y Pagos - Rubik OS</title>
+    
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
+    
+    <script src="https://www.gstatic.com/firebasejs/9.1.3/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.1.3/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.1.3/firebase-database-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.1.3/firebase-storage-compat.js"></script>
+    <script>
+        window._rubikFirebaseConfig = window._rubikFirebaseConfig || {
+            apiKey: "AIzaSyDXYlofy31cDP14xVAVxWo_7TqXdSgsIjA",
+            authDomain: "rubik-bolivia.firebaseapp.com",
+            databaseURL: "https://rubik-bolivia-default-rtdb.firebaseio.com",
+            projectId: "rubik-bolivia",
+            storageBucket: "rubik-bolivia.firebasestorage.app",
+            messagingSenderId: "4153087958",
+            appId: "1:4153087958:web:cf2dd16106580ed6437677"
+        };
+        if (!firebase.apps.length) firebase.initializeApp(window._rubikFirebaseConfig);
+    </script>
+    <script src="/js/firecache.js?v=1"></script>
+    <script src="/js/auth-guard.js?v=1"></script>
+
+    <style>
+        :root { --bg: #f4f4f7; --card: #fff; --text: #1a1a1a; --blue: #007aff; --green: #34c759; --red: #ff3b30; --orange: #ff9500; --purple: #af52de; --gray: #8e8e93; --border: #d1d1d6; }
+        body.dark-mode { --bg: #000; --card: #1c1c1e; --text: #fff; --border: #333; }
+        body { font-family: -apple-system, sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 20px; padding-bottom: 100px; }
+
+        .nav { display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px; }
+        .btn-nav { background: var(--card); border: 1px solid var(--border); padding: 8px 14px; border-radius: 20px; font-weight: 700; color: var(--blue); cursor: pointer; display: flex; align-items: center; gap: 5px; }
+        
+        .header-title { font-size: 24px; font-weight: 900; margin-bottom: 5px; }
+        .header-sub { font-size: 12px; color: var(--gray); font-weight: 700; text-transform: uppercase; margin-bottom: 20px; }
+
+        .tabs-wrap { background: var(--border); padding: 4px; border-radius: 14px; display: flex; margin-bottom: 20px; overflow-x: auto; scrollbar-width: none;}
+        .tabs-wrap::-webkit-scrollbar { display: none; }
+        .tab-btn { flex: 1; min-width:max-content; padding: 12px 15px; border: none; background: transparent; font-weight: 800; font-size: 12px; border-radius: 10px; color: var(--gray); cursor: pointer; transition: 0.3s; text-transform: uppercase;}
+        .tab-btn.active { background: var(--card); color: var(--text); box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+
+        .kpi-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-bottom: 20px; }
+        .kpi-card { background: #1c1c1e; color: white; padding: 15px 10px; border-radius: 16px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); border: 1px solid #333;}
+        .kpi-lbl { font-size: 10px; text-transform: uppercase; color: var(--gray); font-weight: 800; margin-bottom: 5px; display: block;}
+        .kpi-val { font-size: 20px; font-weight: 900; color: var(--green); }
+
+        .section-title { font-size: 16px; font-weight: 900; margin-bottom: 15px; margin-top:25px; display:flex; align-items:center; gap:8px;}
+        
+        .contract-list { display: flex; flex-direction: column; gap: 15px; }
+        .c-card { background: var(--card); border-radius: 16px; border: 1px solid var(--border); padding: 20px; box-shadow: 0 4px 15px rgba(0,0,0,0.03); }
+        .c-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; border-bottom: 1px solid var(--border); padding-bottom: 10px; }
+        .c-name { font-size: 16px; font-weight: 900; color: var(--blue); display:flex; align-items:center; gap:5px;}
+        
+        .bal-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; background: var(--bg); padding: 15px; border-radius: 12px; margin-bottom: 15px; text-align: center; }
+        .b-lbl { font-size: 10px; font-weight: 800; color: var(--gray); text-transform: uppercase; }
+        .b-val { font-size: 16px; font-weight: 900; color: var(--text); margin-top: 5px; }
+
+        .btn-group { display: flex; gap: 10px; }
+        .btn-act { flex: 1; padding: 12px; border-radius: 10px; font-weight: 800; font-size: 12px; border: none; cursor: pointer; display: flex; justify-content: center; align-items: center; gap: 5px; transition: 0.2s;}
+        .btn-act:active { transform: scale(0.97); }
+        .b-pay { background: rgba(52,199,89,0.1); color: var(--green); }
+        .b-pdf { background: rgba(0,122,255,0.1); color: var(--blue); }
+
+        .pay-history { margin-top: 15px; border-top: 1px dashed var(--border); padding-top: 15px; }
+        .pay-row { display: flex; justify-content: space-between; align-items: center; background: var(--card); border: 1px solid var(--border); padding: 10px 15px; border-radius: 8px; margin-bottom: 8px; font-size: 12px; }
+        .p-date { font-weight: 800; color: var(--gray); }
+        .p-amt { font-weight: 900; color: var(--green); font-size: 14px; }
+        .p-view { color: var(--blue); cursor: pointer; font-weight: 700; background:rgba(0,122,255,0.1); padding:4px 8px; border-radius:6px; text-decoration:none;}
+
+        .req-card { background: rgba(255,149,0,0.05); border: 1px dashed var(--orange); border-radius: 16px; padding: 15px; display:flex; justify-content:space-between; align-items:center; }
+        
+        .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); z-index: 2000; justify-content: center; align-items: center; backdrop-filter: blur(4px); }
+        .modal-box { background: var(--card); width: 90%; max-width: 400px; padding: 25px; border-radius: 20px; position: relative; max-height:90vh; overflow-y:auto;}
+        .inp-lbl { font-size: 11px; font-weight: 800; color: var(--gray); text-transform: uppercase; display: block; margin-bottom: 8px; padding-left: 5px; }
+        .inp-std { width: 100%; padding: 14px; border: 1px solid var(--border); background: var(--bg); color: var(--text); border-radius: 12px; font-size: 14px; box-sizing: border-box; font-weight: 700; margin-bottom: 15px; outline:none;}
+        .btn-main { background: var(--blue); color: white; border: none; padding: 15px; border-radius: 12px; font-weight: 900; width: 100%; cursor: pointer; display: flex; justify-content: center; align-items:center; gap: 8px; }
+
+        .upload-zone { background: rgba(0,122,255,0.05); border: 2px dashed var(--blue); border-radius: 12px; padding: 20px; text-align: center; cursor: pointer; color: var(--blue); font-weight: 800; margin-bottom: 15px; display:flex; flex-direction:column; align-items:center; gap:5px;}
+        .alert-box { background: rgba(0,122,255,0.1); border: 1px solid var(--blue); padding: 15px; border-radius: 12px; margin-bottom: 20px; font-size: 12px; color: var(--text); line-height:1.5;}
+
+        .mat-item-header { font-size: 14px; font-weight: 900; color: var(--blue); margin-bottom: 10px; border-bottom: 1px solid var(--border); padding-bottom: 8px; }
+        .mat-row { display: flex; align-items: center; gap: 10px; padding: 10px 0; border-bottom: 1px dashed var(--border); }
+
+        #global-loader { display: none; position: fixed; top:0; left:0; width:100%; height:100%; background: rgba(0,0,0,0.85); backdrop-filter: blur(10px); z-index: 3000; justify-content: center; align-items: center; flex-direction: column; color:white; }
+        .spinner { border: 4px solid rgba(255,255,255,0.2); border-left-color: var(--blue); border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; margin-bottom: 15px; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+        /* ESTILOS IA FLOTANTE */
+        .fab-ai-btn { position: fixed; bottom: 25px; right: 20px; width: 65px; height: 65px; border-radius: 50%; background: #000; box-shadow: 0 8px 25px rgba(0,122,255,0.4); cursor: pointer; z-index: 900; display: flex; align-items: center; justify-content: center; border: 2px solid var(--card); padding:0; -webkit-tap-highlight-color: transparent;}
+        .fab-ai-btn img { width: 100%; height: 100%; object-fit: cover; }
+        .chat-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #000000; z-index: 9500; flex-direction: column; }
+        .chat-header { background: #1c1c1e; padding: 15px 20px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #38383a; }
+        .chat-body { flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 15px; }
+        .msg { max-width: 85%; padding: 12px 16px; border-radius: 18px; font-size: 14px; line-height: 1.4; word-wrap: break-word; color:white;}
+        .msg-ai { background: #1c1c1e; border: 1px solid #38383a; align-self: flex-start; border-bottom-left-radius: 4px; }
+        .msg-user { background: var(--blue); align-self: flex-end; border-bottom-right-radius: 4px; }
+        .msg-img { max-width: 100%; border-radius: 12px; margin-bottom: 8px; border: 1px solid rgba(255,255,255,0.1); }
+        .chat-footer { background: #1c1c1e; padding: 15px; border-top: 1px solid #38383a; display: flex; gap: 10px; align-items: flex-end; }
+        .chat-input { flex: 1; background: #000; border: 1px solid #38383a; color: white; padding: 12px; border-radius: 16px; font-size: 14px; outline: none; }
+        .btn-ai-action { background: var(--blue); color: white; border: none; width: 42px; height: 42px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 20px; cursor: pointer; flex-shrink:0; }
+        .btn-ai-action.cam { background: #000; color: #8e8e93; border: 1px solid #38383a; }
+        .chat-img-preview { max-width: 100px; border-radius: 8px; display: none; border: 1px solid #38383a; object-fit: cover;}
+        .typing-indicator { display: none; align-self: flex-start; background: #1c1c1e; padding: 12px 16px; border-radius: 20px; border-bottom-left-radius: 4px; border: 1px solid #38383a;}
+        .dot { height: 8px; width: 8px; background: #8e8e93; border-radius: 50%; display: inline-block; animation: blink 1.4s infinite both; margin: 0 2px;}
+        .dot:nth-child(2) { animation-delay: 0.2s; } .dot:nth-child(3) { animation-delay: 0.4s; }
+        @keyframes blink { 0% { opacity: 0.2; transform:scale(0.8);} 20% { opacity: 1; transform:scale(1);} 100% { opacity: 0.2; transform:scale(0.8); } }
+    </style>
+    <link rel="stylesheet" href="/css/responsive.css?v=1">
+</head>
+<body>
+
+    <div id="global-loader"><div class="spinner"></div><div style="font-weight:900; font-size:16px;" id="loader-title">Procesando...</div></div>
+
+    <div class="nav">
+        <button class="btn-nav" onclick="location.href='dashboard-proyecto.html'"><i class="ph-bold ph-caret-left"></i> Atrás</button>
+        <button class="btn-nav" style="border:none; background:transparent;" onclick="document.body.classList.toggle('dark-mode')"><i class="ph-fill ph-moon"></i></button>
+    </div>
+
+    <div>
+        <div class="header-title" id="h-pro">Cargando Proyecto...</div>
+        <div class="header-sub">Finanzas y Pagos a Proveedores</div>
+    </div>
+
+    <div class="tabs-wrap">
+        <button class="tab-btn active" id="tab-contratos" onclick="switchTab('contratos')">Contratos y Anticipos</button>
+        <button class="tab-btn" id="tab-materiales" onclick="switchTab('materiales')">Materiales e Insumos</button>
+    </div>
+
+    <div id="panel-contratos" style="display:block;">
+        <div class="kpi-grid">
+            <div class="kpi-card">
+                <span class="kpi-lbl">Total Gastos Adic.</span>
+                <span class="kpi-val" style="color:var(--text);" id="kpi-gastos">0.00 Bs</span>
+            </div>
+            <div class="kpi-card">
+                <span class="kpi-lbl">Licitado (Contratos)</span>
+                <span class="kpi-val" id="kpi-total">0.00 Bs</span>
+            </div>
+            <div class="kpi-card" style="border-color:var(--orange);">
+                <span class="kpi-lbl" style="color:var(--orange);">Saldo a Pagar</span>
+                <span class="kpi-val" id="kpi-deuda" style="color:var(--orange);">0.00 Bs</span>
+            </div>
+        </div>
+
+        <div class="section-title"><i class="ph-bold ph-shopping-cart"></i> Solicitudes de Compras (Taller / Contratistas)</div>
+        <div id="req-list" class="contract-list"></div>
+
+        <div class="section-title"><i class="ph-bold ph-handshake"></i> Estado de Contratos y Anticipos</div>
+        <div id="contract-list" class="contract-list"></div>
+    </div>
+
+    <div id="panel-materiales" style="display:none;">
+        <div style="display:flex; gap:10px; margin-bottom:15px; flex-wrap: wrap;">
+            <button class="btn-main" style="flex:1; min-width:120px; font-size:12px; padding:12px;" onclick="guardarYNotificarSupervisor()"><i class="ph-bold ph-paper-plane-tilt"></i> Notificar</button>
+            <button class="btn-main" style="flex:1; min-width:120px; font-size:12px; padding:12px; background:var(--orange);" onclick="exportarMaterialesPDF()"><i class="ph-bold ph-file-pdf"></i> Imprimir</button>
+            <button class="btn-main" id="btn-act-precios" style="flex:1; min-width:120px; font-size:12px; padding:12px; background:var(--purple);" onclick="actualizarPreciosBD()"><i class="ph-bold ph-database"></i> Actualizar Precios BD</button>
+            <button class="btn-main" style="flex:1; min-width:120px; font-size:12px; padding:12px; background:#636366;" onclick="repararVinculosBD()" title="Cruza proveedores con materiales y repara vínculos faltantes"><i class="ph-bold ph-wrench"></i> Reparar BD</button>
+        </div>
+        <div class="alert-box"><b><i class="ph-bold ph-info"></i> Gestión de Materiales:</b> Selecciona los materiales que faltan comprar. Usa <b>Actualizar Precios BD</b> para que la IA busque el mejor proveedor registrado por cada material y pre-llene los precios reales automáticamente.</div>
+        <div id="bd-update-result" style="display:none; background:rgba(52,199,89,0.08); border:1px solid var(--green); border-radius:12px; padding:14px; margin-bottom:14px; font-size:12px; line-height:1.7;"></div>
+
+        <div class="section-title"><i class="ph-bold ph-receipt"></i> Historial de Compras Directas (Respaldos)</div>
+        <div id="historial-compras-ia" class="contract-list" style="margin-bottom:20px;"></div>
+
+        <div class="section-title"><i class="ph-bold ph-list-checks"></i> Requerimientos de Presupuesto</div>
+        <div id="lista-materiales-presupuesto" class="contract-list"></div>
+    </div>
+
+    <div id="mod-pago" class="modal">
+        <div class="modal-box">
+            <i class="ph-bold ph-x" style="position:absolute; top:20px; right:20px; font-size:20px; cursor:pointer;" onclick="document.getElementById('mod-pago').style.display='none'"></i>
+            <h3 style="margin-top:0;">Abonar a Contrato</h3>
+            <label class="inp-lbl">Monto Pagado (Bs)</label>
+            <input type="number" step="any" id="pay-amt" class="inp-std" placeholder="Ej: 1500.50">
+            <label class="inp-lbl">Fecha del Depósito</label>
+            <input type="date" id="pay-date" class="inp-std">
+            <label class="inp-lbl">Comprobante (Opcional)</label>
+            <div class="upload-zone" onclick="document.getElementById('pay-file').click()">
+                <i class="ph-bold ph-receipt" style="font-size:30px;"></i>
+                <span id="txt-file-name">Subir o Pegar Imagen (Ctrl+V)</span>
+            </div>
+            <input type="file" id="pay-file" accept="image/*" style="display:none;" onchange="handleFile(this, 'txt-file-name')">
+            <button class="btn-main" onclick="guardarPago()"><i class="ph-bold ph-check-circle"></i> Confirmar Pago</button>
+        </div>
+    </div>
+
+    <div id="mod-req" class="modal">
+        <div class="modal-box">
+            <i class="ph-bold ph-x" style="position:absolute; top:20px; right:20px; font-size:20px; cursor:pointer;" onclick="document.getElementById('mod-req').style.display='none'"></i>
+            <h3 style="margin-top:0; color:var(--blue);">Procesar Compra</h3>
+            <div id="req-items-list" style="font-size:12px; margin-bottom:15px; background:var(--bg); padding:10px; border-radius:8px;"></div>
+            
+            <label class="inp-lbl">Total Autorizado (Bs)</label>
+            <input type="number" step="any" id="req-amt" class="inp-std" style="color:var(--green); font-size:20px;">
+            
+            <label class="inp-lbl">Naturaleza Financiera (¡IMPORTANTE!)</label>
+            <div style="background:var(--bg); padding:15px; border-radius:12px; margin-bottom:15px; border:1px solid var(--border);">
+                <label style="display:flex; align-items:center; gap:8px; font-size:12px; font-weight:800; margin-bottom:10px;">
+                    <input type="radio" name="req-type" value="gasto" checked onclick="toggleReqOptions()"> 
+                    Es Gasto Directo (Solo M.O. / No descuenta)
+                </label>
+                <label style="display:flex; align-items:center; gap:8px; font-size:12px; font-weight:800;">
+                    <input type="radio" name="req-type" value="descuento" onclick="toggleReqOptions()"> 
+                    Descontar de su Contrato (Obra Vendida)
+                </label>
+            </div>
+            
+            <select id="req-lic-select" class="inp-std" style="display:none; border-color:var(--orange); color:var(--orange);"></select>
+
+            <label class="inp-lbl">Comprobante de Transferencia</label>
+            <div class="upload-zone" onclick="document.getElementById('req-file').click()">
+                <i class="ph-bold ph-receipt" style="font-size:30px;"></i>
+                <span id="txt-req-file">Subir o Pegar Imagen (Ctrl+V)</span>
+            </div>
+            <input type="file" id="req-file" accept="image/*" style="display:none;" onchange="handleFile(this, 'txt-req-file')">
+            <button class="btn-main" onclick="guardarProcesamientoCompra()"><i class="ph-bold ph-check-circle"></i> Aprobar y Pagar</button>
+        </div>
+    </div>
+
+    <button class="fab-ai-btn" onclick="openAIChat()"><img loading="lazy" decoding="async" src="IA RUBIK BOTON.png" onerror="this.src='./IA RUBIK BOTON.png'" alt="Rubik IA"></button>
+    <div class="chat-overlay" id="ai-chat-modal">
+        <div class="chat-header">
+            <div style="font-weight: 900; font-size: 15px; display: flex; align-items: center; gap: 8px; color:white;"><img loading="lazy" decoding="async" src="IA RUBIK BOTON.png" style="width: 28px; border-radius: 50%;"> IA Financiera</div>
+            <button style="background:var(--card); color:var(--text); border:none; padding: 6px 12px; border-radius:8px; font-weight:bold; cursor:pointer; font-size:12px;" onclick="closeAIChat()">Cerrar</button>
+        </div>
+        <div class="chat-body" id="ai-chat-box">
+            <div class="msg msg-ai">Hola CEO. Estoy conectado a los contratos, requerimientos y materiales de esta obra. Sube una factura o pregúntame saldos de algún contratista.</div>
+        </div>
+        <div class="typing-indicator" id="ai-typing" style="margin-left: 20px;"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div>
+        <div style="padding: 0 15px; display:flex; justify-content:flex-end;">
+            <div style="position:relative; display:inline-block;">
+                <img loading="lazy" decoding="async" id="ai-img-preview" class="chat-img-preview">
+                <div id="ai-img-remove" onclick="removeAIImage()" style="display:none; position:absolute; top:-8px; right:-8px; background:var(--red); color:white; border-radius:50%; width:24px; height:24px; text-align:center; line-height:24px; cursor:pointer; font-size:12px; font-weight:bold;">X</div>
+            </div>
+        </div>
+        <div class="chat-footer">
+            <button class="btn-ai-action cam" onclick="document.getElementById('ai-file-upload').click()"><i class="ph-bold ph-image"></i></button>
+            <input type="file" id="ai-file-upload" accept="image/*" multiple style="display:none" onchange="handleAIImage(this)">
+            <textarea id="ai-user-input" class="chat-input" rows="1" placeholder="Pega fotos (Ctrl+V) o escribe..." onpaste="handleAIPaste(event)"></textarea>
+            <button class="btn-ai-action" onclick="sendAIMessage()"><i class="ph-bold ph-paper-plane-right"></i></button>
+        </div>
+    </div>
+
+<script>
+    // Firebase ya inicializado en el <head>
+    if (!firebase.apps.length) firebase.initializeApp(window._rubikFirebaseConfig);
+    const db = firebase.database(); const storage = firebase.storage();
+
+    const cid = localStorage.getItem('rubik_client_id');
+    const pid = localStorage.getItem('rubik_current_pid');
+    const pName = localStorage.getItem('rubik_current_pname') || 'Proyecto';
+
+    if(!cid || !pid) window.location.href = "index.html";
+    document.getElementById('h-pro').innerText = pName;
+
+    let currentLics = {}; let currentReqs = {}; let globalGastosAdicionales = 0;
+    let budgetItems = {}; 
+    let targetLicId = null; let targetWorkerId = null; let tempB64Receipt = null;
+    let targetReqId = null; let targetReqWorker = null;
+
+    function fMoney(num) { return parseFloat(num || 0).toLocaleString('es-BO', {minimumFractionDigits: 2, maximumFractionDigits: 2}); }
+    function getValidKeys(obj) { if(!obj) return []; return Object.keys(obj).filter(k => obj[k] != null); }
+
+    function switchTab(tab) {
+        ['contratos', 'materiales'].forEach(t => {
+            document.getElementById(`tab-${t}`).classList.remove('active');
+            document.getElementById(`panel-${t}`).style.display = 'none';
+        });
+        document.getElementById(`tab-${tab}`).classList.add('active');
+        document.getElementById(`panel-${tab}`).style.display = 'block';
+    }
+
+
+    // Extrae lista de materiales de un ítem priorizando prod_apu.mat (ajuste real de producción)
+    function _getMaterialesItem(it) {
+        // 1. Prioridad máxima: prod_apu.mat (ajuste real de producción)
+        if (it.prod_apu && it.prod_apu.mat && it.prod_apu.mat.length > 0) {
+            return { mats: it.prod_apu.mat.filter(m => m.d), source: 'prod' };
+        }
+        // 2. compras_requeridas ya guardadas
+        if (it.compras_requeridas) {
+            return { mats: Object.values(it.compras_requeridas), source: 'req' };
+        }
+        // 3. APU del presupuesto base
+        if (it.apu && it.apu.mat) {
+            return { mats: Object.values(it.apu.mat).filter(m => m.d), source: 'apu' };
+        }
+        return { mats: [], source: null };
+    }
+
+
+    function viewImg(url) { window.open(url, '_blank'); }
+
+    function _refreshComprasTotals() { /* re-calcula KPI al cambiar precio real */ renderMateriales(); }
+
+
+    function renderMateriales() {
+        const list = document.getElementById('lista-materiales-presupuesto');
+        list.innerHTML = '';
+        let html = '';
+        let totalPpto = 0, totalReal = 0;
+
+        const items = window.budgetItems || budgetItems || {};
+        Object.keys(items).forEach(idx => {
+            let it = items[idx];
+            if (!it || it.type === 'chapter') return;
+            const { mats, source } = _getMaterialesItem(it);
+            if (mats.length === 0) return;
+
+            const sourceBadge = source === 'prod'
+                ? `<span style="background:rgba(52,199,89,0.15);color:var(--green);font-size:9px;font-weight:900;padding:2px 7px;border-radius:10px;margin-left:8px;">⚙ APU PRODUCCIÓN</span>`
+                : source === 'req'
+                ? `<span style="background:rgba(255,149,0,0.15);color:var(--orange);font-size:9px;font-weight:900;padding:2px 7px;border-radius:10px;margin-left:8px;">✓ REQUERIDO</span>`
+                : `<span style="background:rgba(0,122,255,0.1);color:var(--blue);font-size:9px;font-weight:900;padding:2px 7px;border-radius:10px;margin-left:8px;">PPTO BASE</span>`;
+
+            let matHtml = '';
+            mats.forEach((m, mIdx) => {
+                const p_ppto = parseFloat(m.p || m.pu || 0);
+                const p_real = parseFloat(m.p_real || 0);
+                const qty = parseFloat(m.q || m.cant || 0);
+                const isChecked = m.selected !== false;
+                const corteImg = m.corte_url
+                    ? `<img src="${m.corte_url}" onclick="viewImg('${m.corte_url}')" style="width:36px;height:36px;object-fit:cover;border-radius:6px;cursor:pointer;border:1px solid var(--border);flex-shrink:0;">`
+                    : '';
+                totalPpto += qty * p_ppto;
+                if (p_real > 0) totalReal += qty * p_real;
+                matHtml += `<div class="mat-row">
+                    <input type="checkbox" class="mat-chk" data-idx="${idx}" data-midx="${mIdx}" data-source="${source}" ${isChecked ? 'checked' : ''} style="width:20px;height:20px;cursor:pointer;">
+                    <div style="flex:1;">
+                        <div style="font-size:13px;font-weight:800;color:var(--text);">${m.d || m.nombre || '—'}</div>
+                        <div style="font-size:11px;color:var(--gray);font-weight:700;">
+                            Cant: <b>${qty}</b> ${m.u || m.und || 'und'} | Base: ${fMoney(p_ppto)} Bs/u | Subtotal: <b>${fMoney(qty * p_ppto)} Bs</b>
+                        </div>
+                    </div>
+                    ${corteImg}
+                    <div style="width:110px;">
+                        <div style="font-size:9px;font-weight:800;color:var(--orange);text-transform:uppercase;margin-bottom:4px;">Precio real (Bs/u)</div>
+                        <input type="number" id="mat-real-${idx}-${mIdx}" class="inp-std"
+                            style="padding:8px 10px;margin:0;font-size:13px;" placeholder="${p_ppto}"
+                            value="${p_real > 0 ? p_real : ''}">
+                    </div>
+                </div>`;
+            });
+
+            html += `<div class="c-card" style="margin-bottom:15px;">
+                <div class="mat-item-header" style="display:flex;align-items:center;">${it.desc || '—'} ${sourceBadge}</div>
+                ${matHtml}
+            </div>`;
+        });
+
+        const kpiHtml = `<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px;">
+            <div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:12px;text-align:center;">
+                <div style="font-size:9px;font-weight:800;color:var(--gray);text-transform:uppercase;">Total Presupuestado</div>
+                <div style="font-size:17px;font-weight:900;color:var(--blue);">${fMoney(totalPpto)} Bs</div>
+            </div>
+            <div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:12px;text-align:center;">
+                <div style="font-size:9px;font-weight:800;color:var(--gray);text-transform:uppercase;">Total Real (mercado)</div>
+                <div style="font-size:17px;font-weight:900;color:${totalReal > totalPpto ? 'var(--red)' : 'var(--green)'};">${totalReal > 0 ? fMoney(totalReal) + ' Bs' : '—'}</div>
+            </div>
+        </div>`;
+
+        list.innerHTML = kpiHtml + (html || '<div style="text-align:center;padding:40px;color:var(--gray);font-size:12px;font-weight:700;border:2px dashed var(--border);border-radius:16px;">No hay materiales registrados.</div>');
+    }
+
+
+    async function guardarYNotificarSupervisor() {
+        document.getElementById('loader-title').innerText = "Sincronizando..."; document.getElementById('global-loader').style.display = 'flex';
+        let updates = {}; let itemsSelectedCount = 0;
+        Object.keys(budgetItems).forEach(idx => {
+            let it = budgetItems[idx]; if(!it || it.type === 'chapter') return;
+            let materials = [];
+            if(it.compras_requeridas) materials = Object.values(it.compras_requeridas);
+            else if(it.apu && it.apu.mat) materials = Object.values(it.apu.mat).filter(m => m.d);
+            if(materials.length === 0) return;
+            let requeridasArray = [];
+            materials.forEach((m, mIdx) => {
+                let chk = document.querySelector(`.mat-chk[data-idx="${idx}"][data-midx="${mIdx}"]`);
+                let inpReal = document.getElementById(`mat-real-${idx}-${mIdx}`);
+                let reqMat = { ...m }; if(inpReal && inpReal.value) reqMat.p_real = parseFloat(inpReal.value); reqMat.selected = (chk && chk.checked);
+                if(reqMat.selected) { itemsSelectedCount++; requeridasArray.push(reqMat); }
+            });
+            updates[`proyectos/${cid}/${pid}/presupuesto/items/${idx}/compras_requeridas`] = requeridasArray.length > 0 ? requeridasArray : null; 
+        });
+        await db.ref().update(updates); document.getElementById('global-loader').style.display = 'none';
+        if(itemsSelectedCount > 0) { let msg = encodeURIComponent(`Hola Supervisor 👋\nHe actualizado la lista de requerimientos de compras para el proyecto *${pName}*.\n\n👉 Por favor, revisa la pestaña de COMPRAS en tu Dashboard para ver los materiales y precios aprobados.`); window.open(`https://api.whatsapp.com/send?text=${msg}`, '_blank'); } 
+        else alert("Has guardado una lista vacía.");
+    }
+
+    function exportarMaterialesPDF() {
+        const { jsPDF } = window.jspdf; const doc = new jsPDF('p', 'mm', 'a4');
+        doc.setFontSize(18); doc.setFont(undefined, 'bold'); doc.text("COTIZACIÓN DE MATERIALES - RUBIK OS", 14, 20);
+        doc.setFontSize(10); doc.setFont(undefined, 'normal'); doc.text(`PROYECTO: ${pName}`, 14, 28); doc.text(`FECHA: ${new Date().toLocaleDateString()}`, 14, 33);
+        let tableData = []; let totalEstimado = 0;
+        Object.keys(budgetItems).forEach(idx => {
+            let it = budgetItems[idx]; if(!it || it.type === 'chapter') return;
+            let materials = [];
+            if(it.compras_requeridas) materials = Object.values(it.compras_requeridas);
+            else if(it.apu && it.apu.mat) materials = Object.values(it.apu.mat).filter(m => m.d);
+            if(materials.length === 0) return;
+            materials.forEach((m, mIdx) => {
+                let chk = document.querySelector(`.mat-chk[data-idx="${idx}"][data-midx="${mIdx}"]`);
+                if(chk && chk.checked) {
+                    let inpReal = document.getElementById(`mat-real-${idx}-${mIdx}`);
+                    let pReal = inpReal && parseFloat(inpReal.value) > 0 ? parseFloat(inpReal.value) : parseFloat(m.p || m.pu || 0);
+                    let q = parseFloat(m.q || m.cant || 0); let subt = pReal * q; totalEstimado += subt;
+                    tableData.push([ it.desc, m.d || m.nombre, `${q} ${m.u || m.und}`, `${fMoney(pReal)} Bs`, `${fMoney(subt)} Bs`, '' ]);
+                }
+            });
+        });
+        if(tableData.length === 0) return alert("Selecciona al menos un material.");
+        doc.autoTable({ startY: 40, head: [['Ítem Asociado', 'Material / Insumo', 'Cant.', 'P.U. Asignado', 'Subtotal', 'Cotización Fís.']], body: tableData, theme: 'grid', headStyles: { fillColor: [0, 122, 255] }, styles: { fontSize: 8, valign: 'middle' }, columnStyles: { 5: { cellWidth: 30 } } });
+        let yRes = doc.lastAutoTable.finalY + 15; doc.setFontSize(12); doc.setFont(undefined, 'bold'); doc.text(`PRESUPUESTO TOTAL ESTIMADO: ${fMoney(totalEstimado)} Bs`, 14, yRes);
+        let safeName = pName.replace(/[^a-zA-Z0-9_\- ]/g, "").trim().replace(/ /g, '_'); doc.save(`Materiales_${safeName}.pdf`);
+    }
+
+    function renderRequests() {
+        const list = document.getElementById('req-list'); list.innerHTML = ''; let hasReq = false;
+        Object.keys(currentReqs).forEach(k => {
+            let req = currentReqs[k];
+            if(req.estado === 'pendiente') {
+                hasReq = true; let itemsStr = req.items ? req.items.map(i => `• ${i.cant} x ${i.mat} (PU: ${i.pu})`).join('<br>') : 'Sin detalles';
+                list.innerHTML += `<div class="req-card"><div><div style="font-size:14px; font-weight:900; color:var(--orange);"><i class="ph-fill ph-warning-circle"></i> ${req.worker_name} solicita compra</div><div style="font-size:10px; color:var(--gray); margin-bottom:5px;">${new Date(req.timestamp).toLocaleString()}</div><div style="font-size:11px; font-weight:700; line-height:1.4;">${itemsStr}</div><div style="font-size:16px; font-weight:900; color:var(--text); margin-top:5px;">Total: ${fMoney(req.total)} Bs</div></div><button class="btn-act" style="background:var(--blue); color:white; padding:15px; border-radius:12px; flex:none; width:auto;" onclick="abrirModalReq('${k}')"><i class="ph-bold ph-check"></i> Atender</button></div>`;
+            }
+        });
+        if(!hasReq) list.innerHTML = '<div style="font-size:12px; color:var(--gray); text-align:center; padding:20px;">No hay solicitudes de compra pendientes.</div>';
+    }
+
+    function renderContracts() {
+        const list = document.getElementById('contract-list'); list.innerHTML = ''; let sumTotal = 0; let sumDeuda = 0;
+        Object.keys(currentLics).forEach(key => {
+            let lic = currentLics[key]; if(lic.estado !== 'aprobado' && lic.estado !== 'terminado' && lic.estado !== 'liquidado' && lic.estado !== 'pagado') return; 
+            let totalProp = parseFloat(lic.precio_final || lic.precio_propuesto || 0); let totalPagado = 0; let historyHtml = '';
+            if(lic.pagos) {
+                Object.keys(lic.pagos).forEach(pKey => {
+                    let p = lic.pagos[pKey]; totalPagado += parseFloat(p.monto);
+                    let receiptBtn = p.comprobante ? `<a href="${p.comprobante}" target="_blank" class="p-view"><i class="ph-bold ph-image"></i> Ver Doc</a>` : '-';
+                    historyHtml += `<div class="pay-row"><span class="p-date">${new Date(p.fecha).toLocaleDateString()}</span><span>${p.nota||'Abono'}</span><span class="p-amt">${fMoney(p.monto)} Bs</span>${receiptBtn}</div>`;
+                });
+            }
+            if ((lic.estado === 'pagado' || lic.estado === 'liquidado') && totalPagado === 0) { totalPagado = totalProp; }
+            let saldo = totalProp - totalPagado; sumTotal += totalProp; sumDeuda += saldo;
+            let icon = lic.is_grafico ? 'ph-printer' : 'ph-hammer';
+            list.innerHTML += `<div class="c-card"><div class="c-head"><div class="c-name"><i class="ph-fill ${icon}"></i> ${lic.worker_name}</div><div style="font-size:10px; font-weight:800; color:var(--green); background:rgba(52,199,89,0.1); padding:4px 8px; border-radius:8px;">${lic.estado.toUpperCase()}</div></div><div class="bal-grid"><div><div class="b-lbl">Acordado</div><div class="b-val">${fMoney(totalProp)}</div></div><div><div class="b-lbl">Pagado</div><div class="b-val" style="color:var(--green)">${fMoney(totalPagado)}</div></div><div><div class="b-lbl" style="color:var(--orange)">Saldo Deuda</div><div class="b-val" style="color:var(--orange)">${fMoney(saldo)}</div></div></div><div class="btn-group"><button class="btn-act b-pay" onclick="abrirModalPago('${key}', '${lic.worker_id}')"><i class="ph-bold ph-currency-circle-dollar"></i> Abonar</button><button class="btn-act b-pdf" onclick="exportarLiquidacion('${key}')"><i class="ph-bold ph-file-pdf"></i> Liquidación PDF</button></div>${historyHtml ? `<div class="pay-history"><div style="font-size:10px; font-weight:800; color:var(--gray); margin-bottom:8px; text-transform:uppercase;">Historial de Pagos</div>${historyHtml}</div>` : ''}</div>`;
+        });
+        if(list.innerHTML === '') list.innerHTML = '<div style="text-align:center; padding:40px; color:var(--gray); font-size:12px; font-weight:700; border:2px dashed var(--border); border-radius:16px;">No hay contratos activos.</div>';
+        document.getElementById('kpi-total').innerText = fMoney(sumTotal) + " Bs"; document.getElementById('kpi-deuda').innerText = fMoney(sumDeuda) + " Bs";
+    }
+
+    function abrirModalPago(licId, wId) {
+        targetLicId = licId; targetWorkerId = wId; tempB64Receipt = null;
+        document.getElementById('pay-amt').value = ''; document.getElementById('pay-date').valueAsDate = new Date();
+        document.getElementById('txt-file-name').innerText = "Subir o Pegar Imagen (Ctrl+V)";
+        document.getElementById('mod-pago').style.display = 'flex';
+    }
+
+    async function guardarPago() {
+        let amt = parseFloat(document.getElementById('pay-amt').value); let date = document.getElementById('pay-date').value;
+        if(!amt || amt <= 0) return alert("Ingrese un monto válido.");
+        document.getElementById('loader-title').innerText = "Registrando Pago..."; document.getElementById('global-loader').style.display = 'flex';
+        let urlComp = null;
+        if(tempB64Receipt) { try { let snap = await storage.ref(`comprobantes/${pid}_${Date.now()}.jpg`).putString(tempB64Receipt, 'data_url'); urlComp = await snap.ref.getDownloadURL(); } catch(e) {} }
+        const payload = { monto: amt, fecha: date, comprobante: urlComp, timestamp: Date.now(), nota: "Abono de Matriz" };
+        const newPayRef = db.ref(`proyectos/${cid}/${pid}/licitaciones/${targetLicId}/pagos`).push();
+        await newPayRef.set(payload); await db.ref(`personal/${targetWorkerId}/solicitudes/${targetLicId}/pagos/${newPayRef.key}`).set(payload);
+        document.getElementById('global-loader').style.display = 'none'; document.getElementById('mod-pago').style.display = 'none';
+    }
+
+    function abrirModalReq(reqId) {
+        targetReqId = reqId; let req = currentReqs[reqId]; targetReqWorker = req.wid; tempB64Receipt = null;
+        document.getElementById('req-items-list').innerHTML = req.items ? req.items.map(i => `<b>${i.cant} x ${i.mat}</b> (PU: ${i.pu}) = ${fMoney(i.cant * i.pu)}`).join('<br>') : '';
+        document.getElementById('req-amt').value = req.total; document.getElementById('txt-req-file').innerText = "Subir o Pegar Imagen (Ctrl+V)";
+        document.querySelector('input[name="req-type"][value="gasto"]').checked = true; toggleReqOptions();
+        document.getElementById('mod-req').style.display = 'flex';
+    }
+
+    function toggleReqOptions() {
+        let isDescuento = document.querySelector('input[name="req-type"]:checked').value === 'descuento';
+        let sel = document.getElementById('req-lic-select');
+        if(isDescuento) {
+            sel.style.display = 'block'; sel.innerHTML = ''; let count = 0;
+            Object.keys(currentLics).forEach(k => {
+                if(currentLics[k].worker_id === targetReqWorker && (currentLics[k].estado === 'aprobado' || currentLics[k].estado === 'terminado')) {
+                    sel.innerHTML += `<option value="${k}">Contrato: ${fMoney(currentLics[k].precio_propuesto)} Bs</option>`; count++;
+                }
+            });
+            if(count === 0) { sel.innerHTML = '<option value="">El trabajador no tiene contratos activos.</option>'; }
+        } else { sel.style.display = 'none'; }
+    }
+
+    async function guardarProcesamientoCompra() {
+        let amt = parseFloat(document.getElementById('req-amt').value); if(!amt || amt <= 0) return alert("Ingrese el monto autorizado.");
+        let isDescuento = document.querySelector('input[name="req-type"]:checked').value === 'descuento';
+        let licIdToDeduct = document.getElementById('req-lic-select').value;
+        if(isDescuento && !licIdToDeduct) return alert("El trabajador no tiene contratos activos para descontar.");
+        document.getElementById('loader-title').innerText = "Procesando..."; document.getElementById('global-loader').style.display = 'flex';
+        let urlComp = null; if(tempB64Receipt) { try { let snap = await storage.ref(`comprobantes/${pid}_compra_${Date.now()}.jpg`).putString(tempB64Receipt, 'data_url'); urlComp = await snap.ref.getDownloadURL(); } catch(e) {} }
+        if(isDescuento) {
+            const payload = { monto: amt, fecha: new Date().toISOString().split('T')[0], comprobante: urlComp, timestamp: Date.now(), nota: "Compra Materiales (Anticipo)" };
+            const newPayRef = db.ref(`proyectos/${cid}/${pid}/licitaciones/${licIdToDeduct}/pagos`).push();
+            await newPayRef.set(payload); await db.ref(`personal/${targetReqWorker}/solicitudes/${licIdToDeduct}/pagos/${newPayRef.key}`).set(payload);
+        } else { await db.ref(`proyectos/${cid}/${pid}/gastos_adicionales_compras`).set(globalGastosAdicionales + amt); }
+        await db.ref(`proyectos/${cid}/${pid}/solicitudes_compra/${targetReqId}`).update({ estado: 'pagado', comprobante: urlComp, monto_pagado: amt, tipo_pago: isDescuento ? 'descuento' : 'gasto' });
+        document.getElementById('global-loader').style.display = 'none'; document.getElementById('mod-req').style.display = 'none'; alert("Compra procesada.");
+    }
+
+    function handleFile(inp, txtId) { if(inp.files[0]) { document.getElementById(txtId).innerText = "Comprimiendo..."; compressImage(inp.files[0], 800, 0.7).then(b64 => { tempB64Receipt = b64; document.getElementById(txtId).innerText = "✅ Comprobante Listo"; }); } }
+    document.addEventListener('paste', e => { if ((document.getElementById('mod-pago').style.display === 'flex' || document.getElementById('mod-req').style.display === 'flex') && e.clipboardData.files.length > 0) { let txtId = document.getElementById('mod-pago').style.display === 'flex' ? 'txt-file-name' : 'txt-req-file'; document.getElementById(txtId).innerText = "Comprimiendo..."; compressImage(e.clipboardData.files[0], 800, 0.7).then(b64 => { tempB64Receipt = b64; document.getElementById(txtId).innerText = "✅ Imagen Pegada"; }); } });
+    function compressImage(file, max, q) { return new Promise(res => { const r = new FileReader(); r.onload = e => { const i = new Image(); i.onload = () => { const c = document.createElement('canvas'); let s = i.width>max ? max/i.width : 1; c.width = i.width*s; c.height = i.height*s; c.getContext('2d').drawImage(i, 0, 0, c.width, c.height); res(c.toDataURL('image/jpeg', q)); }; i.src = e.target.result; }; r.readAsDataURL(file); }); }
+
+    // ==========================================================
+    // MOTOR PRO DE EXPORTACIÓN: RESUMEN + ANEXO TÉCNICO FOTOGRÁFICO
+    // ==========================================================
+
+    function getBase64ImageFromUrl(imageUrl) { 
+        return new Promise((resolve) => { 
+            if(!imageUrl) return resolve(null);
+            var img = new Image(); img.crossOrigin = "Anonymous"; 
+            let timeout = setTimeout(() => { resolve(null); }, 15000);
+            img.onload = function() { 
+                clearTimeout(timeout);
+                try { 
+                    var canvas = document.createElement("canvas"); 
+                    canvas.width = img.width; canvas.height = img.height; 
+                    canvas.getContext("2d").drawImage(img, 0, 0); 
+                    resolve(canvas.toDataURL("image/jpeg", 0.6)); 
+                } catch(e) { resolve(null); }
+            }; 
+            img.onerror = function() { clearTimeout(timeout); resolve(null); }; 
+            img.src = imageUrl; 
+        }); 
+    }
+
+    async function exportarLiquidacion(licId) {
+        const lic = window.currentLics[licId];
+        if (!lic) return alert("No se encontró el contrato.");
+
+        document.getElementById('loader-title').innerText = "Generando PDF Pro..."; 
+        document.getElementById('global-loader').style.display = 'flex';
+
+        try {
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF('p', 'mm', 'a4');
+            const margin = 15;
+            
+            // --- HOJA 1: RESUMEN FINANCIERO ---
+            doc.setFontSize(20); doc.setFont(undefined, 'bold');
+            doc.text("LIQUIDACIÓN DE CONTRATO", margin, 20);
+            doc.setFontSize(10); doc.setFont(undefined, 'normal');
+            doc.text(`PROYECTO: ${window.pName || 'Proyecto'}`, margin, 28);
+            doc.text(`CONTRATISTA: ${lic.worker_name}`, margin, 33);
+            doc.text(`FECHA DE EMISIÓN: ${new Date().toLocaleDateString()}`, margin, 38);
+
+            let totalProp = parseFloat(lic.precio_final || lic.precio_propuesto || 0);
+            let totalPagado = 0;
+            const pagosRows = [];
+            if(lic.pagos) {
+                Object.values(lic.pagos).forEach(p => {
+                    let amt = parseFloat(p.monto||0);
+                    totalPagado += amt;
+                    pagosRows.push([ new Date(p.fecha).toLocaleDateString(), p.nota || 'Abono', fMoney(amt) + ' Bs' ]);
+                });
+            }
+
+            let y = 45;
+            doc.setFontSize(12); doc.setFont(undefined, 'bold');
+            doc.text("1. RESUMEN FINANCIERO DEL TRATO", margin, y);
+            doc.autoTable({
+                startY: y + 5,
+                head: [['CONCEPTO DE CUENTA', 'MONTO TOTAL']],
+                body: [
+                    ['MONTO TOTAL ACORDADO', fMoney(totalProp) + ' Bs'],
+                    ['TOTAL DESEMBOLSADO (PAGADO)', fMoney(totalPagado) + ' Bs'],
+                    ['SALDO PENDIENTE POR CANCELAR', fMoney(totalProp - totalPagado) + ' Bs']
+                ],
+                theme: 'grid', headStyles: { fillColor: [0, 122, 255] }
+            });
+
+            y = doc.lastAutoTable.finalY + 15;
+            doc.setFontSize(12); doc.text("2. HISTORIAL DE PAGOS Y ANTICIPOS", margin, y);
+            if (pagosRows.length > 0) {
+                doc.autoTable({
+                    startY: y + 5, head: [['Fecha de Pago', 'Concepto / Nota', 'Monto']],
+                    body: pagosRows, theme: 'striped', headStyles: { fillColor: [52, 199, 89] }
+                });
+                y = doc.lastAutoTable.finalY + 15;
+            } else {
+                doc.setFontSize(10); doc.setFont(undefined, 'italic');
+                doc.text("No se registran pagos realizados a este contrato.", margin, y + 8);
+                y += 15;
+            }
+
+            if (y > 250) { doc.addPage(); y = 20; }
+            doc.setFontSize(14); doc.setFont(undefined, 'bold'); doc.setTextColor(255, 149, 0);
+            doc.text(`ESTADO FINAL: ${fMoney(totalProp - totalPagado)} Bs PENDIENTES`, margin, y);
+            doc.setTextColor(0);
+
+            // --- HOJA 2: ANEXO TÉCNICO ---
+            if (lic.tareas) {
+                doc.addPage();
+                doc.setFontSize(16); doc.setFont(undefined, 'bold'); doc.setTextColor(0, 122, 255);
+                doc.text("ANEXO: DESGLOSE TÉCNICO Y GRÁFICO", margin, 20);
+                
+                let rowsAnexo = [];
+                for (let tId in lic.tareas) {
+                    let t = lic.tareas[tId];
+                    if (!t) continue;
+                    
+                    // BÚSQUEDA BLINDADA (Fuzzy Search por si se cambió el nombre o ID)
+                    let searchDesc = (t.parent_desc || t.desc || "").toUpperCase().replace("IMPRESIÓN: ", "").replace("IMPRESIONES ", "").trim();
+                    let itOrig = window.budgetItems[t.originIdx];
+                    
+                    if (!itOrig || !itOrig.measures) {
+                        itOrig = Object.values(window.budgetItems).find(i => {
+                            if(!i || !i.desc) return false;
+                            let d = i.desc.toUpperCase();
+                            return d === searchDesc || d.includes(searchDesc) || searchDesc.includes(d);
+                        });
+                    }
+                    
+                    if (itOrig && itOrig.measures) {
+                        for (let mId in itOrig.measures) {
+                            let m = itOrig.measures[mId];
+                            if(!m.b && !m.h) continue; 
+                            
+                            let b = parseFloat(m.b||0); let h = parseFloat(m.h||0); let c = parseFloat(m.c||1);
+                            let m2 = (b/100) * (h/100) * c;
+                            let pu = parseFloat(t.pu || 0);
+                            let b64 = m.img ? await getBase64ImageFromUrl(m.img) : null;
+
+                            rowsAnexo.push([
+                                itOrig.desc,
+                                m.d || "Arte",
+                                `${b} x ${h} cm`,
+                                c,
+                                fMoney(pu) + " Bs",
+                                fMoney(m2 * pu) + " Bs",
+                                b64
+                            ]);
+                        }
+                    } else {
+                        let b64 = t.img ? await getBase64ImageFromUrl(t.img) : null;
+                        rowsAnexo.push([t.parent_desc || "General", t.task_name || t.desc, "-", t.cant, fMoney(t.pu) + " Bs", fMoney(t.subtotal) + " Bs", b64]);
+                    }
+                }
+
+                if (rowsAnexo.length > 0) {
+                    doc.autoTable({
+                        startY: 30,
+                        head: [['Ítem Padre', 'Detalle/Arte', 'Medida', 'Cant', 'P.U. (m2)', 'Subtotal', 'Imagen']],
+                        body: rowsAnexo,
+                        theme: 'grid',
+                        headStyles: { fillColor: [0, 122, 255], halign: 'center' },
+                        styles: { fontSize: 7, valign: 'middle' },
+                        columnStyles: { 6: { cellWidth: 30, halign: 'center' } },
+                        didParseCell: function(data) {
+                            if (data.column.index === 6 && data.cell.section === 'body') {
+                                data.cell.text = ''; data.cell.styles.minCellHeight = 22;
+                            }
+                        },
+                        didDrawCell: function(data) {
+                            if (data.column.index === 6 && data.cell.section === 'body' && data.cell.raw) {
+                                let imgB64 = data.cell.raw;
+                                if (imgB64.startsWith('data:image')) { doc.addImage(imgB64, 'JPEG', data.cell.x + 2, data.cell.y + 2, 26, 18); }
+                            }
+                        }
+                    });
+                }
+            }
+
+            doc.save(`Liquidacion_${(lic.worker_name || 'Contrato').replace(/ /g, '_')}.pdf`);
+        } catch (e) {
+            console.error(e); alert("Fallo en generación: " + e.message);
+        } finally { document.getElementById('global-loader').style.display = 'none'; }
+    
+    }
+</script>
+
+<script type="module">
+
+    // VARIABLES GLOBALES LIBERADAS PARA LOS SCRIPTS
+    window.pName = localStorage.getItem('rubik_current_pname') || 'Proyecto';
+    window.budgetItems = {};
+    window.currentLics = {};
+    
+    document.getElementById('h-pro').innerText = window.pName;
+
+    db.ref(`proyectos/${cid}/${pid}`).once('value', snap => {
+        if(!snap.exists()) return;
+        const data = snap.val();
+        window.budgetItems = data.presupuesto?.items || {};
+        window.currentLics = data.licitaciones || {};
+        
+        renderContratos();
+        renderMateriales();
+        calcularKPIs(data);
+        document.getElementById('global-loader').style.display = 'none';
+    });
+
+    function calcularKPIs(data) {
+        let licitado = 0; let saldo = 0; let insumos = 0;
+        
+        Object.values(window.currentLics).forEach(lic => {
+            if(lic.estado !== 'rechazado') {
+                let total = parseFloat(lic.precio_final || lic.precio_propuesto || 0);
+                licitado += total;
+                let pagado = 0;
+                if(lic.pagos) Object.values(lic.pagos).forEach(p => pagado += parseFloat(p.monto||0));
+                saldo += (total - pagado);
+            }
+        });
+
+        Object.values(window.budgetItems).forEach(it => {
+            if(it.apu?.mat) Object.values(it.apu.mat).forEach(m => insumos += (parseFloat(m.q||0) * parseFloat(m.p||0) * parseFloat(it.cant||1)));
+        });
+
+        // Defensa: estos KPIs no existen en este HTML, solo se mantienen por compat.
+        const elL = document.getElementById('kpi-licitado'); if(elL) elL.innerText = fMoney(licitado) + " Bs";
+        const elS = document.getElementById('kpi-saldo');    if(elS) elS.innerText = fMoney(saldo) + " Bs";
+        const elI = document.getElementById('kpi-insumos-total'); if(elI) elI.innerText = fMoney(insumos) + " Bs";
+    }
+
+    function renderContratos() {
+        const cont = document.getElementById('contract-list'); cont.innerHTML = '';
+        const solCont = document.getElementById('req-list'); solCont.innerHTML = '';
+        let hasSols = false;
+
+        Object.keys(window.currentLics).forEach(key => {
+            const lic = window.currentLics[key];
+            const total = parseFloat(lic.precio_final || lic.precio_propuesto || 0);
+            let pagado = 0;
+            let pagosHtml = '';
+            if(lic.pagos) {
+                Object.values(lic.pagos).forEach(p => {
+                    pagado += parseFloat(p.monto||0);
+                    let docBtn = p.comprobante ? `<button class="btn-nav" style="padding:4px 8px; font-size:10px;" onclick="window.open('${p.comprobante}')"><i class="ph-bold ph-image"></i> Ver Doc</button>` : '';
+                    pagosHtml += `<div class="pay-row"><span class="p-date">${new Date(p.fecha).toLocaleDateString()} - ${p.nota || 'Abono'}</span><div style="display:flex; align-items:center; gap:10px;"><span class="p-amt">${fMoney(p.monto)} Bs</span>${docBtn}</div></div>`;
+                });
+            }
+
+            const cardHtml = `
+            <div class="c-card">
+                <div class="c-head">
+                    <div class="c-name"><i class="ph-fill ph-briefcase"></i> ${lic.worker_name}</div>
+                    <div style="font-size:10px; font-weight:800; background:var(--green); color:white; padding:4px 8px; border-radius:6px; text-transform:uppercase;">${lic.estado}</div>
+                </div>
+                <div class="bal-grid">
+                    <div><div class="b-lbl">Acordado</div><div class="b-val">${fMoney(total)}</div></div>
+                    <div><div class="b-lbl">Pagado</div><div class="b-val" style="color:var(--green)">${fMoney(pagado)}</div></div>
+                    <div><div class="b-lbl" style="color:var(--orange)">Saldo Deuda</div><div class="b-val" style="color:var(--orange)">${fMoney(total - pagado)}</div></div>
+                </div>
+                <div class="btn-group" style="margin-bottom:15px;">
+                    <button class="btn-act b-pay" onclick="abrirModalPago('${key}', '${lic.worker_id}')"><i class="ph-bold ph-currency-circle-dollar"></i> Abonar</button>
+                    <button class="btn-act b-pdf" onclick="exportarLiquidacion('${key}')"><i class="ph-bold ph-file-pdf"></i> Liquidación PDF</button>
+                </div>
+                <div style="font-size:11px; font-weight:800; color:var(--gray); text-transform:uppercase; border-top:1px solid var(--border); padding-top:10px;">Historial de Pagos</div>
+                <div class="pay-history" style="margin-top:5px; padding-top:0; border:none;">${pagosHtml || '<div style="color:var(--gray); font-size:11px; font-style:italic;">No hay pagos registrados.</div>'}</div>
+            </div>`;
+
+            if(lic.estado === 'aprobado' || lic.estado === 'terminado' || lic.estado === 'liquidado' || lic.estado === 'pagado') { cont.innerHTML += cardHtml; } 
+            else if (lic.estado !== 'rechazado') { hasSols = true; solCont.innerHTML += cardHtml; }
+        });
+
+        if(!hasSols) solCont.innerHTML = '<div style="text-align:center; color:var(--gray); font-size:12px; padding:20px;">No hay solicitudes pendientes.</div>';
+    }
+
+    function renderMateriales() {
+        const list = document.getElementById('lista-materiales-presupuesto');
+        list.innerHTML = '';
+        let html = '';
+        let totalPpto = 0, totalReal = 0;
+
+        const items = window.budgetItems || budgetItems || {};
+        Object.keys(items).forEach(idx => {
+            let it = items[idx];
+            if (!it || it.type === 'chapter') return;
+            const { mats, source } = _getMaterialesItem(it);
+            if (mats.length === 0) return;
+
+            const sourceBadge = source === 'prod'
+                ? `<span style="background:rgba(52,199,89,0.15);color:var(--green);font-size:9px;font-weight:900;padding:2px 7px;border-radius:10px;margin-left:8px;">⚙ APU PRODUCCIÓN</span>`
+                : source === 'req'
+                ? `<span style="background:rgba(255,149,0,0.15);color:var(--orange);font-size:9px;font-weight:900;padding:2px 7px;border-radius:10px;margin-left:8px;">✓ REQUERIDO</span>`
+                : `<span style="background:rgba(0,122,255,0.1);color:var(--blue);font-size:9px;font-weight:900;padding:2px 7px;border-radius:10px;margin-left:8px;">PPTO BASE</span>`;
+
+            let matHtml = '';
+            mats.forEach((m, mIdx) => {
+                const p_ppto = parseFloat(m.p || m.pu || 0);
+                const p_real = parseFloat(m.p_real || 0);
+                const qty = parseFloat(m.q || m.cant || 0);
+                const isChecked = m.selected !== false;
+                const corteImg = m.corte_url
+                    ? `<img src="${m.corte_url}" onclick="viewImg('${m.corte_url}')" style="width:36px;height:36px;object-fit:cover;border-radius:6px;cursor:pointer;border:1px solid var(--border);flex-shrink:0;">`
+                    : '';
+                totalPpto += qty * p_ppto;
+                if (p_real > 0) totalReal += qty * p_real;
+                matHtml += `<div class="mat-row">
+                    <input type="checkbox" class="mat-chk" data-idx="${idx}" data-midx="${mIdx}" data-source="${source}" ${isChecked ? 'checked' : ''} style="width:20px;height:20px;cursor:pointer;">
+                    <div style="flex:1;">
+                        <div style="font-size:13px;font-weight:800;color:var(--text);">${m.d || m.nombre || '—'}</div>
+                        <div style="font-size:11px;color:var(--gray);font-weight:700;">
+                            Cant: <b>${qty}</b> ${m.u || m.und || 'und'} | Base: ${fMoney(p_ppto)} Bs/u | Subtotal: <b>${fMoney(qty * p_ppto)} Bs</b>
+                        </div>
+                    </div>
+                    ${corteImg}
+                    <div style="width:110px;">
+                        <div style="font-size:9px;font-weight:800;color:var(--orange);text-transform:uppercase;margin-bottom:4px;">Precio real (Bs/u)</div>
+                        <input type="number" id="mat-real-${idx}-${mIdx}" class="inp-std"
+                            style="padding:8px 10px;margin:0;font-size:13px;" placeholder="${p_ppto}"
+                            value="${p_real > 0 ? p_real : ''}">
+                    </div>
+                </div>`;
+            });
+
+            html += `<div class="c-card" style="margin-bottom:15px;">
+                <div class="mat-item-header" style="display:flex;align-items:center;">${it.desc || '—'} ${sourceBadge}</div>
+                ${matHtml}
+            </div>`;
+        });
+
+        const kpiHtml = `<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px;">
+            <div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:12px;text-align:center;">
+                <div style="font-size:9px;font-weight:800;color:var(--gray);text-transform:uppercase;">Total Presupuestado</div>
+                <div style="font-size:17px;font-weight:900;color:var(--blue);">${fMoney(totalPpto)} Bs</div>
+            </div>
+            <div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:12px;text-align:center;">
+                <div style="font-size:9px;font-weight:800;color:var(--gray);text-transform:uppercase;">Total Real (mercado)</div>
+                <div style="font-size:17px;font-weight:900;color:${totalReal > totalPpto ? 'var(--red)' : 'var(--green)'};">${totalReal > 0 ? fMoney(totalReal) + ' Bs' : '—'}</div>
+            </div>
+        </div>`;
+
+        list.innerHTML = kpiHtml + (html || '<div style="text-align:center;padding:40px;color:var(--gray);font-size:12px;font-weight:700;border:2px dashed var(--border);border-radius:16px;">No hay materiales registrados.</div>');
+    }
+
+
+    // ==========================================================
+    // MÓDULO IA ASISTENTE (GEMINI) — proxy autenticado via gemini-client.js
+    // ==========================================================
+    // IA via proxy /api/gemini — no SDK needed
+    window.aiImageStore = [];
+
+    window.openAIChat = function() { document.getElementById('ai-chat-modal').style.display = 'flex'; }
+    window.closeAIChat = function() { document.getElementById('ai-chat-modal').style.display = 'none'; }
+
+    window.handleAIImage = function(inp) {
+        if (inp.files) {
+            Array.from(inp.files).forEach(file => {
+                const reader = new FileReader();
+                reader.onload = function(e) { window.aiImageStore.push({ data: e.target.result, file: file }); renderAIImages(); };
+                reader.readAsDataURL(file);
+            });
+        }
+        inp.value = '';
+    }
+
+    window.handleAIPaste = function(e) {
+        if (e.clipboardData && e.clipboardData.items) {
+            for (let i = 0; i < e.clipboardData.items.length; i++) {
+                if (e.clipboardData.items[i].type.indexOf('image') !== -1) {
+                    let file = e.clipboardData.items[i].getAsFile();
+                    let reader = new FileReader();
+                    reader.onload = function(evt) { window.aiImageStore.push({ data: evt.target.result, file: file }); renderAIImages(); };
+                    reader.readAsDataURL(file);
+                }
+            }
+        }
+    };
+
+    function renderAIImages() {
+        let container = document.getElementById('ai-img-preview-container');
+        if(!container) {
+            container = document.createElement('div');
+            container.id = 'ai-img-preview-container';
+            container.style.cssText = "display:flex; gap:5px; overflow-x:auto; margin-bottom:10px;";
+            const previewImg = document.getElementById('ai-img-preview');
+            previewImg.parentNode.insertBefore(container, previewImg);
+            previewImg.style.display = 'none'; 
+        }
+        container.innerHTML = '';
+        window.aiImageStore.forEach((imgObj, index) => {
+            container.innerHTML += `
+            <div style="position:relative; display:inline-block; flex-shrink:0;">
+                <img loading="lazy" decoding="async" src="${imgObj.data}" style="width:60px; height:60px; object-fit:cover; border-radius:8px; border:1px solid #38383a;">
+                <div onclick="removeAIImageIndex(${index})" style="position:absolute; top:-5px; right:-5px; background:var(--red); color:white; border-radius:50%; width:20px; height:20px; text-align:center; line-height:20px; cursor:pointer; font-size:10px; font-weight:bold;">X</div>
+            </div>`;
+        });
+        document.getElementById('ai-img-remove').style.display = window.aiImageStore.length > 0 ? 'block' : 'none';
+    }
+
+    window.removeAIImageIndex = function(index) { window.aiImageStore.splice(index, 1); renderAIImages(); }
+    window.removeAIImage = function() { window.aiImageStore = []; renderAIImages(); }
+
+    window.sendAIMessage = async function() {
+        const input = document.getElementById('ai-user-input'); const text = input.value.trim();
+        if(!text && window.aiImageStore.length === 0) return;
+
+        const chatBox = document.getElementById('ai-chat-box'); const typing = document.getElementById('ai-typing');
+        const btnSend = document.querySelector('.btn-ai-action:not(.cam)');
+        
+        const imagesToSend = [...window.aiImageStore];
+        const userMsg = document.createElement('div'); userMsg.className = 'msg msg-user';
+        let imgsHtml = imagesToSend.map(img => `<img loading="lazy" decoding="async" src="${img.data}" class="msg-img" style="max-width:80px; margin-right:5px;">`).join('');
+        userMsg.innerHTML = imgsHtml + '<br>' + text.replace(/\n/g, '<br>');
+        chatBox.appendChild(userMsg);
+        
+        input.value = ''; window.removeAIImage(); chatBox.scrollTop = chatBox.scrollHeight;
+        typing.style.display = 'block'; chatBox.appendChild(typing); btnSend.disabled = true;
+
+        const sysPrompt = `Eres Rubik IA, Asistente Financiero de Rubik Bolivia.
+REGLA 1: Si suben fotos de FACTURAS o RECIBOS (incluso a mano):
+A) Extrae qué se compró, a quién y el total.
+B) AL FINAL, separado por "---DATOS_PROVEEDOR---", devuelve un JSON EXACTO.
+C) REGLA ANTI-FALLOS: Si el recibo está a mano y no logras entender el nombre del proveedor, PON OBLIGATORIAMENTE "PROVEEDOR LOCAL". Si no tiene NIT o Contacto, pon "S/N".
+JSON REQUERIDO:
+{ "proveedor": "Nombre o 'PROVEEDOR LOCAL'", "nit": "NIT o 'S/N'", "contacto": "Teléfono o 'S/N'", "fecha": "YYYY-MM-DD", "factura_nro": "Nro o 'S/N'", "total": 150.50, "es_factura": true_o_false_segun_si_tiene_nit, "materiales": [ {"mat": "Nombre material", "pu": 150, "u": "und", "cant": 1} ] }`;
+
+        try {
+            // modelo IA via proxy — siempre disponible
+            let parts = []; let uploadedImageUrl = null;
+
+            for (let i = 0; i < imagesToSend.length; i++) {
+                const b64Full = imagesToSend[i].data;
+                const base64Data = b64Full.split(',')[1];
+                const mimeType = b64Full.split(';')[0].split(':')[1];
+                parts.push({ inlineData: { data: base64Data, mimeType: mimeType } });
+
+                if (i === 0) {
+                    try {
+                        document.getElementById('loader-title').innerText = "Subiendo respaldo..."; 
+                        document.getElementById('global-loader').style.display = 'flex';
+                        const snap = await firebase.storage().ref(`comprobantes/${pid}_compraIA_${Date.now()}.jpg`).putString(b64Full, 'data_url');
+                        uploadedImageUrl = await snap.ref.getDownloadURL();
+                        document.getElementById('global-loader').style.display = 'none';
+                    } catch(e) { console.log(e); document.getElementById('global-loader').style.display = 'none'; }
+                }
+            }
+            
+            parts.push({ text: sysPrompt + "\n\nUSUARIO DICE: " + (text || "Registra esta compra y extrae los datos.") });
+
+            // Proxy /api/gemini con imágenes
+            const _imgPartsCo = parts.filter(p => p.inlineData);
+            const _txtPartCo = parts.find(p => p.text);
+            const _promptCo = _txtPartCo ? _txtPartCo.text : (sysPrompt + "\n\nUSUARIO DICE: Registra esta compra.");
+            const _bodyCo = { prompt: _promptCo, model: 'gemini-2.5-flash' };
+            if (_imgPartsCo.length > 0) _bodyCo.image = _imgPartsCo[0].inlineData;
+            const _tokCo = await firebase.auth().currentUser.getIdToken();
+            const _resCo = await fetch('/api/gemini', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + _tokCo },
+                body: JSON.stringify(_bodyCo)
+            });
+            const _dataCo = await _resCo.json();
+            if (!_resCo.ok) throw new Error(_dataCo.error || 'Gemini error');
+            let aiRawText = _dataCo.text || (_dataCo.candidates?.[0]?.content?.parts?.[0]?.text) || '';
+            let displayHtml = aiRawText.replace(/\n/g, '<br>').replace(/\*\*(.*?)\*\*/g, '<b>$1</b>');
+
+            if(aiRawText.includes('---DATOS_PROVEEDOR---')) {
+                let partsData = aiRawText.split('---DATOS_PROVEEDOR---');
+                displayHtml = partsData[0].replace(/\n/g, '<br>').replace(/\*\*(.*?)\*\*/g, '<b>$1</b>');
+                
+                try {
+                    let cleanJson = partsData[1].replace(/```json/gi, '').replace(/```/g, '').trim();
+                    let p = JSON.parse(cleanJson);
+                    let cleanProv = p.proveedor.toUpperCase().replace(/[.#$\[\]/]/g, "").trim();
+
+                    await firebase.database().ref(`base_datos/proveedores/${cleanProv}`).update({ nombre: p.proveedor, nit: p.nit, contacto: p.contacto });
+
+                    if(p.materiales && p.materiales.length > 0) {
+                        p.materiales.forEach(async (m) => {
+                            let cleanMat = m.mat.toUpperCase().replace(/[.#$\[\]/]/g, "").trim();
+                            await firebase.database().ref(`base_datos/proveedores/${cleanProv}/materiales/${cleanMat}`).update({ precio: m.pu, und: m.u, fecha_act: new Date().toISOString() });
+                            await firebase.database().ref(`base_datos/materiales/${cleanMat}`).update({ n: m.mat, p: m.pu, u: m.u, proveedor_ref: p.proveedor });
+                        });
+                    }
+
+                    if(p.total > 0) {
+                        let snapGastos = await firebase.database().ref(`proyectos/${cid}/${pid}/gasto_total`).once('value');
+                        let gastosActuales = parseFloat(snapGastos.val() || 0);
+                        await firebase.database().ref(`proyectos/${cid}/${pid}/gasto_total`).set(gastosActuales + p.total);
+
+                        await firebase.database().ref(`proyectos/${cid}/${pid}/historial_compras`).push({
+                            proveedor: p.proveedor, total: p.total, fecha: p.fecha || new Date().toISOString().split('T')[0],
+                            comprobante: uploadedImageUrl, nota: text || "Compra por IA"
+                        });
+                    }
+
+                    if(p.es_factura && p.total > 0) {
+                        let tMes = (p.fecha || new Date().toISOString()).substring(0, 7); 
+                        await firebase.database().ref(`tesoreria/iva_compras/${tMes}`).push({
+                            nit: p.nit, factura: p.factura_nro, monto: p.total, fecha: p.fecha, proveedor: p.proveedor, comprobante: uploadedImageUrl, proyecto: window.pName
+                        });
+                    }
+                    displayHtml += `<br><br><div style="background:rgba(52,199,89,0.1); border:1px solid var(--green); padding:10px; border-radius:8px; color:var(--green); font-size:11px;"><b><i class="ph-bold ph-check-circle"></i> Operación Contable Exitosa</b></div>`;
+                } catch(errJson) { console.log(errJson); }
+            }
+
+            typing.style.display = 'none';
+            const aiMsg = document.createElement('div'); aiMsg.className = 'msg msg-ai'; aiMsg.innerHTML = displayHtml;
+            chatBox.appendChild(aiMsg); chatBox.scrollTop = chatBox.scrollHeight;
+
+        } catch (e) {
+            typing.style.display = 'none';
+            const errMsg = document.createElement('div'); errMsg.className = 'msg msg-ai'; errMsg.innerText = "🚧 Error de conexión. Intenta de nuevo."; chatBox.appendChild(errMsg);
+        }
+        btnSend.disabled = false;
+    }
+
+    firebase.database().ref(`proyectos/${cid}/${pid}/historial_compras`).on('value', snap => {
+        const cont = document.getElementById('historial-compras-ia'); if(!cont) return;
+        cont.innerHTML = '';
+        if(snap.exists()) {
+            snap.forEach(child => {
+                const key = child.key; const c = child.val();
+                let docBtn = c.comprobante ? `<a href="${c.comprobante}" target="_blank" class="btn-main" style="padding:6px 10px; font-size:11px; background:var(--blue-light); color:var(--blue); text-decoration:none; width:auto;"><i class="ph-bold ph-image"></i> Foto</a>` : '';
+                let delBtn = `<button onclick="eliminarCompraIA('${key}', ${c.total || 0})" class="btn-main" style="padding:6px 10px; font-size:11px; background:rgba(255,59,48,0.1); color:var(--red); border:none; cursor:pointer; width:auto;"><i class="ph-bold ph-trash"></i></button>`;
+
+                cont.innerHTML += `<div class="pay-row" style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid var(--border); padding:10px 0; gap:10px;">
+                    <div style="flex:1;">
+                        <div style="font-size:10px; color:var(--gray);">${c.fecha}</div>
+                        <div style="font-size:13px;"><b>${c.proveedor}</b></div>
+                        <div style="color:var(--gray); font-size:11px;">${c.nota}</div>
+                    </div>
+                    <div style="text-align:right;">
+                        <div style="font-weight:900; font-size:14px; color:var(--text);">${parseFloat(c.total||0).toLocaleString('es-BO', {minimumFractionDigits: 2})} Bs</div>
+                    </div>
+                    <div style="display:flex; gap:5px; align-items:center;">${docBtn}${delBtn}</div>
+                </div>`;
+            });
+        } else {
+            cont.innerHTML = '<div style="font-size:12px; color:var(--gray); text-align:center; padding:15px;">No hay compras registradas.</div>';
+        }
+    });
+
+    window.eliminarCompraIA = async function(key, monto) {
+        if(!confirm("¿Borrar este registro? El monto se descontará del balance del Dashboard automáticamente.")) return;
+        try {
+            document.getElementById('global-loader').style.display = 'flex';
+            if(monto > 0) {
+                let snapGastos = await firebase.database().ref(`proyectos/${cid}/${pid}/gasto_total`).once('value');
+                let gastosActuales = parseFloat(snapGastos.val() || 0);
+                let nuevoGasto = gastosActuales - monto;
+                if(nuevoGasto < 0) nuevoGasto = 0;
+                await firebase.database().ref(`proyectos/${cid}/${pid}/gasto_total`).set(nuevoGasto);
+            }
+            } catch(e) {
+            console.error("Error al eliminar la compra IA:", e);
+            alert("Hubo un problema al intentar eliminar el registro. Revisa tu conexión.");
+            document.getElementById('global-loader').style.display = 'none';
+        }
+    };
+</script>
+    <script src="/js/viewmode.js?v=1">
+    // ════════════════════════════════════════════════════════════════════════
+    // ACTUALIZADOR DE PRECIOS CON BASE DE DATOS + IA
+    // Lee base_datos/materiales + base_datos/proveedores y cruza con los
+    // materiales del prod_apu de cada ítem. La IA elige el mejor proveedor,
+    // pre-llena p_real en los inputs y marca los sin precio para buscar.
+    // ════════════════════════════════════════════════════════════════════════
+    window.actualizarPreciosBD = async function() {
+        const btn = document.getElementById('btn-act-precios');
+        if (btn) { btn.disabled = true; btn.innerHTML = '<i class="ph-bold ph-spinner"></i> Consultando BD + IA...'; }
+        const resultEl = document.getElementById('bd-update-result');
+        if (resultEl) { resultEl.style.display = 'none'; }
+
+        try {
+            // 1. Cargar base de datos de materiales y proveedores
+            const [matSnap, provSnap] = await Promise.all([
+                firebase.database().ref('base_datos/materiales').once('value'),
+                firebase.database().ref('base_datos/proveedores').once('value')
+            ]);
+            const bdMats = matSnap.val() || {};
+            const bdProvs = provSnap.val() || {};
+
+            // 2. Recopilar todos los materiales del proyecto (desde prod_apu o apu)
+            const items = window.budgetItems || budgetItems || {};
+            const materialesProyecto = [];
+            Object.keys(items).forEach(idx => {
+                const it = items[idx];
+                if (!it || it.type === 'chapter') return;
+                const { mats, source } = _getMaterialesItem(it);
+                mats.forEach((m, mIdx) => {
+                    if (!m.d) return;
+                    materialesProyecto.push({
+                        idx, mIdx, source,
+                        desc: m.d,
+                        q: parseFloat(m.q || m.cant || 0),
+                        u: m.u || m.und || 'und',
+                        p_ref: parseFloat(m.p || m.pu || 0)
+                    });
+                });
+            });
+
+            if (materialesProyecto.length === 0) {
+                alert('No hay materiales cargados. Ve a Producción y completa el APU real primero.');
+                return;
+            }
+
+            // 3. Construir catálogo de BD para el prompt
+            const provPorNombreC = {};
+            Object.values(bdProvs).forEach(prov => {
+                if (prov.nombre) provPorNombreC[prov.nombre.toLowerCase()] = prov;
+            });
+            const catalogoBD = [];
+            Object.entries(bdMats).forEach(([k, m]) => {
+                const nombre = m.n || m.desc || k;
+                if (!nombre) return;
+                const provNombre = m.proveedor || '';
+                const provData = provNombre ? provPorNombreC[provNombre.toLowerCase()] : null;
+                const tel = provData ? (provData.telefono || provData.whatsapp || provData.contacto || '') : '';
+                catalogoBD.push({ nombre, precio: m.p || m.pu || 0, und: m.u || m.und || 'und', proveedor: provNombre, contacto: tel });
+            });
+            Object.entries(bdProvs).forEach(([provKey, prov]) => {
+                if (prov.materiales) {
+                    Object.entries(prov.materiales).forEach(([matKey, mat]) => {
+                        catalogoBD.push({ nombre: matKey, precio: mat.precio||0, und: mat.und||'und', proveedor: prov.nombre||provKey, contacto: prov.telefono||prov.contacto||'' });
+                    });
+                }
+            });
+
+            // 4. Prompt a IA
+            const prompt = `Eres un asistente de compras industriales de Rubik Bolivia (señalética, carpintería metálica, impresión gran formato - Santa Cruz, Bolivia).
+
+MATERIALES REQUERIDOS POR EL PROYECTO:
+${materialesProyecto.map((m,i) => `${i+1}. "${m.desc}" - ${m.q} ${m.u} (precio ref: ${m.p_ref} Bs/u)`).join('\n')}
+
+CATÁLOGO DE PRECIOS EN BASE DE DATOS:
+${catalogoBD.slice(0,80).map(c => `- "${c.nombre}": ${c.precio} Bs/${c.und}${c.proveedor ? ' | Proveedor: '+c.proveedor : ''}${c.contacto ? ' ('+c.contacto+')' : ''}`).join('\n')}
+
+TAREA: Para cada material requerido, busca el mejor match en el catálogo usando similitud de nombre (puede variar en mayúsculas, abreviaturas, sinónimos como "tubo"/"tubín", "plancha"/"chapa", "perfil L"/"ángulo", etc.).
+
+Devuelve SOLO este JSON (sin markdown):
+[
+  {
+    "idx_proyecto": 0,
+    "desc_req": "nombre del material requerido",
+    "encontrado": true_o_false,
+    "mejor_precio": precio_numerico_o_null,
+    "mejor_proveedor": "nombre proveedor o null",
+    "contacto_proveedor": "contacto o null",
+    "und": "unidad",
+    "nota": "breve razón del match o 'Sin registro en BD — buscar proveedor'"
+  }
+]
+REGLAS: Si no encuentras match razonable, pon "encontrado": false y "mejor_precio": null. Nunca inventes precios. Usa el precio de BD más reciente si hay varios matches.`;
+
+            const tok = await firebase.auth().currentUser.getIdToken();
+            const res = await fetch('/api/gemini', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + tok },
+                body: JSON.stringify({ prompt, model: 'gemini-2.5-flash' })
+            });
+            const data = await res.json();
+            const raw = (data.text || '').trim().replace(/```json|```/g, '').trim();
+
+            let resultados;
+            try { resultados = JSON.parse(raw); }
+            catch(e) { throw new Error('La IA devolvió un formato inesperado. Intenta de nuevo.'); }
+
+            // 5. Aplicar precios a los inputs y guardar
+            let encontrados = 0, sinPrecio = 0;
+            let resLines = ['<b>Resultado del cruce con Base de Datos:</b><br>'];
+
+            resultados.forEach(r => {
+                const mat = materialesProyecto[r.idx_proyecto];
+                if (!mat) return;
+
+                const inputEl = document.getElementById(`mat-real-${mat.idx}-${mat.mIdx}`);
+
+                if (r.encontrado && r.mejor_precio > 0) {
+                    encontrados++;
+                    if (inputEl) { inputEl.value = r.mejor_precio; inputEl.style.borderColor = 'var(--green)'; }
+                    // Guardar proveedor_sugerido en Firebase
+                    const it = items[mat.idx];
+                    if (it) {
+                        const { mats } = _getMaterialesItem(it);
+                        if (mats[mat.mIdx]) {
+                            mats[mat.mIdx].p_real = r.mejor_precio;
+                            mats[mat.mIdx].proveedor_sugerido = r.mejor_proveedor || '';
+                            mats[mat.mIdx].contacto_proveedor = r.contacto_proveedor || '';
+                        }
+                        // Persistir
+                        if (it.prod_apu && it.prod_apu.mat) {
+                            firebase.database().ref(`proyectos/${cid}/${pid}/presupuesto/items/${mat.idx}/prod_apu/mat`).set(it.prod_apu.mat);
+                        }
+                    }
+                    resLines.push(`✅ <b>${r.desc_req}</b> → ${r.mejor_precio} Bs/${r.und} · <span style="color:var(--blue)">${r.mejor_proveedor || 'BD'}</span>${r.contacto_proveedor ? ' ('+r.contacto_proveedor+')' : ''}`);
+                } else {
+                    sinPrecio++;
+                    if (inputEl) { inputEl.style.borderColor = 'var(--orange)'; inputEl.placeholder = 'Buscar proveedor'; }
+                    resLines.push(`🔍 <b>${r.desc_req}</b> → Sin registro en BD. <i style="color:var(--orange)">Buscar proveedor manualmente.</i>`);
+                }
+            });
+
+            resLines.push(`<br><b>${encontrados} precios actualizados</b> · ${sinPrecio} materiales pendientes de cotizar.`);
+            if (resultEl) { resultEl.innerHTML = resLines.join('<br>'); resultEl.style.display = 'block'; }
+
+        } catch(e) {
+            console.error(e);
+            alert('Error: ' + e.message);
+        } finally {
+            if (btn) { btn.disabled = false; btn.innerHTML = '<i class="ph-bold ph-database"></i> Actualizar Precios BD'; }
+        }
+    };
+
+</script>
+
+<!-- ══ Modal Planificación de Compras ══════════════════════════════════════ -->
+<div id="plan-compras-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:9999;overflow-y:auto;padding:20px;">
+    <div style="max-width:700px;margin:0 auto;background:var(--card);border-radius:20px;padding:24px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;">
+            <div style="font-size:17px;font-weight:900;"><i class="ph-bold ph-shopping-cart" style="color:var(--green);"></i> Plan de Compras por Proveedor</div>
+            <i class="ph-bold ph-x" style="font-size:22px;cursor:pointer;" onclick="document.getElementById('plan-compras-modal').style.display='none'"></i>
+        </div>
+        <div id="plan-compras-content" style="font-size:13px;color:var(--text);">Generando plan...</div>
+    </div>
+</div>
+
+<script>
+// ══ PLANIFICAR COMPRAS — agrupa por proveedor, genera PDF, envía WhatsApp ══
+
+window.planificarCompras = async function() {
+    const btn = document.getElementById('btn-planificar');
+    if (btn) { btn.disabled = true; }
+    const modal = document.getElementById('plan-compras-modal');
+    const content = document.getElementById('plan-compras-content');
+    modal.style.display = 'block';
+    content.innerHTML = '<div style="text-align:center;padding:40px;"><i class="ph-bold ph-spinner" style="font-size:32px;color:var(--green);"></i><div style="margin-top:12px;font-weight:800;">Analizando materiales y proveedores...</div></div>';
+
+    try {
+        const items = window.budgetItems || {};
+        const pName = window.pName || localStorage.getItem('rubik_current_pname') || 'Proyecto';
+        const cid = localStorage.getItem('rubik_client_id');
+        const pid = localStorage.getItem('rubik_current_pid');
+
+        // 1. Cargar proveedores desde BD
+        const provSnap = await firebase.database().ref('base_datos/proveedores').once('value');
+        const bdProvs = provSnap.val() || {};
+
+        // 2. Recopilar materiales del proyecto (prod_apu > apu)
+        const materialesProyecto = [];
+        Object.keys(items).forEach(idx => {
+            const it = items[idx];
+            if (!it || it.type === 'chapter') return;
+            const { mats } = _getMaterialesItem(it);
+            mats.forEach((m, mIdx) => {
+                if (!m.d) return;
+                materialesProyecto.push({
+                    idx, mIdx,
+                    desc: m.d,
+                    q: parseFloat(m.q || m.cant || 0),
+                    u: m.u || m.und || 'und',
+                    precio: parseFloat(m.p_real || m.p || m.pu || 0),
+                    proveedor: m.proveedor_sugerido || '',
+                    contacto: m.contacto_proveedor || '',
+                    item_desc: it.desc || ''
+                });
+            });
+        });
+
+        if (materialesProyecto.length === 0) {
+            content.innerHTML = '<div style="text-align:center;padding:40px;color:var(--gray);">No hay materiales. Ve a Producción y completa el APU Real.</div>';
+            return;
+        }
+
+        // 3. Agrupar por proveedor sugerido
+        const grupos = {};
+        const sinProveedor = [];
+        materialesProyecto.forEach(m => {
+            if (m.proveedor && m.proveedor.trim()) {
+                if (!grupos[m.proveedor]) grupos[m.proveedor] = { mats: [], contacto: m.contacto };
+                grupos[m.proveedor].mats.push(m);
+                if (m.contacto) grupos[m.proveedor].contacto = m.contacto;
+            } else {
+                sinProveedor.push(m);
+            }
+        });
+
+        // Buscar teléfono en bdProvs si no está en el material
+        Object.keys(grupos).forEach(provNombre => {
+            if (!grupos[provNombre].contacto) {
+                Object.values(bdProvs).forEach(p => {
+                    if ((p.nombre || '').toLowerCase() === provNombre.toLowerCase()) {
+                        grupos[provNombre].contacto = p.telefono || p.whatsapp || p.contacto || '';
+                    }
+                });
+            }
+        });
+
+        // 4. Renderizar resumen en modal
+        let html = `<div style="margin-bottom:16px;padding:12px;background:rgba(52,199,89,0.1);border-radius:10px;font-size:12px;">
+            <b>${materialesProyecto.length}</b> materiales · <b>${Object.keys(grupos).length}</b> proveedores identificados${sinProveedor.length > 0 ? ` · <span style="color:var(--orange);">${sinProveedor.length} sin proveedor asignado</span>` : ''}
+        </div>`;
+
+        // Por proveedor
+        Object.entries(grupos).forEach(([provNombre, g]) => {
+            const totalProv = g.mats.reduce((s, m) => s + m.q * m.precio, 0);
+            const telLimpio = (g.contacto || '').replace(/\D/g, '');
+            const telWA = telLimpio.startsWith('591') ? telLimpio : (telLimpio ? '591' + telLimpio : '');
+
+            html += `<div style="background:var(--bg);border:1px solid var(--border);border-radius:14px;padding:16px;margin-bottom:14px;">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+                    <div>
+                        <div style="font-size:14px;font-weight:900;color:var(--text);">${provNombre}</div>
+                        ${g.contacto ? `<div style="font-size:11px;color:var(--gray);">${g.contacto}</div>` : '<div style="font-size:11px;color:var(--orange);">Sin teléfono en BD</div>'}
+                    </div>
+                    <div style="text-align:right;">
+                        <div style="font-size:11px;color:var(--gray);">Subtotal estimado</div>
+                        <div style="font-size:16px;font-weight:900;color:var(--green);">${totalProv > 0 ? fMoney(totalProv) + ' Bs' : '—'}</div>
+                    </div>
+                </div>
+                <table style="width:100%;border-collapse:collapse;font-size:11px;margin-bottom:12px;">
+                    <thead><tr style="color:var(--gray);font-weight:800;border-bottom:1px solid var(--border);">
+                        <td style="padding:4px 0;">Material</td>
+                        <td style="padding:4px;text-align:right;">Cant.</td>
+                        <td style="padding:4px;text-align:right;">Und</td>
+                        <td style="padding:4px;text-align:right;">P.U. Bs</td>
+                    </tr></thead>
+                    <tbody>${g.mats.map(m => `<tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+                        <td style="padding:4px 0;">${m.desc}</td>
+                        <td style="padding:4px;text-align:right;font-weight:800;">${m.q}</td>
+                        <td style="padding:4px;text-align:right;">${m.u}</td>
+                        <td style="padding:4px;text-align:right;">${m.precio > 0 ? fMoney(m.precio) : '—'}</td>
+                    </tr>`).join('')}</tbody>
+                </table>
+                <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                    <button onclick="generarPDFProveedor('${encodeURIComponent(JSON.stringify({provNombre, mats: g.mats, contacto: g.contacto, pName}))}')"
+                        style="flex:1;min-width:120px;padding:10px;border-radius:10px;background:var(--blue);color:white;border:none;font-weight:800;cursor:pointer;font-size:12px;">
+                        <i class="ph-bold ph-file-pdf"></i> Generar PDF
+                    </button>
+                    ${telWA ? `<button onclick="enviarWhatsApp('${telWA}','${encodeURIComponent(provNombre)}','${encodeURIComponent(pName)}','${encodeURIComponent(g.mats.map(m=>m.desc+' '+m.q+' '+m.u).join(', '))}')"
+                        style="flex:1;min-width:120px;padding:10px;border-radius:10px;background:var(--green);color:white;border:none;font-weight:800;cursor:pointer;font-size:12px;">
+                        <i class="ph-bold ph-whatsapp-logo"></i> Enviar WhatsApp
+                    </button>` : `<button disabled style="flex:1;min-width:120px;padding:10px;border-radius:10px;background:var(--border);color:var(--gray);border:none;font-weight:800;font-size:12px;">
+                        Sin teléfono
+                    </button>`}
+                </div>
+            </div>`;
+        });
+
+        // Sin proveedor
+        if (sinProveedor.length > 0) {
+            html += `<div style="background:rgba(255,149,0,0.08);border:1px solid var(--orange);border-radius:14px;padding:16px;margin-bottom:14px;">
+                <div style="font-size:13px;font-weight:900;color:var(--orange);margin-bottom:10px;">⚠️ Sin proveedor asignado (${sinProveedor.length})</div>
+                <div style="font-size:11px;color:var(--gray);margin-bottom:8px;">Usa "Actualizar Precios BD" en Producción para asignar proveedores automáticamente.</div>
+                <table style="width:100%;border-collapse:collapse;font-size:11px;">
+                    ${sinProveedor.map(m => `<tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+                        <td style="padding:4px 0;">${m.desc}</td>
+                        <td style="padding:4px;text-align:right;font-weight:800;">${m.q} ${m.u}</td>
+                    </tr>`).join('')}
+                </table>
+            </div>`;
+        }
+
+        content.innerHTML = html;
+
+    } catch(e) {
+        console.error(e);
+        content.innerHTML = `<div style="color:var(--red);padding:20px;">Error: ${e.message}</div>`;
+    } finally {
+        if (btn) { btn.disabled = false; }
+    }
+};
+
+window.generarPDFProveedor = function(dataEncoded) {
+    try {
+        const { provNombre, mats, contacto, pName } = JSON.parse(decodeURIComponent(dataEncoded));
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+        const margin = 15;
+        const pageW = 210;
+        let y = 20;
+
+        // Header
+        doc.setFillColor(0, 80, 160);
+        doc.rect(0, 0, pageW, 30, 'F');
+        doc.setTextColor(255, 255, 255);
+        doc.setFont(undefined, 'bold');
+        doc.setFontSize(16);
+        doc.text('RUBIK BOLIVIA', margin, 13);
+        doc.setFontSize(9);
+        doc.setFont(undefined, 'normal');
+        doc.text('Orden de Requerimiento de Materiales', margin, 20);
+        doc.text(new Date().toLocaleDateString('es-BO', { day: '2-digit', month: 'long', year: 'numeric' }), pageW - margin, 13, { align: 'right' });
+        y = 40;
+
+        // Datos proveedor y proyecto
+        doc.setTextColor(0, 0, 0);
+        doc.setFontSize(10);
+        doc.setFont(undefined, 'bold');
+        doc.text('PROVEEDOR:', margin, y);
+        doc.setFont(undefined, 'normal');
+        doc.text(provNombre, margin + 28, y);
+        y += 7;
+        if (contacto) {
+            doc.setFont(undefined, 'bold'); doc.text('CONTACTO:', margin, y);
+            doc.setFont(undefined, 'normal'); doc.text(contacto, margin + 28, y);
+            y += 7;
+        }
+        doc.setFont(undefined, 'bold'); doc.text('PROYECTO:', margin, y);
+        doc.setFont(undefined, 'normal'); doc.text(pName, margin + 28, y);
+        y += 12;
+
+        // Tabla materiales
+        doc.autoTable({
+            startY: y,
+            head: [['#', 'Material / Descripción', 'Cantidad', 'Unidad']],
+            body: mats.map((m, i) => [i + 1, m.desc, m.q, m.u]),
+            theme: 'striped',
+            headStyles: { fillColor: [0, 80, 160], fontSize: 9, fontStyle: 'bold', textColor: [255,255,255] },
+            styles: { fontSize: 8, cellPadding: 2.5 },
+            columnStyles: {
+                0: { cellWidth: 10, halign: 'center' },
+                1: { cellWidth: 110 },
+                2: { cellWidth: 25, halign: 'right' },
+                3: { cellWidth: 25, halign: 'center' }
+            }
+        });
+
+        y = doc.lastAutoTable.finalY + 15;
+        doc.setFontSize(9); doc.setTextColor(100, 100, 100);
+        doc.text('Por favor confirmar disponibilidad y fecha de entrega.', margin, y);
+        y += 6;
+        doc.text('Rubik Bolivia — rubikbolivia.com', margin, y);
+
+        const filename = `Requerimiento_${provNombre.replace(/\s+/g,'_')}_${new Date().toISOString().slice(0,10)}.pdf`;
+        doc.save(filename);
+    } catch(e) {
+        console.error(e);
+        alert('Error generando PDF: ' + e.message);
+    }
+};
+
+window.enviarWhatsApp = function(tel, provNombreEnc, pNameEnc, materialesEnc) {
+    const provNombre = decodeURIComponent(provNombreEnc);
+    const pName = decodeURIComponent(pNameEnc);
+    const materiales = decodeURIComponent(materialesEnc);
+    const msg = `Hola *${provNombre}* 👋
+
+Somos *Rubik Bolivia*. Le enviamos el siguiente requerimiento de materiales para el proyecto *${pName}*:
+
+📦 *Materiales:*
+${materiales.split(', ').map(m => '• ' + m).join('\n')}
+
+Por favor confirmar disponibilidad, precio y fecha de entrega. Muchas gracias.`;
+    window.open(`https://wa.me/${tel}?text=${encodeURIComponent(msg)}`, '_blank');
+};
+
+window.repararVinculosBD = async function() {
+    if(!confirm('Esto cruzará todos los proveedores con sus materiales en la BD y reparará los vínculos faltantes. ¿Continuar?')) return;
+    
+    const resDiv = document.getElementById('bd-update-result');
+    resDiv.style.display = 'block';
+    resDiv.innerHTML = '<i class="ph-bold ph-spinner-gap"></i> Reparando vínculos...';
+    
+    try {
+        const db = firebase.database();
+        const [matsSnap, provsSnap] = await Promise.all([
+            db.ref('base_datos/materiales').once('value'),
+            db.ref('base_datos/proveedores').once('value')
+        ]);
+        
+        const mats = matsSnap.val() || {};
+        const provs = provsSnap.val() || {};
+        
+        const updates = {};
+        let count = 0;
+
+        // Normaliza string para comparación: lowercase, sin tildes, espacios → guion bajo
+        function normKey(s) {
+            return (s || '').toLowerCase()
+                .normalize('NFD').replace(/[̀-ͯ]/g, '')
+                .replace(/[^a-z0-9]/g, '_')
+                .replace(/_+/g, '_')
+                .replace(/^_|_$/g, '');
+        }
+
+        // Construir índice de materiales normalizados para búsqueda rápida
+        const matsNormIdx = {};
+        Object.entries(mats).forEach(([k, m]) => {
+            const nk = normKey(k);
+            const nn = normKey(m.n || '');
+            if (!matsNormIdx[nk]) matsNormIdx[nk] = k;
+            if (nn && !matsNormIdx[nn]) matsNormIdx[nn] = k;
+        });
+
+        // 1. Para cada proveedor, vincular sus materiales en base_datos/materiales
+        Object.entries(provs).forEach(([pk, prov]) => {
+            if (!prov || !prov.materiales) return;
+            const provNombre = prov.nombre || pk;
+
+            Object.entries(prov.materiales).forEach(([mk, mat]) => {
+                const matKey = mk.trim();
+                const matNorm = normKey(matKey);
+                // Búsqueda normalizada: por clave o por nombre
+                const existKey = matsNormIdx[matNorm] || Object.keys(mats).find(k =>
+                    normKey(k) === matNorm ||
+                    normKey(mats[k].n || '') === matNorm
+                );
+
+                if (existKey) {
+                    // Siempre sobreescribir proveedor si viene del nodo del proveedor
+                    // (la fuente de verdad es el registro del proveedor)
+                    updates[`base_datos/materiales/${existKey}/proveedor`] = provNombre;
+                    updates[`base_datos/materiales/${existKey}/proveedor_ref`] = provNombre;
+                    // Actualizar precio si el proveedor tiene precio registrado
+                    if (mat.precio && parseFloat(mat.precio) > 0) {
+                        updates[`base_datos/materiales/${existKey}/p`] = parseFloat(mat.precio);
+                    }
+                    count++;
+                } else {
+                    // Crear el material si no existe
+                    const newKey = matNorm.toUpperCase().replace(/[.#$\[\]/]/g, '_') || matKey.toUpperCase().replace(/[.#$\[\]/]/g, '');
+                    if (newKey) {
+                        updates[`base_datos/materiales/${newKey}`] = {
+                            n: matKey,
+                            p: parseFloat(mat.precio || 0),
+                            u: mat.und || 'und',
+                            proveedor: provNombre,
+                            proveedor_ref: provNombre
+                        };
+                        count++;
+                    }
+                }
+            });
+        });
+
+        // 2. Reparar materiales que tienen proveedor_ref pero no proveedor (o viceversa)
+        Object.entries(mats).forEach(([k, m]) => {
+            if (m.proveedor_ref && !m.proveedor) {
+                updates[`base_datos/materiales/${k}/proveedor`] = m.proveedor_ref;
+                count++;
+            }
+            if (m.proveedor && !m.proveedor_ref) {
+                updates[`base_datos/materiales/${k}/proveedor_ref`] = m.proveedor;
+                count++;
+            }
+        });
+        
+        if (Object.keys(updates).length > 0) {
+            await db.ref().update(updates);
+            resDiv.innerHTML = `✅ <b>${count} vínculos reparados.</b> La BD ahora tiene proveedores correctamente asignados a los materiales.<br><small>Recargá la página para ver los cambios reflejados.</small>`;
+        } else {
+            resDiv.innerHTML = '✅ <b>Todo está en orden.</b> No se encontraron vínculos rotos.';
+        }
+        
+    } catch(err) {
+        resDiv.innerHTML = '❌ Error: ' + err.message;
+        console.error(err);
+    }
+};
+</script>
+
+</body>
+</html>
