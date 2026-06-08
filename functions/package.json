@@ -1,0 +1,16 @@
+{
+  "name": "rubik-whatsapp-bot",
+  "description": "Rubik OS WhatsApp AI Bot",
+  "scripts": {
+    "serve": "firebase emulators:start --only functions",
+    "deploy": "firebase deploy --only functions"
+  },
+  "engines": { "node": "20" },
+  "main": "index.js",
+  "dependencies": {
+    "firebase-admin": "^12.0.0",
+    "firebase-functions": "^5.0.0",
+    "@google/generative-ai": "^0.21.0",
+    "axios": "^1.7.0"
+  }
+}
