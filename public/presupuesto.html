@@ -2129,7 +2129,14 @@ EJEMPLO VÁLIDO:
                 throw new Error(`Las imágenes adjuntas son demasiado pesadas (${_payloadKB} KB total). Intentá con menos imágenes o usá solo 1-2 fotos de referencia.`);
             }
 
-            const resp = await fetch('/api/gemini', { method: 'POST', headers, body: _reqBody });
+            // Payloads >50KB van directo a Cloud Functions para evitar el timeout
+            // del rewrite de Firebase Hosting (~60s). La función tiene 540s de timeout.
+            const _geminiUrl = _payloadKB > 50
+                ? 'https://us-central1-rubik-bolivia.cloudfunctions.net/geminiProxy'
+                : '/api/gemini';
+            console.log('[Budget] Endpoint:', _geminiUrl);
+
+            const resp = await fetch(_geminiUrl, { method: 'POST', headers, body: _reqBody });
 
             if (!resp.ok) {
                 if (resp.status === 502) {
