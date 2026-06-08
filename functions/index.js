@@ -260,13 +260,321 @@ Consulta/Links: ${textPrompt || "No proporcionado."}
 });
 
 // ============================================================================
-// WHATSAPP AI AGENT — Webhook de Meta
+// WHATSAPP AI AGENT — Webhook de Meta  v2 (sistema de roles)
 // ============================================================================
 //
-// Estructura en Firebase Realtime DB:
-//   /whatsapp_clientes/{phone}  -> { cid, nombre }
-//   /whatsapp_historial/{phone}/mensajes/{pushId} -> { role, text, ts }
+// ROLES:
+//   ADMIN      — número 76868833 / 59176868833 (Renzo, acceso total)
+//   SUPERVISOR — personal con tipo:"supervisor" en /personal
+//   TRABAJADOR — personal con telefono en /personal (sin tipo supervisor)
+//   CLIENTE    — clientes con wsp/whatsapp en /clientes
+//   DESCONOCIDO— número no registrado
 //
+// Estructura Firebase Realtime DB:
+//   /whatsapp_historial/{phone}/mensajes/{pushId} -> { role, text, ts }
+//   /whatsapp_historial/{phone}/meta -> { nombre, rol, ultimaInteraccion }
+//
+
+// ── Helpers ────────────────────────────────────────────────────────────────
+
+/** Normaliza teléfono: quita prefijo 591, deja solo dígitos locales bolivianos */
+function normalizarTel(tel) {
+    if (!tel) return "";
+    const s = String(tel).replace(/\D/g, "");
+    if (s.startsWith("591") && s.length > 8) return s.slice(3);
+    return s;
+}
+
+/** Envía un mensaje de texto por WhatsApp API de Meta */
+async function enviarWA(phoneNumberId, to, texto, waToken) {
+    const https = require("https");
+    const waUrl = "https://graph.facebook.com/v20.0/" + phoneNumberId + "/messages";
+    const payload = JSON.stringify({
+        messaging_product: "whatsapp",
+        to: to,
+        type: "text",
+        text: { body: texto },
+    });
+    return new Promise(function(resolve, reject) {
+        const req = https.request(waUrl, {
+            method: "POST",
+            headers: {
+                "Authorization": "Bearer " + waToken,
+                "Content-Type": "application/json",
+                "Content-Length": Buffer.byteLength(payload),
+            },
+        }, function(r) {
+            let data = "";
+            r.on("data", function(c) { data += c; });
+            r.on("end", function() {
+                console.log("WA API (" + r.statusCode + "): " + data.slice(0, 120));
+                resolve();
+            });
+        });
+        req.on("error", reject);
+        req.write(payload);
+        req.end();
+    });
+}
+
+/** Lee los últimos N mensajes del historial de un número */
+async function leerHistorial(db, phone, n) {
+    try {
+        const snap = await db.ref("/whatsapp_historial/" + phone + "/mensajes")
+            .orderByChild("ts").limitToLast(n).get();
+        if (!snap.exists()) return "";
+        const lineas = [];
+        snap.forEach(function(h) {
+            const d = h.val();
+            lineas.push((d.role === "user" ? "Usuario" : "RUBIK") + ": " + d.text);
+        });
+        return lineas.length ? "\n\nCONVERSACION PREVIA:\n" + lineas.join("\n") : "";
+    } catch (e) {
+        return "";
+    }
+}
+
+/** Guarda mensaje en historial y actualiza meta */
+async function guardarHistorial(db, phone, textUser, textBot, nombre, rol) {
+    const ref = db.ref("/whatsapp_historial/" + phone + "/mensajes");
+    const ts = Date.now();
+    await ref.push({ role: "user",  text: textUser, ts });
+    await ref.push({ role: "model", text: textBot,  ts: ts + 1 });
+    await db.ref("/whatsapp_historial/" + phone + "/meta").update({
+        nombre, rol,
+        ultimoMensaje: textUser,
+        ultimaRespuesta: textBot,
+        ultimaInteraccion: ts,
+    });
+}
+
+/** Identifica rol del número emisor consultando Firebase */
+async function identificarRol(db, phone) {
+    const phoneNorm = normalizarTel(phone);
+
+    // ADMIN — número del dueño
+    const ADMIN_PHONES = ["76868833", "59176868833"];
+    if (ADMIN_PHONES.includes(phone) || ADMIN_PHONES.includes(phoneNorm)) {
+        return { rol: "ADMIN", nombre: "Renzo", id: "RENZO_INTERNO", data: {} };
+    }
+
+    // TRABAJADOR / SUPERVISOR — buscar en /personal
+    try {
+        const persSnap = await db.ref("/personal").get();
+        if (persSnap.exists()) {
+            let encontrado = null;
+            persSnap.forEach(function(child) {
+                const p = child.val();
+                if (!p || encontrado) return;
+                const tel = normalizarTel(p.telefono || p.phone || p.whatsapp || "");
+                if (tel === phoneNorm || tel === phone) {
+                    encontrado = { key: child.key, data: p };
+                }
+            });
+            if (encontrado) {
+                const d = encontrado.data;
+                const esSupervisor = d.tipo === "supervisor" || d.rol === "supervisor";
+                return {
+                    rol: esSupervisor ? "SUPERVISOR" : "TRABAJADOR",
+                    nombre: d.nombre || encontrado.key,
+                    id: encontrado.key,
+                    data: d,
+                };
+            }
+        }
+    } catch (e) {
+        console.warn("Error buscando personal:", e.message);
+    }
+
+    // CLIENTE — buscar en /clientes por wsp o whatsapp
+    try {
+        const cliSnap = await db.ref("/clientes").get();
+        if (cliSnap.exists()) {
+            let encontrado = null;
+            cliSnap.forEach(function(child) {
+                const c = child.val();
+                if (!c || encontrado) return;
+                const tel1 = normalizarTel(c.wsp || "");
+                const tel2 = normalizarTel(c.whatsapp || "");
+                if ([tel1, tel2].includes(phoneNorm) || [tel1, tel2].includes(phone)) {
+                    encontrado = { key: child.key, data: c };
+                }
+            });
+            if (encontrado) {
+                return {
+                    rol: "CLIENTE",
+                    nombre: encontrado.data.nombre || encontrado.key,
+                    id: encontrado.key,
+                    data: encontrado.data,
+                };
+            }
+        }
+    } catch (e) {
+        console.warn("Error buscando cliente:", e.message);
+    }
+
+    return { rol: "DESCONOCIDO", nombre: "Desconocido", id: null, data: {} };
+}
+
+/** Construye contexto de proyectos según el rol */
+async function contextoProyectos(db, rol, id) {
+    try {
+        const proySnap = await db.ref("/proyectos").get();
+        if (!proySnap.exists()) return "";
+        const lineas = [];
+
+        proySnap.forEach(function(cliNode) {
+            const cid = cliNode.key;
+            // Para CLIENTE solo sus proyectos; para ADMIN/SUPERVISOR todos
+            if (rol === "CLIENTE" && cid !== id) return;
+
+            cliNode.forEach(function(proyNode) {
+                const p = proyNode.val();
+                if (!p || p.archivado) return;
+
+                // Para TRABAJADOR solo proyectos donde aparece asignado
+                if (rol === "TRABAJADOR") {
+                    let asignado = false;
+                    if (p.gantt && p.gantt.items) {
+                        const items = Array.isArray(p.gantt.items) ? p.gantt.items : Object.values(p.gantt.items);
+                        items.forEach(function(it) {
+                            if (!it || !it.subtasks) return;
+                            const subs = Array.isArray(it.subtasks) ? it.subtasks : Object.values(it.subtasks);
+                            subs.forEach(function(s) {
+                                if (s && s.worker && s.worker.toUpperCase().includes(id.toUpperCase().replace(/_/g, " "))) asignado = true;
+                            });
+                        });
+                    }
+                    if (!asignado) return;
+                }
+
+                const nombre = p.nombre || proyNode.key;
+                const estado = p.estado || "sin estado";
+                const total  = p.presupuesto_total || (p.presupuesto && p.presupuesto.total) || 0;
+
+                // Tareas del gantt
+                let tareasStr = "";
+                if (p.gantt && p.gantt.items) {
+                    const items = Array.isArray(p.gantt.items) ? p.gantt.items : Object.values(p.gantt.items);
+                    const tareas = [];
+                    items.forEach(function(it) {
+                        if (!it || !it.subtasks) return;
+                        const subs = Array.isArray(it.subtasks) ? it.subtasks : Object.values(it.subtasks);
+                        subs.forEach(function(s) {
+                            if (!s) return;
+                            tareas.push("  • " + (s.name || "tarea") + " [" + (s.progress || 0) + "%] worker:" + (s.worker || "libre"));
+                        });
+                    });
+                    if (tareas.length) tareasStr = "\n  Tareas:\n" + tareas.slice(0, 8).join("\n");
+                }
+
+                // Presupuesto: solo para ADMIN, ocultar para otros
+                let presStr = "";
+                if (rol === "ADMIN") {
+                    presStr = " | Total: " + total + " Bs";
+                    if (p.gasto_total) presStr += " | Gasto: " + p.gasto_total + " Bs";
+                } else if (rol === "CLIENTE") {
+                    // Cliente ve su total sin margen interno
+                    presStr = " | Presupuesto aprobado: " + total + " Bs";
+                }
+
+                lineas.push("Proyecto: \"" + nombre + "\" (cid:" + cid + "/pid:" + proyNode.key + ") | Estado: " + estado + presStr + tareasStr);
+            });
+        });
+
+        return lineas.length ? "\n\nPROYECTOS:\n" + lineas.join("\n\n") : "";
+    } catch (e) {
+        console.warn("Error leyendo proyectos:", e.message);
+        return "";
+    }
+}
+
+/** Construye contexto de precios y proveedores (solo ADMIN) */
+async function contextoPrecios(db) {
+    try {
+        const [matsSnap, provSnap] = await Promise.all([
+            db.ref("/base_datos/materiales").limitToFirst(30).get(),
+            db.ref("/base_datos/proveedores").limitToFirst(15).get(),
+        ]);
+        let ctx = "";
+        if (matsSnap.exists()) {
+            const mats = [];
+            matsSnap.forEach(function(m) {
+                const d = m.val();
+                if (d && d.nombre) mats.push(d.nombre + ": " + (d.precio || "?") + " " + (d.unidad || "und"));
+            });
+            if (mats.length) ctx += "\n\nMATERIALES BD:\n" + mats.join("\n");
+        }
+        if (provSnap.exists()) {
+            const provs = [];
+            provSnap.forEach(function(p) {
+                const d = p.val();
+                if (!d) return;
+                const nombre = d.nombre || p.key;
+                const contacto = d.contacto || "";
+                const mats = d.materiales ? Object.keys(d.materiales).slice(0, 3).join(", ") : "";
+                provs.push(nombre + (contacto ? " (tel:" + contacto + ")" : "") + (mats ? " — " + mats : ""));
+            });
+            if (provs.length) ctx += "\n\nPROVEEDORES:\n" + provs.join("\n");
+        }
+        return ctx;
+    } catch (e) {
+        return "";
+    }
+}
+
+/** Construye el system prompt según el rol */
+function buildPrompt(rol, nombre, contexto, historial, mensaje) {
+    const base =
+        "Sos el asistente de WhatsApp de RUBIK Bolivia — empresa de señaletica, publicidad y rotulacion.\n" +
+        "Tu nombre es Rubik Asistente. Respondés en español latinoamericano, de forma amable, profesional y concisa (maximo 3 parrafos cortos).\n" +
+        "Nunca uses markdown, asteriscos ni JSON en tu respuesta — solo texto plano.\n\n";
+
+    let instrucciones = "";
+
+    if (rol === "ADMIN") {
+        instrucciones =
+            "ROL: ADMIN (Renzo, dueño de RUBIK Bolivia). Tenes acceso total al sistema.\n" +
+            "Podes consultar proyectos, precios, proveedores, finanzas, inventario y personal.\n" +
+            "Si pide una cotizacion, construila con los materiales de la BD.\n" +
+            "Si pide contactar un proveedor, incluí su número de contacto.\n" +
+            "Respondé de forma ejecutiva y directa — sos el jefe.\n";
+    } else if (rol === "SUPERVISOR") {
+        instrucciones =
+            "ROL: SUPERVISOR. Tenes acceso a los proyectos asignados a vos.\n" +
+            "Podes ver tareas, estados y avances. NO tenes acceso a precios internos ni utilidades.\n" +
+            "Si necesitas información fuera de tu alcance, indicá que consultará con Renzo.\n";
+    } else if (rol === "TRABAJADOR") {
+        instrucciones =
+            "ROL: TRABAJADOR. Solo ves los proyectos donde estás asignado.\n" +
+            "Podes consultar qué tareas tenés hoy, cómo realizarlas, y reportar avances.\n" +
+            "NO tenes acceso a presupuestos, utilidades ni proyectos de otros.\n" +
+            "Si el trabajador necesita comprar algo, pedile: ¿para qué proyecto? ¿qué necesita? y avisale que lo gestionarás con Renzo.\n";
+    } else if (rol === "CLIENTE") {
+        instrucciones =
+            "ROL: CLIENTE. Solo ves tus propios proyectos.\n" +
+            "Podes consultar estado de tu proyecto, pedir fotos de avance, hacer consultas y cotizaciones.\n" +
+            "NO revelar precios internos, márgenes ni datos de otros clientes.\n" +
+            "Si necesita algo fuera de lo disponible, decile que el equipo lo contactará pronto.\n";
+    } else {
+        instrucciones =
+            "ROL: DESCONOCIDO. Este número no está registrado en el sistema.\n" +
+            "Saludalo amablemente e indicale que para ser atendido debe registrarse en: https://rubikbolivia.com/cliente-view.html\n" +
+            "No brindes información del negocio hasta que esté registrado.\n";
+    }
+
+    return (
+        base +
+        instrucciones + "\n" +
+        "USUARIO: " + nombre + " | Teléfono: +" + "\n" +
+        contexto +
+        historial + "\n\n" +
+        "MENSAJE: \"" + mensaje + "\""
+    );
+}
+
+// ── Webhook principal ──────────────────────────────────────────────────────
+
 exports.whatsappWebhook = onRequest(
     {
         secrets: [GEMINI_API_KEY, WHATSAPP_TOKEN, WHATSAPP_VERIFY_TOKEN],
@@ -280,13 +588,13 @@ exports.whatsappWebhook = onRequest(
     },
     async (req, res) => {
 
-        // ── GET: verificación inicial del webhook por Meta ─────────────────
+        // ── GET: verificación del webhook por Meta ─────────────────────────
         if (req.method === "GET") {
             const mode      = req.query["hub.mode"];
             const token     = req.query["hub.verify_token"];
             const challenge = req.query["hub.challenge"];
             if (mode === "subscribe" && token === WHATSAPP_VERIFY_TOKEN.value()) {
-                console.log("Webhook verificado por Meta OK");
+                console.log("Webhook verificado OK");
                 return res.status(200).send(challenge);
             }
             return res.status(403).send("Token invalido");
@@ -294,7 +602,7 @@ exports.whatsappWebhook = onRequest(
 
         if (req.method !== "POST") return res.status(405).send("Metodo no permitido");
 
-        // Responder 200 de inmediato — Meta reintenta si no recibe respuesta rapida
+        // Responder 200 inmediato — Meta reintenta si no recibe respuesta rápida
         res.status(200).send("OK");
 
         try {
@@ -302,157 +610,67 @@ exports.whatsappWebhook = onRequest(
             const entry  = (body.entry || [])[0];
             const change = (entry && entry.changes) ? entry.changes[0] : null;
             const value  = change ? change.value : null;
-
-            // Solo procesar mensajes entrantes de texto
             const messages = value && value.messages;
             if (!messages || !messages[0]) return;
-            const msg = messages[0];
-            if (msg.type !== "text") return;
 
+            const msg           = messages[0];
             const fromPhone     = msg.from;
-            const textRecibido  = msg.text.body.trim();
             const phoneNumberId = value.metadata ? value.metadata.phone_number_id : null;
+            const msgType       = msg.type;
 
-            console.log("Mensaje de " + fromPhone + ": " + textRecibido);
+            // Por ahora procesamos texto e imagen
+            if (msgType !== "text" && msgType !== "image") return;
+
+            const textRecibido = msgType === "text"
+                ? msg.text.body.trim()
+                : "[El usuario envió una imagen]" + (msg.image && msg.image.caption ? " — " + msg.image.caption : "");
+
+            console.log("[WA] De:" + fromPhone + " Tipo:" + msgType + " Msg:" + textRecibido.slice(0, 80));
 
             const db = admin.database();
 
-            // ── 1. Identificar cliente ─────────────────────────────────────
-            const clienteSnap = await db.ref("/whatsapp_clientes/" + fromPhone).get();
-            const clienteData = clienteSnap.exists() ? clienteSnap.val() : null;
-            const cid         = clienteData ? clienteData.cid : null;
-            const nombreCliente = clienteData ? (clienteData.nombre || "Cliente") : "Cliente";
+            // ── 1. Identificar rol ─────────────────────────────────────────
+            const usuario = await identificarRol(db, fromPhone);
+            const { rol, nombre, id } = usuario;
+            console.log("[WA] Rol identificado:", rol, nombre);
 
-            // ── 2. Contexto de proyectos activos ───────────────────────────
-            let contextoProyectos = "";
-            if (cid) {
-                try {
-                    const proySnap = await db.ref("/proyectos")
-                        .orderByChild("cid").equalTo(cid).limitToFirst(5).get();
-                    if (proySnap.exists()) {
-                        const lineas = [];
-                        proySnap.forEach(function(p) {
-                            const d = p.val();
-                            if (!d || d.archivado) return;
-                            const items = d.presupuesto && d.presupuesto.items
-                                ? (Array.isArray(d.presupuesto.items)
-                                    ? d.presupuesto.items
-                                    : Object.values(d.presupuesto.items))
-                                : [];
-                            const resumen = items
-                                .filter(function(it) { return it && it.type !== "chapter"; })
-                                .map(function(it) {
-                                    return "  - " + (it.desc || it.nombre || "Item") + ": " + (it.precioFinal || it.total || 0) + " Bs";
-                                }).join("\n");
-                            lineas.push(
-                                "Proyecto: \"" + (d.nombre || "Sin nombre") + "\" | Estado: " +
-                                (d.estado || "en curso") + " | Total: " +
-                                (d.presupuesto && d.presupuesto.total ? d.presupuesto.total : 0) + " Bs\n" + resumen
-                            );
-                        });
-                        if (lineas.length > 0) {
-                            contextoProyectos = "\n\nPROYECTOS ACTIVOS:\n" + lineas.join("\n\n");
-                        }
-                    }
-                } catch (e) {
-                    console.warn("Error leyendo proyectos:", e.message);
-                }
+            // ── 2. Construir contexto según rol ────────────────────────────
+            let contexto = "";
+
+            if (rol !== "DESCONOCIDO") {
+                // Todos ven proyectos (filtrados por rol)
+                contexto += await contextoProyectos(db, rol, id);
             }
 
-            // ── 3. Historial de conversación (últimos 6 mensajes) ──────────
-            let historialStr = "";
-            try {
-                const histSnap = await db.ref("/whatsapp_historial/" + fromPhone + "/mensajes")
-                    .orderByChild("ts").limitToLast(6).get();
-                if (histSnap.exists()) {
-                    const lineas = [];
-                    histSnap.forEach(function(h) {
-                        const d = h.val();
-                        lineas.push((d.role === "user" ? "Cliente" : "RUBIK") + ": " + d.text);
-                    });
-                    if (lineas.length > 0) {
-                        historialStr = "\n\nCONVERSACION PREVIA:\n" + lineas.join("\n");
-                    }
-                }
-            } catch (e) {
-                console.warn("Error leyendo historial:", e.message);
+            if (rol === "ADMIN") {
+                // Admin además ve precios y proveedores
+                contexto += await contextoPrecios(db);
             }
+
+            // ── 3. Historial conversación ──────────────────────────────────
+            const historial = await leerHistorial(db, fromPhone, 8);
 
             // ── 4. Llamar a Gemini ─────────────────────────────────────────
             const { GoogleGenerativeAI } = require("@google/generative-ai");
-            const genAI = new GoogleGenerativeAI(GEMINI_API_KEY.value());
+            const genAI   = new GoogleGenerativeAI(GEMINI_API_KEY.value());
             const aiModel = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
-            const prompt =
-                "Sos el asistente de WhatsApp de RUBIK Bolivia — empresa de señaletica, publicidad y rotulacion.\n" +
-                "Tu nombre es Rubik Asistente. Respondés de forma amable, profesional y concisa (maximo 3 parrafos cortos).\n" +
-                "Usas español latinoamericano. Nunca revelas precios internos ni margenes de utilidad.\n\n" +
-                "CLIENTE: " + nombreCliente + " | Numero: +" + fromPhone +
-                " | Vinculado al sistema: " + (cid ? "SI" : "NO") + "\n" +
-                contextoProyectos + "\n" +
-                historialStr + "\n\n" +
-                "MENSAJE ACTUAL DEL CLIENTE: \"" + textRecibido + "\"\n\n" +
-                "INSTRUCCIONES:\n" +
-                "- Si pregunta por el estado de su proyecto, usa la info de PROYECTOS ACTIVOS.\n" +
-                "- Si pide una cotizacion nueva, pide los detalles (medidas, material, cantidad, uso).\n" +
-                "- Si no estas seguro, di que consultaras con el equipo y que lo contactaran pronto.\n" +
-                "- Si el cliente NO esta vinculado, invitalo a: https://rubikbolivia.com/cliente-view.html\n" +
-                "- Responde SOLO el texto del mensaje, sin JSON, sin markdown, sin asteriscos.";
-
+            const prompt  = buildPrompt(rol, nombre, contexto, historial, textRecibido);
             const aiResult = await aiModel.generateContent(prompt);
             const respuesta = aiResult.response.text().trim();
 
-            console.log("Respuesta IA: " + respuesta.substring(0, 100));
+            console.log("[WA] Respuesta IA (" + rol + "): " + respuesta.slice(0, 100));
 
-            // ── 5. Enviar por WhatsApp API de Meta ─────────────────────────
+            // ── 5. Enviar respuesta por WhatsApp ───────────────────────────
             if (phoneNumberId) {
-                const https = require("https");
-                const waUrl = "https://graph.facebook.com/v20.0/" + phoneNumberId + "/messages";
-                const payload = JSON.stringify({
-                    messaging_product: "whatsapp",
-                    to: fromPhone,
-                    type: "text",
-                    text: { body: respuesta },
-                });
-
-                await new Promise(function(resolve, reject) {
-                    const options = {
-                        method: "POST",
-                        headers: {
-                            "Authorization": "Bearer " + WHATSAPP_TOKEN.value(),
-                            "Content-Type": "application/json",
-                            "Content-Length": Buffer.byteLength(payload),
-                        },
-                    };
-                    const waReq = https.request(waUrl, options, function(r) {
-                        let data = "";
-                        r.on("data", function(chunk) { data += chunk; });
-                        r.on("end", function() {
-                            console.log("WhatsApp API (" + r.statusCode + "): " + data);
-                            resolve();
-                        });
-                    });
-                    waReq.on("error", reject);
-                    waReq.write(payload);
-                    waReq.end();
-                });
+                await enviarWA(phoneNumberId, fromPhone, respuesta, WHATSAPP_TOKEN.value());
             }
 
-            // ── 6. Guardar historial en Firebase ───────────────────────────
-            const histRef = db.ref("/whatsapp_historial/" + fromPhone + "/mensajes");
-            const ts = Date.now();
-            await histRef.push({ role: "user",  text: textRecibido, ts: ts });
-            await histRef.push({ role: "model", text: respuesta,    ts: ts + 1 });
-
-            await db.ref("/whatsapp_historial/" + fromPhone + "/meta").update({
-                ultimoMensaje:       textRecibido,
-                ultimaRespuesta:     respuesta,
-                ultimaInteraccion:   ts,
-                nombre:              nombreCliente,
-            });
+            // ── 6. Guardar historial ───────────────────────────────────────
+            await guardarHistorial(db, fromPhone, textRecibido, respuesta, nombre, rol);
 
         } catch (err) {
-            console.error("whatsappWebhook error:", err);
+            console.error("[WA] Error:", err.message || err);
         }
     }
 );
