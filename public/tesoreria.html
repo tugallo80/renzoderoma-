@@ -294,6 +294,22 @@
                 <label class="inp-lbl">NIT del Cliente</label><input type="number" id="ing-nit" class="inp-std" placeholder="Ej: 1234567010">
                 <label class="inp-lbl">Nro. de Factura</label><input type="number" id="ing-nro" class="inp-std" placeholder="Ej: 00152">
             </div>
+            <!-- Escáner IA de recibos de pago -->
+            <div style="border:1.5px dashed var(--green); border-radius:12px; padding:14px; margin-bottom:14px; background:rgba(52,199,89,0.05);">
+                <div style="font-size:11px; font-weight:900; color:var(--green); text-transform:uppercase; margin-bottom:10px;"><i class="ph-bold ph-magic-wand"></i> Escanear Recibo con IA</div>
+                <div style="display:flex; gap:10px; align-items:center;">
+                    <label style="flex:1; border:1.5px dashed var(--border); border-radius:10px; padding:12px; text-align:center; cursor:pointer; font-size:12px; font-weight:800; color:var(--blue);">
+                        <i class="ph-bold ph-upload-simple" style="font-size:20px; display:block; margin-bottom:4px;"></i>
+                        Subir recibo / comprobante
+                        <input type="file" accept="image/*,application/pdf" style="display:none;" onchange="escanearReciboIngreso(this)">
+                    </label>
+                    <button id="btn-ia-ingreso" onclick="leerReciboIngresoIA()" style="display:none; background:var(--green); color:white; border:none; padding:14px 16px; border-radius:10px; font-size:11px; font-weight:900; cursor:pointer; flex-direction:column; align-items:center; gap:4px; min-width:72px;">
+                        <i class="ph-bold ph-magic-wand" style="font-size:18px;"></i>
+                        <span>Leer IA</span>
+                    </button>
+                </div>
+                <div id="recibo-ingreso-nombre" style="font-size:11px; color:var(--green); margin-top:6px; display:none;"></div>
+            </div>
             <button class="btn-action btn-success" onclick="registrarIngreso()"><i class="ph-bold ph-floppy-disk"></i> Guardar Ingreso</button>
         </div>
         <div class="section-title"><i class="ph-bold ph-chart-pie-slice"></i> Cuentas por Cobrar</div><div id="list-cxc"></div>
@@ -1943,6 +1959,61 @@
 
     window.escanearFacturaTesoreria = async function(input) {
         cargarFacturasSeleccionadas(input);
+    };
+
+    // Escáner de recibo de pago de cliente (pestaña Ingresos)
+    window._reciboIngreso = { b64: null, mime: null };
+    window.escanearReciboIngreso = async function(input) {
+        const file = input.files[0]; if (!file) return;
+        window._reciboIngreso.mime = file.type;
+        window._reciboIngreso.b64 = await new Promise((res, rej) => {
+            const reader = new FileReader();
+            reader.onload = e => res(e.target.result.split(',')[1]);
+            reader.onerror = rej;
+            reader.readAsDataURL(file);
+        });
+        const nom = document.getElementById('recibo-ingreso-nombre');
+        nom.textContent = '✓ ' + file.name;
+        nom.style.display = 'block';
+        const btn = document.getElementById('btn-ia-ingreso');
+        btn.style.display = 'flex';
+    };
+
+    window.leerReciboIngresoIA = async function() {
+        if (!window._reciboIngreso.b64) return alert('Primero cargá el recibo.');
+        const btn = document.getElementById('btn-ia-ingreso');
+        const origHtml = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<i class="ph-bold ph-spinner-gap" style="font-size:18px; animation:spin 1s linear infinite;"></i><span>Leyendo...</span>';
+        try {
+            const resp = await callGemini({
+                model: 'gemini-2.5-flash',
+                contents: [{ role: 'user', parts: [
+                    { inlineData: { mimeType: window._reciboIngreso.mime, data: window._reciboIngreso.b64 } },
+                    { text: 'Analizá este recibo o comprobante de pago de cliente boliviano. Respondé SOLO con JSON:\n{"monto":<numero>,"fecha":"<YYYY-MM-DD>","proyecto":"<nombre del proyecto o empresa si aparece>","nit":"<NIT si aparece o null>","nro_factura":"<nro si aparece o null>"}' }
+                ]}]
+            });
+            const raw = (resp.candidates?.[0]?.content?.parts?.[0]?.text || '').trim();
+            const d = JSON.parse(raw.replace(/```json/gi,'').replace(/```/g,'').trim());
+            if (d.monto)       document.getElementById('ing-monto').value = parseFloat(d.monto) || '';
+            if (d.fecha)       document.getElementById('ing-fecha').value = d.fecha;
+            if (d.nit)         { document.getElementById('ing-facturado').checked = true; toggleFacturaFields('venta'); document.getElementById('ing-nit').value = d.nit; }
+            if (d.nro_factura) document.getElementById('ing-nro').value = d.nro_factura;
+            if (d.proyecto) {
+                const sel = document.getElementById('ing-proy-sel');
+                for (const opt of sel.options) {
+                    if (opt.text.toLowerCase().includes((d.proyecto||'').toLowerCase().slice(0,6))) { sel.value = opt.value; break; }
+                }
+            }
+            btn.innerHTML = '<i class="ph-bold ph-check"></i><span>Listo!</span>';
+            btn.style.background = 'var(--blue)';
+            setTimeout(() => { btn.innerHTML = origHtml; btn.style.background = 'var(--green)'; btn.disabled = false; }, 2500);
+        } catch(e) {
+            console.error('Error IA recibo:', e);
+            alert('No se pudo leer el recibo. Intentá con otra imagen más clara.');
+            btn.innerHTML = origHtml;
+            btn.disabled = false;
+        }
     };
 
     // Lectura de comprobante de anticipo con IA
