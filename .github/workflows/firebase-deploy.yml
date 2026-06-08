@@ -18,13 +18,12 @@ jobs:
 
       - name: Write functions .env
         run: |
-          cat > functions/.env << ENVEOF
-          GEMINI_KEY=${{ secrets.GEMINI_KEY }}
-          WA_TOKEN=${{ secrets.WA_TOKEN }}
-          WA_VERIFY_TOKEN=${{ secrets.WA_VERIFY_TOKEN }}
-          ADMIN_PHONE=${{ secrets.ADMIN_PHONE }}
-          WA_PHONE_ID=1100203513168717
-          ENVEOF
+          printf 'GEMINI_KEY=%s\nWA_TOKEN=%s\nWA_VERIFY_TOKEN=%s\nADMIN_PHONE=%s\nWA_PHONE_ID=1100203513168717\n' \
+            "${{ secrets.GEMINI_KEY }}" \
+            "${{ secrets.WA_TOKEN }}" \
+            "${{ secrets.WA_VERIFY_TOKEN }}" \
+            "${{ secrets.ADMIN_PHONE }}" \
+            > functions/.env
 
       - name: Install functions dependencies
         run: npm install
