@@ -18,17 +18,18 @@ exports.geminiProxy = onRequest({ region: 'us-central1', cors: true }, async (re
     if (req.method !== 'POST') return res.sendStatus(405);
     try {
         const body = req.body;
-        const model = body.model || 'gemini-2.0-flash';
-        const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${cfg.GEMINI_KEY}`;
-        const resp = await axios.post(url, {
+        const modelName = body.model || 'gemini-2.0-flash';
+        const genAI = new GoogleGenerativeAI(cfg.GEMINI_KEY);
+        const model = genAI.getGenerativeModel({ model: modelName });
+        const result = await model.generateContent({
             contents: body.contents,
             ...(body.generationConfig ? { generationConfig: body.generationConfig } : {}),
             ...(body.systemInstruction ? { systemInstruction: body.systemInstruction } : {}),
         });
-        return res.json(resp.data);
+        return res.json({ candidates: [{ content: { parts: [{ text: result.response.text() }] } }] });
     } catch (e) {
-        console.error('geminiProxy error:', e?.response?.data || e.message);
-        return res.status(500).json({ error: e?.response?.data || e.message });
+        console.error('geminiProxy error:', e?.message || e);
+        return res.status(500).json({ error: e?.message || String(e) });
     }
 });
 
