@@ -79,3 +79,7 @@ public/backups/
 **/*service-account*.json
 **/*credentials*.json
 **/*api-key*.txt
+
+# Archivos temporales de Google Drive sync
+.tmp.driveupload/
+.tmp.*/
