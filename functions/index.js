@@ -28,8 +28,9 @@ exports.geminiProxy = onRequest({ region: 'us-central1', cors: true }, async (re
         });
         return res.json({ candidates: [{ content: { parts: [{ text: result.response.text() }] } }] });
     } catch (e) {
-        console.error('geminiProxy error:', e?.message || e);
-        return res.status(500).json({ error: e?.message || String(e) });
+        const msg = e?.message || String(e);
+        console.error('geminiProxy error:', msg, 'KEY_SET:', !!process.env.GEMINI_KEY, 'KEY_LEN:', (process.env.GEMINI_KEY||'').length);
+        return res.status(500).json({ error: msg });
     }
 });
 

@@ -1542,7 +1542,7 @@ Devolvé exactamente este formato (sin texto adicional):
                     contents: [{ role: 'user', parts: [{ text: userPrompt }] }]
                 })
             });
-            if(!resp.ok) throw new Error(`HTTP ${resp.status}`);
+            if(!resp.ok) { let errBody={}; try{errBody=await resp.json();}catch(_){} throw new Error(`HTTP ${resp.status}: ${errBody.error||'sin detalle'}`); }
             const respData = await resp.json();
             let raw = respData?.candidates?.[0]?.content?.parts?.[0]?.text || '';
             raw = raw.replace(/```json|```/g, '').trim();
