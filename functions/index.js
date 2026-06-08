@@ -1,5 +1,4 @@
 const { onRequest } = require('firebase-functions/v2/https');
-const { defineString } = require('firebase-functions/params');
 const admin = require('firebase-admin');
 const axios = require('axios');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
@@ -7,12 +6,14 @@ const { GoogleGenerativeAI } = require('@google/generative-ai');
 admin.initializeApp();
 const db = admin.database();
 
-// Variables de entorno (se configuran con: firebase functions:secrets:set NOMBRE)
-const WA_VERIFY_TOKEN = defineString('WA_VERIFY_TOKEN', { default: 'rubik2026' });
-const WA_TOKEN       = defineString('WA_TOKEN');
-const WA_PHONE_ID    = defineString('WA_PHONE_ID', { default: '1100203513168717' });
-const ADMIN_PHONE    = defineString('ADMIN_PHONE');
-const GEMINI_KEY     = defineString('GEMINI_KEY');
+// Variables de entorno — configurar en Firebase Console > Functions > Configuration
+const cfg = {
+    WA_VERIFY_TOKEN: process.env.WA_VERIFY_TOKEN || 'rubik2026',
+    WA_TOKEN:        process.env.WA_TOKEN        || '',
+    WA_PHONE_ID:     process.env.WA_PHONE_ID     || '1100203513168717',
+    ADMIN_PHONE:     process.env.ADMIN_PHONE     || '',
+    GEMINI_KEY:      process.env.GEMINI_KEY      || '',
+};
 
 exports.webhook = onRequest({ region: 'us-central1' }, async (req, res) => {
     // Verificación del webhook (Meta llama con GET al configurarlo)
@@ -20,7 +21,7 @@ exports.webhook = onRequest({ region: 'us-central1' }, async (req, res) => {
         const mode      = req.query['hub.mode'];
         const token     = req.query['hub.verify_token'];
         const challenge = req.query['hub.challenge'];
-        if (mode === 'subscribe' && token === WA_VERIFY_TOKEN.value()) {
+        if (mode === 'subscribe' && token === cfg.WA_VERIFY_TOKEN) {
             return res.status(200).send(challenge);
         }
         return res.sendStatus(403);
@@ -72,7 +73,7 @@ async function identificarUsuario(phone) {
     const con591 = clean.startsWith('591') ? clean : '591' + clean;
 
     // Admin
-    const adminNum = ADMIN_PHONE.value().replace(/\D/g, '');
+    const adminNum = cfg.ADMIN_PHONE.replace(/\D/g, '');
     if (adminNum && (clean === adminNum || sin591 === adminNum || con591 === adminNum)) {
         return { role: 'admin', userData: { nombre: 'Admin' } };
     }
@@ -137,7 +138,7 @@ async function construirContexto(role, userData) {
 
 // ─── Generar respuesta con Gemini ─────────────────────────────────────────────
 async function generarRespuesta(mensaje, contexto, role, userData) {
-    const genAI = new GoogleGenerativeAI(GEMINI_KEY.value());
+    const genAI = new GoogleGenerativeAI(cfg.GEMINI_KEY);
     const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
 
     const permisos = {
@@ -164,7 +165,7 @@ ${contexto}`;
 
 // ─── Enviar mensaje por WhatsApp ──────────────────────────────────────────────
 async function enviarMensaje(to, text) {
-    const url = `https://graph.facebook.com/v20.0/${WA_PHONE_ID.value()}/messages`;
+    const url = `https://graph.facebook.com/v20.0/${cfg.WA_PHONE_ID}/messages`;
     await axios.post(url, {
         messaging_product: 'whatsapp',
         to,
@@ -172,7 +173,7 @@ async function enviarMensaje(to, text) {
         text: { body: text.slice(0, 4096) }
     }, {
         headers: {
-            Authorization: `Bearer ${WA_TOKEN.value()}`,
+            Authorization: `Bearer ${cfg.WA_TOKEN}`,
             'Content-Type': 'application/json'
         }
     });
