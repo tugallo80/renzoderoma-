@@ -285,7 +285,8 @@
         <div class="generic-card">
             <h3 style="margin-top:0; color:var(--green);"><i class="ph-bold ph-money"></i> Registrar Nuevo Ingreso</h3>
             <label class="inp-lbl">Proyecto Asociado</label>
-            <input type="text" id="ing-proy-buscar" class="inp-std" placeholder="Buscar proyecto..." oninput="filtrarProyectosIngreso(this.value)" autocomplete="off" style="margin-bottom:4px;">
+            <input type="text" id="ing-proy-buscar" class="inp-std" placeholder="Escribí para buscar proyecto..." oninput="filtrarProyectosIngreso(this.value)" autocomplete="off" list="ing-proy-datalist" style="margin-bottom:4px;">
+            <datalist id="ing-proy-datalist"></datalist>
             <select id="ing-proy-sel" class="inp-std"></select>
             <div class="flex-row">
                 <div style="flex:1;"><label class="inp-lbl">Monto (Bs)</label><input type="number" step="any" id="ing-monto" class="inp-std" placeholder="0.00"></div>
@@ -498,10 +499,48 @@
 
     window.filtrarProyectosIngreso = function(q) {
         const sel = document.getElementById('ing-proy-sel');
-        const lista = (window._todosProyectosIngreso || []).filter(n => n.toLowerCase().includes(q.toLowerCase()));
+        const dl = document.getElementById('ing-proy-datalist');
+        const todos = window._todosProyectosIngreso || [];
+        const lista = q ? todos.filter(n => n.toLowerCase().includes(q.toLowerCase())) : todos;
         sel.innerHTML = '<option value="">Seleccionar Proyecto...</option>' +
             lista.map(n => `<option value="${n}">${n}</option>`).join('');
+        if (dl) dl.innerHTML = lista.map(n => `<option value="${n}">`).join('');
         if (lista.length === 1) sel.value = lista[0];
+    };
+
+    window.registrarIngreso = async function() {
+        const proyecto  = document.getElementById('ing-proy-sel').value;
+        const monto     = parseFloat(document.getElementById('ing-monto').value);
+        const fecha     = document.getElementById('ing-fecha').value;
+        const facturado = document.getElementById('ing-facturado').checked;
+        const nit       = document.getElementById('ing-nit')?.value || '';
+        const nroFac    = document.getElementById('ing-nro')?.value || '';
+
+        if (!monto || monto <= 0) return alert('Ingresá un monto válido.');
+        if (!fecha)               return alert('Seleccioná una fecha.');
+
+        const ingreso = { proyecto: proyecto || 'Ingreso general', monto, fecha, ts: Date.now() };
+        if (facturado) { ingreso.is_facturado = true; ingreso.nit = nit; ingreso.nro_factura = nroFac; }
+
+        try {
+            await db.ref('ingresos').push(ingreso);
+            // Limpiar formulario
+            document.getElementById('ing-monto').value = '';
+            document.getElementById('ing-proy-buscar').value = '';
+            document.getElementById('ing-facturado').checked = false;
+            document.getElementById('box-factura-venta').style.display = 'none';
+            document.getElementById('ing-nit').value = '';
+            document.getElementById('ing-nro').value = '';
+            document.getElementById('ing-fecha').valueAsDate = new Date();
+            document.getElementById('recibo-ingreso-nombre').style.display = 'none';
+            document.getElementById('btn-ia-ingreso').style.display = 'none';
+            window._reciboIngreso = { b64: null, mime: null };
+            filtrarProyectosIngreso('');
+            alert('✅ Ingreso registrado correctamente.');
+        } catch(e) {
+            console.error('Error guardando ingreso:', e);
+            alert('Error al guardar. Intentá de nuevo.');
+        }
     };
 
     function renderPlanillas() {
