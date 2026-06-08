@@ -1,0 +1,64 @@
+{
+  "database": {
+    "rules": "database.rules.json"
+  },
+  "hosting": {
+    "public": "public",
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/node_modules/**",
+      "backups/**",
+      "**/*.env",
+      "**/*.env.*"
+    ],
+    "headers": [
+      {
+        "source": "/js/**",
+        "headers": [
+          { "key": "Cache-Control", "value": "no-cache, must-revalidate" }
+        ]
+      },
+      {
+        "source": "**/*.html",
+        "headers": [
+          { "key": "Cache-Control", "value": "no-cache, must-revalidate" }
+        ]
+      },
+      {
+        "source": "/sw-cliente.js",
+        "headers": [
+          { "key": "Cache-Control", "value": "no-cache, must-revalidate" }
+        ]
+      }
+    ],
+    "rewrites": [
+      {
+        "source": "/api/gemini",
+        "function": { "functionId": "geminiProxy", "region": "us-central1" }
+      },
+      {
+        "source": "/api/ingesta",
+        "function": { "functionId": "procesarIngestaIA", "region": "us-central1" }
+      },
+      {
+        "source": "/api/whatsapp",
+        "function": { "functionId": "whatsappWebhook", "region": "us-central1" }
+      }
+    ]
+  },
+  "functions": [
+    {
+      "source": "functions",
+      "codebase": "default",
+      "ignore": [
+        "node_modules",
+        ".git",
+        "firebase-debug.log",
+        "firebase-debug.*.log",
+        "*.local"
+      ],
+      "predeploy": []
+    }
+  ]
+}

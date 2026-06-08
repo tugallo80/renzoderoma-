@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Rubik OS - Hub de Supervisor</title>
+    
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.1.3/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.1.3/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.1.3/firebase-database-compat.js"></script>
+
+    <style>
+        :root { 
+            --bg: #f4f4f7; --card: #fff; --text: #1a1a1a; 
+            --blue: #007aff; --green: #34c759; --orange: #ff9500; 
+            --red: #ff3b30; --gray: #8e8e93; --border: #d1d1d6; 
+        }
+        body.dark-mode { 
+            --bg: #000; --card: #1c1c1e; --text: #fff; --border: #333; 
+        }
+        body { 
+            font-family: -apple-system, BlinkMacSystemFont, sans-serif; 
+            background: var(--bg); color: var(--text); margin: 0; 
+            padding: 20px; padding-bottom: 100px; -webkit-tap-highlight-color: transparent;
+            transition: background 0.3s, color 0.3s;
+        }
+
+        /* Utilidades y Layout */
+        .hidden { display: none !important; }
+        .nav { display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px; }
+        .btn-nav { background: var(--card); border: 1px solid var(--border); padding: 10px 16px; border-radius: 20px; font-weight: 800; color: var(--blue); cursor: pointer; display: flex; align-items: center; gap: 6px; box-shadow: 0 2px 8px rgba(0,0,0,0.02);}
+        
+        .header-title { font-size: 28px; font-weight: 900; margin-bottom: 5px; letter-spacing: -0.5px;}
+        .header-sub { font-size: 13px; color: var(--gray); font-weight: 700; text-transform: uppercase; margin-bottom: 25px;}
+
+        /* Tarjetas de Proyectos */
+        .card-list { display: flex; flex-direction: column; gap: 15px; }
+        .generic-card { background: var(--card); border-radius: 20px; padding: 20px; border: 1px solid var(--border); box-shadow: 0 8px 20px rgba(0,0,0,0.03); cursor: pointer; transition: 0.2s;}
+        .generic-card:active { transform: scale(0.98); }
+        .badge { display: inline-block; padding: 4px 10px; border-radius: 8px; font-size: 10px; font-weight: 900; text-transform: uppercase; margin-bottom: 8px;}
+        .badge-blue { background: rgba(0,122,255,0.1); color: var(--blue); }
+        
+        /* KPIs Financieros */
+        .kpi-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-bottom: 20px; }
+        .kpi-card { background: var(--card); padding: 15px; border-radius: 16px; border: 1px solid var(--border); border-left: 4px solid var(--blue); }
+        .kpi-lbl { font-size: 10px; font-weight: 800; color: var(--gray); text-transform: uppercase; margin-bottom: 5px; }
+        .kpi-val { font-size: 20px; font-weight: 900; color: var(--text); }
+        
+        /* Pestañas */
+        .tabs-wrap { background: var(--border); padding: 4px; border-radius: 14px; display: flex; margin-bottom: 20px; overflow-x: auto; }
+        .tab-btn { flex: 1; padding: 12px; border: none; background: transparent; font-weight: 800; font-size: 12px; border-radius: 10px; color: var(--gray); cursor: pointer; transition: 0.3s; text-transform: uppercase; white-space: nowrap;}
+        .tab-btn.active { background: var(--card); color: var(--text); box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+
+        /* Lista de Presupuesto Operativo */
+        .item-row { background: var(--card); border: 1px solid var(--border); border-radius: 16px; padding: 15px; margin-bottom: 12px; }
+        .item-desc { font-size: 14px; font-weight: 800; margin-bottom: 10px; color: var(--text); }
+        .item-math { display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 8px; padding-bottom: 8px; border-bottom: 1px dashed var(--border); }
+        .inp-gasto { width: 100%; padding: 12px; border: 1px solid var(--border); background: var(--bg); color: var(--text); border-radius: 10px; font-weight: 800; font-size: 16px; box-sizing: border-box; outline: none; margin-top: 5px;}
+        .inp-gasto:focus { border-color: var(--blue); }
+        
+        /* Grid de Módulos */
+        .modules-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; }
+        .mod-item { display: flex; flex-direction: column; align-items: center; gap: 8px; text-align: center; cursor: pointer; }
+        .mod-icon { width: 65px; height: 65px; border-radius: 20px; background: var(--card); border: 1px solid var(--border); display: flex; align-items: center; justify-content: center; font-size: 30px; box-shadow: 0 4px 10px rgba(0,0,0,0.02); color: var(--blue); }
+        .mod-lbl { font-size: 12px; font-weight: 800; color: var(--text); }
+
+        /* Botones y Alertas */
+        .btn-action { width: 100%; background: var(--blue); color: white; border: none; padding: 16px; border-radius: 14px; font-size: 15px; font-weight: 900; cursor: pointer; margin-top: 10px; }
+        .alert-box { background: rgba(52,199,89,0.1); border: 1px solid var(--green); padding: 15px; border-radius: 14px; margin-bottom: 20px; }
+
+        /* Loader */
+        #global-loader { display: flex; position: fixed; top:0; left:0; width:100%; height:100%; background: rgba(0,0,0,0.85); backdrop-filter: blur(8px); z-index: 3000; justify-content: center; align-items: center; flex-direction: column; color: white; font-weight: 800; }
+        .spinner { border: 4px solid rgba(255,255,255,0.2); border-left-color: var(--blue); border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; margin-bottom: 15px; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    </style>
+</head>
+<body>
+
+    <div id="global-loader"><div class="spinner"></div><div id="loader-text">Verificando Credenciales...</div></div>
+
+    <div id="view-proyectos" class="hidden">
+        <div class="nav">
+            <button class="btn-nav" onclick="cerrarSesion()"><i class="ph-bold ph-sign-out"></i> Salir</button>
+            <button class="btn-nav" style="border:none; background:transparent;" onclick="document.body.classList.toggle('dark-mode')"><i class="ph-fill ph-moon"></i></button>
+        </div>
+        <div class="header-title" id="txt-welcome">Hola, Supervisor</div>
+        <div class="header-sub">Tus Obras Asignadas</div>
+        <div class="card-list" id="lista-obras"></div>
+    </div>
+
+    <div id="view-detalle" class="hidden">
+        <div class="nav">
+            <button class="btn-nav" onclick="volverAProyectos()"><i class="ph-bold ph-caret-left"></i> Volver</button>
+            <button class="btn-nav" style="border:none; background:transparent;" onclick="document.body.classList.toggle('dark-mode')"><i class="ph-fill ph-moon"></i></button>
+        </div>
+        <div class="header-title" id="det-pname">Cargando...</div>
+        <div class="header-sub" id="det-cname">Cliente</div>
+
+        <div class="tabs-wrap">
+            <button class="tab-btn active" id="tab-mods" onclick="switchTab('mods')">Módulos</button>
+            <button class="tab-btn" id="tab-pres" onclick="switchTab('pres')">Presupuesto</button>
+            <button class="tab-btn" id="tab-caja" onclick="switchTab('caja')">Caja Chica</button>
+        </div>
+
+        <div id="ctn-mods">
+            <div class="modules-grid">
+                <div class="mod-item" onclick="abrirModulo('diseno')">
+                    <div class="mod-icon" style="color:#bf5af2;"><i class="ph-fill ph-palette"></i></div><div class="mod-lbl">Diseños y<br>Planos</div>
+                </div>
+                <div class="mod-item" onclick="abrirModulo('produccion')">
+                    <div class="mod-icon" style="color:var(--text);"><i class="ph-fill ph-hammer"></i></div><div class="mod-lbl">Orden de<br>Producción</div>
+                </div>
+                <div class="mod-item" onclick="abrirModulo('gantt')">
+                    <div class="mod-icon" style="color:var(--orange);"><i class="ph-fill ph-calendar-check"></i></div><div class="mod-lbl">Gantt y<br>Avances</div>
+                </div>
+            </div>
+        </div>
+
+        <div id="ctn-pres" class="hidden">
+            <div class="alert-box">
+                <div style="font-size:12px; font-weight:800; color:var(--green); margin-bottom:5px;">📊 INCENTIVO DE AHORRO</div>
+                <div style="font-size:11px; color:#2c3e50;">Si logras ejecutar la obra por debajo del Costo Meta (Referencial), ganarás un <b>10%</b> de comisión sobre el ahorro generado.</div>
+            </div>
+            
+            <div class="kpi-grid">
+                <div class="kpi-card"><div class="kpi-lbl">Costo Meta</div><div class="kpi-val" id="kpi-meta">0 Bs</div></div>
+                <div class="kpi-card" style="border-color:var(--orange);"><div class="kpi-lbl">Gasto Real</div><div class="kpi-val" style="color:var(--orange);" id="kpi-real">0 Bs</div></div>
+                <div class="kpi-card" style="border-color:var(--green);"><div class="kpi-lbl">Ahorro Logrado</div><div class="kpi-val" style="color:var(--green);" id="kpi-ahorro">0 Bs</div></div>
+                <div class="kpi-card" style="border-color:#bf5af2; background:rgba(191,90,242,0.05);"><div class="kpi-lbl">Tu Comisión (10%)</div><div class="kpi-val" style="color:#bf5af2;" id="kpi-bono">0 Bs</div></div>
+            </div>
+
+            <h3 style="font-size:16px; margin-bottom:15px; margin-top:25px; border-bottom:1px solid var(--border); padding-bottom:5px;">Detalle de Ítems</h3>
+            <div id="lista-presupuesto"></div>
+        </div>
+
+        <div id="ctn-caja" class="hidden">
+            <div class="generic-card" style="margin-bottom:20px;">
+                <h3 style="margin-top:0; color:var(--blue);">Solicitar o Rendir Fondos</h3>
+                <label style="font-size:11px; font-weight:800; color:var(--gray);">Descripción del Gasto / Solicitud</label>
+                <input type="text" id="cc-desc" class="inp-gasto" placeholder="Ej: Compra de pintura y brochas" style="margin-bottom:15px;">
+                
+                <label style="font-size:11px; font-weight:800; color:var(--gray);">Monto (Bs)</label>
+                <input type="number" id="cc-monto" class="inp-gasto" placeholder="Ej: 350.00" style="margin-bottom:15px;">
+                
+                <button class="btn-action" onclick="registrarCajaChica()"><i class="ph-bold ph-paper-plane-right"></i> Enviar a Tesorería</button>
+            </div>
+            <h3 style="font-size:14px; margin-bottom:10px;">Mi Historial de Caja Chica</h3>
+            <div id="lista-caja"></div>
+        </div>
+    </div>
+
+<script>
+    const firebaseConfig = { databaseURL: "https://rubik-bolivia-default-rtdb.firebaseio.com/" };
+    if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
+    const db = firebase.database();
+    const auth = firebase.auth();
+
+    let supId = ""; 
+    let supName = "";
+    let activeCid = "";
+    let activePid = "";
+    let projectItems = [];
+
+    function fMoney(num) { return parseFloat(num || 0).toLocaleString('es-BO', {minimumFractionDigits: 2, maximumFractionDigits: 2}); }
+    function stripZeros(num) { return Math.round((parseFloat(num) || 0) * 100) / 100; }
+
+    // 1. VALIDACIÓN DE AUTENTICACIÓN
+    auth.onAuthStateChanged(user => {
+        if (user) {
+            verificarPerfilSupervisor(user.email);
+        } else {
+            // Si no está logueado, mandarlo al login nativo
+            window.location.href = "login.html";
+        }
+    });
+
+    // 2. BUSCAR AL SUPERVISOR EN LA BD
+    function verificarPerfilSupervisor(email) {
+        db.ref('personal').once('value', snap => {
+            let found = false;
+            snap.forEach(child => {
+                const data = child.val();
+                // Verificamos si es supervisor por nombre, email o tipo
+                if(data.correo === email || data.tipo === 'supervisor' || data.especialidad === 'supervisor') {
+                    supId = child.key;
+                    supName = data.nombre;
+                    found = true;
+                }
+            });
+
+            if(found) {
+                document.getElementById('txt-welcome').innerText = "Hola, " + supName;
+                cargarObras();
+            } else {
+                alert("Tu usuario no tiene rol de Supervisor asignado en Recursos Humanos.");
+                auth.signOut();
+            }
+        });
+    }
+
+    // 3. CARGAR OBRAS ASIGNADAS
+    function cargarObras() {
+        document.getElementById('loader-text').innerText = "Buscando tus obras...";
+        const lista = document.getElementById('lista-obras');
+        lista.innerHTML = "";
+
+        db.ref('proyectos').once('value', snap => {
+            let count = 0;
+            snap.forEach(cliSnap => {
+                const cid = cliSnap.key;
+                cliSnap.forEach(proySnap => {
+                    const pid = proySnap.key;
+                    const p = proySnap.val();
+                    
+                    // ¿El supervisor está asignado a esta obra? (Revisamos campo supervisor o licitaciones)
+                    let isAssigned = false;
+                    if(p.supervisor === supId || p.supervisor === supName) isAssigned = true;
+                    if(p.licitaciones) {
+                        Object.values(p.licitaciones).forEach(lic => {
+                            if(lic.contratista === supName && lic.estado === 'adjudicado') isAssigned = true;
+                        });
+                    }
+
+                    // Por seguridad de prueba, si no tienes la asignación hecha, descomenta la siguiente línea para ver todos los proyectos:
+                    // isAssigned = true; 
+
+                    if(isAssigned && (p.estado === 'produccion' || p.estado === 'entregado')) {
+                        count++;
+                        lista.innerHTML += `
+                        <div class="generic-card" onclick="abrirProyecto('${cid}', '${pid}', '${p.nombre.replace(/'/g, "\\'")}')">
+                            <div class="badge badge-blue">OBRA ACTIVA</div>
+                            <div style="font-size:18px; font-weight:900; color:var(--text);">${p.nombre}</div>
+                            <div style="font-size:12px; color:var(--gray); margin-top:5px;"><i class="ph-bold ph-calendar"></i> Entrega: ${p.fecha_entrega || 'Sin definir'}</div>
+                        </div>`;
+                    }
+                });
+            });
+
+            if(count === 0) lista.innerHTML = '<div style="text-align:center; padding:30px; color:var(--gray); font-weight:bold;">No tienes obras activas asignadas actualmente.</div>';
+            
+            document.getElementById('global-loader').style.display = 'none';
+            document.getElementById('view-proyectos').classList.remove('hidden');
+        });
+    }
+
+    function abrirProyecto(cid, pid, pName) {
+        activeCid = cid; activePid = pid;
+        localStorage.setItem('rubik_client_id', cid);
+        localStorage.setItem('rubik_current_pid', pid);
+        
+        document.getElementById('det-pname').innerText = pName;
+        document.getElementById('view-proyectos').classList.add('hidden');
+        document.getElementById('view-detalle').classList.remove('hidden');
+        
+        switchTab('mods');
+        procesarPresupuestoOperativo();
+        cargarCajaChica();
+    }
+
+    function volverAProyectos() {
+        document.getElementById('view-detalle').classList.add('hidden');
+        document.getElementById('view-proyectos').classList.remove('hidden');
+    }
+
+    function switchTab(t) {
+        ['mods', 'pres', 'caja'].forEach(id => {
+            document.getElementById(`tab-${id}`).classList.remove('active');
+            document.getElementById(`ctn-${id}`).classList.add('hidden');
+        });
+        document.getElementById(`tab-${t}`).classList.add('active');
+        document.getElementById(`ctn-${t}`).classList.remove('hidden');
+    }
+
+    function abrirModulo(mod) {
+        // Redirige usando el sistema actual pero como supervisor (worker mode para que no editen precios de venta)
+        window.location.href = `${mod}.html?cid=${activeCid}&pid=${activePid}&mode=worker`;
+    }
+
+    // 4. INGENIERÍA DE COSTOS (PRESUPUESTO OPERATIVO)
+    function procesarPresupuestoOperativo() {
+        db.ref(`proyectos/${activeCid}/${activePid}/presupuesto/items`).on('value', snap => {
+            const list = document.getElementById('lista-presupuesto');
+            list.innerHTML = "";
+            projectItems = snap.val() || [];
+            
+            let totalMeta = 0;
+            let totalReal = 0;
+
+            projectItems.forEach((item, idx) => {
+                if(!item || item.type === 'chapter') return;
+
+                // Extraemos el COSTO DIRECTO puro (sin utilidad ni indirectos)
+                let costoDirectoUnitario = 0;
+                if (item.apu) {
+                    ['mat', 'mo', 'eq', 'sub'].forEach(t => {
+                        if (item.apu[t]) {
+                            item.apu[t].forEach(x => {
+                                costoDirectoUnitario += (stripZeros(x.q) * stripZeros(x.p));
+                            });
+                        }
+                    });
+                } else {
+                    costoDirectoUnitario = stripZeros(item.pu); // Si no hay APU, asumimos que el PU es la base
+                }
+
+                let metaLocal = costoDirectoUnitario * stripZeros(item.cant);
+                let realLocal = stripZeros(item.costo_real_supervisor) || 0; // Campo exclusivo del supervisor
+
+                totalMeta += metaLocal;
+                totalReal += realLocal;
+
+                let badgeColor = realLocal > metaLocal ? 'var(--red)' : (realLocal > 0 ? 'var(--green)' : 'var(--gray)');
+
+                list.innerHTML += `
+                <div class="item-row">
+                    <div class="item-desc">${item.desc}</div>
+                    <div class="item-math">
+                        <div><span style="color:var(--gray); font-weight:800;">CANTIDAD:</span><br><b>${item.cant} ${item.und}</b></div>
+                        <div style="text-align:right;"><span style="color:var(--gray); font-weight:800;">COSTO META TOTAL:</span><br><b style="color:var(--blue);">${fMoney(metaLocal)} Bs</b></div>
+                    </div>
+                    <label style="font-size:10px; font-weight:800; color:${badgeColor}; text-transform:uppercase;">MI GASTO REAL EN ESTE ÍTEM (Bs):</label>
+                    <input type="number" step="any" class="inp-gasto" value="${realLocal || ''}" placeholder="Ej: ${metaLocal}" onchange="guardarGastoReal(${idx}, this.value)">
+                </div>`;
+            });
+
+            // Actualizar KPIs
+            document.getElementById('kpi-meta').innerText = fMoney(totalMeta);
+            document.getElementById('kpi-real').innerText = fMoney(totalReal);
+            
+            let ahorro = totalMeta - totalReal;
+            if(totalReal === 0) ahorro = 0; // Si no ha gastado nada, no hay ahorro aún
+
+            document.getElementById('kpi-ahorro').innerText = fMoney(ahorro);
+            document.getElementById('kpi-ahorro').style.color = ahorro >= 0 ? 'var(--green)' : 'var(--red)';
+            
+            let bono = ahorro > 0 ? ahorro * 0.10 : 0; // 10% de comisión
+            document.getElementById('kpi-bono').innerText = fMoney(bono);
+        });
+    }
+
+    function guardarGastoReal(idx, val) {
+        const num = stripZeros(val);
+        db.ref(`proyectos/${activeCid}/${activePid}/presupuesto/items/${idx}/costo_real_supervisor`).set(num);
+        // La UI se actualiza sola gracias al .on('value')
+    }
+
+    // 5. CAJA CHICA Y RENDICIONES
+    function registrarCajaChica() {
+        const desc = document.getElementById('cc-desc').value.trim();
+        const monto = parseFloat(document.getElementById('cc-monto').value);
+        
+        if(!desc || !monto) return alert("Llena la descripción y el monto.");
+
+        document.getElementById('global-loader').style.display = 'flex';
+        document.getElementById('loader-text').innerText = "Enviando a Tesorería...";
+
+        const payload = {
+            proyecto: document.getElementById('det-pname').innerText,
+            pid: activePid,
+            descripcion: desc,
+            monto: monto,
+            fecha: new Date().toISOString().split('T')[0],
+            estado: 'pendiente',
+            auditado: false, // Esto dispara la alerta en el HUB del Admin
+            timestamp: Date.now()
+        };
+
+        db.ref(`caja_chica/${supId}/gastos`).push(payload).then(() => {
+            document.getElementById('cc-desc').value = '';
+            document.getElementById('cc-monto').value = '';
+            document.getElementById('global-loader').style.display = 'none';
+            alert("✅ Enviado correctamente a Tesorería.");
+        });
+    }
+
+    function cargarCajaChica() {
+        db.ref(`caja_chica/${supId}/gastos`).orderByChild('pid').equalTo(activePid).on('value', snap => {
+            const list = document.getElementById('lista-caja');
+            list.innerHTML = "";
+            if(!snap.exists()) {
+                list.innerHTML = "<div style='font-size:12px; color:var(--gray); text-align:center;'>No hay solicitudes registradas para esta obra.</div>";
+                return;
+            }
+
+            let html = "";
+            snap.forEach(child => {
+                const g = child.val();
+                let color = g.estado === 'aprobado' ? 'var(--green)' : (g.estado === 'rechazado' ? 'var(--red)' : 'var(--orange)');
+                
+                html = `
+                <div style="background:var(--card); border:1px solid var(--border); border-left:4px solid ${color}; padding:15px; border-radius:12px; margin-bottom:10px;">
+                    <div style="display:flex; justify-content:space-between; margin-bottom:5px;">
+                        <span style="font-size:14px; font-weight:800;">${g.descripcion}</span>
+                        <span style="font-size:16px; font-weight:900; color:var(--text);">${fMoney(g.monto)} Bs</span>
+                    </div>
+                    <div style="font-size:11px; color:var(--gray); font-weight:700;">ESTADO: <span style="color:${color}; text-transform:uppercase;">${g.estado}</span> | ${g.fecha}</div>
+                </div>` + html; // Insertamos al revés para ver los más nuevos arriba
+            });
+            list.innerHTML = html;
+        });
+    }
+
+    function cerrarSesion() {
+        auth.signOut().then(() => { window.location.href = "login.html"; });
+    }
+</script>
+</body>
+</html>

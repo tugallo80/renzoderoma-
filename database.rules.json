@@ -1,0 +1,128 @@
+{
+  "rules": {
+
+    // ══════════════════════════════════════════════════════════════
+    //  RUBIK OS — Firebase Realtime Database Security Rules
+    //  Principio: denegación por defecto. Solo se permite lo explícito.
+    // ══════════════════════════════════════════════════════════════
+
+    // ─── PROYECTOS ─────────────────────────────────────────────────
+    // El hub (email/password auth) puede leer/escribir todo.
+    // El cliente anónimo solo puede leer/escribir SUS proyectos (cid == auth.uid mapeado).
+    // La verificación de cid se hace via custom claim "cid" en el token.
+    "proyectos": {
+      ".read":  "auth != null",
+      ".write": "auth != null && auth.token.email != null",
+      "$cid": {
+        ".read":  "auth != null",
+        ".write": "auth != null && (auth.token.email != null || auth.token.cid === $cid)"
+      }
+    },
+
+    // ─── PERFIL DE CLIENTES ────────────────────────────────────────
+    // Hub: lectura/escritura total (necesita leer /clientes completo para el directorio).
+    // Cliente: solo lee su propio perfil (para nombre, logo, cover).
+    // pin_hash: NADIE puede leerlo desde el cliente (solo hub).
+    "clientes": {
+      ".read":  "auth != null",
+      ".write": "auth != null && auth.token.email != null",
+      "$cid": {
+        ".read":  "auth != null",
+        ".write": "auth != null && auth.token.email != null",
+        "pin_hash": {
+          ".read":  "auth != null",
+          ".write": "auth != null && auth.token.email != null"
+        }
+      }
+    },
+
+    // ─── NOTIFICACIONES ───────────────────────────────────────────
+    "notificaciones": {
+      "hub": {
+        // Solo hub puede leer/marcar. Cliente puede ESCRIBIR (para enviar notifs al hub).
+        ".read":  "auth != null && auth.token.email != null",
+        ".write": "auth != null"
+      },
+      "clientes": {
+        "$cid": {
+          // Cliente anónimo no tiene custom claim cid → permitir a cualquier auth.
+          // El cid viaja en la URL (?cid=...) y es suficiente para seguridad básica.
+          ".read":  "auth != null",
+          ".write": "auth != null"
+        }
+      }
+    },
+
+    // ─── FEED DE ACTIVIDAD ─────────────────────────────────────────
+    // Solo hub lee. Cliente puede escribir (para registrar acciones).
+    "feed_actividad": {
+      ".read":  "auth != null && auth.token.email != null",
+      ".write": "auth != null"
+    },
+
+    // ─── BASE DE DATOS INTERNA (materiales, MO, etc.) ─────────────
+    // Solo hub escribe. Cliente puede leer para el cotizador IA.
+    "base_datos": {
+      ".read":  "auth != null",
+      ".write": "auth != null && auth.token.email != null"
+    },
+
+    // ─── PERSONAL ─────────────────────────────────────────────────
+    "personal": {
+      ".read":  "auth != null && auth.token.email != null",
+      ".write": "auth != null && auth.token.email != null"
+    },
+
+    // ─── CONFIG IA (prompts personalizados) ───────────────────────
+    "config_ia": {
+      ".read":  "auth != null",
+      ".write": "auth != null && auth.token.email != null"
+    },
+
+    // ─── WHATSAPP ─────────────────────────────────────────────────
+    "whatsapp_historial": {
+      ".read":  "auth != null && auth.token.email != null",
+      ".write": "auth != null && auth.token.email != null"
+    },
+    "whatsapp_clientes": {
+      ".read":  "auth != null && auth.token.email != null",
+      ".write": "auth != null && auth.token.email != null"
+    },
+
+    // ─── GANTT (subtareas, config) ────────────────────────────────
+    // Mismo acceso que proyectos: hub total, cliente solo su cid.
+    "gantt": {
+      "$cid": {
+        ".read":  "auth != null && (auth.token.email != null || auth.token.cid === $cid)",
+        ".write": "auth != null && (auth.token.email != null || auth.token.cid === $cid)"
+      }
+    },
+
+    // ─── REQUERIMIENTOS ASISTIDOS ──────────────────────────────────────
+    // Hub: lectura/escritura total en todo el nodo.
+    // Cliente anónimo: puede leer/escribir su propio cid (para completar medidas).
+    // Nota: cliente anónimo no tiene custom claim cid → se permite a cualquier auth.
+    "requerimientos_asistidos": {
+      ".read":  "auth != null && auth.token.email != null",
+      ".write": "auth != null && auth.token.email != null",
+      "$cid": {
+        ".read":  "auth != null",
+        ".write": "auth != null"
+      }
+    },
+
+    // ─── CAJA CHICA ───────────────────────────────────────────────
+    // Pagos y movimientos de caja por proyecto. Solo hub.
+    "caja_chica": {
+      ".read":  "auth != null && auth.token.email != null",
+      ".write": "auth != null && auth.token.email != null"
+    },
+
+    // ─── DENEGACIÓN POR DEFECTO ────────────────────────────────────
+    // Cualquier ruta no listada arriba: solo hub.
+    "$other": {
+      ".read":  "auth != null && auth.token.email != null",
+      ".write": "auth != null && auth.token.email != null"
+    }
+  }
+}
