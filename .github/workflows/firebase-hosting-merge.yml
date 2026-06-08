@@ -1,0 +1,32 @@
+# Deploy automático a Firebase Hosting + Functions en cada push a main
+name: Deploy to Firebase on merge
+on:
+  push:
+    branches:
+      - main
+jobs:
+  deploy_hosting:
+    name: Deploy Hosting
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: FirebaseExtended/action-hosting-deploy@v0
+        with:
+          repoToken: ${{ secrets.GITHUB_TOKEN }}
+          firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_RUBIK_BOLIVIA }}
+          channelId: live
+          projectId: rubik-bolivia
+
+  deploy_functions:
+    name: Deploy Functions
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Instalar dependencias
+        run: npm install
+        working-directory: functions
+      - name: Deploy Functions
+        run: npx firebase-tools deploy --only functions --token "${{ secrets.FIREBASE_TOKEN }}" --project rubik-bolivia --non-interactive

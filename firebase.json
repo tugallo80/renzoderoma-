@@ -16,34 +16,52 @@
       {
         "source": "/js/**",
         "headers": [
-          { "key": "Cache-Control", "value": "no-cache, must-revalidate" }
+          {
+            "key": "Cache-Control",
+            "value": "no-cache, must-revalidate"
+          }
         ]
       },
       {
         "source": "**/*.html",
         "headers": [
-          { "key": "Cache-Control", "value": "no-cache, must-revalidate" }
+          {
+            "key": "Cache-Control",
+            "value": "no-cache, must-revalidate"
+          }
         ]
       },
       {
         "source": "/sw-cliente.js",
         "headers": [
-          { "key": "Cache-Control", "value": "no-cache, must-revalidate" }
+          {
+            "key": "Cache-Control",
+            "value": "no-cache, must-revalidate"
+          }
         ]
       }
     ],
     "rewrites": [
       {
         "source": "/api/gemini",
-        "function": { "functionId": "geminiProxy", "region": "us-central1" }
+        "function": {
+          "functionId": "geminiProxy",
+          "region": "us-central1"
+        }
       },
       {
         "source": "/api/ingesta",
-        "function": { "functionId": "procesarIngestaIA", "region": "us-central1" }
+        "function": {
+          "functionId": "procesarIngestaIA",
+          "region": "us-central1"
+        }
       },
       {
         "source": "/api/whatsapp",
-        "function": { "functionId": "whatsappWebhook", "region": "us-central1" }
+        "function": {
+          "functionId": "whatsappWebhook",
+          "region": "us-central1"
+        }
       }
     ]
   },
