@@ -284,7 +284,9 @@
     <div id="panel-ingresos" class="panel-section">
         <div class="generic-card">
             <h3 style="margin-top:0; color:var(--green);"><i class="ph-bold ph-money"></i> Registrar Nuevo Ingreso</h3>
-            <label class="inp-lbl">Proyecto Asociado</label><select id="ing-proy-sel" class="inp-std"></select>
+            <label class="inp-lbl">Proyecto Asociado</label>
+            <input type="text" id="ing-proy-buscar" class="inp-std" placeholder="Buscar proyecto..." oninput="filtrarProyectosIngreso(this.value)" autocomplete="off" style="margin-bottom:4px;">
+            <select id="ing-proy-sel" class="inp-std"></select>
             <div class="flex-row">
                 <div style="flex:1;"><label class="inp-lbl">Monto (Bs)</label><input type="number" step="any" id="ing-monto" class="inp-std" placeholder="0.00"></div>
                 <div style="flex:1;"><label class="inp-lbl">Fecha</label><input type="date" id="ing-fecha" class="inp-std"></div>
@@ -481,16 +483,26 @@
         const listBuzon = document.getElementById('list-global-lic'); const listActive = document.getElementById('list-active-contracts');
         listBuzon.innerHTML = ''; listActive.innerHTML = '';
         let hasCotizaciones = false; let hasActivos = false;
-        const selProy = document.getElementById('ing-proy-sel'); selProy.innerHTML = '<option value="">Seleccionar Proyecto...</option>';
-
+        const selProy = document.getElementById('ing-proy-sel');
+        window._todosProyectosIngreso = [];
         Object.keys(proyectosData).forEach(clientId => {
             Object.keys(proyectosData[clientId]).forEach(projectId => {
-                const proyecto = proyectosData[clientId][projectId];
-                const projectName = proyecto.nombre || 'Proyecto';
-                selProy.innerHTML += `<option value="${projectName}">${projectName}</option>`;
+                const nombre = proyectosData[clientId][projectId].nombre || 'Proyecto';
+                window._todosProyectosIngreso.push(nombre);
             });
         });
+        window._todosProyectosIngreso.sort();
+        selProy.innerHTML = '<option value="">Seleccionar Proyecto...</option>' +
+            window._todosProyectosIngreso.map(n => `<option value="${n}">${n}</option>`).join('');
     }
+
+    window.filtrarProyectosIngreso = function(q) {
+        const sel = document.getElementById('ing-proy-sel');
+        const lista = (window._todosProyectosIngreso || []).filter(n => n.toLowerCase().includes(q.toLowerCase()));
+        sel.innerHTML = '<option value="">Seleccionar Proyecto...</option>' +
+            lista.map(n => `<option value="${n}">${n}</option>`).join('');
+        if (lista.length === 1) sel.value = lista[0];
+    };
 
     function renderPlanillas() {
         const mesSeleccionado = document.getElementById('filtro-mes').value;
