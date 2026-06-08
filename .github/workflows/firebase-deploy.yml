@@ -24,7 +24,7 @@ jobs:
         run: npm install -g firebase-tools
 
       - name: Deploy to Firebase
-        run: firebase deploy --token "${{ secrets.FIREBASE_TOKEN }}" --project rubik-bolivia --non-interactive
+        run: firebase deploy --token "${{ secrets.FIREBASE_TOKEN }}" --project rubik-bolivia --non-interactive --force
         env:
           FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
           GEMINI_KEY: ${{ secrets.GEMINI_KEY }}
