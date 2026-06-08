@@ -27,3 +27,7 @@ jobs:
         run: firebase deploy --token "${{ secrets.FIREBASE_TOKEN }}" --project rubik-bolivia --non-interactive
         env:
           FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
+          GEMINI_KEY: ${{ secrets.GEMINI_KEY }}
+          WA_TOKEN: ${{ secrets.WA_TOKEN }}
+          WA_VERIFY_TOKEN: ${{ secrets.WA_VERIFY_TOKEN }}
+          ADMIN_PHONE: ${{ secrets.ADMIN_PHONE }}
