@@ -306,10 +306,13 @@
                     <div style="font-size:12px; font-weight:800; color:var(--green); margin-top:4px;">Subir Boucher / Comprobante de Pago</div>
                 </div>
                 <input type="file" id="cobro-boucher-upload" accept="image/*,application/pdf" style="display:none" onchange="onCobroBoucherCargado(this)">
-                <div id="cobro-boucher-preview" style="display:none; margin-bottom:10px; background:rgba(52,199,89,0.08); border:1px solid var(--green); border-radius:8px; padding:8px; font-size:11px; font-weight:700; color:var(--green); display:none; align-items:center; gap:8px;">
+                <div id="cobro-boucher-preview" style="display:none; margin-bottom:6px; background:rgba(52,199,89,0.08); border:1px solid var(--green); border-radius:8px; padding:8px; font-size:11px; font-weight:700; color:var(--green); align-items:center; gap:8px;">
                     <i class="ph-bold ph-file-check"></i> <span id="cobro-boucher-nombre">Archivo cargado</span>
                     <button onclick="limpiarCobroBoucher()" style="background:none;border:none;color:var(--red);cursor:pointer;margin-left:auto;font-size:14px;"><i class="ph-bold ph-x"></i></button>
                 </div>
+                <button id="btn-scan-cobro" onclick="escanearCobroBoucher()" style="display:none; width:100%; margin-bottom:12px; padding:10px; background:rgba(52,199,89,0.15); border:1px solid var(--green); color:var(--green); border-radius:10px; font-size:12px; font-weight:800; cursor:pointer;">
+                    <i class="ph-bold ph-magic-wand"></i> Leer con IA
+                </button>
 
                 <label class="inp-lbl">Proyecto Asociado</label>
                 <div id="cobro-proy-container" style="position:relative; margin-bottom:14px;">
@@ -660,7 +663,9 @@
         const prev = document.getElementById('cobro-boucher-preview');
         document.getElementById('cobro-boucher-nombre').innerText = file.name;
         prev.style.display = 'flex';
-        // Leer como base64 para posible subida
+        const btnIA = document.getElementById('btn-scan-cobro');
+        if (btnIA) btnIA.style.display = 'block';
+        // Leer como base64 para escáner IA
         const reader = new FileReader();
         reader.onload = e => { window._cobroBoucherB64 = e.target.result; };
         reader.readAsDataURL(file);
@@ -671,6 +676,8 @@
         window._cobroBoucherB64 = null;
         document.getElementById('cobro-boucher-upload').value = '';
         document.getElementById('cobro-boucher-preview').style.display = 'none';
+        const btnIA = document.getElementById('btn-scan-cobro');
+        if (btnIA) btnIA.style.display = 'none';
     };
 
     window.registrarCobro = async function() {
@@ -1857,1274 +1864,361 @@
                         doc.text((c.proveedor || 'S/N').substring(0, 55), M, y); y += 5;
                         doc.setFont(undefined, 'normal'); doc.setTextColor(80, 80, 80);
                         doc.text('NIT: '+(c.nit||'-')+'  Fact: '+(c.nro_factura||'-')+'  Fecha: '+(c.fecha||'-')+'  Monto: '+fMoney(c.monto)+' Bs', M, y); y += 4;
-                        if (c.descripcion) { doc.text('Concepto: ' + c.descripcion.substring(0,80), M, y); y += 4; }
-                        if (c.comprobante) {
-                            if (c.comprobante.toLowerCase().includes('.pdf')) {
+                        if (c.descripcion) { doc.text('Concepto: ' + c.descripcion.substring(0,80), M, y); y += 4; }                            if (c.comprobante.toLowerCase().includes('.pdf')) {
                                 doc.setFontSize(8); doc.setTextColor(120); doc.text('[Comprobante PDF — ver original]', M, y); y += 5;
                             } else {
-                                const b64 = await urlToBase64(c.comprobante);
-                                if (b64) {
-                                    y = checkY(y, 58);
-                                    try { const fmt = b64.startsWith('data:image/png') ? 'PNG' : 'JPEG'; doc.addImage(b64, fmt, M, y, 85, 52); y += 56; } catch(ie) { doc.text('[Imagen no disponible]', M, y); y += 5; }
-                                } else { doc.setFontSize(8); doc.setTextColor(150); doc.text('[No se pudo cargar imagen]', M, y); y += 5; }
+                                y = checkY(y, 52);
+                                try {
+                                    const imgData = await urlToBase64(c.comprobante);
+                                    if (imgData) { doc.addImage(imgData, 'JPEG', M, y, 50, 40); y += 44; }
+                                } catch(e) { doc.setFontSize(8); doc.setTextColor(120); doc.text('[Error al cargar imagen]', M, y); y += 5; }
                             }
                         }
-                        doc.setDrawColor(210, 210, 210); doc.setLineWidth(0.3); doc.line(M, y, PW - M, y); y += 5;
+                        doc.setDrawColor(220); doc.setLineWidth(0.2); doc.line(M, y, PW - M, y); y += 5;
                     }
                 }
+
+                // Facturas de venta del mes
                 if (ventas.length > 0) {
                     y = checkY(y, 12);
-                    doc.setFontSize(10); doc.setFont(undefined, 'bold'); doc.setTextColor(40, 40, 40);
-                    doc.text('VENTAS FACTURADAS (' + ventas.length + ')', M, y); y += 6;
+                    doc.setFontSize(10); doc.setFont(undefined, 'bold'); doc.setTextColor(0, 122, 255);
+                    doc.text('FACTURAS DE VENTA (' + ventas.length + ')', M, y); y += 6;
                     doc.autoTable({
                         startY: y,
-                        head: [['Fecha Emisión', 'Factura', 'Cliente', 'Estado Cobro', 'Monto']],
+                        head: [['Fecha', 'Nro.', 'Cliente / Razón Social', 'Estado', 'Monto']],
                         body: ventas.map(v => [
-                            v.fecha || '-', 'F.' + (v.nro_factura || '-'),
-                            (v.cliente_rs || v.proyecto || '-').substring(0, 30),
-                            v.estado_cobro === 'cobrado' ? 'Cobrado ' + (v.fecha_cobro||'') : 'Pendiente',
+                            v.fecha || '-', v.nro_factura || '-',
+                            (v.cliente_rs || v.proyecto || '-').substring(0, 40),
+                            v.estado_cobro === 'cobrado' ? 'Cobrado' : 'Pendiente',
                             fMoney(v.monto) + ' Bs'
                         ]),
-                        theme: 'grid', styles: { fontSize: 8, cellPadding: 2 },
-                        headStyles: { fillColor: [0, 80, 200] },
-                        columnStyles: { 0:{cellWidth:24}, 1:{cellWidth:18}, 3:{cellWidth:26}, 4:{cellWidth:26, halign:'right'} },
-                        margin: { left: M, right: M }
+                        theme: 'striped', styles: { fontSize: 8, cellPadding: 2 },
+                        headStyles: { fillColor: [0, 122, 255] }, margin: { left: M, right: M }
                     });
-                    y = doc.lastAutoTable.finalY + 6;
+                    y = doc.lastAutoTable.finalY + 8;
                 }
             }
 
+            doc.setTextColor(150); doc.setFontSize(8); doc.setFont(undefined, 'normal');
             const totalPages = doc.internal.getNumberOfPages();
-            for (let p = 1; p <= totalPages; p++) {
-                doc.setPage(p);
-                doc.setTextColor(160); doc.setFontSize(7); doc.setFont(undefined, 'normal');
-                doc.text('Generado por Rubik OS — rubikbolivia.com', M, PH - 7);
-                doc.text('Página ' + p + ' de ' + totalPages, PW - M, PH - 7, { align: 'right' });
+            for (let i = 1; i <= totalPages; i++) {
+                doc.setPage(i);
+                doc.text('Rubik OS - rubikbolivia.com  |  Pág. ' + i + '/' + totalPages, M, PH - 8);
             }
-            doc.save('Auditoria_' + periodoLabel.replace(/[^a-zA-Z0-9]/g,'_') + '.pdf');
-        } catch(e) {
-            console.error(e);
-            alert('Error al generar auditoría PDF: ' + e.message);
-        } finally {
-            if (btn) { btn.disabled = false; btn.innerHTML = '<i class="ph-bold ph-file-pdf"></i> PDF + Fotos'; }
-        }
+            doc.save('Auditoria_IVA_' + periodoLabel.replace(/[^a-zA-Z0-9]/g,'_') + '.pdf');
+        } catch(e) { alert('Error al generar PDF: ' + e.message); console.error(e); }
+        finally { if (btn) { btn.disabled = false; btn.innerHTML = '<i class=\"ph-bold ph-file-pdf\"></i> PDF + Fotos'; } }
     }
 
     // ==========================================
-    // MÓDULO IMPUESTOS
+    // ESCÁNER IA — FACTURAS DE COMPRA (MULTI)
     // ==========================================
 
-    function registrarFacturaCompra() {
-        let proveedor = document.getElementById('fc-proveedor').value.trim();
-        let nit = document.getElementById('fc-nit').value.trim();
-        let nro = document.getElementById('fc-nro').value.trim();
-        let cuf = document.getElementById('fc-cuf').value.trim();
-        let monto = parseFloat(document.getElementById('fc-monto').value);
-        let fecha = document.getElementById('fc-fecha').value;
-        let descripcion = document.getElementById('fc-descripcion').value.trim();
+    window._factFiles = [];
 
-        if(!nro || !monto || !fecha) return alert("Completa al menos: Nro. Factura, Monto y Fecha.");
-
-        let payload = {
-            proveedor: proveedor || 'S/N',
-            nit: nit || '',
-            nro_factura: nro,
-            cuf: cuf || '',
-            monto: monto,
-            fecha: fecha,
-            descripcion: descripcion || '',
-            timestamp: Date.now()
-        };
-
-        if (editFacturaId && comprasFacturadasData[editFacturaId]) {
-            payload.comprobante = window.tempComprobanteUrl || comprasFacturadasData[editFacturaId].comprobante || null;
-            db.ref(`compras_facturadas/${editFacturaId}`).update(payload).then(() => {
-                limpiarFormularioFactura();
-                alert("Factura actualizada correctamente.");
-            });
-        } else {
-            payload.comprobante = window.tempComprobanteUrl || null;
-            db.ref('compras_facturadas').push(payload).then(async (ref) => {
-                limpiarFormularioFactura();
-                // ── Sync con Base de Datos / Proveedores ──
-                await syncFacturaCompraABD(payload, ref.key);
-                alert("Factura cargada al RCV y sincronizada con Base de Datos.");
-            });
-        }
-    }
-
-    // Sincronizar factura de compra → BD/proveedores
-    async function syncFacturaCompraABD(factura, facturaId) {
-        try {
-            // Buscar si existe el proveedor por NIT o nombre
-            const bdSnap = await db.ref('base_datos/proveedores').once('value');
-            const bdData = bdSnap.val() || {};
-            let proveedorKey = null;
-            // Buscar por NIT primero, luego por nombre
-            Object.keys(bdData).forEach(k => {
-                const p = bdData[k];
-                if (!proveedorKey && factura.nit && p.nit === factura.nit) proveedorKey = k;
-                if (!proveedorKey && factura.proveedor && factura.proveedor !== 'S/N' &&
-                    (p.nombre||'').toLowerCase() === factura.proveedor.toLowerCase()) proveedorKey = k;
-            });
-
-            const facturaEntry = {
-                nro_factura: factura.nro_factura,
-                nit: factura.nit || '',
-                monto: factura.monto,
-                fecha: factura.fecha,
-                cuf: factura.cuf || '',
-                descripcion: factura.descripcion || '',
-                comprobante: factura.comprobante || null,
-                origen: 'impuestos',
-                factura_id: facturaId,
-                timestamp: factura.timestamp
-            };
-
-            if (proveedorKey) {
-                // Agregar factura al proveedor existente
-                await db.ref(`base_datos/proveedores/${proveedorKey}/facturas`).push(facturaEntry);
-            } else {
-                // Crear nuevo proveedor con esta factura
-                const nuevoProveedor = {
-                    nombre: factura.proveedor || 'S/N',
-                    nit: factura.nit || '',
-                    tipo: 'proveedor',
-                    creado_desde: 'impuestos',
-                    timestamp: Date.now(),
-                    facturas: { ['-auto']: facturaEntry }
-                };
-                await db.ref('base_datos/proveedores').push(nuevoProveedor);
-            }
-        } catch(e) {
-            console.warn('Sync BD falló (no crítico):', e);
-        }
-    }
-
-    function limpiarFormularioFactura() {
-        ['fc-proveedor','fc-nit','fc-nro','fc-cuf','fc-monto','fc-descripcion'].forEach(id => {
-            const el = document.getElementById(id);
-            if(el) el.value = '';
-        });
-        document.getElementById('fc-fecha').valueAsDate = new Date();
-        editFacturaId = null;
-        window.tempComprobanteUrl = null;
-        const btnSave = document.querySelector('button[onclick="registrarFacturaCompra()"]');
-        if(btnSave) {
-            btnSave.innerHTML = `<i class="ph-bold ph-plus"></i> Guardar en RCV + Sync BD`;
-            btnSave.style.background = "var(--purple)";
-        }
-    }
-
-    window.editarFactura = function(id) {
-        const f = comprasFacturadasData[id];
-        if(!f) return;
-        const setProp = (el, val) => { const e = document.getElementById(el); if(e) e.value = val || ''; };
-        setProp('fc-proveedor', f.proveedor);
-        setProp('fc-nit', f.nit);
-        setProp('fc-nro', f.nro_factura);
-        setProp('fc-cuf', f.cuf);
-        setProp('fc-monto', f.monto);
-        setProp('fc-fecha', f.fecha);
-        setProp('fc-descripcion', f.descripcion);
-        editFacturaId = id;
-        window.tempComprobanteUrl = f.comprobante || null;
-        const btnSave = document.querySelector('button[onclick="registrarFacturaCompra()"]');
-        if(btnSave) {
-            btnSave.innerHTML = `<i class="ph-bold ph-floppy-disk"></i> Guardar Cambios`;
-            btnSave.style.background = "var(--orange)";
-        }
-        // Scroll al formulario de facturas
-        document.getElementById('zona-scan-facturas')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    window.cargarFacturasSeleccionadas = function(input) {
+        const nuevos = Array.from(input.files);
+        if (!nuevos.length) return;
+        window._factFiles = window._factFiles.concat(nuevos);
+        _renderFacturaThumbs();
+        document.getElementById('factura-preview-grid').style.display = 'block';
+        input.value = '';
     };
-
-    window.eliminarFactura = function(id) {
-        if(confirm("¿Estás seguro de eliminar esta factura del RCV? El Balance Impositivo se recalculará automáticamente.")) {
-            db.ref(`compras_facturadas/${id}`).remove();
-        }
-    };
-
-    function _getMesesDelPeriodo(mesBase, vista) {
-        // Retorna array de strings 'YYYY-MM' del período dado
-        const [y, m] = mesBase.split('-').map(Number);
-        const meses = [];
-        if (vista === 'mes') {
-            meses.push(mesBase);
-        } else if (vista === 'trimestre') {
-            const inicio = Math.floor((m - 1) / 3) * 3 + 1;
-            for (let i = 0; i < 3; i++) {
-                const mm = inicio + i;
-                meses.push(y + '-' + String(mm).padStart(2, '0'));
-            }
-        } else if (vista === 'semestre') {
-            const inicio = m <= 6 ? 1 : 7;
-            for (let i = 0; i < 6; i++) {
-                const mm = inicio + i;
-                meses.push(y + '-' + String(mm).padStart(2, '0'));
-            }
-        } else if (vista === 'anual') {
-            for (let mm = 1; mm <= 12; mm++) {
-                meses.push(y + '-' + String(mm).padStart(2, '0'));
-            }
-        }
-        return meses;
-    }
-
-    function _labelPeriodo(meses, vista) {
-        if (vista === 'mes') {
-            const [y, m] = meses[0].split('-');
-            return new Date(y, parseInt(m)-1).toLocaleString('es-BO', {month:'long', year:'numeric'}).toUpperCase();
-        }
-        if (vista === 'trimestre') {
-            const q = Math.ceil(parseInt(meses[0].split('-')[1]) / 3);
-            return `T${q} ${meses[0].split('-')[0]}  (${meses[0]} → ${meses[meses.length-1]})`;
-        }
-        if (vista === 'semestre') {
-            const s = parseInt(meses[0].split('-')[1]) <= 6 ? 1 : 2;
-            return `Semestre ${s} ${meses[0].split('-')[0]}`;
-        }
-        return `Año ${meses[0].split('-')[0]}`;
-    }
-
-    function renderImpuestos() {
-        const mesBase = (document.getElementById('tax-filtro-mes') || {}).value || new Date().toISOString().substring(0,7);
-        const vista = window._taxVista || 'mes';
-        const mesesPeriodo = _getMesesDelPeriodo(mesBase, vista);
-        const mesesSet = new Set(mesesPeriodo);
-
-        // Actualizar etiqueta
-        const labelEl = document.getElementById('tax-periodo-label');
-        const tituloEl = document.getElementById('tax-titulo-periodo');
-        const periodo = _labelPeriodo(mesesPeriodo, vista);
-        if (labelEl) labelEl.innerText = periodo;
-        if (tituloEl) tituloEl.innerText = 'Balance Impositivo · ' + periodo;
-
-        // Calcular totales del período
-        let totalVentasFacturadas = 0, totalComprasFacturadas = 0;
-        Object.values(ingresosData).forEach(i => {
-            if (!i || !i.is_facturado || !i.fecha) return;
-            if (mesesSet.has(i.fecha.substring(0,7))) totalVentasFacturadas += parseFloat(i.monto || 0);
-        });
-        Object.values(comprasFacturadasData).forEach(c => {
-            if (!c || !c.fecha) return;
-            if (mesesSet.has(c.fecha.substring(0,7))) totalComprasFacturadas += parseFloat(c.monto || 0);
-        });
-
-        let debitoIVA = totalVentasFacturadas * 0.13;
-        let it = totalVentasFacturadas * 0.03;
-        let creditoIVA = totalComprasFacturadas * 0.13;
-        let ivaAPagar = debitoIVA - creditoIVA;
-
-        document.getElementById('tax-ventas').innerText = fMoney(totalVentasFacturadas) + " Bs";
-        document.getElementById('tax-debito').innerText = fMoney(debitoIVA) + " Bs";
-        document.getElementById('tax-it').innerText = fMoney(it) + " Bs";
-        document.getElementById('tax-compras').innerText = fMoney(totalComprasFacturadas) + " Bs";
-        document.getElementById('tax-credito').innerText = fMoney(creditoIVA) + " Bs";
-
-        const lblPagar = document.getElementById('tax-iva-pagar');
-        const lblMsg = document.getElementById('tax-msg');
-        const boxFaltan = document.getElementById('box-faltan-facturas');
-        if (ivaAPagar > 0) {
-            lblPagar.innerText = fMoney(ivaAPagar) + " Bs"; lblPagar.style.color = "var(--red)";
-            lblMsg.innerText = `Crédito insuficiente — hay IVA a pagar.`; lblMsg.style.color = "var(--orange)";
-            if (boxFaltan) {
-                boxFaltan.style.display = 'block';
-                document.getElementById('tax-faltan-monto').innerText = fMoney(ivaAPagar / 0.13) + ' Bs en facturas de compra';
-            }
-        } else {
-            lblPagar.innerText = "0.00 Bs"; lblPagar.style.color = "var(--green)";
-            lblMsg.innerText = `Crédito supera al Débito — saldo a favor.`; lblMsg.style.color = "var(--green)";
-            if (boxFaltan) boxFaltan.style.display = 'none';
-        }
-
-        // Balance por mes dentro del período (si no es vista mensual)
-        const boxMeses = document.getElementById('box-balance-meses');
-        if (boxMeses) {
-            if (vista === 'mes') {
-                boxMeses.style.display = 'none';
-            } else {
-                boxMeses.style.display = 'block';
-                let html = `<div style="font-size:12px; font-weight:900; color:var(--gray); text-transform:uppercase; margin-bottom:8px;"><i class="ph-bold ph-list"></i> Detalle por Mes</div>`;
-                mesesPeriodo.forEach(mes => {
-                    let mV = 0, mC = 0;
-                    Object.values(ingresosData).forEach(i => { if(i && i.is_facturado && i.fecha && i.fecha.substring(0,7)===mes) mV += parseFloat(i.monto||0); });
-                    Object.values(comprasFacturadasData).forEach(c => { if(c && c.fecha && c.fecha.substring(0,7)===mes) mC += parseFloat(c.monto||0); });
-                    const mDeb = mV*0.13, mCred = mC*0.13, mIVA = mDeb - mCred;
-                    const [y, m2] = mes.split('-');
-                    const nombreMes = new Date(parseInt(y), parseInt(m2)-1).toLocaleString('es-BO', {month:'short'}).toUpperCase();
-                    html += `<div class="generic-card" style="padding:10px; margin-bottom:8px;">
-                        <div style="display:flex; justify-content:space-between; align-items:center;">
-                            <div style="font-weight:900; font-size:13px; color:var(--blue);">${nombreMes} ${y}</div>
-                            <div style="font-size:12px; font-weight:900; color:${mIVA>0?'var(--red)':'var(--green)'};">${mIVA>0?'IVA: '+fMoney(mIVA)+' Bs':'Saldo a favor'}</div>
-                        </div>
-                        <div style="display:grid; grid-template-columns:1fr 1fr; gap:6px; margin-top:6px; font-size:10px; color:var(--gray);">
-                            <span>Ventas: ${fMoney(mV)} Bs</span>
-                            <span>Compras: ${fMoney(mC)} Bs</span>
-                            <span>Débito IVA: ${fMoney(mDeb)} Bs</span>
-                            <span>Crédito IVA: ${fMoney(mCred)} Bs</span>
-                        </div>
-                    </div>`;
-                });
-                boxMeses.innerHTML = html;
-            }
-        }
-
-        // Libro de compras con filtro de mes del RCV
-        const rcvFiltroMes = (document.getElementById('rcv-filtro-mes') || {}).value || '';
-        const listFC = document.getElementById('list-facturas-compras');
-        if (!listFC) return;
-        listFC.innerHTML = ''; let hasFC = false;
-
-        const comprasOrdenadas = Object.entries(comprasFacturadasData)
-            .filter(([k,c]) => c && (!rcvFiltroMes || (c.fecha && c.fecha.substring(0,7) === rcvFiltroMes)))
-            .sort((a,b) => (b[1].fecha||'').localeCompare(a[1].fecha||''));
-
-        comprasOrdenadas.forEach(([k, c]) => {
-            hasFC = true;
-            const isPdf = c.comprobante && c.comprobante.toLowerCase().includes('.pdf');
-            const btnView = c.comprobante ? `<a href="${c.comprobante}" target="_blank" style="padding:4px 8px; font-size:10px; text-decoration:none; background:rgba(0,122,255,0.1); color:var(--blue); border-radius:6px; font-weight:800;"><i class="ph-bold ${isPdf?'ph-file-pdf':'ph-image'}"></i> ${isPdf?'PDF':'Foto'}</a>` : '';
-            const btnEdit = `<button style="padding:4px 8px; font-size:10px; background:var(--bg); color:var(--text); border:1px solid var(--border); border-radius:6px; cursor:pointer; font-weight:800;" onclick="editarFactura('${k}')"><i class="ph-bold ph-pencil"></i></button>`;
-            const btnDel = `<button style="padding:4px 8px; font-size:10px; background:var(--red); color:white; border:none; border-radius:6px; cursor:pointer;" onclick="eliminarFactura('${k}')"><i class="ph-bold ph-trash"></i></button>`;
-            listFC.innerHTML += `
-            <div class="generic-card" style="padding:12px; margin-bottom:8px; border-left:3px solid var(--purple);">
-                <div style="display:flex; justify-content:space-between; margin-bottom:4px; align-items:center;">
-                    <div style="font-weight:800; font-size:13px;">${c.proveedor || 'S/N'}</div>
-                    <span style="font-size:14px; font-weight:900; color:var(--purple);">${fMoney(c.monto)} Bs</span>
-                </div>
-                <div style="font-size:10px; color:var(--gray); margin-bottom:4px;">Fact: ${c.nro_factura||'-'} · NIT: ${c.nit||'-'} · ${c.fecha||'-'}</div>
-                ${c.descripcion ? `<div style="font-size:10px; color:var(--gray); margin-bottom:6px;">${c.descripcion}</div>` : ''}
-                <div style="display:flex; gap:5px;">${btnEdit}${btnDel}${btnView}</div>
-            </div>`;
-        });
-        if (!hasFC) listFC.innerHTML = '<div style="font-size:11px; text-align:center; color:var(--gray); padding:10px;">Libro vacío para el período seleccionado.</div>';
-    }
-
-    // ==========================================
-    // EXPORTACIONES
-    // ==========================================
-    function exportarRCVExcel() {
-        if(Object.keys(comprasFacturadasData).length === 0 && Object.keys(ingresosData).length === 0) return alert("No hay transacciones registradas para armar el RCV.");
-        let wb = XLSX.utils.book_new();
-
-        let dataCompras = []; let indexCompra = 1;
-        Object.values(comprasFacturadasData).forEach(c => {
-            dataCompras.push({
-                "N°": indexCompra++,
-                "NIT PROVEEDOR": c.nit || "0",
-                "RAZON SOCIAL PROVEEDOR": c.proveedor || "S/N", 
-                "CODIGO DE AUTORIZACION": c.cuf || "0",
-                "NUMERO FACTURA": c.nro_factura || "0",
-                "NUMERO DUI/DIM": "0",
-                "FECHA DE FACTURA/DUI/DIM": c.fecha ? c.fecha.split("-").reverse().join("/") : "",
-                "IMPORTE TOTAL COMPRA": parseFloat(c.monto || 0),
-                "IMPORTE ICE": 0, "IMPORTE IEHD": 0, "IPJ": 0, "TASAS": 0,
-                "OTRO NO SUJETO A CREDITO FISCAL": 0, "IMPORTES EXENTOS": 0,
-                "IMPORTE COMPRAS GRAVADAS A TASA CERO": 0,
-                "SUBTOTAL": parseFloat(c.monto || 0),
-                "DESCUENTOS / BONIFICACIONES / REBAJAS SUJETAS AL IVA": 0,
-                "IMPORTE GIFT CARD": 0,
-                "IMPORTE BASE CREDITO FISCAL": parseFloat(c.monto || 0),
-                "CREDITO FISCAL": parseFloat(c.monto || 0) * 0.13,
-                "TIPO COMPRA": "1",
-                "CODIGO DE CONTROL": "0"
-            });
-        });
-        if(dataCompras.length > 0) {
-            let wsCompras = XLSX.utils.json_to_sheet(dataCompras);
-            XLSX.utils.book_append_sheet(wb, wsCompras, "Compras_Estándar");
-        }
-
-        let dataVentas = []; let indexVenta = 1;
-        Object.values(ingresosData).forEach(v => {
-            if(v.is_facturado) {
-                dataVentas.push({
-                    "N°": indexVenta++,
-                    "FECHA DE FACTURA": v.fecha ? v.fecha.split("-").reverse().join("/") : "",
-                    "NÚMERO DE FACTURA": v.nro_factura || "0",
-                    "CÓDIGO DE AUTORIZACIÓN": "0",
-                    "NIT/CI CLIENTE": v.nit || "0",
-                    "COMPLEMENTO": "",
-                    "RAZÓN SOCIAL CLIENTE": "S/N",
-                    "IMPORTE TOTAL VENTA": parseFloat(v.monto || 0),
-                    "IMPORTE ICE": 0, "IMPORTE IEHD": 0, "IPJ": 0, "TASAS": 0,
-                    "OTROS NO SUJETOS AL IVA": 0, "EXPORTACIONES Y OPERACIONES EXENTAS": 0,
-                    "VENTAS GRAVADAS A TASA CERO": 0,
-                    "SUBTOTAL": parseFloat(v.monto || 0),
-                    "DESCUENTOS, BONIFICACIONES Y REBAJAS OTORGADAS": 0,
-                    "IMPORTE GIFT CARD": 0,
-                    "IMPORTE BASE DÉBITO FISCAL": parseFloat(v.monto || 0),
-                    "DÉBITO FISCAL": parseFloat(v.monto || 0) * 0.13,
-                    "ESTADO": "V",
-                    "CÓDIGO DE CONTROL": "0"
-                });
-            }
-        });
-        if(dataVentas.length > 0) {
-            let wsVentas = XLSX.utils.json_to_sheet(dataVentas);
-            XLSX.utils.book_append_sheet(wb, wsVentas, "Ventas_Estándar");
-        }
-
-        if(dataCompras.length === 0 && dataVentas.length === 0) return alert("No existen compras o ventas facturadas.");
-        XLSX.writeFile(wb, `RCV_Rubik_${document.getElementById('filtro-mes') ? document.getElementById('filtro-mes').value : 'Periodo'}.xlsx`);
-    }
-
-    async function exportarAuditoriaPDF() {
-        const btn = document.querySelector('button[onclick="exportarAuditoriaPDF()"]');
-        if (btn) { btn.disabled = true; btn.innerHTML = '<i class="ph-bold ph-spinner"></i> Generando PDF...'; }
-        try {
-            const { jsPDF } = window.jspdf;
-            const doc = new jsPDF();
-            const PW = doc.internal.pageSize.getWidth();
-            const PH = doc.internal.pageSize.getHeight();
-            const M = 14;
-
-            function checkY(y, needed) {
-                if (y + (needed || 20) > PH - 16) { doc.addPage(); return M; }
-                return y;
-            }
-
-            async function urlToBase64(url) {
-                try {
-                    // Ruta a través del proxy para evitar CORS de Firebase Storage
-                    const proxyUrl = '/api/imagen?url=' + encodeURIComponent(url);
-                    const res = await fetch(proxyUrl);
-                    if (!res.ok) return null;
-                    const blob = await res.blob();
-                    return await new Promise((resolve, reject) => {
-                        const fr = new FileReader();
-                        fr.onload = () => resolve(fr.result);
-                        fr.onerror = reject;
-                        fr.readAsDataURL(blob);
-                    });
-                } catch(e) { return null; }
-            }
-
-            // ── Calcular totales globales desde los datos ──
-            let totalVentas = 0, totalCompras = 0;
-            Object.values(ingresosData).forEach(i => { if (i.is_facturado) totalVentas += parseFloat(i.monto || 0); });
-            Object.values(comprasFacturadasData).forEach(c => { totalCompras += parseFloat(c.monto || 0); });
-            const debitoTotal = totalVentas * 0.13;
-            const itTotal    = totalVentas * 0.03;
-            const creditoTotal = totalCompras * 0.13;
-            const ivaTotal   = debitoTotal - creditoTotal;
-
-            // ── Portada: resumen total ──
-            doc.setFontSize(15); doc.setFont(undefined, 'bold'); doc.setTextColor(0, 122, 255);
-            doc.text('Auditoria Impositiva IVA/IT - Rubik OS', M, 18);
-            doc.setFontSize(9); doc.setFont(undefined, 'normal'); doc.setTextColor(100);
-            doc.text('Generado: ' + new Date().toLocaleDateString('es-BO') + '  |  Todos los periodos registrados', M, 25);
-
-            doc.autoTable({
-                startY: 30,
-                head: [['Metrica Impositiva (TOTAL HISTORICO)', 'Monto']],
-                body: [
-                    ['Total Ventas Facturadas', fMoney(totalVentas) + ' Bs'],
-                    ['Debito Fiscal (IVA 13%)', fMoney(debitoTotal) + ' Bs'],
-                    ['Impuesto Transacciones (IT 3%)', fMoney(itTotal) + ' Bs'],
-                    ['Total Compras Facturadas', fMoney(totalCompras) + ' Bs'],
-                    ['Credito Fiscal (IVA 13% a favor)', fMoney(creditoTotal) + ' Bs'],
-                    [{ content: 'IVA A PAGAR AL SIN', styles: { fontStyle: 'bold' } },
-                     { content: (ivaTotal > 0 ? fMoney(ivaTotal) : '0.00') + ' Bs',
-                       styles: { fontStyle: 'bold', textColor: ivaTotal > 0 ? [220, 40, 40] : [34, 160, 80] } }]
-                ],
-                theme: 'striped',
-                styles: { fontSize: 10, cellPadding: 3.5 },
-                headStyles: { fillColor: [0, 122, 255] },
-                alternateRowStyles: { fillColor: [244, 244, 248] }
-            });
-
-            // ── Agrupar por mes ──
-            const mesesMap = {};
-            Object.values(ingresosData).forEach(i => {
-                if (!i.is_facturado || !i.fecha) return;
-                const m = i.fecha.substring(0, 7);
-                if (!mesesMap[m]) mesesMap[m] = { ventas: [], compras: [] };
-                mesesMap[m].ventas.push(i);
-            });
-            Object.keys(comprasFacturadasData).forEach(k => {
-                const c = comprasFacturadasData[k];
-                if (!c.fecha) return;
-                const m = c.fecha.substring(0, 7);
-                if (!mesesMap[m]) mesesMap[m] = { ventas: [], compras: [] };
-                mesesMap[m].compras.push({ ...c, _id: k });
-            });
-
-            const mesesOrdenados = Object.keys(mesesMap).sort();
-
-            for (const mes of mesesOrdenados) {
-                const { ventas, compras } = mesesMap[mes];
-                doc.addPage();
-                let y = M;
-
-                // Cabecera del mes
-                const [anio, numMes] = mes.split('-');
-                const nombreMes = new Date(anio, parseInt(numMes) - 1).toLocaleString('es-BO', { month: 'long', year: 'numeric' }).toUpperCase();
-                doc.setFontSize(13); doc.setFont(undefined, 'bold'); doc.setTextColor(0, 122, 255);
-                doc.text('PERIODO: ' + nombreMes, M, y); y += 2;
-                doc.setDrawColor(0, 122, 255); doc.setLineWidth(0.5);
-                doc.line(M, y + 2, PW - M, y + 2); y += 7;
-
-                // Resumen del mes
-                const mV = ventas.reduce((s, i) => s + parseFloat(i.monto || 0), 0);
-                const mC = compras.reduce((s, c) => s + parseFloat(c.monto || 0), 0);
-                const mDeb = mV * 0.13, mIT = mV * 0.03, mCred = mC * 0.13, mIVA = mDeb - mCred;
-
-                doc.autoTable({
-                    startY: y,
-                    head: [['Metrica del Mes', 'Monto']],
-                    body: [
-                        ['Ventas Facturadas', fMoney(mV) + ' Bs'],
-                        ['Debito IVA 13%', fMoney(mDeb) + ' Bs'],
-                        ['IT 3%', fMoney(mIT) + ' Bs'],
-                        ['Compras Facturadas', fMoney(mC) + ' Bs'],
-                        ['Credito IVA 13%', fMoney(mCred) + ' Bs'],
-                        [{ content: 'Balance IVA del Mes', styles: { fontStyle: 'bold' } },
-                         { content: (mIVA > 0 ? fMoney(mIVA) : '0.00') + ' Bs',
-                           styles: { fontStyle: 'bold', textColor: mIVA > 0 ? [220, 40, 40] : [34, 160, 80] } }]
-                    ],
-                    theme: 'striped',
-                    styles: { fontSize: 9, cellPadding: 2.5 },
-                    headStyles: { fillColor: [52, 170, 100] },
-                    margin: { left: M, right: M }
-                });
-                y = doc.lastAutoTable.finalY + 8;
-
-                // ── Comprobantes de compra con imágenes ──
-                if (compras.length > 0) {
-                    y = checkY(y, 12);
-                    doc.setFontSize(10); doc.setFont(undefined, 'bold'); doc.setTextColor(40, 40, 40);
-                    doc.text('COMPROBANTES DE COMPRA (' + compras.length + ')', M, y); y += 6;
-
-                    for (const c of compras) {
-                        y = checkY(y, 22);
-                        doc.setFontSize(9); doc.setFont(undefined, 'bold'); doc.setTextColor(20, 20, 20);
-                        doc.text((c.proveedor || 'S/N').substring(0, 55), M, y); y += 5;
-                        doc.setFont(undefined, 'normal'); doc.setTextColor(80, 80, 80);
-                        doc.text('NIT: ' + (c.nit || '-') + '   Factura N: ' + (c.nro_factura || '-') + '   Fecha: ' + (c.fecha || '-') + '   Monto: ' + fMoney(c.monto) + ' Bs', M, y); y += 5;
-
-                        if (c.comprobante) {
-                            const esPdf = c.comprobante.toLowerCase().includes('.pdf');
-                            if (esPdf) {
-                                doc.setFontSize(8); doc.setTextColor(120);
-                                doc.text('[Comprobante PDF - ver original]', M, y); y += 5;
-                            } else {
-                                const b64 = await urlToBase64(c.comprobante);
-                                if (b64) {
-                                    y = checkY(y, 58);
-                                    try {
-                                        const fmt = b64.startsWith('data:image/png') ? 'PNG' : 'JPEG';
-                                        const imgW = 85, imgH = 52;
-                                        doc.addImage(b64, fmt, M, y, imgW, imgH);
-                                        y += imgH + 4;
-                                    } catch(ie) {
-                                        doc.setFontSize(8); doc.setTextColor(150);
-                                        doc.text('[Imagen no disponible]', M, y); y += 5;
-                                    }
-                                } else {
-                                    doc.setFontSize(8); doc.setTextColor(150);
-                                    doc.text('[No se pudo cargar imagen]', M, y); y += 5;
-                                }
-                            }
-                        }
-
-                        doc.setDrawColor(210, 210, 210); doc.setLineWidth(0.3);
-                        doc.line(M, y, PW - M, y); y += 5;
-                    }
-                }
-
-                // ── Ventas del mes ──
-                if (ventas.length > 0) {
-                    y = checkY(y, 12);
-                    doc.setFontSize(10); doc.setFont(undefined, 'bold'); doc.setTextColor(40, 40, 40);
-                    doc.text('VENTAS FACTURADAS (' + ventas.length + ')', M, y); y += 6;
-
-                    const bodyV = ventas.map(v => [
-                        v.fecha || '-',
-                        'Fact. ' + (v.nro_factura || '-'),
-                        (v.descripcion || v.concepto || 'Ingreso').substring(0, 40),
-                        fMoney(v.monto) + ' Bs'
-                    ]);
-                    doc.autoTable({
-                        startY: y,
-                        head: [['Fecha', 'Factura', 'Descripcion', 'Monto']],
-                        body: bodyV,
-                        theme: 'grid',
-                        styles: { fontSize: 8, cellPadding: 2 },
-                        headStyles: { fillColor: [0, 80, 200] },
-                        columnStyles: { 0: { cellWidth: 24 }, 1: { cellWidth: 22 }, 3: { cellWidth: 28, halign: 'right' } },
-                        margin: { left: M, right: M }
-                    });
-                    y = doc.lastAutoTable.finalY + 6;
-                }
-            }
-
-            // Pie de todas las páginas
-            const totalPages = doc.internal.getNumberOfPages();
-            for (let p = 1; p <= totalPages; p++) {
-                doc.setPage(p);
-                doc.setTextColor(160); doc.setFontSize(7); doc.setFont(undefined, 'normal');
-                doc.text('Generado por Cerebro Financiero y Contable - Rubik OS', M, PH - 7);
-                doc.text('Pagina ' + p + ' de ' + totalPages, PW - M, PH - 7, { align: 'right' });
-            }
-
-            const periodo = mesesOrdenados.length > 0
-                ? mesesOrdenados[0] + '_a_' + mesesOrdenados[mesesOrdenados.length - 1]
-                : (document.getElementById('filtro-mes')?.value || 'periodo');
-            doc.save('Auditoria_Impositiva_' + periodo + '.pdf');
-
-        } catch(e) {
-            console.error(e);
-            alert('Error al generar la auditoria PDF: ' + e.message);
-        } finally {
-            if (btn) { btn.disabled = false; btn.innerHTML = '<i class="ph-bold ph-file-pdf"></i> Exportar Auditoria (Imagenes)'; }
-        }
-    }
-
-
-    // ================================================================
-    // ANTICIPO DESDE TESORERÍA — lógica principal (no-module)
-    // ================================================================
-
-    // Cache de trabajadores + sus licitaciones: { workerName -> { wid, licitaciones:[{cid,pid,licId,desc,monto}] } }
-    window._anticipo = { trabajadores: {}, b64: null, mime: null };
-
-    window.abrirModalAnticipo = function() {
-        // Construir lista de trabajadores desde proyectosData
-        const map = {};
-        Object.keys(proyectosData).forEach(cid => {
-            Object.keys(proyectosData[cid] || {}).forEach(pid => {
-                const proy = proyectosData[cid][pid];
-                if (!proy || !proy.licitaciones) return;
-                const pNombre = proy.nombre || proy.p_name || pid;
-                Object.keys(proy.licitaciones).forEach(licId => {
-                    const lic = proy.licitaciones[licId];
-                    if (!lic || !lic.worker_name) return;
-                    if (!map[lic.worker_name]) map[lic.worker_name] = { wid: lic.worker_id || '', licitaciones: [] };
-                    map[lic.worker_name].licitaciones.push({ cid, pid, licId, pNombre, desc: lic.descripcion || lic.rubro || 'Contrato', monto: parseFloat(lic.precio_propuesto || lic.precio_final || 0), estado: lic.estado || '' });
-                });
-            });
-        });
-        window._anticipo.trabajadores = map;
-
-        // Poblar select de trabajadores
-        const selW = document.getElementById('ant-trabajador');
-        selW.innerHTML = '<option value="">Seleccionar trabajador...</option>';
-        Object.keys(map).sort().forEach(n => { selW.innerHTML += `<option value="${n}">${n}</option>`; });
-
-        // Resetear resto
-        document.getElementById('ant-proyecto').innerHTML = '<option value="">Primero selecciona un trabajador</option>';
-        document.getElementById('ant-licitacion').innerHTML = '<option value="">Primero selecciona un proyecto</option>';
-        document.getElementById('ant-monto').value = '';
-        document.getElementById('ant-nota').value = '';
-        document.getElementById('ant-fecha').valueAsDate = new Date();
-        document.getElementById('ant-foto').value = '';
-        document.getElementById('ant-foto-preview').style.display = 'none';
-        document.getElementById('btn-ia-ant').style.display = 'none';
-        window._anticipo.b64 = null;
-        window._anticipo.mime = null;
-        const btnG = document.getElementById('btn-guardar-anticipo');
-        if (btnG) { btnG.disabled = false; btnG.style.opacity = '1'; btnG.innerHTML = '<i class="ph-bold ph-check-circle"></i> Guardar Anticipo'; }
-
-        // Resetear modo edición si quedó activo
-        const modal = document.getElementById('mod-anticipo');
-        delete modal.dataset.editMode;
-        ['ant-trabajador','ant-proyecto','ant-licitacion'].forEach(id => {
-            const el = document.getElementById(id);
-            if (el) el.disabled = false;
-        });
-
-        modal.style.display = 'flex';
-    };
-
-    window.onAntTrabajadorChange = function() {
-        const nombre = document.getElementById('ant-trabajador').value;
-        const selP = document.getElementById('ant-proyecto');
-        const selL = document.getElementById('ant-licitacion');
-        selP.innerHTML = '<option value="">Seleccionar proyecto...</option>';
-        selL.innerHTML = '<option value="">Primero selecciona un proyecto</option>';
-        if (!nombre) return;
-        const lics = (window._anticipo.trabajadores[nombre] || {}).licitaciones || [];
-        const proyectos = [...new Set(lics.map(l => l.pid + '|' + l.pNombre))];
-        proyectos.forEach(p => {
-            const [pid, pN] = p.split('|');
-            selP.innerHTML += `<option value="${pid}">${pN}</option>`;
-        });
-        if (proyectos.length === 1) { selP.value = proyectos[0].split('|')[0]; window.onAntProyectoChange(); }
-    };
-
-    window.onAntProyectoChange = function() {
-        const nombre = document.getElementById('ant-trabajador').value;
-        const pid = document.getElementById('ant-proyecto').value;
-        const selL = document.getElementById('ant-licitacion');
-        selL.innerHTML = '<option value="">Seleccionar contrato...</option>';
-        if (!nombre || !pid) return;
-        const lics = (window._anticipo.trabajadores[nombre] || {}).licitaciones || [];
-        const deLaProy = lics.filter(l => l.pid === pid);
-        deLaProy.forEach(l => {
-            selL.innerHTML += `<option value="${l.cid}|${l.pid}|${l.licId}">${l.desc} — ${fMoney(l.monto)} Bs (${l.estado})</option>`;
-        });
-        if (deLaProy.length === 1) selL.value = `${deLaProy[0].cid}|${deLaProy[0].pid}|${deLaProy[0].licId}`;
-    };
-
-    window.onAntFotoCargada = function(input) {
-        if (!input.files || !input.files[0]) return;
-        const file = input.files[0];
-        document.getElementById('ant-foto-nombre').innerText = file.name;
-        document.getElementById('ant-foto-preview').style.display = 'flex';
-        document.getElementById('btn-ia-ant').style.display = 'flex';
-        const reader = new FileReader();
-        reader.onload = e => {
-            window._anticipo.b64 = e.target.result.split(',')[1];
-            window._anticipo.mime = file.type || (file.name.endsWith('.pdf') ? 'application/pdf' : 'image/jpeg');
-        };
-        reader.readAsDataURL(file);
-    };
-
-    window.guardarAnticipo = async function() {
-        const nombre = document.getElementById('ant-trabajador').value;
-        const licVal = document.getElementById('ant-licitacion').value;
-        const monto = parseFloat(document.getElementById('ant-monto').value) || 0;
-        const fecha = document.getElementById('ant-fecha').value;
-        const nota = document.getElementById('ant-nota').value.trim() || 'Anticipo / Pago a cuenta';
-
-        if (!nombre) return alert('Selecciona un trabajador.');
-        if (!licVal) return alert('Selecciona el contrato al que aplica el anticipo.');
-        if (monto <= 0) return alert('Ingresa un monto válido.');
-
-        const [cid, pid, licId] = licVal.split('|');
-        const wid = (window._anticipo.trabajadores[nombre] || {}).wid || '';
-
-        // Evitar doble envío
-        const btnGuardar = document.getElementById('btn-guardar-anticipo');
-        if (btnGuardar) { btnGuardar.disabled = true; btnGuardar.style.opacity = '0.6'; }
-
-        const loader = document.getElementById('global-loader');
-        const loaderTxt = document.getElementById('loader-txt');
-        loaderTxt.innerText = 'Registrando anticipo...';
-        loader.style.display = 'flex';
-        try {
-            let urlFoto = '';
-            const fotoInput = document.getElementById('ant-foto');
-            if (fotoInput.files[0]) {
-                const file = fotoInput.files[0];
-                const snap = await storage.ref(`comprobantes/${cid}/${pid}/${Date.now()}_${file.name}`).put(file);
-                urlFoto = await snap.ref.getDownloadURL();
-            }
-
-            const pagoRef = db.ref(`proyectos/${cid}/${pid}/licitaciones/${licId}/pagos`).push();
-            const payload = { id: pagoRef.key, monto, fecha, nota, comprobante: urlFoto, timestamp: Date.now(), registrado_por: 'tesoreria', wid: wid || '' };
-            await pagoRef.set(payload);
-            // Espejo en personal para que la app del trabajador lo vea
-            if (wid) await db.ref(`personal/${wid}/solicitudes/${licId}/pagos/${pagoRef.key}`).set(payload);
-
-            loader.style.display = 'none';
-            document.getElementById('mod-anticipo').style.display = 'none';
-            alert('✅ Anticipo registrado correctamente.');
-            // Recargar datos y re-renderizar planillas
-            const proySnap = await db.ref('proyectos').once('value');
-            proyectosData = proySnap.val() || {};
-            renderPlanillas();
-        } catch(e) {
-            loader.style.display = 'none';
-            console.error('Error guardando anticipo:', e);
-            alert('Error al guardar: ' + (e.message || String(e)));
-        } finally {
-            // Rehabilitar botón siempre
-            if (btnGuardar) { btnGuardar.disabled = false; btnGuardar.style.opacity = '1'; }
-        }
-    };
-
-    // ─── Editar anticipo ────────────────────────────────────────────────
-    window.editarAnticipo = function(cid, pid, licId, pagoKey, monto, fecha, nota, wid) {
-        // Reutilizamos el modal de anticipo en modo edición
-        const modal = document.getElementById('mod-anticipo');
-        modal.style.display = 'flex';
-        // Ocultar selector de trabajador/proyecto/lic — ya están fijos
-        document.getElementById('ant-trabajador').closest('div') && (() => {
-            // Marcamos modo edición en dataset del modal
-            modal.dataset.editMode = '1';
-            modal.dataset.editCid = cid;
-            modal.dataset.editPid = pid;
-            modal.dataset.editLicId = licId;
-            modal.dataset.editPagoKey = pagoKey;
-            modal.dataset.editWid = wid || '';
-        })();
-        // Poblar campos con datos actuales
-        document.getElementById('ant-monto').value = monto;
-        document.getElementById('ant-fecha').value = fecha;
-        document.getElementById('ant-nota').value = nota;
-        // Limpiar foto (no se re-sube si no se cambia)
-        document.getElementById('ant-foto').value = '';
-        document.getElementById('ant-foto-preview').style.display = 'none';
-        document.getElementById('btn-ia-ant').style.display = 'none';
-        // Deshabilitar selects de trabajador/proyecto/licitacion — ya están asignados
-        ['ant-trabajador','ant-proyecto','ant-licitacion'].forEach(id => {
-            const el = document.getElementById(id);
-            if (el) el.disabled = true;
-        });
-        // Cambiar texto del botón guardar
-        const btnGuardar = document.getElementById('btn-guardar-anticipo');
-        if (btnGuardar) btnGuardar.innerHTML = '<i class="ph-bold ph-check-circle"></i> Guardar Cambios';
-        // Rehabilitar botón
-        if (btnGuardar) { btnGuardar.disabled = false; btnGuardar.style.opacity = '1'; }
-    };
-
-    // Sobreescribir guardarAnticipo para manejar modo edición
-    const _guardarOriginal = window.guardarAnticipo;
-    window.guardarAnticipo = async function() {
-        const modal = document.getElementById('mod-anticipo');
-        if (modal.dataset.editMode === '1') {
-            // Modo edición
-            const cid = modal.dataset.editCid;
-            const pid = modal.dataset.editPid;
-            const licId = modal.dataset.editLicId;
-            const pagoKey = modal.dataset.editPagoKey;
-            const wid = modal.dataset.editWid;
-            const monto = parseFloat(document.getElementById('ant-monto').value) || 0;
-            const fecha = document.getElementById('ant-fecha').value;
-            const nota = document.getElementById('ant-nota').value.trim() || 'Anticipo / Pago a cuenta';
-            if (monto <= 0) return alert('Ingresa un monto válido.');
-
-            const btnGuardar = document.getElementById('btn-guardar-anticipo');
-            if (btnGuardar) { btnGuardar.disabled = true; btnGuardar.style.opacity = '0.6'; }
-            const loader = document.getElementById('global-loader');
-            const loaderTxt = document.getElementById('loader-txt');
-            loaderTxt.innerText = 'Actualizando anticipo...';
-            loader.style.display = 'flex';
-            try {
-                // Si hay nueva foto, subirla
-                let urlFoto = null;
-                const fotoInput = document.getElementById('ant-foto');
-                if (fotoInput.files[0]) {
-                    const file = fotoInput.files[0];
-                    const snap = await storage.ref(`comprobantes/${cid}/${pid}/${Date.now()}_${file.name}`).put(file);
-                    urlFoto = await snap.ref.getDownloadURL();
-                }
-                const updates = { monto, fecha, nota };
-                if (urlFoto) updates.comprobante = urlFoto;
-                await db.ref(`proyectos/${cid}/${pid}/licitaciones/${licId}/pagos/${pagoKey}`).update(updates);
-                if (wid) await db.ref(`personal/${wid}/solicitudes/${licId}/pagos/${pagoKey}`).update(updates);
-                loader.style.display = 'none';
-                modal.style.display = 'none';
-                alert('✅ Anticipo actualizado.');
-                const proySnap = await db.ref('proyectos').once('value');
-                proyectosData = proySnap.val() || {};
-                renderPlanillas();
-            } catch(e) {
-                loader.style.display = 'none';
-                alert('Error: ' + (e.message || String(e)));
-            } finally {
-                if (btnGuardar) { btnGuardar.disabled = false; btnGuardar.style.opacity = '1'; }
-                // Limpiar modo edición
-                delete modal.dataset.editMode;
-                ['ant-trabajador','ant-proyecto','ant-licitacion'].forEach(id => {
-                    const el = document.getElementById(id);
-                    if (el) el.disabled = false;
-                });
-                if (btnGuardar) btnGuardar.innerHTML = '<i class="ph-bold ph-check-circle"></i> Guardar Anticipo';
-            }
-            return;
-        }
-        // Modo creación normal
-        return _guardarOriginal();
-    };
-
-    // ─── Eliminar anticipo ───────────────────────────────────────────────
-    window.eliminarAnticipo = async function(cid, pid, licId, pagoKey, wid) {
-        if (!confirm('¿Eliminar este anticipo? Esta acción no se puede deshacer.')) return;
-        const loader = document.getElementById('global-loader');
-        const loaderTxt = document.getElementById('loader-txt');
-        loaderTxt.innerText = 'Eliminando anticipo...';
-        loader.style.display = 'flex';
-        try {
-            await db.ref(`proyectos/${cid}/${pid}/licitaciones/${licId}/pagos/${pagoKey}`).remove();
-            if (wid) await db.ref(`personal/${wid}/solicitudes/${licId}/pagos/${pagoKey}`).remove();
-            loader.style.display = 'none';
-            const proySnap = await db.ref('proyectos').once('value');
-            proyectosData = proySnap.val() || {};
-            renderPlanillas();
-        } catch(e) {
-            loader.style.display = 'none';
-            alert('Error eliminando: ' + (e.message || String(e)));
-        }
-    };
-
-</script>
-
-<script type="module">
-    // ================================================================
-    // Lectura de comprobante con IA — usa geminiProxy autenticado
-    // ================================================================
-    import { callGemini } from '/js/gemini-client.js?v=2';
-
-    // ── Escaneador Multi-Factura con IA ──────────────────────────────
-    let _facturasEnCola = []; // [{file, b64, mime, nombre}]
-
-    // ── Scanner Facturas de Venta (emitidas) ─────────────────────────────
-    let _ventasEnCola = [];
-
-    window.handleVentaDrop = function(event) {
-        const files = Array.from(event.dataTransfer.files).filter(f => f.type.startsWith('image/') || f.type === 'application/pdf');
-        if (!files.length) return;
-        agregarArchivosVenta(files);
-    };
-
-    window.cargarVentasSeleccionadas = function(input) {
-        const files = Array.from(input.files);
-        if (files.length) { agregarArchivosVenta(files); input.value = ''; }
-    };
-
-    function agregarArchivosVenta(files) {
-        files.forEach(file => {
-            if (_ventasEnCola.find(f => f.nombre === file.name)) return;
-            _ventasEnCola.push({ file, b64: null, mime: file.type || 'image/jpeg', nombre: file.name });
-        });
-        renderVentaThumbs();
-        document.getElementById('venta-preview-grid').style.display = 'block';
-        document.getElementById('venta-scan-resultados').style.display = 'none';
-        const n = _ventasEnCola.length;
-        document.getElementById('btn-scan-venta-txt').textContent = n === 1 ? 'Escanear con IA' : `Escanear ${n} facturas`;
-    }
-
-    function renderVentaThumbs() {
-        const grid = document.getElementById('venta-thumbs');
-        grid.innerHTML = '';
-        _ventasEnCola.forEach((item, idx) => {
-            const thumb = document.createElement('div');
-            thumb.style.cssText = 'position:relative;width:72px;height:72px;border-radius:8px;overflow:hidden;border:2px solid var(--card);flex-shrink:0;';
-            thumb.id = `vthumb-${idx}`;
-            if (item.mime.startsWith('image/')) {
-                const reader = new FileReader();
-                reader.onload = e => { thumb.innerHTML = `<img src="${e.target.result}" style="width:100%;height:100%;object-fit:cover;"><div onclick="quitarVenta(${idx})" style="position:absolute;top:2px;right:2px;background:rgba(0,0,0,0.7);border-radius:50%;width:18px;height:18px;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:10px;color:#fff;"><i class="ph-bold ph-x"></i></div>`; };
-                reader.readAsDataURL(item.file);
-            } else {
-                thumb.innerHTML = `<div style="width:100%;height:100%;background:var(--card);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;"><i class="ph-bold ph-file-pdf" style="font-size:22px;color:var(--red);"></i><div style="font-size:8px;color:var(--gray);text-align:center;padding:0 4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:68px;">${item.nombre}</div></div><div onclick="quitarVenta(${idx})" style="position:absolute;top:2px;right:2px;background:rgba(0,0,0,0.7);border-radius:50%;width:18px;height:18px;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:10px;color:#fff;"><i class="ph-bold ph-x"></i></div>`;
-            }
-            grid.appendChild(thumb);
-        });
-        const addMore = document.createElement('div');
-        addMore.onclick = () => document.getElementById('venta-factura-upload').click();
-        addMore.style.cssText = 'width:72px;height:72px;border-radius:8px;border:2px dashed var(--gray);display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;gap:3px;flex-shrink:0;';
-        addMore.innerHTML = '<i class="ph-bold ph-plus" style="font-size:20px;color:var(--gray);"></i><div style="font-size:9px;color:var(--gray);font-weight:700;">MAS</div>';
-        grid.appendChild(addMore);
-    }
-
-    window.quitarVenta = function(idx) {
-        _ventasEnCola.splice(idx, 1);
-        if (!_ventasEnCola.length) {
-            document.getElementById('venta-preview-grid').style.display = 'none';
-            document.getElementById('venta-scan-resultados').style.display = 'none';
-        } else { renderVentaThumbs(); }
-    };
-
-    window.limpiarVentaScan = function() {
-        _ventasEnCola = [];
-        document.getElementById('venta-preview-grid').style.display = 'none';
-        document.getElementById('venta-scan-resultados').style.display = 'none';
-    };
-
-    window.escanearFacturasVenta = async function() {
-        if (!_ventasEnCola.length) return;
-        const btn = document.getElementById('btn-scan-ventas');
-        btn.disabled = true;
-        const resultados = [];
-        for (let i = 0; i < _ventasEnCola.length; i++) {
-            const item = _ventasEnCola[i];
-            document.getElementById('btn-scan-venta-txt').textContent = `Leyendo ${i+1} de ${_ventasEnCola.length}...`;
-            const thumb = document.getElementById(`vthumb-${i}`);
-            if (thumb) thumb.style.border = '2px solid var(--blue)';
-            try {
-                if (!item.b64) {
-                    item.b64 = await new Promise((res, rej) => {
-                        const reader = new FileReader();
-                        reader.onload = e => res(e.target.result.split(',')[1]);
-                        reader.onerror = rej;
-                        reader.readAsDataURL(item.file);
-                    });
-                }
-                const resp = await callGemini({
-                    model: 'gemini-2.5-flash',
-                    contents: [{ role: 'user', parts: [
-                        { inlineData: { mimeType: item.mime, data: item.b64 } },
-                        { text: 'Analiza esta factura de venta boliviana que YO emiti. Responde SOLO el JSON:\n{"nit_cliente":"<NIT del comprador o null>","nro_factura":"<numero>","monto":<total Bs>,"fecha":"<YYYY-MM-DD>"}' }
-                    ]}]
-                });
-                const raw = (resp.candidates?.[0]?.content?.parts?.[0]?.text || '').trim();
-                const parsed = JSON.parse(raw.replace(/```json/gi,'').replace(/```/g,'').trim());
-                resultados.push({ ok: true, nombre: item.nombre, data: parsed, idx: i });
-                if (thumb) thumb.style.border = '2px solid var(--green)';
-            } catch(e) {
-                resultados.push({ ok: false, nombre: item.nombre, error: e.message, idx: i });
-                if (thumb) thumb.style.border = '2px solid var(--red)';
-            }
-        }
-        mostrarResultadosVenta(resultados);
-        btn.disabled = false;
-        document.getElementById('btn-scan-venta-txt').textContent = 'Escanear con IA';
-    };
-
-    function mostrarResultadosVenta(resultados) {
-        const box = document.getElementById('venta-scan-resultados');
-        box.style.display = 'block';
-        const exitosas = resultados.filter(r => r.ok);
-        const fallidas = resultados.filter(r => !r.ok);
-        let html = `<div style="font-size:12px;font-weight:800;color:var(--text);margin-bottom:8px;"><i class="ph-bold ph-check-circle" style="color:var(--green);"></i> ${exitosas.length} leida(s)${fallidas.length ? ` &nbsp;&middot;&nbsp; <i class="ph-bold ph-warning" style="color:var(--red);"></i> ${fallidas.length} con error` : ''}</div>`;
-        exitosas.forEach((r, i) => {
-            const d = r.data;
-            html += `<div style="background:rgba(52,199,89,0.08);border:1px solid var(--green);border-radius:10px;padding:12px;margin-bottom:8px;">
-                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
-                    <div style="font-size:11px;font-weight:800;color:var(--green);">Factura de Venta</div>
-                    <button onclick="cargarVentaEnFormulario(${i})" class="btn-action" style="padding:6px 12px;font-size:11px;background:var(--green);">
-                        <i class="ph-bold ph-arrow-down"></i> Cargar
-                    </button>
-                </div>
-                <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;font-size:11px;">
-                    <div><span style="color:var(--gray);">NIT Cliente:</span> <b>${d.nit_cliente||'&mdash;'}</b></div>
-                    <div><span style="color:var(--gray);">Nro. Fact.:</span> <b>${d.nro_factura||'&mdash;'}</b></div>
-                    <div><span style="color:var(--gray);">Monto:</span> <b style="color:var(--green);">${d.monto ? parseFloat(d.monto).toFixed(2)+' Bs' : '&mdash;'}</b></div>
-                    <div><span style="color:var(--gray);">Fecha:</span> <b>${d.fecha||'&mdash;'}</b></div>
-                </div>
-            </div>`;
-        });
-        fallidas.forEach(r => {
-            html += `<div style="background:rgba(255,59,48,0.08);border:1px solid var(--red);border-radius:10px;padding:10px;margin-bottom:8px;font-size:11px;"><i class="ph-bold ph-warning" style="color:var(--red);"></i> <b>${r.nombre}</b> &mdash; No se pudo leer.</div>`;
-        });
-        box._resultados = exitosas;
-        box.innerHTML = html;
-        if (exitosas.length === 1) cargarVentaEnFormularioDatos(exitosas[0].data);
-    }
-
-    window.cargarVentaEnFormulario = function(idx) {
-        const box = document.getElementById('venta-scan-resultados');
-        const r = box._resultados && box._resultados[idx];
-        if (r) cargarVentaEnFormularioDatos(r.data);
-    };
-
-    function cargarVentaEnFormularioDatos(d) {
-        if (d.monto)        document.getElementById('ing-monto').value = parseFloat(d.monto) || '';
-        if (d.fecha)        document.getElementById('ing-fecha').value = d.fecha;
-        if (d.nit_cliente || d.nro_factura) {
-            document.getElementById('ing-facturado').checked = true;
-            document.getElementById('box-factura-venta').style.display = 'block';
-            if (d.nit_cliente)  document.getElementById('ing-nit').value = d.nit_cliente;
-            if (d.nro_factura)  document.getElementById('ing-nro').value = d.nro_factura;
-        }
-        document.getElementById('ing-monto').scrollIntoView({ behavior: 'smooth', block: 'center' });
-    }
 
     window.handleFacturaDrop = function(event) {
         const files = Array.from(event.dataTransfer.files).filter(f => f.type.startsWith('image/') || f.type === 'application/pdf');
         if (!files.length) return;
-        agregarArchivosFactura(files);
+        window._factFiles = window._factFiles.concat(files);
+        _renderFacturaThumbs();
+        document.getElementById('factura-preview-grid').style.display = 'block';
     };
 
-    window.cargarFacturasSeleccionadas = function(input) {
-        const files = Array.from(input.files);
-        if (!files.length) return;
-        agregarArchivosFactura(files);
+    function _renderFacturaThumbs() {
+        const container = document.getElementById('factura-thumbs');
+        if (!container) return;
+        container.innerHTML = '';
+        window._factFiles.forEach((f, i) => {
+            const div = document.createElement('div');
+            div.style.cssText = 'position:relative; width:70px; height:70px; border-radius:8px; overflow:hidden; border:2px solid var(--purple); background:var(--card);';
+            if (f.type.startsWith('image/')) {
+                const img = document.createElement('img');
+                img.style.cssText = 'width:100%; height:100%; object-fit:cover;';
+                img.src = URL.createObjectURL(f);
+                div.appendChild(img);
+            } else {
+                div.innerHTML = '<div style=\"display:flex;align-items:center;justify-content:center;height:100%;font-size:24px;color:var(--purple)\"><i class=\"ph-bold ph-file-pdf\"></i></div>';
+            }
+            const del = document.createElement('button');
+            del.innerHTML = '<i class=\"ph-bold ph-x\"></i>';
+            del.style.cssText = 'position:absolute;top:2px;right:2px;background:rgba(0,0,0,0.6);color:white;border:none;border-radius:50%;width:18px;height:18px;cursor:pointer;font-size:10px;display:flex;align-items:center;justify-content:center;padding:0;';
+            del.onclick = () => { window._factFiles.splice(i, 1); _renderFacturaThumbs(); if (!window._factFiles.length) limpiarFacturaScan(); };
+            div.appendChild(del);
+            container.appendChild(div);
+        });
+    }
+
+    window.limpiarFacturaScan = function() {
+        window._factFiles = [];
+        document.getElementById('factura-preview-grid').style.display = 'none';
+        document.getElementById('factura-scan-resultados').style.display = 'none';
+        document.getElementById('factura-scan-resultados').innerHTML = '';
+        document.getElementById('ai-factura-upload').value = '';
+    };
+
+    window.escanearTodasLasFacturas = async function() {
+        if (!window._factFiles || !window._factFiles.length) return alert('Primero cargá al menos una factura.');
+        const btn = document.getElementById('btn-scan-facturas');
+        const txtEl = document.getElementById('btn-scan-txt');
+        if (btn) btn.disabled = true;
+        if (txtEl) txtEl.textContent = 'Analizando...';
+
+        const resultados = [];
+        for (let i = 0; i < window._factFiles.length; i++) {
+            const file = window._factFiles[i];
+            if (txtEl) txtEl.textContent = `Analizando ${i+1}/${window._factFiles.length}...`;
+            try {
+                const b64 = await _fileToBase64(file);
+                const mime = file.type.startsWith('image/') ? file.type : 'image/jpeg';
+                const resp = await fetch('/api/gemini', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        model: 'gemini-2.5-flash',
+                        systemInstruction: 'Eres un extractor de datos de facturas bolivianas. Devuelve SOLO JSON válido, sin markdown.',
+                        contents: [{
+                            role: 'user',
+                            parts: [
+                                { inlineData: { mimeType: mime, data: b64.split(',')[1] } },
+                                { text: 'Extrae de esta factura boliviana: nit_proveedor, razon_social_proveedor, nro_factura, cuf (código de autorización/CUF), fecha (YYYY-MM-DD), monto_total (número), descripcion (concepto/item principal). Devuelve SOLO JSON.' }
+                            ]
+                        }]
+                    })
+                });
+                const data = await resp.json();
+                let texto = '';
+                if (data.candidates?.[0]?.content?.parts?.[0]?.text) texto = data.candidates[0].content.parts[0].text;
+                else if (data.text) texto = data.text;
+                const jsonMatch = texto.match(/\{[\s\S]*\}/);
+                if (jsonMatch) {
+                    const parsed = JSON.parse(jsonMatch[0]);
+                    resultados.push({ ok: true, data: parsed, file });
+                } else {
+                    resultados.push({ ok: false, error: 'No se pudo extraer JSON', file });
+                }
+            } catch(e) {
+                resultados.push({ ok: false, error: e.message, file });
+            }
+        }
+
+        const resDiv = document.getElementById('factura-scan-resultados');
+        resDiv.style.display = 'block';
+        if (resultados.length === 1 && resultados[0].ok) {
+            const d = resultados[0].data;
+            _fillFacturaCompraForm(d);
+            resDiv.innerHTML = `<div style="background:rgba(52,199,89,0.12);border:1px solid var(--green);border-radius:10px;padding:12px;font-size:12px;color:var(--green);font-weight:800;"><i class="ph-bold ph-check-circle"></i> Factura leída — campos completados. Revisá y guardá.</div>`;
+        } else {
+            resDiv.innerHTML = resultados.map((r, i) => r.ok
+                ? `<div style="background:rgba(52,199,89,0.08);border:1px solid var(--green);border-radius:10px;padding:12px;margin-bottom:8px;font-size:11px;">
+                    <div style="font-weight:900;color:var(--green);margin-bottom:6px;"><i class="ph-bold ph-check-circle"></i> ${r.file.name}</div>
+                    <div style="color:var(--text);">${r.data.razon_social_proveedor || ''} · NIT: ${r.data.nit_proveedor || '-'} · Fact: ${r.data.nro_factura || '-'} · ${r.data.fecha || ''} · <strong>${r.data.monto_total || '-'} Bs</strong></div>
+                    <button onclick="window._guardarFacturaEscaneada(${i})" style="margin-top:8px;background:var(--green);color:white;border:none;border-radius:8px;padding:6px 14px;font-size:11px;font-weight:800;cursor:pointer;"><i class="ph-bold ph-floppy-disk"></i> Guardar esta</button>
+                  </div>`
+                : `<div style="background:rgba(255,59,48,0.08);border:1px solid var(--red);border-radius:10px;padding:12px;margin-bottom:8px;font-size:11px;">
+                    <div style="font-weight:900;color:var(--red);"><i class="ph-bold ph-warning"></i> ${r.file.name} — Error: ${r.error}</div>
+                  </div>`
+            ).join('');
+            window._factScanResults = resultados;
+        }
+
+        if (btn) btn.disabled = false;
+        if (txtEl) txtEl.textContent = 'Escanear con IA';
+    };
+
+    window._guardarFacturaEscaneada = async function(idx) {
+        const r = window._factScanResults[idx];
+        if (!r || !r.ok) return;
+        _fillFacturaCompraForm(r.data);
+        await registrarFacturaCompra();
+    };
+
+    function _fillFacturaCompraForm(d) {
+        if (d.nit_proveedor)          document.getElementById('fc-nit').value          = d.nit_proveedor;
+        if (d.razon_social_proveedor) document.getElementById('fc-proveedor').value     = d.razon_social_proveedor;
+        if (d.nro_factura)            document.getElementById('fc-nro').value           = d.nro_factura;
+        if (d.cuf)                    document.getElementById('fc-cuf').value           = d.cuf;
+        if (d.fecha)                  document.getElementById('fc-fecha').value         = d.fecha;
+        if (d.monto_total)            document.getElementById('fc-monto').value         = d.monto_total;
+        if (d.descripcion)            document.getElementById('fc-descripcion').value   = d.descripcion;
+    }
+
+    // ==========================================
+    // ESCÁNER IA — FACTURAS DE VENTA (MULTI)
+    // ==========================================
+
+    window._ventaFiles = [];
+
+    window.cargarVentasSeleccionadas = function(input) {
+        const nuevos = Array.from(input.files);
+        if (!nuevos.length) return;
+        window._ventaFiles = window._ventaFiles.concat(nuevos);
+        _renderVentaThumbs();
+        document.getElementById('venta-preview-grid').style.display = 'block';
         input.value = '';
     };
 
-    function agregarArchivosFactura(files) {
-        files.forEach(file => {
-            // Evitar duplicados por nombre
-            if (_facturasEnCola.find(f => f.nombre === file.name)) return;
-            _facturasEnCola.push({ file, b64: null, mime: file.type || 'image/jpeg', nombre: file.name });
-        });
-        renderFacturaThumbs();
-        document.getElementById('factura-preview-grid').style.display = 'block';
-        document.getElementById('factura-scan-resultados').style.display = 'none';
-        actualizarBtnScan();
-    }
+    window.handleVentaDrop = function(event) {
+        const files = Array.from(event.dataTransfer.files).filter(f => f.type.startsWith('image/') || f.type === 'application/pdf');
+        if (!files.length) return;
+        window._ventaFiles = window._ventaFiles.concat(files);
+        _renderVentaThumbs();
+        document.getElementById('venta-preview-grid').style.display = 'block';
+    };
 
-    function renderFacturaThumbs() {
-        const grid = document.getElementById('factura-thumbs');
-        grid.innerHTML = '';
-        _facturasEnCola.forEach((item, idx) => {
-            const isImg = item.mime.startsWith('image/');
-            const thumb = document.createElement('div');
-            thumb.style.cssText = 'position:relative; width:72px; height:72px; border-radius:8px; overflow:hidden; border:2px solid var(--card); flex-shrink:0;';
-            thumb.id = `fthumb-${idx}`;
-            if (isImg) {
-                const reader = new FileReader();
-                reader.onload = e => {
-                    thumb.innerHTML = `<img src="${e.target.result}" style="width:100%;height:100%;object-fit:cover;">
-                        <div onclick="quitarFactura(${idx})" style="position:absolute;top:2px;right:2px;background:rgba(0,0,0,0.7);border-radius:50%;width:18px;height:18px;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:10px;color:#fff;"><i class="ph-bold ph-x"></i></div>`;
-                };
-                reader.readAsDataURL(item.file);
+    function _renderVentaThumbs() {
+        const container = document.getElementById('venta-thumbs');
+        if (!container) return;
+        container.innerHTML = '';
+        window._ventaFiles.forEach((f, i) => {
+            const div = document.createElement('div');
+            div.style.cssText = 'position:relative; width:70px; height:70px; border-radius:8px; overflow:hidden; border:2px solid var(--blue); background:var(--card);';
+            if (f.type.startsWith('image/')) {
+                const img = document.createElement('img');
+                img.style.cssText = 'width:100%; height:100%; object-fit:cover;';
+                img.src = URL.createObjectURL(f);
+                div.appendChild(img);
             } else {
-                thumb.innerHTML = `<div style="width:100%;height:100%;background:var(--card);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;">
-                    <i class="ph-bold ph-file-pdf" style="font-size:22px;color:var(--red);"></i>
-                    <div style="font-size:8px;color:var(--gray);text-align:center;padding:0 4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:68px;">${item.nombre}</div>
-                    </div>
-                    <div onclick="quitarFactura(${idx})" style="position:absolute;top:2px;right:2px;background:rgba(0,0,0,0.7);border-radius:50%;width:18px;height:18px;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:10px;color:#fff;"><i class="ph-bold ph-x"></i></div>`;
+                div.innerHTML = '<div style=\"display:flex;align-items:center;justify-content:center;height:100%;font-size:24px;color:var(--blue)\"><i class=\"ph-bold ph-file-pdf\"></i></div>';
             }
-            grid.appendChild(thumb);
+            const del = document.createElement('button');
+            del.innerHTML = '<i class=\"ph-bold ph-x\"></i>';
+            del.style.cssText = 'position:absolute;top:2px;right:2px;background:rgba(0,0,0,0.6);color:white;border:none;border-radius:50%;width:18px;height:18px;cursor:pointer;font-size:10px;display:flex;align-items:center;justify-content:center;padding:0;';
+            del.onclick = () => { window._ventaFiles.splice(i, 1); _renderVentaThumbs(); if (!window._ventaFiles.length) limpiarVentaScan(); };
+            div.appendChild(del);
+            container.appendChild(div);
         });
-        // Botón agregar más
-        const addMore = document.createElement('div');
-        addMore.onclick = () => document.getElementById('ai-factura-upload').click();
-        addMore.style.cssText = 'width:72px;height:72px;border-radius:8px;border:2px dashed var(--gray);display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;gap:3px;flex-shrink:0;';
-        addMore.innerHTML = '<i class="ph-bold ph-plus" style="font-size:20px;color:var(--gray);"></i><div style="font-size:9px;color:var(--gray);font-weight:700;">AGREGAR</div>';
-        grid.appendChild(addMore);
     }
 
-    window.quitarFactura = function(idx) {
-        _facturasEnCola.splice(idx, 1);
-        if (_facturasEnCola.length === 0) {
-            document.getElementById('factura-preview-grid').style.display = 'none';
-            document.getElementById('factura-scan-resultados').style.display = 'none';
-        } else {
-            renderFacturaThumbs();
-        }
-        actualizarBtnScan();
+    window.limpiarVentaScan = function() {
+        window._ventaFiles = [];
+        document.getElementById('venta-preview-grid').style.display = 'none';
+        document.getElementById('venta-scan-resultados').style.display = 'none';
+        document.getElementById('venta-scan-resultados').innerHTML = '';
+        document.getElementById('venta-factura-upload').value = '';
     };
 
-    window.limpiarFacturaScan = function() {
-        _facturasEnCola = [];
-        document.getElementById('factura-preview-grid').style.display = 'none';
-        document.getElementById('factura-scan-resultados').style.display = 'none';
-    };
+    window.escanearFacturasVenta = async function() {
+        if (!window._ventaFiles || !window._ventaFiles.length) return alert('Primero cargá al menos una factura.');
+        const btn = document.getElementById('btn-scan-ventas');
+        const txtEl = document.getElementById('btn-scan-venta-txt');
+        if (btn) btn.disabled = true;
+        if (txtEl) txtEl.textContent = 'Analizando...';
 
-    function actualizarBtnScan() {
-        const n = _facturasEnCola.length;
-        document.getElementById('btn-scan-txt').textContent = n === 1 ? 'Escanear con IA' : `Escanear ${n} facturas con IA`;
-    }
-
-    window.escanearTodasLasFacturas = async function() {
-        if (!_facturasEnCola.length) return;
-        const btn = document.getElementById('btn-scan-facturas');
-        btn.disabled = true;
-        const resultados = [];
-
-        for (let i = 0; i < _facturasEnCola.length; i++) {
-            const item = _facturasEnCola[i];
-            document.getElementById('btn-scan-txt').textContent = `Leyendo ${i+1} de ${_facturasEnCola.length}...`;
-            const thumb = document.getElementById(`fthumb-${i}`);
-            if (thumb) thumb.style.border = '2px solid var(--blue)';
-            try {
-                if (!item.b64) {
-                    item.b64 = await new Promise((res, rej) => {
-                        const reader = new FileReader();
-                        reader.onload = e => res(e.target.result.split(',')[1]);
-                        reader.onerror = rej;
-                        reader.readAsDataURL(item.file);
-                    });
-                }
-                const resp = await callGemini({
-                    model: 'gemini-2.5-flash',
-                    contents: [{ role: 'user', parts: [
-                        { inlineData: { mimeType: item.mime, data: item.b64 } },
-                        { text: 'Analiza esta factura boliviana. Responde SOLO el JSON:\n{"nit":"<NIT o null>","nro_factura":"<nro o null>","cuf":"<CUF o S/N>","monto":<total Bs>,"fecha":"<YYYY-MM-DD>","proveedor":"<nombre empresa>"}' }
-                    ]}]
-                });
-                const raw = (resp.candidates?.[0]?.content?.parts?.[0]?.text || '').trim();
-                const parsed = JSON.parse(raw.replace(/```json/gi,'').replace(/```/g,'').trim());
-                resultados.push({ ok: true, nombre: item.nombre, data: parsed, idx: i });
-                if (thumb) thumb.style.border = '2px solid var(--green)';
-            } catch(e) {
-                resultados.push({ ok: false, nombre: item.nombre, error: e.message, idx: i });
-                if (thumb) thumb.style.border = '2px solid var(--red)';
-            }
-        }
-
-        mostrarResultadosEscaneo(resultados);
-        btn.disabled = false;
-        actualizarBtnScan();
-    };
-
-    function mostrarResultadosEscaneo(resultados) {
-        const box = document.getElementById('factura-scan-resultados');
-        box.style.display = 'block';
-        const exitosas = resultados.filter(r => r.ok);
-        const fallidas = resultados.filter(r => !r.ok);
-
-        let html = `<div style="font-size:12px;font-weight:800;color:var(--text);margin-bottom:8px;">
-            <i class="ph-bold ph-check-circle" style="color:var(--green);"></i> ${exitosas.length} leida(s)
-            ${fallidas.length ? `&nbsp;&middot;&nbsp;<i class="ph-bold ph-warning" style="color:var(--red);"></i> ${fallidas.length} con error` : ''}
-        </div>`;
-
-        exitosas.forEach((r, i) => {
-            const d = r.data;
-            html += `<div style="background:rgba(52,199,89,0.08);border:1px solid var(--green);border-radius:10px;padding:12px;margin-bottom:8px;">
-                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
-                    <div style="font-size:11px;font-weight:800;color:var(--green);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:55%;">${r.nombre}</div>
-                    <button onclick="cargarFacturaEnFormulario(${i})" class="btn-action" style="padding:6px 12px;font-size:11px;background:var(--blue);">
-                        <i class="ph-bold ph-arrow-down"></i> Cargar
-                    </button>
-                </div>
-                <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;font-size:11px;">
-                    <div><span style="color:var(--gray);">Proveedor:</span> <b>${d.proveedor||'&mdash;'}</b></div>
-                    <div><span style="color:var(--gray);">NIT:</span> <b>${d.nit||'&mdash;'}</b></div>
-                    <div><span style="color:var(--gray);">Nro.:</span> <b>${d.nro_factura||'&mdash;'}</b></div>
-                    <div><span style="color:var(--gray);">Monto:</span> <b style="color:var(--green);">${d.monto ? parseFloat(d.monto).toFixed(2)+' Bs' : '&mdash;'}</b></div>
-                    <div style="grid-column:1/-1;"><span style="color:var(--gray);">Fecha:</span> <b>${d.fecha||'&mdash;'}</b></div>
-                </div>
-            </div>`;
-        });
-
-        fallidas.forEach(r => {
-            html += `<div style="background:rgba(255,59,48,0.08);border:1px solid var(--red);border-radius:10px;padding:10px;margin-bottom:8px;font-size:11px;">
-                <i class="ph-bold ph-warning" style="color:var(--red);"></i> <b>${r.nombre}</b> &mdash; No se pudo leer. Carga manualmente.
-            </div>`;
-        });
-
-        box._resultados = exitosas;
-        box.innerHTML = html;
-        if (exitosas.length === 1) cargarFacturaEnFormularioData(exitosas[0].data);
-    }
-
-    window.cargarFacturaEnFormulario = function(idx) {
-        const box = document.getElementById('factura-scan-resultados');
-        const r = box._resultados && box._resultados[idx];
-        if (r) cargarFacturaEnFormularioData(r.data);
-    };
-
-    function cargarFacturaEnFormularioData(d) {
-        if (d.nit)         document.getElementById('fc-nit').value   = d.nit;
-        if (d.nro_factura) document.getElementById('fc-nro').value   = d.nro_factura;
-        if (d.cuf)         document.getElementById('fc-cuf').value   = d.cuf;
-        if (d.monto)       document.getElementById('fc-monto').value = parseFloat(d.monto) || '';
-        if (d.fecha)       document.getElementById('fc-fecha').value = d.fecha;
-        document.getElementById('fc-nit').scrollIntoView({ behavior: 'smooth', block: 'center' });
-    }
-
-    window.escanearFacturaTesoreria = async function(input) {
-        cargarFacturasSeleccionadas(input);
-    };
-
-    // Lectura de comprobante de anticipo con IA
-    window.leerComprobanteAnticipo = async function() {
-        if (!window._anticipo.b64) return alert('Primero carga el comprobante.');
-        const btn = document.getElementById('btn-ia-ant');
-        const origHtml = btn.innerHTML;
-        btn.disabled = true;
-        btn.innerHTML = '<i class="ph-bold ph-spinner-gap" style="font-size:18px; animation:spin 1s linear infinite;"></i><span>Leyendo...</span>';
         try {
-            const resp = await callGemini({
-                model: 'gemini-2.5-flash',
-                contents: [{ role: 'user', parts: [
-                    { inlineData: { mimeType: window._anticipo.mime, data: window._anticipo.b64 } },
-                    { text: 'Analiza este comprobante de pago boliviano. JSON: {"monto":<numero>,"fecha":"<YYYY-MM-DD>","nota":"<descripcion breve>"}. Solo JSON.' }
-                ]}]
+            const file = window._ventaFiles[0];
+            const b64 = await _fileToBase64(file);
+            const mime = file.type.startsWith('image/') ? file.type : 'image/jpeg';
+            const resp = await fetch('/api/gemini', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    model: 'gemini-2.5-flash',
+                    systemInstruction: 'Eres un extractor de datos de facturas bolivianas emitidas. Devuelve SOLO JSON válido, sin markdown.',
+                    contents: [{
+                        role: 'user',
+                        parts: [
+                            { inlineData: { mimeType: mime, data: b64.split(',')[1] } },
+                            { text: 'Extrae de esta factura boliviana EMITIDA: nit_cliente, razon_social_cliente, nro_factura, cuf (código de autorización/CUF), fecha (YYYY-MM-DD), monto_total (número). Devuelve SOLO JSON.' }
+                        ]
+                    }]
+                })
             });
-            const raw = (resp.candidates?.[0]?.content?.parts?.[0]?.text||'').trim();
-            const d = JSON.parse(raw.replace(/```json/gi,'').replace(/```/g,'').trim());
-            if (d.monto) document.getElementById('ant-monto').value = parseFloat(d.monto) || '';
-            if (d.fecha) document.getElementById('ant-fecha').value = d.fecha;
-            if (d.nota)  document.getElementById('ant-nota').value  = d.nota;
-            btn.innerHTML = '<i class="ph-bold ph-check"></i><span>Leido!</span>';
-            btn.style.background = 'var(--green)';
-            setTimeout(() => { btn.innerHTML = origHtml; btn.style.background = ''; btn.disabled = false; }, 2500);
+            const data = await resp.json();
+            let texto = '';
+            if (data.candidates?.[0]?.content?.parts?.[0]?.text) texto = data.candidates[0].content.parts[0].text;
+            else if (data.text) texto = data.text;
+            const jsonMatch = texto.match(/\{[\s\S]*\}/);
+            if (jsonMatch) {
+                const d = JSON.parse(jsonMatch[0]);
+                if (d.nit_cliente)          document.getElementById('ing-nit').value        = d.nit_cliente;
+                if (d.razon_social_cliente) document.getElementById('ing-cliente-rs').value = d.razon_social_cliente;
+                if (d.nro_factura)          document.getElementById('ing-nro').value         = d.nro_factura;
+                if (d.cuf)                  document.getElementById('ing-cuf').value         = d.cuf;
+                if (d.fecha)                document.getElementById('ing-fecha').value       = d.fecha;
+                if (d.monto_total)          document.getElementById('ing-monto').value       = d.monto_total;
+                const resDiv = document.getElementById('venta-scan-resultados');
+                resDiv.style.display = 'block';
+                resDiv.innerHTML = `<div style="background:rgba(0,122,255,0.1);border:1px solid var(--blue);border-radius:10px;padding:12px;font-size:12px;color:var(--blue);font-weight:800;"><i class="ph-bold ph-check-circle"></i> Factura leída — campos completados. Revisá y guardá.</div>`;
+            } else {
+                alert('No se pudieron extraer datos. Intentá con una imagen más nítida.');
+            }
         } catch(e) {
-            console.error('Error IA comprobante:', e);
-            alert('No se pudo leer el comprobante.');
-            btn.innerHTML = origHtml;
-            btn.disabled = false;
+            alert('Error al escanear: ' + e.message);
+        } finally {
+            if (btn) btn.disabled = false;
+            if (txtEl) txtEl.textContent = 'Escanear con IA';
         }
     };
 
-</script>
-    <script src="/js/viewmode.js?v=1"></script>
+    // ==========================================
+    // ESCÁNER IA — BOUCHER DE COBRO
+    // ==========================================
+
+    window.escanearCobroBoucher = async function() {
+        if (!window._cobroBoucherB64) return alert('Primero cargá un comprobante/boucher.');
+        const btn = document.getElementById('btn-scan-cobro');
+        if (btn) { btn.disabled = true; btn.innerHTML = '<i class=\"ph-bold ph-spinner\"></i> Analizando...'; }
+        try {
+            const b64 = window._cobroBoucherB64;
+            const mime = window._cobroBoucherFile?.type?.startsWith('image/') ? window._cobroBoucherFile.type : 'image/jpeg';
+            const resp = await fetch('/api/gemini', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    model: 'gemini-2.5-flash',
+                    systemInstruction: 'Eres un extractor de datos de comprobantes de pago y bouchers bancarios. Devuelve SOLO JSON válido, sin markdown.',
+                    contents: [{
+                        role: 'user',
+                        parts: [
+                            { inlineData: { mimeType: mime, data: b64.split(',')[1] } },
+                            { text: 'Extrae de este comprobante/boucher de pago: monto (número, sin símbolo), fecha (YYYY-MM-DD), concepto (descripción del pago o referencia), banco_origen (si se ve). Devuelve SOLO JSON.' }
+                        ]
+                    }]
+                })
+            });
+            const data = await resp.json();
+            let texto = '';
+            if (data.candidates?.[0]?.content?.parts?.[0]?.text) texto = data.candidates[0].content.parts[0].text;
+            else if (data.text) texto = data.text;
+            const jsonMatch = texto.match(/\{[\s\S]*\}/);
+            if (jsonMatch) {
+                const d = JSON.parse(jsonMatch[0]);
+                if (d.monto)    document.getElementById('cobro-monto').value    = d.monto;
+                if (d.fecha)    document.getElementById('cobro-fecha').value    = d.fecha;
+                if (d.concepto) document.getElementById('cobro-concepto').value = d.concepto + (d.banco_origen ? ' · ' + d.banco_origen : '');
+                document.getElementById('cobro-boucher-nombre').innerText = '\u2713 Leído con IA · ' + (window._cobroBoucherFile?.name || '');
+            } else {
+                alert('No se pudieron extraer datos. Intentá con imagen más nítida.');
+            }
+        } catch(e) {
+            alert('Error al escanear boucher: ' + e.message);
+        } finally {
+            if (btn) { btn.disabled = false; btn.innerHTML = '<i class="ph-bold ph-magic-wand"></i> Leer con IA'; }
+        }
+    };
+
+    // ==========================================
+    // UTILIDAD: FILE → BASE64
+    // ==========================================
+
+    function _fileToBase64(file) {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = e => resolve(e.target.result);
+            reader.onerror = reject;
+            reader.readAsDataURL(file);
+        });
+    }
+
+    </script>
 </body>
 </html>
