@@ -3325,11 +3325,32 @@ Solicitud: ${texto}`;
 <!-- SCRIPT MÓDULO IA GEMINI (HITO 1) -->
 <!-- ========================================== -->
 <script type="module">
-    window._typewriterAppend = typewriterAppend; // exponer al scope global
+    // Definir typewriterAppend localmente (efecto máquina de escribir)
+    async function typewriterAppend(el, text, delay = 10) {
+        for (const char of text) {
+            el.textContent += char;
+            el.scrollIntoView({ block: 'end', behavior: 'smooth' });
+            await new Promise(r => setTimeout(r, delay));
+        }
+    }
+    window._typewriterAppend = typewriterAppend;
 
-    // Modelo IA via proxy /api/gemini (expuesto al scope global)
-    // Los scripts que usan window._geminiModel.generateContent() ahora pasan por el proxylo
-    window._geminiModel = model;
+    // _geminiModel: objeto compatible que usa el proxy /api/gemini
+    window._geminiModel = {
+        generateContent: async function(prompt) {
+            const token = await firebase.auth().currentUser.getIdToken();
+            const body = typeof prompt === 'string'
+                ? { prompt, model: 'gemini-2.5-flash' }
+                : { contents: prompt?.contents || prompt, model: 'gemini-2.5-flash' };
+            const r = await fetch('/api/gemini', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+                body: JSON.stringify(body)
+            });
+            const data = await r.json();
+            return { response: { text: () => data.text || '', candidates: data.candidates || [] } };
+        }
+    };
 
     let dbMats = {};
     let dbMo = {};
@@ -4089,5 +4110,6 @@ Mensaje del cliente: ${text}`;
     };
 
 </script>
+<script src="/paste-image.js"></script>
 </body>
 </html>
