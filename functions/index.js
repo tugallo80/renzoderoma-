@@ -164,9 +164,10 @@ exports.geminiProxy = onRequest(GEMINI_PROXY_OPTS, async (req, res) => {
         let text = "";
         try { text = result.response.text() || ""; } catch (_) { text = ""; }
 
-        // ── Generación de imagen via Gemini image models ──────────────────
+        // ── Generación de imagen via REST API (SDK v0.21 no soporta responseModalities) ──
         if (body.generateImage) {
             const imgPrompt = body.prompt || body.text || "imagen profesional corporativa";
+            const geminiKey = GEMINI_API_KEY.value();
             const imgModels = [
                 "gemini-2.0-flash-preview-image-generation",
                 "gemini-2.0-flash-exp-image-generation",
@@ -174,12 +175,28 @@ exports.geminiProxy = onRequest(GEMINI_PROXY_OPTS, async (req, res) => {
             ];
             for (const imgModel of imgModels) {
                 try {
-                    const m = genAI.getGenerativeModel({
-                        model: imgModel,
-                        generationConfig: { responseModalities: ["TEXT", "IMAGE"] },
-                    });
-                    const imgResult = await m.generateContent([{ text: imgPrompt }]);
-                    const parts = imgResult?.response?.candidates?.[0]?.content?.parts || [];
+                    const restRes = await fetch(
+                        `https://generativelanguage.googleapis.com/v1beta/models/${imgModel}:generateContent?key=${geminiKey}`,
+                        {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({
+                                contents: [{ role: "user", parts: [{ text: imgPrompt }] }],
+                                generationConfig: { responseModalities: ["TEXT", "IMAGE"] },
+                            }),
+                        }
+                    );
+                    if (restRes.status === 404) {
+                        console.warn(`imagen-gen: ${imgModel} no disponible (404), probando siguiente…`);
+                        continue;
+                    }
+                    const restData = await restRes.json();
+                    if (!restRes.ok) {
+                        const detail = restData?.error?.message || JSON.stringify(restData).slice(0, 200);
+                        console.warn(`imagen-gen: ${imgModel} error ${restRes.status}: ${detail}, probando siguiente…`);
+                        continue;
+                    }
+                    const parts = restData?.candidates?.[0]?.content?.parts || [];
                     for (const p of parts) {
                         const inline = p.inlineData || p.inline_data;
                         if (inline && inline.data) {
@@ -187,15 +204,11 @@ exports.geminiProxy = onRequest(GEMINI_PROXY_OPTS, async (req, res) => {
                             return res.status(200).json({ imageUrl: `data:${mime};base64,${inline.data}` });
                         }
                     }
-                    console.warn(`imagen-gen: ${imgModel} no produjo imagen, probando siguiente…`);
+                    const finishReason = restData?.candidates?.[0]?.finishReason || "";
+                    console.warn(`imagen-gen: ${imgModel} no produjo imagen (${finishReason}), probando siguiente…`);
                 } catch(imgErr) {
-                    const msg = imgErr.message || "";
-                    if (msg.includes("404") || msg.toLowerCase().includes("not found")) {
-                        console.warn(`imagen-gen: ${imgModel} no disponible, probando siguiente…`);
-                        continue;
-                    }
-                    console.error("imagen-gen error:", imgErr.message);
-                    return res.status(500).json({ error: "No se pudo generar imagen", detalle: imgErr.message });
+                    console.error(`imagen-gen: ${imgModel} excepcion:`, imgErr.message);
+                    continue;
                 }
             }
             return res.status(500).json({ error: "Ningún modelo de imagen disponible. Intentá más tarde." });
