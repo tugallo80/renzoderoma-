@@ -593,10 +593,14 @@ exports.whatsappWebhook = onRequest(
             const mode      = req.query["hub.mode"];
             const token     = req.query["hub.verify_token"];
             const challenge = req.query["hub.challenge"];
-            if (mode === "subscribe" && token === WHATSAPP_VERIFY_TOKEN.value()) {
-                console.log("Webhook verificado OK");
+            // Comparar contra el secret Y contra el valor hardcodeado como fallback
+            const expectedToken = (WHATSAPP_VERIFY_TOKEN.value() || "").trim();
+            const VERIFY_FALLBACK = "rubik-webhook-2026";
+            if (mode === "subscribe" && (token === expectedToken || token === VERIFY_FALLBACK)) {
+                console.log("Webhook verificado OK, token:", token);
                 return res.status(200).send(challenge);
             }
+            console.log("Token invalido recibido:", token, "| esperado:", expectedToken);
             return res.status(403).send("Token invalido");
         }
 
