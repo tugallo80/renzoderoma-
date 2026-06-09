@@ -433,7 +433,7 @@
             const resp = await fetch('/api/gemini', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
-                body: JSON.stringify({ prompt, model: 'gemini-2.0-flash-exp', generateImage: true })
+                body: JSON.stringify({ prompt, model: 'gemini-2.5-flash', generateImage: true })
             });
             const data = await resp.json();
             if(data.imageUrl) {
@@ -509,5 +509,6 @@
     }
 
 </script>
+<script src="/paste-image.js"></script>
 </body>
 </html>

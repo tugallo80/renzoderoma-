@@ -2232,54 +2232,8 @@ EJEMPLO VÁLIDO:
                 const apuObj = ApuUtils.normalizeApu(it.apu, it);
                 const pu = ApuUtils.calcPuFromApu(apuObj);
                 // Preservar el nombre que escribió el usuario — la IA no debe sobreescribirlo
-                const _rowOriginal = _iaRowData[_itIdx] || _iaRowData[0] || {};
-                const _descOriginal = _rowOriginal.nombre || '';
-                const _descIA = it.desc || it.nombre || it.name || it.title || '';
-                const _desc = _descOriginal || _descIA; // prioridad al nombre del usuario
-                const _feat = Array.isArray(it.feat)
-                    ? it.feat.join('\n')
-                    : (it.feat || it.caracteristicas || it.features || '');
-                const _featClean = (_feat || '').replace(/\\n/g, '\n');
-                // Si feat llegó vacío, generar un placeholder mínimo para no dejar en blanco
-                const _featFinal = _featClean.trim() || `- Ítem generado por IA\n- Verificar características manualmente`;
-                const _imgUrl = _iaRowImgUrls[_itIdx] || null;
-                const _newItem = {
-                    type: 'item',
-                    desc: _desc,
-                    cant: parseFloat(it.cant || it.cantidad || _rowOriginal.cant || 1) || 1,
-                    und:  it.und || it.unidad || it.unit || 'glb',
-                    feat: _featFinal,
-                    pu:   Math.round(pu * 100) / 100,
-                    apu:  apuObj,
-                    iaPrompt: JSON.stringify({ nombre: _descOriginal, instrucciones: _rowOriginal.instrucciones || '' })
-                };
-                if (_imgUrl) _newItem.img = _imgUrl;
-                data.push(_newItem);
-            });
-            saveDB(true);
-            render();
-            cerrarModalIABudget();
-            _iaProgEnd(true);
-
-        } catch(err) {
-            console.error('generateIABudget error:', err);
-            _iaProgEnd(false);
-            alert('Error al generar: ' + (err.message || err));
-        } finally {
-            btnGen.disabled = false;
-            btnGen.innerHTML = '<i class="ph-bold ph-check-circle"></i> Generar Presupuesto Completo';
-        }
-    };
-</script>
-
-<!-- mobile-action-bar presupuesto -->
-<div id="mobile-action-bar">
-    <button class="m-act-btn" onclick="addChapter()"><i class="ph-bold ph-text-t"></i><span>Cap&#237;tulo</span></button>
-    <button class="m-act-btn green" onclick="addItem()"><i class="ph-bold ph-plus-circle"></i><span>&#205;tem</span></button>
-    <button class="m-act-btn purple" onclick="abrirModalIABudget()"><i class="ph-bold ph-magic-wand"></i><span>IA</span></button>
-    <button class="m-act-btn orange" onclick="syncDatabasePrices()"><i class="ph-bold ph-arrows-clockwise"></i><span>Precios</span></button>
-    <button class="m-act-btn" onclick="abrirModalPDF()"><i class="ph-bold ph-file-pdf"></i><span>PDF</span></button>
-</div>
+                const _rowOriginal = _iaRowData[_itIdx] ||
+    </script>
+<script src="/paste-image.js"></script>
 </body>
 </html>
-
