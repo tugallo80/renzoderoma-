@@ -523,6 +523,13 @@
             </div>
             <label class="inp-lbl">Descripción / Concepto (opcional)</label>
             <input type="text" id="fc-descripcion" class="inp-std" placeholder="Ej: materiales para proyecto X">
+            <label class="inp-lbl">Foto del comprobante (opcional)</label>
+            <div style="border:2px dashed var(--border); border-radius:10px; padding:12px; text-align:center; cursor:pointer; margin-bottom:14px;" onclick="document.getElementById('fc-comprobante-upload').click()">
+                <i class="ph-bold ph-camera" style="font-size:20px; color:var(--gray);"></i>
+                <div style="font-size:11px; color:var(--gray); margin-top:4px;">Adjuntar foto de la factura</div>
+                <div id="fc-comprobante-nombre" style="font-size:11px; color:var(--green); font-weight:800; margin-top:4px; display:none;"></div>
+            </div>
+            <input type="file" id="fc-comprobante-upload" accept="image/*,application/pdf" style="display:none" onchange="onFcComprobanteCargado(this)">
             <button class="btn-action" style="background:var(--purple);" onclick="registrarFacturaCompra()"><i class="ph-bold ph-plus"></i> Guardar en RCV + Sync BD</button>
         </div>
 
@@ -1689,6 +1696,275 @@
     };
 
     // ==========================================
+    // HELPERS DE PERÍODO
+    // ==========================================
+
+    function _getMesesDelPeriodo(mesBase, vista) {
+        if (!mesBase) mesBase = new Date().toISOString().substring(0,7);
+        const [y, m] = mesBase.split('-').map(Number);
+        if (vista === 'mes') return [mesBase];
+        if (vista === 'trimestre') {
+            const inicio = Math.floor((m - 1) / 3) * 3 + 1;
+            return [0,1,2].map(i => { const mm = inicio + i; return y + '-' + String(mm).padStart(2,'0'); });
+        }
+        if (vista === 'semestre') {
+            const inicio = m <= 6 ? 1 : 7;
+            return [0,1,2,3,4,5].map(i => { const mm = inicio + i; return y + '-' + String(mm).padStart(2,'0'); });
+        }
+        // anual
+        return [1,2,3,4,5,6,7,8,9,10,11,12].map(i => y + '-' + String(i).padStart(2,'0'));
+    }
+
+    function _labelPeriodo(meses, vista) {
+        if (!meses || !meses.length) return '';
+        const nombres = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+        if (vista === 'mes') {
+            const [y, m] = meses[0].split('-');
+            return nombres[parseInt(m)-1] + ' ' + y;
+        }
+        if (vista === 'trimestre') {
+            const [y, m] = meses[0].split('-');
+            const q = Math.ceil(parseInt(m)/3);
+            return 'T' + q + ' ' + y;
+        }
+        if (vista === 'semestre') {
+            const [y, m] = meses[0].split('-');
+            return (parseInt(m) <= 6 ? '1er Sem.' : '2do Sem.') + ' ' + y;
+        }
+        return 'Año ' + meses[0].split('-')[0];
+    }
+
+    // ==========================================
+    // CARGAR FACTURA DE COMPRA (con foto)
+    // ==========================================
+
+    window._fcComprobanteFile = null;
+    window._fcComprobanteB64  = null;
+
+    window.onFcComprobanteCargado = function(input) {
+        const file = input.files[0];
+        if (!file) return;
+        window._fcComprobanteFile = file;
+        const nomEl = document.getElementById('fc-comprobante-nombre');
+        if (nomEl) { nomEl.textContent = '✓ ' + file.name; nomEl.style.display = 'block'; }
+        const reader = new FileReader();
+        reader.onload = e => { window._fcComprobanteB64 = e.target.result; };
+        reader.readAsDataURL(file);
+    };
+
+    window.registrarFacturaCompra = async function() {
+        const nit    = document.getElementById('fc-nit').value.trim();
+        const nro    = document.getElementById('fc-nro').value.trim();
+        const monto  = parseFloat(document.getElementById('fc-monto').value || 0);
+        const fecha  = document.getElementById('fc-fecha').value;
+        if (!nro)             return alert('El número de factura es requerido.');
+        if (!monto || monto <= 0) return alert('Ingresa un monto válido.');
+        if (!fecha)           return alert('Selecciona una fecha.');
+
+        let comprobanteUrl = null;
+        if (window._fcComprobanteFile) {
+            try {
+                const ref = storage.ref('facturas_compra/' + Date.now() + '_' + window._fcComprobanteFile.name);
+                await ref.put(window._fcComprobanteFile);
+                comprobanteUrl = await ref.getDownloadURL();
+            } catch(e) { console.warn('No se pudo subir comprobante:', e); }
+        }
+
+        const payload = {
+            nit:         nit || '',
+            proveedor:   document.getElementById('fc-proveedor').value.trim() || '',
+            nro_factura: nro,
+            cuf:         document.getElementById('fc-cuf').value.trim() || '',
+            monto,
+            fecha,
+            descripcion: document.getElementById('fc-descripcion').value.trim() || '',
+            comprobante: comprobanteUrl,
+            timestamp:   Date.now()
+        };
+
+        try {
+            const newRef = await db.ref('compras_facturadas').push(payload);
+            await syncFacturaCompraABD(payload, newRef.key);
+            // Reset form
+            ['fc-nit','fc-nro','fc-cuf','fc-monto','fc-proveedor','fc-descripcion'].forEach(id => {
+                document.getElementById(id).value = '';
+            });
+            document.getElementById('fc-fecha').value = '';
+            window._fcComprobanteFile = null;
+            window._fcComprobanteB64 = null;
+            limpiarFacturaScan();
+            alert('Factura de compra guardada y sincronizada con BD.');
+        } catch(e) { alert('Error: ' + e.message); }
+    };
+
+    async function syncFacturaCompraABD(factura, facturaId) {
+        try {
+            const bdSnap = await db.ref('base_datos/proveedores').once('value');
+            const proveedores = bdSnap.val() || {};
+            // Buscar por NIT primero, luego por nombre
+            let matchKey = null;
+            Object.entries(proveedores).forEach(([k, p]) => {
+                if (!p) return;
+                if (factura.nit && p.nit && String(p.nit).trim() === String(factura.nit).trim()) matchKey = k;
+            });
+            if (!matchKey && factura.proveedor) {
+                Object.entries(proveedores).forEach(([k, p]) => {
+                    if (!p) return;
+                    if ((p.nombre||'').toLowerCase().trim() === factura.proveedor.toLowerCase().trim()) matchKey = k;
+                });
+            }
+            if (matchKey) {
+                await db.ref('base_datos/proveedores/' + matchKey + '/facturas/' + facturaId).set({
+                    nro_factura: factura.nro_factura,
+                    fecha:       factura.fecha,
+                    monto:       factura.monto,
+                    descripcion: factura.descripcion || '',
+                    cuf:         factura.cuf || ''
+                });
+            } else {
+                // Crear nuevo proveedor
+                await db.ref('base_datos/proveedores').push({
+                    nombre:  factura.proveedor || 'S/N',
+                    nit:     factura.nit || '',
+                    facturas: {
+                        [facturaId]: {
+                            nro_factura: factura.nro_factura,
+                            fecha:       factura.fecha,
+                            monto:       factura.monto,
+                            descripcion: factura.descripcion || '',
+                            cuf:         factura.cuf || ''
+                        }
+                    }
+                });
+            }
+        } catch(e) { console.warn('syncFacturaCompraABD error:', e); }
+    }
+
+    window.eliminarFacturaCompra = function(id) {
+        if (confirm('¿Eliminar esta factura de compra?')) db.ref('compras_facturadas/' + id).remove();
+    };
+
+    // ==========================================
+    // RENDER IMPUESTOS
+    // ==========================================
+
+    window.renderImpuestos = function renderImpuestos() {
+        const mesBase = (document.getElementById('tax-filtro-mes')||{}).value || new Date().toISOString().substring(0,7);
+        const vista   = window._taxVista || 'mes';
+        const meses   = _getMesesDelPeriodo(mesBase, vista);
+        const mesesSet = new Set(meses);
+        const label   = _labelPeriodo(meses, vista);
+
+        // Actualizar label período
+        const titEl = document.getElementById('tax-titulo-periodo');
+        if (titEl) titEl.textContent = 'Balance Impositivo — ' + label;
+        const labEl = document.getElementById('tax-periodo-label');
+        if (labEl) labEl.textContent = label;
+
+        let totalVentas = 0, totalCompras = 0;
+        Object.values(ingresosData).forEach(i => {
+            if (i && i.is_facturado && i.fecha && mesesSet.has(i.fecha.substring(0,7))) totalVentas += parseFloat(i.monto || 0);
+        });
+        Object.values(comprasFacturadasData).forEach(c => {
+            if (c && c.fecha && mesesSet.has(c.fecha.substring(0,7))) totalCompras += parseFloat(c.monto || 0);
+        });
+
+        const debito  = totalVentas  * 0.13;
+        const it      = totalVentas  * 0.03;
+        const credito = totalCompras * 0.13;
+        const iva     = debito - credito;
+
+        document.getElementById('tax-ventas').textContent  = fMoney(totalVentas)  + ' Bs';
+        document.getElementById('tax-debito').textContent  = fMoney(debito)  + ' Bs';
+        document.getElementById('tax-it').textContent      = fMoney(it)      + ' Bs';
+        document.getElementById('tax-compras').textContent = fMoney(totalCompras) + ' Bs';
+        document.getElementById('tax-credito').textContent = fMoney(credito) + ' Bs';
+
+        const ivaEl = document.getElementById('tax-iva-pagar');
+        ivaEl.textContent = (iva > 0 ? fMoney(iva) : '0.00') + ' Bs';
+        ivaEl.style.color = iva > 0 ? 'var(--red)' : 'var(--green)';
+
+        const msgEl = document.getElementById('tax-msg');
+        if (msgEl) msgEl.textContent = iva > 0 ? 'Debés pagar al SIN.' : 'El Crédito supera al Débito.';
+
+        // Caja "faltan facturas"
+        const faltanBox  = document.getElementById('box-faltan-facturas');
+        const faltanMont = document.getElementById('tax-faltan-monto');
+        if (faltanBox && faltanMont) {
+            if (iva > 0) {
+                const faltanBs = iva / 0.13;
+                faltanMont.textContent = fMoney(faltanBs) + ' Bs';
+                faltanBox.style.display = 'block';
+            } else {
+                faltanBox.style.display = 'none';
+            }
+        }
+
+        // Balance por meses (si período > 1 mes)
+        const boxMeses = document.getElementById('box-balance-meses');
+        if (boxMeses) {
+            if (meses.length > 1) {
+                const nombres = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+                let html = '<div style="display:flex;flex-direction:column;gap:8px;">';
+                meses.forEach(mes => {
+                    let mv = 0, mc = 0;
+                    Object.values(ingresosData).forEach(i => { if (i && i.is_facturado && i.fecha && i.fecha.startsWith(mes)) mv += parseFloat(i.monto||0); });
+                    Object.values(comprasFacturadasData).forEach(c => { if (c && c.fecha && c.fecha.startsWith(mes)) mc += parseFloat(c.monto||0); });
+                    const mIva = mv * 0.13 - mc * 0.13;
+                    const [y, m] = mes.split('-');
+                    const nomMes = nombres[parseInt(m)-1] + ' ' + y;
+                    html += `<div style="background:var(--card);border:1px solid var(--border);border-radius:10px;padding:10px 14px;display:flex;justify-content:space-between;align-items:center;font-size:12px;">
+                        <span style="font-weight:800;">${nomMes}</span>
+                        <span style="color:var(--blue);">V: ${fMoney(mv)} Bs</span>
+                        <span style="color:var(--purple);">C: ${fMoney(mc)} Bs</span>
+                        <span style="font-weight:900;color:${mIva>0?'var(--red)':'var(--green)'};">IVA: ${fMoney(Math.abs(mIva))} Bs ${mIva>0?'▲':'▼'}</span>
+                    </div>`;
+                });
+                html += '</div>';
+                boxMeses.innerHTML = html;
+                boxMeses.style.display = 'block';
+            } else {
+                boxMeses.style.display = 'none';
+            }
+        }
+
+        // Libro de compras (RCV) — filtrado por rcv-filtro-mes si existe
+        const rcvMes = (document.getElementById('rcv-filtro-mes')||{}).value || '';
+        const listFC = document.getElementById('list-facturas-compras');
+        if (listFC) {
+            listFC.innerHTML = '';
+            const todas = Object.entries(comprasFacturadasData)
+                .filter(([k, c]) => c && (!rcvMes || (c.fecha && c.fecha.startsWith(rcvMes))))
+                .sort((a, b) => (b[1].fecha||'').localeCompare(a[1].fecha||''));
+            if (!todas.length) {
+                listFC.innerHTML = '<div class="empty-msg">No hay facturas de compra registradas.</div>';
+            } else {
+                todas.forEach(([k, c]) => {
+                    const imgBtn = c.comprobante
+                        ? `<a href="${c.comprobante}" target="_blank" style="font-size:10px;background:rgba(175,82,222,0.1);color:var(--purple);padding:3px 8px;border-radius:6px;text-decoration:none;font-weight:800;"><i class="ph-bold ph-image"></i> Ver foto</a>`
+                        : '';
+                    listFC.innerHTML += `<div class="generic-card" style="padding:12px;border-left:3px solid var(--purple);">
+                        <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+                            <div style="flex:1;">
+                                <div style="font-weight:900;font-size:13px;">${c.proveedor || 'S/N'}</div>
+                                <div style="font-size:10px;color:var(--gray);margin-top:2px;">
+                                    NIT: ${c.nit||'-'} · Fact: ${c.nro_factura||'-'} · ${c.fecha||'-'}
+                                    ${c.descripcion ? '<br>'+c.descripcion : ''}
+                                </div>
+                                <div style="margin-top:6px;">${imgBtn}</div>
+                            </div>
+                            <div style="display:flex;align-items:center;gap:8px;">
+                                <div style="font-size:16px;font-weight:900;color:var(--purple);">${fMoney(c.monto)} Bs</div>
+                                <button onclick="eliminarFacturaCompra('${k}')" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:14px;"><i class="ph-bold ph-trash"></i></button>
+                            </div>
+                        </div>
+                    </div>`;
+                });
+            }
+        }
+    };
+
+    // ==========================================
     // EXPORTACIONES IMPOSITIVAS
     // ==========================================
 
@@ -1984,12 +2260,12 @@
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         model: 'gemini-2.5-flash',
-                        systemInstruction: 'Eres un extractor de datos de facturas bolivianas. Devuelve SOLO JSON válido, sin markdown.',
+                        systemInstruction: 'Eres un extractor de datos de facturas bolivianas de compra. Devuelve SOLO JSON válido, sin markdown ni explicaciones.',
                         contents: [{
                             role: 'user',
                             parts: [
                                 { inlineData: { mimeType: mime, data: b64.split(',')[1] } },
-                                { text: 'Extrae de esta factura boliviana: nit_proveedor, razon_social_proveedor, nro_factura, cuf (código de autorización/CUF), fecha (YYYY-MM-DD), monto_total (número), descripcion (concepto/item principal). Devuelve SOLO JSON.' }
+                                { text: 'Extrae de esta factura boliviana de COMPRA los siguientes campos y devuelve SOLO un JSON con estas claves exactas:\n- nit_proveedor: NIT o CI del emisor/proveedor (solo números)\n- razon_social_proveedor: nombre o razón social de quien emite la factura\n- nro_factura: número de factura\n- cuf: código de autorización único (CUF, alfanumérico largo)\n- fecha: fecha de emisión en formato YYYY-MM-DD\n- monto_total: importe total en número (sin símbolo de moneda)\n- descripcion: concepto principal o descripción del producto/servicio\n\nSi no encuentras un campo, usa null. Devuelve SOLO el JSON.' }
                             ]
                         }]
                     })
@@ -2015,17 +2291,15 @@
         if (resultados.length === 1 && resultados[0].ok) {
             const d = resultados[0].data;
             _fillFacturaCompraForm(d);
-            resDiv.innerHTML = `<div style="background:rgba(52,199,89,0.12);border:1px solid var(--green);border-radius:10px;padding:12px;font-size:12px;color:var(--green);font-weight:800;"><i class="ph-bold ph-check-circle"></i> Factura leída — campos completados. Revisá y guardá.</div>`;
+            window._fcComprobanteFile = resultados[0].file;
+            window._fcComprobanteB64  = await _fileToBase64(resultados[0].file);
+            const nomEl = document.getElementById('fc-comprobante-nombre');
+            if (nomEl) { nomEl.textContent = '\u2713 ' + resultados[0].file.name; nomEl.style.display = 'block'; }
+            resDiv.innerHTML = '<div style="background:rgba(52,199,89,0.12);border:1px solid var(--green);border-radius:10px;padding:12px;font-size:12px;color:var(--green);font-weight:800;"><i class="ph-bold ph-check-circle"></i> Factura le\u00edda \u2014 campos y foto listos. Revis\u00e1 y guard\u00e1.</div>';
         } else {
             resDiv.innerHTML = resultados.map((r, i) => r.ok
-                ? `<div style="background:rgba(52,199,89,0.08);border:1px solid var(--green);border-radius:10px;padding:12px;margin-bottom:8px;font-size:11px;">
-                    <div style="font-weight:900;color:var(--green);margin-bottom:6px;"><i class="ph-bold ph-check-circle"></i> ${r.file.name}</div>
-                    <div style="color:var(--text);">${r.data.razon_social_proveedor || ''} · NIT: ${r.data.nit_proveedor || '-'} · Fact: ${r.data.nro_factura || '-'} · ${r.data.fecha || ''} · <strong>${r.data.monto_total || '-'} Bs</strong></div>
-                    <button onclick="window._guardarFacturaEscaneada(${i})" style="margin-top:8px;background:var(--green);color:white;border:none;border-radius:8px;padding:6px 14px;font-size:11px;font-weight:800;cursor:pointer;"><i class="ph-bold ph-floppy-disk"></i> Guardar esta</button>
-                  </div>`
-                : `<div style="background:rgba(255,59,48,0.08);border:1px solid var(--red);border-radius:10px;padding:12px;margin-bottom:8px;font-size:11px;">
-                    <div style="font-weight:900;color:var(--red);"><i class="ph-bold ph-warning"></i> ${r.file.name} — Error: ${r.error}</div>
-                  </div>`
+                ? '<div style="background:rgba(52,199,89,0.08);border:1px solid var(--green);border-radius:10px;padding:12px;margin-bottom:8px;font-size:11px;"><div style="font-weight:900;color:var(--green);margin-bottom:6px;"><i class="ph-bold ph-check-circle"></i> ' + r.file.name + '</div><div style="color:var(--text);">' + (r.data.razon_social_proveedor || '') + ' \u00b7 NIT: ' + (r.data.nit_proveedor || '-') + ' \u00b7 Fact: ' + (r.data.nro_factura || '-') + ' \u00b7 ' + (r.data.fecha || '') + ' \u00b7 <strong>' + (r.data.monto_total || '-') + ' Bs</strong></div><button onclick="window._guardarFacturaEscaneada(' + i + ')" style="margin-top:8px;background:var(--green);color:white;border:none;border-radius:8px;padding:6px 14px;font-size:11px;font-weight:800;cursor:pointer;"><i class="ph-bold ph-floppy-disk"></i> Guardar esta</button></div>'
+                : '<div style="background:rgba(255,59,48,0.08);border:1px solid var(--red);border-radius:10px;padding:12px;margin-bottom:8px;font-size:11px;"><div style="font-weight:900;color:var(--red);"><i class="ph-bold ph-warning"></i> ' + r.file.name + ' \u2014 Error: ' + r.error + '</div></div>'
             ).join('');
             window._factScanResults = resultados;
         }
@@ -2038,6 +2312,8 @@
         const r = window._factScanResults[idx];
         if (!r || !r.ok) return;
         _fillFacturaCompraForm(r.data);
+        window._fcComprobanteFile = r.file;
+        window._fcComprobanteB64  = await _fileToBase64(r.file);
         await registrarFacturaCompra();
     };
 
@@ -2052,7 +2328,7 @@
     }
 
     // ==========================================
-    // ESCÁNER IA — FACTURAS DE VENTA (MULTI)
+    // ESCANEAR IA — FACTURAS DE VENTA
     // ==========================================
 
     window._ventaFiles = [];
@@ -2080,17 +2356,17 @@
         container.innerHTML = '';
         window._ventaFiles.forEach((f, i) => {
             const div = document.createElement('div');
-            div.style.cssText = 'position:relative; width:70px; height:70px; border-radius:8px; overflow:hidden; border:2px solid var(--blue); background:var(--card);';
+            div.style.cssText = 'position:relative;width:70px;height:70px;border-radius:8px;overflow:hidden;border:2px solid var(--blue);background:var(--card);';
             if (f.type.startsWith('image/')) {
                 const img = document.createElement('img');
-                img.style.cssText = 'width:100%; height:100%; object-fit:cover;';
+                img.style.cssText = 'width:100%;height:100%;object-fit:cover;';
                 img.src = URL.createObjectURL(f);
                 div.appendChild(img);
             } else {
-                div.innerHTML = '<div style=\"display:flex;align-items:center;justify-content:center;height:100%;font-size:24px;color:var(--blue)\"><i class=\"ph-bold ph-file-pdf\"></i></div>';
+                div.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;font-size:24px;color:var(--blue)"><i class="ph-bold ph-file-pdf"></i></div>';
             }
             const del = document.createElement('button');
-            del.innerHTML = '<i class=\"ph-bold ph-x\"></i>';
+            del.innerHTML = '<i class="ph-bold ph-x"></i>';
             del.style.cssText = 'position:absolute;top:2px;right:2px;background:rgba(0,0,0,0.6);color:white;border:none;border-radius:50%;width:18px;height:18px;cursor:pointer;font-size:10px;display:flex;align-items:center;justify-content:center;padding:0;';
             del.onclick = () => { window._ventaFiles.splice(i, 1); _renderVentaThumbs(); if (!window._ventaFiles.length) limpiarVentaScan(); };
             div.appendChild(del);
@@ -2107,12 +2383,11 @@
     };
 
     window.escanearFacturasVenta = async function() {
-        if (!window._ventaFiles || !window._ventaFiles.length) return alert('Primero cargá al menos una factura.');
+        if (!window._ventaFiles || !window._ventaFiles.length) return alert('Primero carg\u00e1 al menos una factura.');
         const btn = document.getElementById('btn-scan-ventas');
         const txtEl = document.getElementById('btn-scan-venta-txt');
         if (btn) btn.disabled = true;
         if (txtEl) txtEl.textContent = 'Analizando...';
-
         try {
             const file = window._ventaFiles[0];
             const b64 = await _fileToBase64(file);
@@ -2122,12 +2397,12 @@
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     model: 'gemini-2.5-flash',
-                    systemInstruction: 'Eres un extractor de datos de facturas bolivianas emitidas. Devuelve SOLO JSON válido, sin markdown.',
+                    systemInstruction: 'Eres un extractor de datos de facturas bolivianas emitidas. Devuelve SOLO JSON v\u00e1lido, sin markdown ni explicaciones.',
                     contents: [{
                         role: 'user',
                         parts: [
                             { inlineData: { mimeType: mime, data: b64.split(',')[1] } },
-                            { text: 'Extrae de esta factura boliviana EMITIDA: nit_cliente, razon_social_cliente, nro_factura, cuf (código de autorización/CUF), fecha (YYYY-MM-DD), monto_total (número). Devuelve SOLO JSON.' }
+                            { text: 'Extrae de esta factura boliviana EMITIDA los siguientes campos y devuelve SOLO un JSON con estas claves exactas:\n- nit_cliente: NIT o CI del cliente (solo n\u00fameros)\n- razon_social_cliente: nombre o raz\u00f3n social del cliente\n- nro_factura: n\u00famero de factura\n- cuf: c\u00f3digo de autorizaci\u00f3n \u00fanico (CUF, alfanum\u00e9rico largo)\n- fecha: fecha de emisi\u00f3n en formato YYYY-MM-DD\n- monto_total: importe total en n\u00famero (sin s\u00edmbolo de moneda)\n\nSi no encuentras un campo, usa null. Devuelve SOLO el JSON.' }
                         ]
                     }]
                 })
@@ -2147,9 +2422,9 @@
                 if (d.monto_total)          document.getElementById('ing-monto').value       = d.monto_total;
                 const resDiv = document.getElementById('venta-scan-resultados');
                 resDiv.style.display = 'block';
-                resDiv.innerHTML = `<div style="background:rgba(0,122,255,0.1);border:1px solid var(--blue);border-radius:10px;padding:12px;font-size:12px;color:var(--blue);font-weight:800;"><i class="ph-bold ph-check-circle"></i> Factura leída — campos completados. Revisá y guardá.</div>`;
+                resDiv.innerHTML = '<div style="background:rgba(0,122,255,0.1);border:1px solid var(--blue);border-radius:10px;padding:12px;font-size:12px;color:var(--blue);font-weight:800;"><i class="ph-bold ph-check-circle"></i> Factura le\u00edda \u2014 campos completados. Revis\u00e1 y guard\u00e1.</div>';
             } else {
-                alert('No se pudieron extraer datos. Intentá con una imagen más nítida.');
+                alert('No se pudieron extraer datos. Intent\u00e1 con una imagen m\u00e1s n\u00edtida.');
             }
         } catch(e) {
             alert('Error al escanear: ' + e.message);
@@ -2160,13 +2435,13 @@
     };
 
     // ==========================================
-    // ESCÁNER IA — BOUCHER DE COBRO
+    // ESCANEAR IA — BOUCHER DE COBRO
     // ==========================================
 
     window.escanearCobroBoucher = async function() {
-        if (!window._cobroBoucherB64) return alert('Primero cargá un comprobante/boucher.');
+        if (!window._cobroBoucherB64) return alert('Primero carg\u00e1 un comprobante/boucher.');
         const btn = document.getElementById('btn-scan-cobro');
-        if (btn) { btn.disabled = true; btn.innerHTML = '<i class=\"ph-bold ph-spinner\"></i> Analizando...'; }
+        if (btn) { btn.disabled = true; btn.innerHTML = '<i class="ph-bold ph-spinner"></i> Analizando...'; }
         try {
             const b64 = window._cobroBoucherB64;
             const mime = window._cobroBoucherFile?.type?.startsWith('image/') ? window._cobroBoucherFile.type : 'image/jpeg';
@@ -2175,12 +2450,12 @@
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     model: 'gemini-2.5-flash',
-                    systemInstruction: 'Eres un extractor de datos de comprobantes de pago y bouchers bancarios. Devuelve SOLO JSON válido, sin markdown.',
+                    systemInstruction: 'Eres un extractor de datos de comprobantes de pago y bouchers bancarios. Devuelve SOLO JSON v\u00e1lido, sin markdown ni explicaciones.',
                     contents: [{
                         role: 'user',
                         parts: [
                             { inlineData: { mimeType: mime, data: b64.split(',')[1] } },
-                            { text: 'Extrae de este comprobante/boucher de pago: monto (número, sin símbolo), fecha (YYYY-MM-DD), concepto (descripción del pago o referencia), banco_origen (si se ve). Devuelve SOLO JSON.' }
+                            { text: 'Extrae de este comprobante/boucher de pago los siguientes campos y devuelve SOLO un JSON con estas claves exactas:\n- monto: importe total en n\u00famero (sin s\u00edmbolo de moneda)\n- fecha: fecha del pago en formato YYYY-MM-DD\n- concepto: descripci\u00f3n del pago, referencia o motivo\n- banco_origen: nombre del banco o entidad emisora si se ve\n\nSi no encuentras un campo, usa null. Devuelve SOLO el JSON.' }
                         ]
                     }]
                 })
@@ -2194,10 +2469,10 @@
                 const d = JSON.parse(jsonMatch[0]);
                 if (d.monto)    document.getElementById('cobro-monto').value    = d.monto;
                 if (d.fecha)    document.getElementById('cobro-fecha').value    = d.fecha;
-                if (d.concepto) document.getElementById('cobro-concepto').value = d.concepto + (d.banco_origen ? ' · ' + d.banco_origen : '');
-                document.getElementById('cobro-boucher-nombre').innerText = '\u2713 Leído con IA · ' + (window._cobroBoucherFile?.name || '');
+                if (d.concepto) document.getElementById('cobro-concepto').value = d.concepto + (d.banco_origen ? ' \u00b7 ' + d.banco_origen : '');
+                document.getElementById('cobro-boucher-nombre').innerText = '\u2713 Le\u00eddo con IA \u00b7 ' + (window._cobroBoucherFile?.name || '');
             } else {
-                alert('No se pudieron extraer datos. Intentá con imagen más nítida.');
+                alert('No se pudieron extraer datos. Intent\u00e1 con imagen m\u00e1s n\u00edtida.');
             }
         } catch(e) {
             alert('Error al escanear boucher: ' + e.message);
