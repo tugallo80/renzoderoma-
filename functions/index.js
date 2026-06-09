@@ -164,6 +164,24 @@ exports.geminiProxy = onRequest(GEMINI_PROXY_OPTS, async (req, res) => {
         let text = "";
         try { text = result.response.text() || ""; } catch (_) { text = ""; }
 
+        // ── Generación de imagen (Imagen 3) ──────────────────────────
+        if (body.generateImage) {
+            const imgModel = genAI.getGenerativeModel({ model: "imagen-3.0-generate-001" });
+            try {
+                const imgResult = await imgModel.generateImages({
+                    prompt: body.prompt || body.text || "",
+                    number_of_images: 1,
+                    aspect_ratio: "16:9",
+                });
+                const b64 = imgResult.images[0].imageBytes;
+                const imageUrl = `data:image/png;base64,${b64}`;
+                return res.status(200).json({ imageUrl });
+            } catch(imgErr) {
+                console.error("imagen-3 error:", imgErr.message);
+                return res.status(500).json({ error: "No se pudo generar imagen", detalle: imgErr.message });
+            }
+        }
+
         return res.status(200).json({
             text,
             candidates: result.response.candidates,
