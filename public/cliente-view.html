@@ -3358,7 +3358,7 @@ Solicitud: ${texto}`;
     // _geminiModel: objeto compatible que usa el proxy /api/gemini
     window._geminiModel = {
         generateContent: async function(prompt) {
-            const token = await firebase.auth().currentUser.getIdToken();
+            const token = await _getCvToken();
             const body = typeof prompt === 'string'
                 ? { prompt, model: 'gemini-2.5-flash' }
                 : { contents: prompt?.contents || prompt, model: 'gemini-2.5-flash' };
