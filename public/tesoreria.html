@@ -311,7 +311,17 @@
 
             <div style="text-align:center; font-size:11px; color:var(--gray); margin-bottom:12px; font-weight:bold;">O completa manualmente:</div>
 
-            <label class="inp-lbl">Proyecto Asociado</label><select id="ing-proy-sel" class="inp-std"></select>
+            <label class="inp-lbl">Proyecto Asociado</label>
+            <div id="ing-proy-container" style="position:relative; margin-bottom:14px;">
+                <input type="text" id="ing-proy-input" class="inp-std" placeholder="Buscar proyecto..." autocomplete="off"
+                       style="margin:0; padding-right:36px;"
+                       oninput="filtrarProyectos(this.value)"
+                       onfocus="abrirDropProyectos()"
+                       onkeydown="navDropProyectos(event)">
+                <i class="ph-bold ph-magnifying-glass" style="position:absolute;right:12px;top:50%;transform:translateY(-50%);color:var(--gray);pointer-events:none;font-size:16px;"></i>
+                <div id="ing-proy-drop" style="display:none;position:absolute;top:calc(100% + 4px);left:0;right:0;background:var(--card);border:1px solid var(--border);border-radius:12px;max-height:220px;overflow-y:auto;z-index:200;box-shadow:0 8px 24px rgba(0,0,0,0.2);"></div>
+            </div>
+            <input type="hidden" id="ing-proy-sel" value="">
             <div class="flex-row">
                 <div style="flex:1;"><label class="inp-lbl">Monto (Bs)</label><input type="number" step="any" id="ing-monto" class="inp-std" placeholder="0.00"></div>
                 <div style="flex:1;"><label class="inp-lbl">Fecha</label><input type="date" id="ing-fecha" class="inp-std"></div>
@@ -453,7 +463,7 @@
         const payload = {
             monto,
             fecha,
-            proyecto: document.getElementById('ing-proy-sel').value || '',
+            proyecto: document.getElementById('ing-proy-sel').value || document.getElementById('ing-proy-input').value || '',
             is_facturado: isFact,
             timestamp: Date.now()
         };
@@ -517,20 +527,78 @@
         kpiUt.innerText = fMoney(utilidad) + " Bs"; kpiUt.style.color = utilidad >= 0 ? "var(--green)" : "var(--red)";
     }
 
+    let _proyNombres = [];
+
     function renderBuzonYContratos() {
         const listBuzon = document.getElementById('list-global-lic'); const listActive = document.getElementById('list-active-contracts');
         listBuzon.innerHTML = ''; listActive.innerHTML = '';
         let hasCotizaciones = false; let hasActivos = false;
-        const selProy = document.getElementById('ing-proy-sel'); selProy.innerHTML = '<option value="">Seleccionar Proyecto...</option>';
 
+        _proyNombres = [];
         Object.keys(proyectosData).forEach(clientId => {
             Object.keys(proyectosData[clientId]).forEach(projectId => {
                 const proyecto = proyectosData[clientId][projectId];
                 const projectName = proyecto.nombre || 'Proyecto';
-                selProy.innerHTML += `<option value="${projectName}">${projectName}</option>`;
+                if (!_proyNombres.includes(projectName)) _proyNombres.push(projectName);
             });
         });
+        _proyNombres.sort();
     }
+
+    function _renderDropItems(lista, q) {
+        const drop = document.getElementById('ing-proy-drop');
+        if (!lista.length) {
+            drop.innerHTML = '<div style="padding:12px;font-size:12px;color:var(--gray);text-align:center;">Sin resultados</div>';
+            return;
+        }
+        drop.innerHTML = lista.map(n => {
+            const hl = q.trim()
+                ? n.replace(new RegExp(q.trim().replace(/[.*+?^${}()|[\]\\]/g,'\\$&'), 'gi'),
+                    m => `<b style="color:var(--blue);">${m}</b>`)
+                : n;
+            return `<div onmousedown="event.preventDefault()" onclick="seleccionarProyecto(this.dataset.v)"
+                data-v="${n.replace(/"/g,'&quot;')}"
+                style="padding:11px 14px;font-size:13px;font-weight:600;cursor:pointer;border-bottom:1px solid var(--border);transition:background 0.1s;"
+                onmouseover="this.style.background='rgba(0,122,255,0.08)'"
+                onmouseout="this.style.background=''">${hl}</div>`;
+        }).join('');
+    }
+
+    window.abrirDropProyectos = function() {
+        const q = document.getElementById('ing-proy-input').value;
+        const lista = q.trim() ? _proyNombres.filter(n => n.toLowerCase().includes(q.toLowerCase())) : _proyNombres;
+        _renderDropItems(lista, q);
+        document.getElementById('ing-proy-drop').style.display = lista.length ? 'block' : 'none';
+    };
+
+    window.filtrarProyectos = function(q) {
+        const filtrados = q.trim()
+            ? _proyNombres.filter(n => n.toLowerCase().includes(q.toLowerCase()))
+            : _proyNombres;
+        _renderDropItems(filtrados, q);
+        document.getElementById('ing-proy-drop').style.display = filtrados.length ? 'block' : 'none';
+        document.getElementById('ing-proy-sel').value = '';
+    };
+
+    window.seleccionarProyecto = function(nombre) {
+        document.getElementById('ing-proy-input').value = nombre;
+        document.getElementById('ing-proy-sel').value = nombre;
+        document.getElementById('ing-proy-drop').style.display = 'none';
+    };
+
+    window.navDropProyectos = function(e) {
+        if (e.key === 'Escape') { document.getElementById('ing-proy-drop').style.display = 'none'; }
+        if (e.key === 'Enter') {
+            const first = document.querySelector('#ing-proy-drop div[data-v]');
+            if (first) { seleccionarProyecto(first.dataset.v); e.preventDefault(); }
+        }
+    };
+
+    document.addEventListener('click', function(e) {
+        if (!e.target.closest('#ing-proy-container')) {
+            document.getElementById('ing-proy-drop').style.display = 'none';
+        }
+    });
 
     function renderPlanillas() {
         const mesSeleccionado = document.getElementById('filtro-mes').value;
