@@ -424,9 +424,9 @@
         const nombre = document.getElementById('inp-nombre').value.trim();
         const rubro = document.getElementById('inp-rubro').value.trim();
         if(!nombre) return alert('Ingresá el nombre del cliente primero.');
-        const btn = document.getElementById('btn-cover-ia');
+        const btn = document.getElementById('btn-gen-cover');
         const spinner = document.getElementById('cover-ia-spinner');
-        btn.disabled = true; spinner.style.display = 'inline-block';
+        if (btn) btn.disabled = true; if (spinner) spinner.style.display = 'inline-block';
         try {
             const token = await firebase.auth().currentUser.getIdToken();
             const prompt = `Genera una imagen de portada profesional y moderna para una empresa llamada "${nombre}" del rubro "${rubro || 'empresarial'}". Estilo minimalista, colores corporativos, sin texto.`;
@@ -444,7 +444,7 @@
                 tempCoverFile = new File([blob], 'cover_ia.jpg', { type: 'image/jpeg' });
             }
         } catch(e) { alert('Error generando imagen: ' + e.message); }
-        finally { btn.disabled = false; spinner.style.display = 'none'; }
+        finally { if (btn) btn.disabled = false; if (spinner) spinner.style.display = 'none'; }
     }
 
     async function saveClient() {

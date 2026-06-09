@@ -694,3 +694,26 @@ exports.whatsappWebhook = onRequest(WA_OPTS, async (req, res) => {
         return res.status(200).send("OK"); // siempre 200 para Meta
     }
 });
+
+// ─────────────────────────────────────────────────────────
+// PROXY IMÁGENES (Firebase Storage → PDF sin CORS)
+// ─────────────────────────────────────────────────────────
+exports.proxyImagen = onRequest(
+    { region: "us-central1", memory: "256MiB", timeoutSeconds: 30, invoker: "public" },
+    async (req, res) => {
+        const url = req.query.url;
+        if (!url) return res.status(400).send("Falta parámetro url");
+        try {
+            const response = await fetch(url);
+            if (!response.ok) return res.status(response.status).send("Error al obtener imagen");
+            const contentType = response.headers.get("content-type") || "image/jpeg";
+            const buffer = Buffer.from(await response.arrayBuffer());
+            res.set("Access-Control-Allow-Origin", "*");
+            res.set("Cache-Control", "public, max-age=3600");
+            res.set("Content-Type", contentType);
+            res.send(buffer);
+        } catch(e) {
+            res.status(500).send("Error: " + e.message);
+        }
+    }
+);

@@ -2485,10 +2485,10 @@
                 const d = JSON.parse(jsonMatch[0]);
                 if (d.monto)    document.getElementById('cobro-monto').value    = d.monto;
                 if (d.fecha)    document.getElementById('cobro-fecha').value    = d.fecha;
-                if (d.concepto) document.getElementById('cobro-concepto').value = d.concepto + (d.banco_origen ? ' \u00b7 ' + d.banco_origen : '');
-                document.getElementById('cobro-boucher-nombre').innerText = '\u2713 Le\u00eddo con IA \u00b7 ' + (window._cobroBoucherFile?.name || '');
+                if (d.concepto) document.getElement('cobro-concepto').value = d.concepto + (d.banco_origen ? ' · ' + d.banco_origen : '');
+                document.getElementById('cobro-boucher-nombre').innerText = '✓ Leído con IA · ' + (window._cobroBoucherFile?.name || '');
             } else {
-                alert('No se pudieron extraer datos. Intent\u00e1 con imagen m\u00e1s n\u00edtida.');
+                alert('No se pudieron extraer datos. Intentá con imagen más nítida.');
             }
         } catch(e) {
             alert('Error al escanear boucher: ' + e.message);
@@ -2496,10 +2496,6 @@
             if (btn) { btn.disabled = false; btn.innerHTML = '<i class="ph-bold ph-magic-wand"></i> Leer con IA'; }
         }
     };
-
-    // ==========================================
-    // UTILIDAD: FILE → BASE64
-    // ==========================================
 
     function _fileToBase64(file) {
         return new Promise((resolve, reject) => {
