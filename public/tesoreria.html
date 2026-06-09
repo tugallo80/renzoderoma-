@@ -1844,6 +1844,19 @@
         if (confirm('¿Eliminar esta factura de compra?')) db.ref('compras_facturadas/' + id).remove();
     };
 
+    window.adjuntarFotoFactura = async function(id, input) {
+        const file = input.files[0];
+        if (!file) return;
+        try {
+            input.parentElement.innerHTML = '<i class="ph-bold ph-spinner"></i> Subiendo...';
+            const ref = storage.ref('facturas_compra/' + Date.now() + '_' + file.name);
+            await ref.put(file);
+            const url = await ref.getDownloadURL();
+            await db.ref('compras_facturadas/' + id).update({ comprobante: url });
+            // renderImpuestos se actualiza solo via listener
+        } catch(e) { alert('Error al subir foto: ' + e.message); }
+    };
+
     // ==========================================
     // RENDER IMPUESTOS
     // ==========================================
@@ -1942,8 +1955,11 @@
                 todas.forEach(([k, c]) => {
                     const imgBtn = c.comprobante
                         ? `<a href="${c.comprobante}" target="_blank" style="font-size:10px;background:rgba(175,82,222,0.1);color:var(--purple);padding:3px 8px;border-radius:6px;text-decoration:none;font-weight:800;"><i class="ph-bold ph-image"></i> Ver foto</a>`
-                        : '';
-                    listFC.innerHTML += `<div class="generic-card" style="padding:12px;border-left:3px solid var(--purple);">
+                        : `<label style="font-size:10px;background:rgba(255,149,0,0.1);color:var(--orange);padding:3px 8px;border-radius:6px;font-weight:800;cursor:pointer;">
+                              <i class="ph-bold ph-camera-plus"></i> Adjuntar foto
+                              <input type="file" accept="image/*,application/pdf" style="display:none" onchange="adjuntarFotoFactura('${k}', this)">
+                           </label>`;
+                    listFC.innerHTML += `<div class="generic-card" style="padding:12px;border-left:3px solid ${c.comprobante ? 'var(--purple)' : 'var(--orange)'};">
                         <div style="display:flex;justify-content:space-between;align-items:flex-start;">
                             <div style="flex:1;">
                                 <div style="font-weight:900;font-size:13px;">${c.proveedor || 'S/N'}</div>

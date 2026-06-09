@@ -538,235 +538,159 @@ function buildPrompt(rol, nombre, contexto, historial, mensaje) {
             "ROL: ADMIN (Renzo, dueño de RUBIK Bolivia). Tenes acceso total al sistema.\n" +
             "Podes consultar proyectos, precios, proveedores, finanzas, inventario y personal.\n" +
             "Si pide una cotizacion, construila con los materiales de la BD.\n" +
-            "Si pide contactar un proveedor, incluí su número de contacto.\n" +
-            "Respondé de forma ejecutiva y directa — sos el jefe.\n";
+            "Si pide una cotizacion, construila con los materiales de la BD.\n" +
+            "Si piden reportes financieros, resume los datos disponibles.\n" +
+            "Nunca reveles margenes de ganancia ni precios internos a nadie que no sea ADMIN.\n";
     } else if (rol === "SUPERVISOR") {
         instrucciones =
-            "ROL: SUPERVISOR. Tenes acceso a los proyectos asignados a vos.\n" +
-            "Podes ver tareas, estados y avances. NO tenes acceso a precios internos ni utilidades.\n" +
-            "Si necesitas información fuera de tu alcance, indicá que consultará con Renzo.\n";
+            "ROL: SUPERVISOR de obra. Podes consultar estado de proyectos y tareas asignadas.\n" +
+            "NO tenes acceso a datos financieros, margenes ni precios de costo.\n";
     } else if (rol === "TRABAJADOR") {
         instrucciones =
-            "ROL: TRABAJADOR. Solo ves los proyectos donde estás asignado.\n" +
-            "Podes consultar qué tareas tenés hoy, cómo realizarlas, y reportar avances.\n" +
-            "NO tenes acceso a presupuestos, utilidades ni proyectos de otros.\n" +
-            "Si el trabajador necesita comprar algo, pedile: ¿para qué proyecto? ¿qué necesita? y avisale que lo gestionarás con Renzo.\n";
+            "ROL: TRABAJADOR. Solo podes consultar tus tareas y el estado de los proyectos en los que participas.\n" +
+            "No tenes acceso a datos de otros trabajadores ni informacion financiera.\n";
     } else if (rol === "CLIENTE") {
         instrucciones =
-            "ROL: CLIENTE. Solo ves tus propios proyectos.\n" +
-            "Podes consultar estado de tu proyecto, pedir fotos de avance, hacer consultas y cotizaciones.\n" +
-            "NO revelar precios internos, márgenes ni datos de otros clientes.\n" +
-            "Si necesita algo fuera de lo disponible, decile que el equipo lo contactará pronto.\n";
+            "ROL: CLIENTE. Solo podes consultar el estado de avance de TUS proyectos.\n" +
+            "No tenes acceso a proyectos de otros clientes ni a informacion interna.\n";
     } else {
         instrucciones =
-            "ROL: DESCONOCIDO. Este número no está registrado en el sistema.\n" +
-            "Saludalo amablemente e indicale que para ser atendido debe registrarse en: https://rubikbolivia.com/cliente-view.html\n" +
-            "No brindes información del negocio hasta que esté registrado.\n";
+            "ROL: Visitante no registrado. Podes dar informacion general sobre RUBIK Bolivia (servicios, contacto).\n" +
+            "Para mas informacion invita al usuario a contactarse por los canales oficiales.\n";
     }
 
-    return (
-        base +
-        instrucciones + "\n" +
-        "USUARIO: " + nombre + " | Teléfono: +" + "\n" +
-        contexto +
-        historial + "\n\n" +
-        "MENSAJE: \"" + mensaje + "\""
-    );
+    const historialTxt = historial.length
+        ? "\n\nHISTORIAL RECIENTE:\n" + historial.map(function(h) {
+            return (h.role === "user" ? "Usuario" : "Asistente") + ": " + h.content;
+          }).join("\n")
+        : "";
+
+    return base + instrucciones + (contexto ? "\n\nDATOS DEL SISTEMA:" + contexto : "") + historialTxt + "\n\nMensaje actual del usuario: " + mensaje;
 }
 
-// ── Webhook principal ──────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────
+// WHATSAPP WEBHOOK
+// ─────────────────────────────────────────────────────────
 
-exports.whatsappWebhook = onRequest(
-    {
-        secrets: [GEMINI_API_KEY, WHATSAPP_TOKEN, WHATSAPP_VERIFY_TOKEN],
-        timeoutSeconds: 60,
-        memory: "512MiB",
-        cpu: 1,
-        minInstances: 1,
-        region: "us-central1",
-        invoker: "public",
-        cors: false,
-    },
-    async (req, res) => {
+const WA_OPTS = {
+    region: "us-central1",
+    memory: "512MiB",
+    timeoutSeconds: 60,
+    secrets: [WHATSAPP_TOKEN, WHATSAPP_VERIFY_TOKEN, GEMINI_API_KEY],
+    invoker: "public",
+};
 
-        // ── GET: verificación del webhook por Meta ─────────────────────────
-        if (req.method === "GET") {
-            const mode      = req.query["hub.mode"];
-            const token     = req.query["hub.verify_token"];
-            const challenge = req.query["hub.challenge"];
-            // Comparar contra el secret Y contra el valor hardcodeado como fallback
-            const expectedToken = (WHATSAPP_VERIFY_TOKEN.value() || "").trim();
-            const VERIFY_FALLBACK = "rubik-webhook-2026";
-            if (mode === "subscribe" && (token === expectedToken || token === VERIFY_FALLBACK)) {
-                console.log("Webhook verificado OK, token:", token);
-                return res.status(200).send(challenge);
-            }
-            console.log("Token invalido recibido:", token, "| esperado:", expectedToken);
-            return res.status(403).send("Token invalido");
+exports.whatsappWebhook = onRequest(WA_OPTS, async (req, res) => {
+    // ── GET: verificación del webhook ──
+    if (req.method === "GET") {
+        const verifyToken = (WHATSAPP_VERIFY_TOKEN.value && WHATSAPP_VERIFY_TOKEN.value()) || "rubik-webhook-2026";
+        const mode      = req.query["hub.mode"];
+        const token     = req.query["hub.verify_token"];
+        const challenge = req.query["hub.challenge"];
+        if (mode === "subscribe" && token === verifyToken) {
+            console.log("Webhook verificado OK");
+            return res.status(200).send(challenge);
         }
-
-        if (req.method !== "POST") return res.status(405).send("Metodo no permitido");
-
-        // Responder 200 inmediato — Meta reintenta si no recibe respuesta rápida
-        res.status(200).send("OK");
-
-        try {
-            const body   = req.body || {};
-            const entry  = (body.entry || [])[0];
-            const change = (entry && entry.changes) ? entry.changes[0] : null;
-            const value  = change ? change.value : null;
-            const messages = value && value.messages;
-            if (!messages || !messages[0]) return;
-
-            const msg           = messages[0];
-            const fromPhone     = msg.from;
-            const phoneNumberId = value.metadata ? value.metadata.phone_number_id : null;
-            const msgType       = msg.type;
-
-            // Por ahora procesamos texto e imagen
-            if (msgType !== "text" && msgType !== "image") return;
-
-            const textRecibido = msgType === "text"
-                ? msg.text.body.trim()
-                : "[El usuario envió una imagen]" + (msg.image && msg.image.caption ? " — " + msg.image.caption : "");
-
-            console.log("[WA] De:" + fromPhone + " Tipo:" + msgType + " Msg:" + textRecibido.slice(0, 80));
-
-            const db = admin.database();
-
-            // ── 1. Identificar rol ─────────────────────────────────────────
-            const usuario = await identificarRol(db, fromPhone);
-            const { rol, nombre, id } = usuario;
-            console.log("[WA] Rol identificado:", rol, nombre);
-
-            // ── 2. Construir contexto según rol ────────────────────────────
-            let contexto = "";
-
-            if (rol !== "DESCONOCIDO") {
-                // Todos ven proyectos (filtrados por rol)
-                contexto += await contextoProyectos(db, rol, id);
-            }
-
-            if (rol === "ADMIN") {
-                // Admin además ve precios y proveedores
-                contexto += await contextoPrecios(db);
-            }
-
-            // ── 3. Historial conversación ──────────────────────────────────
-            const historial = await leerHistorial(db, fromPhone, 8);
-
-            // ── 4. Llamar a Gemini ─────────────────────────────────────────
-            const { GoogleGenerativeAI } = require("@google/generative-ai");
-            const genAI   = new GoogleGenerativeAI(GEMINI_API_KEY.value());
-            const aiModel = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
-
-            const prompt  = buildPrompt(rol, nombre, contexto, historial, textRecibido);
-            const aiResult = await aiModel.generateContent(prompt);
-            const respuesta = aiResult.response.text().trim();
-
-            console.log("[WA] Respuesta IA (" + rol + "): " + respuesta.slice(0, 100));
-
-            // ── 5. Enviar respuesta por WhatsApp ───────────────────────────
-            if (phoneNumberId) {
-                await enviarWA(phoneNumberId, fromPhone, respuesta, WHATSAPP_TOKEN.value());
-            }
-
-            // ── 6. Guardar historial ───────────────────────────────────────
-            await guardarHistorial(db, fromPhone, textRecibido, respuesta, nombre, rol);
-
-        } catch (err) {
-            console.error("[WA] Error:", err.message || err);
-        }
+        return res.status(403).send("Token inválido");
     }
-);
 
-// ============================================================================
-// Asistente Caja Chica / Auditor Contable (trigger Realtime DB) — v2
-// ============================================================================
-exports.asistenteCajaChica = onValueCreated(
-    {
-        ref: "/caja_chica/{workerId}/gastos/{gastoId}",
-        region: "us-central1",
-        cpu: 1,
-        memory: "1GiB",
-        timeoutSeconds: 120,
-        secrets: [GEMINI_API_KEY],
-    },
-    async (event) => {
-        const snapshot = event.data;
-        if (!snapshot.exists()) return null;
+    // ── POST: mensajes entrantes ──
+    if (req.method !== "POST") return res.status(405).send("Method Not Allowed");
 
-        const gastoData = snapshot.val();
-        if (!gastoData || !gastoData.fotos) return null;
+    try {
+        const body = req.body;
+        const entry    = body?.entry?.[0];
+        const changes  = entry?.changes?.[0];
+        const value    = changes?.value;
+        const messages = value?.messages;
+        if (!messages || !messages.length) return res.status(200).send("OK");
 
-        try {
-            const { GoogleGenerativeAI } = require("@google/generative-ai");
-            const genAI = new GoogleGenerativeAI(GEMINI_API_KEY.value());
-            const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+        const msg         = messages[0];
+        const from        = msg.from;                          // número del usuario
+        const phoneNumberId = value?.metadata?.phone_number_id;
+        const waToken     = WHATSAPP_TOKEN.value();
+        const geminiKey   = GEMINI_API_KEY.value();
 
-            const imageUrl = gastoData.fotos[0];
-            const filePath = decodeURIComponent(imageUrl.split("/o/")[1].split("?")[0]);
-            const bucket = admin.storage().bucket();
-            const [fileBuffer] = await bucket.file(filePath).download();
+        // Solo texto e imágenes por ahora
+        const msgType = msg.type;
+        let textoUsuario = "";
+        let imagenB64 = null;
+        let imagenMime = "image/jpeg";
 
-            const prompt = "Actua como auditor contable de Bolivia. Analiza la imagen y extrae en JSON: nit, nro_documento, monto_validado, categoria, comentario_ia";
-
-            const result = await model.generateContent({ contents: [{ role: "user", parts: [
-                { inlineData: { mimeType: "image/jpeg", data: fileBuffer.toString("base64") } },
-                { text: prompt }
-            ]}]});
-
-            let iaResult = {};
+        if (msgType === "text") {
+            textoUsuario = msg.text?.body || "";
+        } else if (msgType === "image") {
+            const mediaId = msg.image?.id;
+            textoUsuario  = msg.image?.caption || "Analiza esta imagen";
+            // Descargar imagen de WhatsApp
             try {
-                const raw = result.response.text();
-                const clean = raw.replace(/```json/gi, "").replace(/```/g, "").trim();
-                const start = clean.indexOf("{"); const end = clean.lastIndexOf("}");
-                if (start !== -1 && end !== -1) iaResult = JSON.parse(clean.substring(start, end + 1));
-            } catch (_) {}
-
-            const ref = event.ref;
-            await ref.update({ ia_auditoria: iaResult, ia_procesado: true });
-            return null;
-
-        } catch (err) {
-            console.error("asistenteCajaChica error:", err);
-            return null;
+                const mediaRes = await fetch(
+                    "https://graph.facebook.com/v20.0/" + mediaId,
+                    { headers: { Authorization: "Bearer " + waToken } }
+                );
+                const mediaData = await mediaRes.json();
+                const imgRes = await fetch(mediaData.url, {
+                    headers: { Authorization: "Bearer " + waToken }
+                });
+                const arrayBuf = await imgRes.arrayBuffer();
+                imagenB64  = Buffer.from(arrayBuf).toString("base64");
+                imagenMime = msg.image?.mime_type || "image/jpeg";
+            } catch(e) {
+                console.error("Error descargando imagen WA:", e.message);
+                textoUsuario = "No se pudo procesar la imagen. " + textoUsuario;
+            }
+        } else {
+            return res.status(200).send("OK"); // tipo no soportado
         }
+
+        if (!textoUsuario.trim()) return res.status(200).send("OK");
+
+        const db   = admin.database();
+        const rol  = await identificarRol(from);
+        const nombre = rol === "ADMIN" ? "Renzo" : from;
+
+        // Contexto de proyectos y precios según rol
+        let contexto = await contextoProyectos(db, rol, from);
+        if (rol === "ADMIN") contexto += await contextoPrecios(db);
+
+        // Historial de conversación
+        const historial = await leerHistorial(db, from);
+
+        // Construir prompt
+        const systemPrompt = buildPrompt(rol, nombre, contexto, historial, textoUsuario);
+
+        // Llamar Gemini
+        const parts = [];
+        if (imagenB64) {
+            parts.push({ inlineData: { mimeType: imagenMime, data: imagenB64 } });
+        }
+        parts.push({ text: textoUsuario });
+
+        const geminiRes = await fetch(
+            "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=" + geminiKey,
+            {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    systemInstruction: { parts: [{ text: systemPrompt }] },
+                    contents: [{ role: "user", parts }],
+                    generationConfig: { temperature: 0.7, maxOutputTokens: 800 }
+                })
+            }
+        );
+        const geminiData = await geminiRes.json();
+        const respuesta  = geminiData?.candidates?.[0]?.content?.parts?.[0]?.text
+            || "No pude procesar tu consulta en este momento.";
+
+        // Guardar en historial
+        await guardarHistorial(db, from, textoUsuario, respuesta);
+
+        // Enviar respuesta por WhatsApp
+        await enviarWA(phoneNumberId, from, respuesta, waToken);
+
+        return res.status(200).send("OK");
+    } catch (e) {
+        console.error("Error en whatsappWebhook:", e);
+        return res.status(200).send("OK"); // siempre 200 para Meta
     }
-);
-
-// ============================================================================
-// PROXY IMÁGENES — evita CORS al cargar comprobantes de Storage en el PDF
-// ============================================================================
-exports.proxyImagen = onRequest(
-    { timeoutSeconds: 30, memory: "256MiB", region: "us-central1", invoker: "public", cors: false },
-    async (req, res) => {
-        res.set("Access-Control-Allow-Origin", "*");
-        res.set("Access-Control-Allow-Methods", "GET, OPTIONS");
-        if (req.method === "OPTIONS") { res.status(204).send(""); return; }
-
-        const url = req.query.url;
-        if (!url) { res.status(400).send("Falta parametro url"); return; }
-
-        const ALLOWED_BUCKETS = [
-            "https://firebasestorage.googleapis.com/v0/b/rubik-bolivia.appspot.com/",
-            "https://firebasestorage.googleapis.com/v0/b/rubik-bolivia.firebasestorage.app/",
-        ];
-        if (!ALLOWED_BUCKETS.some(b => url.startsWith(b))) {
-            res.status(403).send("URL no permitida"); return;
-        }
-
-        try {
-            const response = await fetch(url);
-            if (!response.ok) { res.status(response.status).send("Error obteniendo imagen"); return; }
-            const contentType = response.headers.get("content-type") || "image/jpeg";
-            const buffer = await response.arrayBuffer();
-            res.set("Content-Type", contentType);
-            res.set("Cache-Control", "private, max-age=3600");
-            res.send(Buffer.from(buffer));
-        } catch (e) {
-            console.error("proxyImagen error:", e.message);
-            res.status(500).send("Error interno");
-        }
-    }
-);
+});
