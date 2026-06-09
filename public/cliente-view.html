@@ -1215,7 +1215,7 @@
                     if (done) return;
                     done = true; unsub(); resolve(u);
                 });
-                setTimeout(() => { if (!done) { done = true; try { unsub(); } catch {} resolve(null); } }, 5000);
+                setTimeout(() => { if (!done) { done = true; try { unsub(); } catch(e) {} resolve(null); } }, 5000);
             });
         }
         if (!user) {

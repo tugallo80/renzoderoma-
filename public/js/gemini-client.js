@@ -44,7 +44,7 @@ async function getIdToken() {
             });
             setTimeout(() => {
                 if (done) return;
-                done = true; try { unsub(); } catch {} resolve(null);
+                done = true; try { unsub(); } catch(e) {} resolve(null);
             }, 5000);
         });
     }
