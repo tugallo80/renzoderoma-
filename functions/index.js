@@ -164,39 +164,41 @@ exports.geminiProxy = onRequest(GEMINI_PROXY_OPTS, async (req, res) => {
         let text = "";
         try { text = result.response.text() || ""; } catch (_) { text = ""; }
 
-        // ── Generación de imagen via Imagen 3 REST API ──────────────────
+        // ── Generación de imagen via Gemini image models ──────────────────
         if (body.generateImage) {
-            try {
-                const geminiKey = GEMINI_API_KEY.value();
-                const imgPrompt = body.prompt || body.text || "imagen profesional corporativa";
-                const imgRes = await fetch(
-                    `https://generativelanguage.googleapis.com/v1beta/models/imagen-3.0-generate-002:predict?key=${geminiKey}`,
-                    {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({
-                            instances: [{ prompt: imgPrompt }],
-                            parameters: {
-                                sampleCount: 1,
-                                aspectRatio: "16:9",
-                                safetySetting: "block_only_high",
-                                personGeneration: "dont_allow"
-                            }
-                        })
+            const imgPrompt = body.prompt || body.text || "imagen profesional corporativa";
+            const imgModels = [
+                "gemini-2.0-flash-preview-image-generation",
+                "gemini-2.0-flash-exp-image-generation",
+                "gemini-2.0-flash-exp",
+            ];
+            for (const imgModel of imgModels) {
+                try {
+                    const m = genAI.getGenerativeModel({
+                        model: imgModel,
+                        generationConfig: { responseModalities: ["TEXT", "IMAGE"] },
+                    });
+                    const imgResult = await m.generateContent([{ text: imgPrompt }]);
+                    const parts = imgResult?.response?.candidates?.[0]?.content?.parts || [];
+                    for (const p of parts) {
+                        const inline = p.inlineData || p.inline_data;
+                        if (inline && inline.data) {
+                            const mime = inline.mimeType || inline.mime_type || "image/png";
+                            return res.status(200).json({ imageUrl: `data:${mime};base64,${inline.data}` });
+                        }
                     }
-                );
-                const imgData = await imgRes.json();
-                console.log("imagen-3 response status:", imgRes.status, JSON.stringify(imgData).slice(0, 400));
-                const b64 = imgData?.predictions?.[0]?.bytesBase64Encoded;
-                const mime = imgData?.predictions?.[0]?.mimeType || "image/png";
-                if (b64) {
-                    return res.status(200).json({ imageUrl: `data:${mime};base64,${b64}` });
+                    console.warn(`imagen-gen: ${imgModel} no produjo imagen, probando siguiente…`);
+                } catch(imgErr) {
+                    const msg = imgErr.message || "";
+                    if (msg.includes("404") || msg.toLowerCase().includes("not found")) {
+                        console.warn(`imagen-gen: ${imgModel} no disponible, probando siguiente…`);
+                        continue;
+                    }
+                    console.error("imagen-gen error:", imgErr.message);
+                    return res.status(500).json({ error: "No se pudo generar imagen", detalle: imgErr.message });
                 }
-                return res.status(500).json({ error: "Sin imagen en respuesta", detalle: JSON.stringify(imgData).slice(0, 300) });
-            } catch(imgErr) {
-                console.error("imagen-gen error:", imgErr.message);
-                return res.status(500).json({ error: "No se pudo generar imagen", detalle: imgErr.message });
             }
+            return res.status(500).json({ error: "Ningún modelo de imagen disponible. Intentá más tarde." });
         }
 
         return res.status(200).json({
