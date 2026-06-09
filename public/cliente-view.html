@@ -3520,33 +3520,61 @@ Solicitud: ${texto}`;
     });
 
     let recognition; let isRecording = false;
-    if ('webkitSpeechRecognition' in window) {
-        recognition = new webkitSpeechRecognition();
+    const SpeechAPI = window.SpeechRecognition || window.webkitSpeechRecognition || null;
+
+    if (SpeechAPI) {
+        recognition = new SpeechAPI();
         recognition.continuous = false;
-        recognition.interimResults = false;
-        recognition.lang = 'es-BO';
+        recognition.interimResults = true;
+        recognition.lang = 'es';
+
+        const _micBtn = () => document.getElementById('btn-mic');
+        const _input  = () => document.getElementById('ia-text-input');
+        let _baseText = '';
 
         recognition.onstart = function() {
             isRecording = true;
-            document.getElementById('btn-mic').classList.add('recording');
-            document.getElementById('ia-text-input').placeholder = "Escuchando...";
+            _baseText = _input().value;
+            _micBtn().classList.add('recording');
+            _micBtn().innerHTML = '<i class="ph-bold ph-stop-circle"></i>';
+            _input().placeholder = "Escuchando...";
         };
+
         recognition.onresult = function(event) {
-            const transcript = event.results[0][0].transcript;
-            const input = document.getElementById('ia-text-input');
-            input.value = (input.value + " " + transcript).trim();
+            let interim = '';
+            let final = '';
+            for (let i = event.resultIndex; i < event.results.length; i++) {
+                const t = event.results[i][0].transcript;
+                if (event.results[i].isFinal) final += t;
+                else interim += t;
+            }
+            _input().value = (_baseText + ' ' + (final || interim)).trim();
         };
-        recognition.onerror = function(event) { console.error("Speech error", event); };
+
+        recognition.onerror = function(event) {
+            const msgs = {
+                'not-allowed':   'Permití el micrófono en tu navegador e intentá de nuevo.',
+                'no-speech':     'No se detectó voz. Intentá de nuevo.',
+                'network':       'Error de red al procesar voz. Revisá tu conexión.',
+                'audio-capture': 'No se encontró micrófono.',
+            };
+            const msg = msgs[event.error] || ('Error de voz: ' + event.error);
+            _input().placeholder = msg;
+            setTimeout(() => { _input().placeholder = 'Escribe aquí o pega una imagen...'; }, 3000);
+        };
+
         recognition.onend = function() {
             isRecording = false;
-            document.getElementById('btn-mic').classList.remove('recording');
-            document.getElementById('ia-text-input').placeholder = "Escribe aquí o pega una imagen...";
+            _micBtn().classList.remove('recording');
+            _micBtn().innerHTML = '<i class="ph-bold ph-microphone"></i>';
+            _input().placeholder = 'Escribe aquí o pega una imagen...';
+            _baseText = '';
         };
     }
 
     window.toggleMic = function() {
-        if(!recognition) return alert("Tu navegador no soporta entrada por voz.");
-        if(isRecording) recognition.stop(); else recognition.start();
+        if (!recognition) return alert('Tu navegador no soporta entrada por voz. Usá Chrome en Android o Safari en iOS.');
+        if (isRecording) { recognition.stop(); } else { recognition.start(); }
     };
 
         window.selectOpcion = function(btn, inputId) {
