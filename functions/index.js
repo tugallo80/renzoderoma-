@@ -164,20 +164,36 @@ exports.geminiProxy = onRequest(GEMINI_PROXY_OPTS, async (req, res) => {
         let text = "";
         try { text = result.response.text() || ""; } catch (_) { text = ""; }
 
-        // ── Generación de imagen (Imagen 3) ──────────────────────────
+        // ── Generación de imagen via Gemini 2.0 Flash (imagen nativa) ──
         if (body.generateImage) {
-            const imgModel = genAI.getGenerativeModel({ model: "imagen-3.0-generate-001" });
             try {
-                const imgResult = await imgModel.generateImages({
-                    prompt: body.prompt || body.text || "",
-                    number_of_images: 1,
-                    aspect_ratio: "16:9",
-                });
-                const b64 = imgResult.images[0].imageBytes;
-                const imageUrl = `data:image/png;base64,${b64}`;
-                return res.status(200).json({ imageUrl });
+                const geminiKey = GEMINI_API_KEY.value();
+                const imgPrompt = body.prompt || body.text || "imagen profesional de construcción y arquitectura";
+                // Usar gemini-2.0-flash-exp que soporta generación de imágenes nativa
+                const imgRes = await fetch(
+                    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${geminiKey}`,
+                    {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                            contents: [{ parts: [{ text: imgPrompt }] }],
+                            generationConfig: { responseModalities: ["TEXT", "IMAGE"] }
+                        })
+                    }
+                );
+                const imgData = await imgRes.json();
+                // Buscar la parte con imagen inline
+                const parts = imgData?.candidates?.[0]?.content?.parts || [];
+                const imgPart = parts.find(p => p.inlineData);
+                if (imgPart) {
+                    const { data, mimeType } = imgPart.inlineData;
+                    return res.status(200).json({ imageUrl: `data:${mimeType};base64,${data}` });
+                }
+                // Fallback: si no hay imagen, devolver error descriptivo
+                console.error("imagen-gen: no image part in response", JSON.stringify(imgData).slice(0, 300));
+                return res.status(500).json({ error: "No se pudo generar imagen", detalle: "Sin parte de imagen en respuesta" });
             } catch(imgErr) {
-                console.error("imagen-3 error:", imgErr.message);
+                console.error("imagen-gen error:", imgErr.message);
                 return res.status(500).json({ error: "No se pudo generar imagen", detalle: imgErr.message });
             }
         }
@@ -712,6 +728,7 @@ exports.whatsappWebhook = onRequest(WA_OPTS, async (req, res) => {
         return res.status(200).send("OK"); // siempre 200 para Meta
     }
 });
+
 
 // ─────────────────────────────────────────────────────────
 // PROXY IMÁGENES (Firebase Storage → PDF sin CORS)
