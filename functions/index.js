@@ -107,10 +107,11 @@ exports.geminiProxy = onRequest(GEMINI_PROXY_OPTS, async (req, res) => {
         if (body.generateImage) {
             const imgPrompt = body.prompt || body.text || "imagen profesional corporativa";
             const imgModels = [
+                "gemini-2.5-flash-preview-image-generation",
                 "gemini-2.0-flash-preview-image-generation",
                 "gemini-2.0-flash-exp-image-generation",
-                "gemini-2.0-flash-exp",
             ];
+            const errors = [];
             for (const imgModel of imgModels) {
                 try {
                     const restRes = await fetch(
@@ -124,14 +125,11 @@ exports.geminiProxy = onRequest(GEMINI_PROXY_OPTS, async (req, res) => {
                             }),
                         }
                     );
-                    if (restRes.status === 404) {
-                        console.warn(`imagen-gen: ${imgModel} no disponible (404), probando siguiente…`);
-                        continue;
-                    }
                     const restData = await restRes.json();
                     if (!restRes.ok) {
                         const detail = restData?.error?.message || JSON.stringify(restData).slice(0, 200);
-                        console.warn(`imagen-gen: ${imgModel} error ${restRes.status}: ${detail}, probando siguiente…`);
+                        errors.push(`${imgModel} → ${restRes.status}: ${detail}`);
+                        console.warn(`imagen-gen: ${imgModel} error ${restRes.status}: ${detail}`);
                         continue;
                     }
                     const imgParts = restData?.candidates?.[0]?.content?.parts || [];
@@ -142,14 +140,16 @@ exports.geminiProxy = onRequest(GEMINI_PROXY_OPTS, async (req, res) => {
                             return res.status(200).json({ imageUrl: `data:${mime};base64,${inline.data}` });
                         }
                     }
-                    const finishReason = restData?.candidates?.[0]?.finishReason || "";
+                    const finishReason = restData?.candidates?.[0]?.finishReason || "sin imagen";
+                    errors.push(`${imgModel} → no produjo imagen (${finishReason})`);
                     console.warn(`imagen-gen: ${imgModel} no produjo imagen. finishReason=${finishReason}`);
                 } catch(imgErr) {
+                    errors.push(`${imgModel} → excepcion: ${imgErr.message}`);
                     console.error(`imagen-gen: ${imgModel} excepcion:`, imgErr.message);
                     continue;
                 }
             }
-            return res.status(500).json({ error: "Ningún modelo de imagen disponible. Intentá más tarde." });
+            return res.status(500).json({ error: "Ningún modelo de imagen disponible.", detalle: errors.join(" | ") });
         }
 
         const requestedModel = body.model || "gemini-2.5-flash";
