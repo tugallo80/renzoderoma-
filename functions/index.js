@@ -164,34 +164,35 @@ exports.geminiProxy = onRequest(GEMINI_PROXY_OPTS, async (req, res) => {
         let text = "";
         try { text = result.response.text() || ""; } catch (_) { text = ""; }
 
-        // ── Generación de imagen via Gemini 2.0 Flash (imagen nativa) ──
+        // ── Generación de imagen via Imagen 3 REST API ──────────────────
         if (body.generateImage) {
             try {
                 const geminiKey = GEMINI_API_KEY.value();
-                const imgPrompt = body.prompt || body.text || "imagen profesional de construcción y arquitectura";
-                // Usar gemini-2.0-flash-exp que soporta generación de imágenes nativa
+                const imgPrompt = body.prompt || body.text || "imagen profesional corporativa";
                 const imgRes = await fetch(
-                    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${geminiKey}`,
+                    `https://generativelanguage.googleapis.com/v1beta/models/imagen-3.0-generate-002:predict?key=${geminiKey}`,
                     {
                         method: "POST",
                         headers: { "Content-Type": "application/json" },
                         body: JSON.stringify({
-                            contents: [{ parts: [{ text: imgPrompt }] }],
-                            generationConfig: { responseModalities: ["TEXT", "IMAGE"] }
+                            instances: [{ prompt: imgPrompt }],
+                            parameters: {
+                                sampleCount: 1,
+                                aspectRatio: "16:9",
+                                safetySetting: "block_only_high",
+                                personGeneration: "dont_allow"
+                            }
                         })
                     }
                 );
                 const imgData = await imgRes.json();
-                // Buscar la parte con imagen inline
-                const parts = imgData?.candidates?.[0]?.content?.parts || [];
-                const imgPart = parts.find(p => p.inlineData);
-                if (imgPart) {
-                    const { data, mimeType } = imgPart.inlineData;
-                    return res.status(200).json({ imageUrl: `data:${mimeType};base64,${data}` });
+                console.log("imagen-3 response status:", imgRes.status, JSON.stringify(imgData).slice(0, 400));
+                const b64 = imgData?.predictions?.[0]?.bytesBase64Encoded;
+                const mime = imgData?.predictions?.[0]?.mimeType || "image/png";
+                if (b64) {
+                    return res.status(200).json({ imageUrl: `data:${mime};base64,${b64}` });
                 }
-                // Fallback: si no hay imagen, devolver error descriptivo
-                console.error("imagen-gen: no image part in response", JSON.stringify(imgData).slice(0, 300));
-                return res.status(500).json({ error: "No se pudo generar imagen", detalle: "Sin parte de imagen en respuesta" });
+                return res.status(500).json({ error: "Sin imagen en respuesta", detalle: JSON.stringify(imgData).slice(0, 300) });
             } catch(imgErr) {
                 console.error("imagen-gen error:", imgErr.message);
                 return res.status(500).json({ error: "No se pudo generar imagen", detalle: imgErr.message });
