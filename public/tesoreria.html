@@ -282,72 +282,173 @@
     </div>
 
     <div id="panel-ingresos" class="panel-section">
-        <div class="generic-card">
-            <h3 style="margin-top:0; color:var(--green);"><i class="ph-bold ph-money"></i> Registrar Ingreso / Factura de Venta</h3>
-
-            <!-- Scanner IA para facturas de venta -->
-            <div id="zona-scan-ventas" style="border:2px dashed var(--green); border-radius:12px; padding:16px; margin-bottom:15px; cursor:pointer; text-align:center;"
-                 onclick="document.getElementById('venta-factura-upload').click()"
-                 ondragover="event.preventDefault(); this.style.borderColor='var(--blue)'"
-                 ondragleave="this.style.borderColor='var(--green)'"
-                 ondrop="event.preventDefault(); this.style.borderColor='var(--green)'; handleVentaDrop(event)">
-                <i class="ph-bold ph-scan" style="font-size:26px; color:var(--green);"></i>
-                <div style="font-size:13px; font-weight:800; color:var(--green); margin-top:5px;">Escanear Factura Emitida con IA</div>
-                <div style="font-size:11px; color:var(--gray); margin-top:3px;">Toca para subir foto o PDF de la factura que emitiste</div>
-            </div>
-            <input type="file" id="venta-factura-upload" accept="image/*,application/pdf" multiple style="display:none" onchange="cargarVentasSeleccionadas(this)">
-            <div id="venta-preview-grid" style="display:none; margin-bottom:12px;">
-                <div id="venta-thumbs" style="display:flex; flex-wrap:wrap; gap:8px; margin-bottom:10px;"></div>
-                <div style="display:flex; gap:8px;">
-                    <button id="btn-scan-ventas" class="btn-action" style="background:var(--green); flex:1;" onclick="escanearFacturasVenta()">
-                        <i class="ph-bold ph-magic-wand"></i> <span id="btn-scan-venta-txt">Escanear con IA</span>
-                    </button>
-                    <button class="btn-action" style="background:var(--card); border:1px solid var(--gray); color:var(--gray); padding:10px 14px;" onclick="limpiarVentaScan()" title="Limpiar">
-                        <i class="ph-bold ph-x"></i>
-                    </button>
-                </div>
-            </div>
-            <div id="venta-scan-resultados" style="display:none; margin-bottom:15px;"></div>
-
-            <div style="text-align:center; font-size:11px; color:var(--gray); margin-bottom:12px; font-weight:bold;">O completa manualmente:</div>
-
-            <label class="inp-lbl">Proyecto Asociado</label>
-            <div id="ing-proy-container" style="position:relative; margin-bottom:14px;">
-                <input type="text" id="ing-proy-input" class="inp-std" placeholder="Buscar proyecto..." autocomplete="off"
-                       style="margin:0; padding-right:36px;"
-                       oninput="filtrarProyectos(this.value)"
-                       onfocus="abrirDropProyectos()"
-                       onkeydown="navDropProyectos(event)">
-                <i class="ph-bold ph-magnifying-glass" style="position:absolute;right:12px;top:50%;transform:translateY(-50%);color:var(--gray);pointer-events:none;font-size:16px;"></i>
-                <div id="ing-proy-drop" style="display:none;position:absolute;top:calc(100% + 4px);left:0;right:0;background:var(--card);border:1px solid var(--border);border-radius:12px;max-height:220px;overflow-y:auto;z-index:200;box-shadow:0 8px 24px rgba(0,0,0,0.2);"></div>
-            </div>
-            <input type="hidden" id="ing-proy-sel" value="">
-            <div class="flex-row">
-                <div style="flex:1;"><label class="inp-lbl">Monto (Bs)</label><input type="number" step="any" id="ing-monto" class="inp-std" placeholder="0.00"></div>
-                <div style="flex:1;"><label class="inp-lbl">Fecha</label><input type="date" id="ing-fecha" class="inp-std"></div>
-            </div>
-            <label style="display:flex; align-items:center; gap:10px; font-size:13px; font-weight:800; margin-bottom:15px;"><input type="checkbox" id="ing-facturado" style="width:20px; height:20px;" onchange="toggleFacturaFields('venta')"> Venta Con Factura Fiscal</label>
-            <div id="box-factura-venta" style="display:none;">
-                <label class="inp-lbl">NIT del Cliente</label><input type="number" id="ing-nit" class="inp-std" placeholder="Ej: 1234567010">
-                <label class="inp-lbl">Nro. de Factura</label><input type="number" id="ing-nro" class="inp-std" placeholder="Ej: 00152">
-            </div>
-            <button class="btn-action btn-success" onclick="registrarIngreso()"><i class="ph-bold ph-floppy-disk"></i> Guardar Ingreso</button>
+        <!-- Sub-tabs Ingresos -->
+        <div style="display:flex; background:var(--border); padding:4px; border-radius:12px; margin-bottom:16px; gap:2px;">
+            <button class="tab-btn active" id="subtab-cobros-btn" onclick="switchIngresosTab('cobros',this)" style="flex:1;">
+                <i class="ph-bold ph-money"></i> Cobros / Bouchers
+            </button>
+            <button class="tab-btn" id="subtab-factventas-btn" onclick="switchIngresosTab('factventas',this)" style="flex:1;">
+                <i class="ph-bold ph-receipt"></i> Facturas de Venta
+            </button>
         </div>
-        <div class="section-title"><i class="ph-bold ph-chart-pie-slice"></i> Cuentas por Cobrar</div><div id="list-cxc"></div>
-        <div class="section-title"><i class="ph-bold ph-list-dashes"></i> Historial de Ingresos</div><div id="list-ingresos"></div>
+
+        <!-- ===== SUB-PANEL: COBROS / BOUCHERS ===== -->
+        <div id="subpanel-cobros">
+            <div class="generic-card">
+                <h3 style="margin-top:0; color:var(--green); font-size:15px;"><i class="ph-bold ph-wallet"></i> Registrar Cobro / Boucher</h3>
+                <div style="font-size:11px; color:var(--gray); margin-bottom:14px; background:rgba(52,199,89,0.08); border-radius:8px; padding:10px;">
+                    <i class="ph-bold ph-info" style="color:var(--green);"></i> Registrá aquí los <strong>pagos reales recibidos</strong>: transferencias, bouchers, efectivo. No necesitan factura.
+                </div>
+
+                <!-- Boucher upload -->
+                <div style="border:2px dashed var(--green); border-radius:12px; padding:14px; margin-bottom:12px; cursor:pointer; text-align:center;" onclick="document.getElementById('cobro-boucher-upload').click()">
+                    <i class="ph-bold ph-upload-simple" style="font-size:22px; color:var(--green);"></i>
+                    <div style="font-size:12px; font-weight:800; color:var(--green); margin-top:4px;">Subir Boucher / Comprobante de Pago</div>
+                </div>
+                <input type="file" id="cobro-boucher-upload" accept="image/*,application/pdf" style="display:none" onchange="onCobroBoucherCargado(this)">
+                <div id="cobro-boucher-preview" style="display:none; margin-bottom:10px; background:rgba(52,199,89,0.08); border:1px solid var(--green); border-radius:8px; padding:8px; font-size:11px; font-weight:700; color:var(--green); display:none; align-items:center; gap:8px;">
+                    <i class="ph-bold ph-file-check"></i> <span id="cobro-boucher-nombre">Archivo cargado</span>
+                    <button onclick="limpiarCobroBoucher()" style="background:none;border:none;color:var(--red);cursor:pointer;margin-left:auto;font-size:14px;"><i class="ph-bold ph-x"></i></button>
+                </div>
+
+                <label class="inp-lbl">Proyecto Asociado</label>
+                <div id="cobro-proy-container" style="position:relative; margin-bottom:14px;">
+                    <input type="text" id="cobro-proy-input" class="inp-std" placeholder="Buscar proyecto..." autocomplete="off"
+                           style="margin:0; padding-right:36px;"
+                           oninput="filtrarProyectosCobro(this.value)"
+                           onfocus="abrirDropProyectosCobro()"
+                           onkeydown="navDropProyectosCobro(event)">
+                    <i class="ph-bold ph-magnifying-glass" style="position:absolute;right:12px;top:50%;transform:translateY(-50%);color:var(--gray);pointer-events:none;font-size:16px;"></i>
+                    <div id="cobro-proy-drop" style="display:none;position:absolute;top:calc(100% + 4px);left:0;right:0;background:var(--card);border:1px solid var(--border);border-radius:12px;max-height:200px;overflow-y:auto;z-index:200;box-shadow:0 8px 24px rgba(0,0,0,0.2);"></div>
+                </div>
+                <input type="hidden" id="cobro-proy-sel" value="">
+
+                <div class="flex-row">
+                    <div style="flex:1;"><label class="inp-lbl">Monto Cobrado (Bs)</label><input type="number" step="any" id="cobro-monto" class="inp-std" placeholder="0.00"></div>
+                    <div style="flex:1;"><label class="inp-lbl">Fecha de Cobro</label><input type="date" id="cobro-fecha" class="inp-std"></div>
+                </div>
+                <label class="inp-lbl">Concepto / Descripción</label>
+                <input type="text" id="cobro-concepto" class="inp-std" placeholder="Ej: 50% anticipo, pago final...">
+                <button class="btn-action btn-success" onclick="registrarCobro()"><i class="ph-bold ph-floppy-disk"></i> Guardar Cobro</button>
+            </div>
+            <div class="section-title"><i class="ph-bold ph-chart-pie-slice"></i> Cuentas por Cobrar</div>
+            <div id="list-cxc"></div>
+            <div class="section-title"><i class="ph-bold ph-list-dashes"></i> Historial de Cobros</div>
+            <div id="list-cobros"></div>
+        </div>
+
+        <!-- ===== SUB-PANEL: FACTURAS DE VENTA ===== -->
+        <div id="subpanel-factventas" style="display:none;">
+            <div class="generic-card">
+                <h3 style="margin-top:0; color:var(--blue); font-size:15px;"><i class="ph-bold ph-receipt"></i> Registrar Factura de Venta Emitida</h3>
+                <div style="font-size:11px; color:var(--gray); margin-bottom:14px; background:rgba(0,122,255,0.08); border-radius:8px; padding:10px;">
+                    <i class="ph-bold ph-info" style="color:var(--blue);"></i> Solo facturas fiscales emitidas. Usadas para el <strong>balance de impuestos (IVA/IT)</strong>. El cobro puede ser posterior.
+                </div>
+
+                <!-- Scanner IA -->
+                <div id="zona-scan-ventas" style="border:2px dashed var(--blue); border-radius:12px; padding:14px; margin-bottom:12px; cursor:pointer; text-align:center;"
+                     onclick="document.getElementById('venta-factura-upload').click()"
+                     ondragover="event.preventDefault(); this.style.borderColor='var(--green)'"
+                     ondragleave="this.style.borderColor='var(--blue)'"
+                     ondrop="event.preventDefault(); this.style.borderColor='var(--blue)'; handleVentaDrop(event)">
+                    <i class="ph-bold ph-scan" style="font-size:24px; color:var(--blue);"></i>
+                    <div style="font-size:12px; font-weight:800; color:var(--blue); margin-top:4px;">Escanear Factura con IA</div>
+                    <div style="font-size:10px; color:var(--gray); margin-top:2px;">Foto o PDF de la factura emitida</div>
+                </div>
+                <input type="file" id="venta-factura-upload" accept="image/*,application/pdf" multiple style="display:none" onchange="cargarVentasSeleccionadas(this)">
+                <div id="venta-preview-grid" style="display:none; margin-bottom:12px;">
+                    <div id="venta-thumbs" style="display:flex; flex-wrap:wrap; gap:8px; margin-bottom:10px;"></div>
+                    <div style="display:flex; gap:8px;">
+                        <button id="btn-scan-ventas" class="btn-action" style="background:var(--blue); flex:1;" onclick="escanearFacturasVenta()">
+                            <i class="ph-bold ph-magic-wand"></i> <span id="btn-scan-venta-txt">Escanear con IA</span>
+                        </button>
+                        <button class="btn-action" style="background:var(--card); border:1px solid var(--gray); color:var(--gray); padding:10px 14px;" onclick="limpiarVentaScan()">
+                            <i class="ph-bold ph-x"></i>
+                        </button>
+                    </div>
+                </div>
+                <div id="venta-scan-resultados" style="display:none; margin-bottom:12px;"></div>
+                <div style="text-align:center; font-size:11px; color:var(--gray); margin-bottom:12px; font-weight:bold;">O completá manualmente:</div>
+
+                <label class="inp-lbl">Proyecto Asociado</label>
+                <div id="ing-proy-container" style="position:relative; margin-bottom:12px;">
+                    <input type="text" id="ing-proy-input" class="inp-std" placeholder="Buscar proyecto..." autocomplete="off"
+                           style="margin:0; padding-right:36px;"
+                           oninput="filtrarProyectos(this.value)"
+                           onfocus="abrirDropProyectos()"
+                           onkeydown="navDropProyectos(event)">
+                    <i class="ph-bold ph-magnifying-glass" style="position:absolute;right:12px;top:50%;transform:translateY(-50%);color:var(--gray);pointer-events:none;font-size:16px;"></i>
+                    <div id="ing-proy-drop" style="display:none;position:absolute;top:calc(100% + 4px);left:0;right:0;background:var(--card);border:1px solid var(--border);border-radius:12px;max-height:200px;overflow-y:auto;z-index:200;box-shadow:0 8px 24px rgba(0,0,0,0.2);"></div>
+                </div>
+                <input type="hidden" id="ing-proy-sel" value="">
+
+                <div class="flex-row">
+                    <div style="flex:1;"><label class="inp-lbl">Monto Factura (Bs)</label><input type="number" step="any" id="ing-monto" class="inp-std" placeholder="0.00"></div>
+                    <div style="flex:1;"><label class="inp-lbl">Fecha Emisión</label><input type="date" id="ing-fecha" class="inp-std"></div>
+                </div>
+                <div class="flex-row">
+                    <div style="flex:1;"><label class="inp-lbl">NIT del Cliente</label><input type="number" id="ing-nit" class="inp-std" placeholder="Ej: 1234567010"></div>
+                    <div style="flex:1;"><label class="inp-lbl">Nro. de Factura</label><input type="number" id="ing-nro" class="inp-std" placeholder="Ej: 00152"></div>
+                </div>
+                <label class="inp-lbl">Código Autorización / CUF</label>
+                <input type="text" id="ing-cuf" class="inp-std" placeholder="Alfanumérico o 'S/N'">
+                <label class="inp-lbl">Razón Social Cliente</label>
+                <input type="text" id="ing-cliente-rs" class="inp-std" placeholder="Nombre o razón social del cliente">
+
+                <!-- Estado de cobro -->
+                <div style="background:var(--bg); border-radius:10px; padding:12px; margin-bottom:14px;">
+                    <div style="font-size:11px; font-weight:800; color:var(--gray); text-transform:uppercase; margin-bottom:8px;"><i class="ph-bold ph-currency-circle-dollar"></i> Estado de Cobro</div>
+                    <div style="display:flex; gap:8px; margin-bottom:10px;">
+                        <button id="btn-estado-pendiente" onclick="setEstadoCobro('pendiente')" style="flex:1; padding:10px; border:2px solid var(--orange); background:rgba(255,149,0,0.15); color:var(--orange); border-radius:10px; font-weight:900; font-size:12px; cursor:pointer;">
+                            <i class="ph-bold ph-clock"></i> Pendiente
+                        </button>
+                        <button id="btn-estado-cobrado" onclick="setEstadoCobro('cobrado')" style="flex:1; padding:10px; border:2px solid var(--border); background:var(--card); color:var(--gray); border-radius:10px; font-weight:900; font-size:12px; cursor:pointer;">
+                            <i class="ph-bold ph-check-circle"></i> Cobrado
+                        </button>
+                    </div>
+                    <div id="box-fecha-cobro" style="display:none;">
+                        <label class="inp-lbl">Fecha de Cobro Real</label>
+                        <input type="date" id="ing-fecha-cobro" class="inp-std">
+                    </div>
+                </div>
+                <input type="hidden" id="ing-facturado" value="true">
+                <input type="hidden" id="ing-estado-cobro" value="pendiente">
+                <button class="btn-action btn-success" onclick="registrarIngreso()"><i class="ph-bold ph-floppy-disk"></i> Guardar Factura de Venta</button>
+            </div>
+            <div class="section-title"><i class="ph-bold ph-list-dashes"></i> Facturas de Venta Emitidas</div>
+            <div id="list-ingresos"></div>
+        </div>
     </div>
 
     <div id="panel-impuestos" class="panel-section">
-        
-        <div class="generic-card" style="background:#1c1c1e; color:white; border-color:#333;">
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
-                <div style="font-size:11px; font-weight:800; color:var(--gray); text-transform:uppercase;">Balance Impositivo Mensual (IVA e IT)</div>
-                <div style="display:flex; gap:8px;">
-                    <button class="btn-action btn-outline" style="width:auto; padding:6px 12px; border-color:var(--green); color:var(--green);" onclick="exportarRCVExcel()"><i class="ph-bold ph-file-xls"></i> Exportar RCV</button>
-                    <button class="btn-action btn-outline" style="width:auto; padding:6px 12px; border-color:var(--purple); color:var(--purple);" onclick="exportarAuditoriaPDF()"><i class="ph-bold ph-file-pdf"></i> Exportar Auditoría (Imágenes)</button>
+
+        <!-- Selector de período y vistas consolidadas -->
+        <div class="generic-card" style="margin-bottom:12px;">
+            <div style="font-size:11px; font-weight:800; color:var(--gray); text-transform:uppercase; margin-bottom:10px;"><i class="ph-bold ph-calendar"></i> Período de Análisis</div>
+            <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:flex-end;">
+                <div style="flex:1; min-width:130px;">
+                    <label class="inp-lbl">Mes</label>
+                    <input type="month" id="tax-filtro-mes" class="inp-std" style="margin:0;" onchange="renderImpuestos()">
+                </div>
+                <div style="display:flex; gap:6px; flex-wrap:wrap;">
+                    <button onclick="setTaxVista('mes')" id="tax-btn-mes" class="btn-action" style="width:auto; padding:8px 12px; font-size:11px; background:var(--blue);">Mes</button>
+                    <button onclick="setTaxVista('trimestre')" id="tax-btn-trim" class="btn-action btn-outline" style="width:auto; padding:8px 12px; font-size:11px;">Trimestre</button>
+                    <button onclick="setTaxVista('semestre')" id="tax-btn-sem" class="btn-action btn-outline" style="width:auto; padding:8px 12px; font-size:11px;">Semestre</button>
+                    <button onclick="setTaxVista('anual')" id="tax-btn-anual" class="btn-action btn-outline" style="width:auto; padding:8px 12px; font-size:11px;">Año</button>
                 </div>
             </div>
-            
+            <div id="tax-periodo-label" style="font-size:11px; color:var(--blue); font-weight:800; margin-top:8px; text-align:center;"></div>
+        </div>
+
+        <div class="generic-card" style="background:#1c1c1e; color:white; border-color:#333;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px; flex-wrap:wrap; gap:8px;">
+                <div style="font-size:11px; font-weight:800; color:var(--gray); text-transform:uppercase;" id="tax-titulo-periodo">Balance Impositivo</div>
+                <div style="display:flex; gap:6px; flex-wrap:wrap;">
+                    <button class="btn-action btn-outline" style="width:auto; padding:6px 10px; font-size:10px; border-color:var(--green); color:var(--green);" onclick="exportarRCVExcel()"><i class="ph-bold ph-file-xls"></i> RCV Excel</button>
+                    <button class="btn-action btn-outline" style="width:auto; padding:6px 10px; font-size:10px; border-color:var(--purple); color:var(--purple);" onclick="exportarAuditoriaPDF()"><i class="ph-bold ph-file-pdf"></i> PDF + Fotos</button>
+                </div>
+            </div>
+
             <div class="tax-row"><span>Total Ventas Facturadas:</span> <span id="tax-ventas" style="color:var(--blue);">0.00 Bs</span></div>
             <div class="tax-row"><span>Débito Fiscal (IVA 13%):</span> <span id="tax-debito" style="color:var(--red);">0.00 Bs</span></div>
             <div class="tax-row"><span>Impto. Transacciones (IT 3%):</span> <span id="tax-it" style="color:var(--red);">0.00 Bs</span></div>
@@ -355,7 +456,13 @@
             <div class="tax-row"><span>Total Compras Facturadas:</span> <span id="tax-compras" style="color:var(--blue);">0.00 Bs</span></div>
             <div class="tax-row"><span>Crédito Fiscal (IVA 13% a favor):</span> <span id="tax-credito" style="color:var(--green);">0.00 Bs</span></div>
             <div style="border-top:1px dashed #666; margin:15px 0;"></div>
-            
+
+            <!-- Indicador cuánto falta para anular IVA -->
+            <div id="box-faltan-facturas" style="background:rgba(255,149,0,0.15); border:1px solid var(--orange); border-radius:8px; padding:10px; margin-bottom:12px; display:none;">
+                <div style="font-size:10px; font-weight:800; color:var(--orange); text-transform:uppercase; margin-bottom:4px;"><i class="ph-bold ph-target"></i> Para anular IVA necesitás cargar facturas de compra por:</div>
+                <div id="tax-faltan-monto" style="font-size:18px; font-weight:900; color:var(--orange);">0.00 Bs</div>
+            </div>
+
             <div style="display:flex; justify-content:space-between; align-items:center;">
                 <span style="font-size:14px; font-weight:900;">IVA A PAGAR AL SIN:</span>
                 <span id="tax-iva-pagar" style="font-size:24px; font-weight:900; color:var(--red);">0.00 Bs</span>
@@ -363,52 +470,65 @@
             <div style="font-size:10px; color:var(--gray); text-align:right; margin-top:5px;" id="tax-msg">El Crédito supera al Débito.</div>
         </div>
 
+        <!-- Balance consolidado por meses dentro del período -->
+        <div id="box-balance-meses" style="display:none; margin-bottom:15px;"></div>
+
         <div class="generic-card">
-            <h3 style="margin-top:0; color:var(--text); font-size:16px;"><i class="ph-bold ph-receipt"></i> Cargar Factura de Compra (Crédito)</h3>
-            
+            <h3 style="margin-top:0; color:var(--text); font-size:15px;"><i class="ph-bold ph-receipt"></i> Cargar Factura de Compra (Crédito Fiscal)</h3>
+            <div style="font-size:11px; color:var(--gray); margin-bottom:12px; background:rgba(175,82,222,0.08); border-radius:8px; padding:10px;">
+                <i class="ph-bold ph-info" style="color:var(--purple);"></i> Al guardar, la factura se sincroniza automáticamente con <strong>Base de Datos / Proveedores</strong>.
+            </div>
+
             <!-- Zona de carga multi-factura -->
-            <div id="zona-scan-facturas" style="border:2px dashed var(--purple); border-radius:12px; padding:16px; margin-bottom:15px; cursor:pointer; text-align:center; transition:border-color 0.2s;"
+            <div id="zona-scan-facturas" style="border:2px dashed var(--purple); border-radius:12px; padding:14px; margin-bottom:12px; cursor:pointer; text-align:center; transition:border-color 0.2s;"
                  onclick="document.getElementById('ai-factura-upload').click()"
                  ondragover="event.preventDefault(); this.style.borderColor='var(--blue)'"
                  ondragleave="this.style.borderColor='var(--purple)'"
                  ondrop="event.preventDefault(); this.style.borderColor='var(--purple)'; handleFacturaDrop(event)">
-                <i class="ph-bold ph-images" style="font-size:28px; color:var(--purple);"></i>
-                <div style="font-size:13px; font-weight:800; color:var(--purple); margin-top:6px;">Arrastrá o tocá para cargar facturas</div>
-                <div style="font-size:11px; color:var(--gray); margin-top:3px;">Podés seleccionar varias fotos o PDFs a la vez</div>
+                <i class="ph-bold ph-images" style="font-size:26px; color:var(--purple);"></i>
+                <div style="font-size:12px; font-weight:800; color:var(--purple); margin-top:5px;">Arrastrá o tocá para cargar facturas</div>
+                <div style="font-size:10px; color:var(--gray); margin-top:2px;">Podés seleccionar varias fotos o PDFs a la vez</div>
             </div>
             <input type="file" id="ai-factura-upload" accept="image/*,application/pdf" multiple style="display:none" onchange="cargarFacturasSeleccionadas(this)">
 
-            <!-- Grilla de previews + botón escanear -->
             <div id="factura-preview-grid" style="display:none; margin-bottom:12px;">
                 <div id="factura-thumbs" style="display:flex; flex-wrap:wrap; gap:8px; margin-bottom:10px;"></div>
                 <div style="display:flex; gap:8px; align-items:center;">
                     <button id="btn-scan-facturas" class="btn-action" style="background:var(--purple); flex:1;" onclick="escanearTodasLasFacturas()">
                         <i class="ph-bold ph-magic-wand"></i> <span id="btn-scan-txt">Escanear con IA</span>
                     </button>
-                    <button class="btn-action" style="background:var(--card); border:1px solid var(--gray); color:var(--gray); padding:10px 14px;" onclick="limpiarFacturaScan()" title="Limpiar">
+                    <button class="btn-action" style="background:var(--card); border:1px solid var(--gray); color:var(--gray); padding:10px 14px;" onclick="limpiarFacturaScan()">
                         <i class="ph-bold ph-x"></i>
                     </button>
                 </div>
             </div>
+            <div id="factura-scan-resultados" style="display:none; margin-bottom:12px;"></div>
 
-            <!-- Resultados de escaneo múltiple -->
-            <div id="factura-scan-resultados" style="display:none; margin-bottom:15px;"></div>
+            <div style="text-align:center; font-size:11px; color:var(--gray); margin-bottom:12px; font-weight:bold;">O completá manualmente:</div>
 
-            <div style="text-align:center; font-size:11px; color:var(--gray); margin-bottom:15px; font-weight:bold;">O llénala manualmente aquí abajo:</div>
-
+            <label class="inp-lbl">Proveedor / Razón Social</label>
+            <input type="text" id="fc-proveedor" class="inp-std" placeholder="Nombre del proveedor">
             <div class="flex-row">
                 <div style="flex:1;"><label class="inp-lbl">NIT Proveedor</label><input type="text" id="fc-nit" class="inp-std" placeholder="NIT"></div>
                 <div style="flex:1;"><label class="inp-lbl">Nro. Factura</label><input type="text" id="fc-nro" class="inp-std" placeholder="0001"></div>
             </div>
-            <label class="inp-lbl">Código de Autorización / CUF</label><input type="text" id="fc-cuf" class="inp-std" placeholder="Alfanumérico o 'S/N'">
+            <label class="inp-lbl">Código de Autorización / CUF</label>
+            <input type="text" id="fc-cuf" class="inp-std" placeholder="Alfanumérico o 'S/N'">
             <div class="flex-row">
                 <div style="flex:1;"><label class="inp-lbl">Monto (Bs)</label><input type="number" step="any" id="fc-monto" class="inp-std" placeholder="0.00"></div>
                 <div style="flex:1;"><label class="inp-lbl">Fecha</label><input type="date" id="fc-fecha" class="inp-std"></div>
             </div>
-            <button class="btn-action" style="background:var(--text);" onclick="registrarFacturaCompra()"><i class="ph-bold ph-plus"></i> Añadir al Registro (RCV)</button>
+            <label class="inp-lbl">Descripción / Concepto (opcional)</label>
+            <input type="text" id="fc-descripcion" class="inp-std" placeholder="Ej: materiales para proyecto X">
+            <button class="btn-action" style="background:var(--purple);" onclick="registrarFacturaCompra()"><i class="ph-bold ph-plus"></i> Guardar en RCV + Sync BD</button>
         </div>
 
-        <h3 style="font-size:14px; margin-bottom:10px;">Libro de Compras (RCV)</h3>
+        <!-- Filtro del libro de compras -->
+        <div style="display:flex; gap:8px; align-items:flex-end; margin-bottom:12px;">
+            <div style="flex:1;"><label class="inp-lbl">Filtrar libro por mes</label><input type="month" id="rcv-filtro-mes" class="inp-std" style="margin:0;" onchange="renderImpuestos()"></div>
+            <button class="btn-action btn-outline" style="width:auto; height:48px; margin-top:18px;" onclick="document.getElementById('rcv-filtro-mes').value=''; renderImpuestos()"><i class="ph-bold ph-x"></i> Todos</button>
+        </div>
+        <h3 style="font-size:14px; margin-bottom:10px; font-weight:900;">Libro de Compras (RCV)</h3>
         <div id="list-facturas-compras"></div>
     </div>
 
@@ -437,6 +557,10 @@
     document.getElementById('filtro-mes').value = new Date().toISOString().substring(0, 7);
     document.getElementById('ing-fecha').valueAsDate = new Date();
     document.getElementById('fc-fecha').valueAsDate = new Date();
+    document.getElementById('cobro-fecha').valueAsDate = new Date();
+    document.getElementById('tax-filtro-mes').value = new Date().toISOString().substring(0, 7);
+    document.getElementById('rcv-filtro-mes').value = new Date().toISOString().substring(0, 7);
+    window._taxVista = 'mes'; // 'mes' | 'trimestre' | 'semestre' | 'anual'
 
     function fMoney(num) { return parseFloat(num || 0).toLocaleString('es-BO', {minimumFractionDigits: 2, maximumFractionDigits: 2}); }
 
@@ -448,38 +572,141 @@
     }
 
     function toggleFacturaFields(tipo) {
-        if(tipo === 'venta') {
-            const isChecked = document.getElementById('ing-facturado').checked;
-            document.getElementById('box-factura-venta').style.display = isChecked ? 'block' : 'none';
-        }
+        // Legacy — ya no se usa checkbox, se mantiene por compatibilidad con IA scan
     }
 
+    // Sub-tabs de Ingresos
+    window.switchIngresosTab = function(tab, btn) {
+        document.getElementById('subpanel-cobros').style.display = tab === 'cobros' ? 'block' : 'none';
+        document.getElementById('subpanel-factventas').style.display = tab === 'factventas' ? 'block' : 'none';
+        document.querySelectorAll('#subtab-cobros-btn, #subtab-factventas-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+    };
+
+    // Estado de cobro en facturas de venta
+    window.setEstadoCobro = function(estado) {
+        document.getElementById('ing-estado-cobro').value = estado;
+        const btnPend = document.getElementById('btn-estado-pendiente');
+        const btnCobr = document.getElementById('btn-estado-cobrado');
+        const boxFecha = document.getElementById('box-fecha-cobro');
+        if (estado === 'pendiente') {
+            btnPend.style.borderColor = 'var(--orange)'; btnPend.style.background = 'rgba(255,149,0,0.15)'; btnPend.style.color = 'var(--orange)';
+            btnCobr.style.borderColor = 'var(--border)'; btnCobr.style.background = 'var(--card)'; btnCobr.style.color = 'var(--gray)';
+            boxFecha.style.display = 'none';
+        } else {
+            btnCobr.style.borderColor = 'var(--green)'; btnCobr.style.background = 'rgba(52,199,89,0.15)'; btnCobr.style.color = 'var(--green)';
+            btnPend.style.borderColor = 'var(--border)'; btnPend.style.background = 'var(--card)'; btnPend.style.color = 'var(--gray)';
+            boxFecha.style.display = 'block';
+            if (!document.getElementById('ing-fecha-cobro').value) document.getElementById('ing-fecha-cobro').valueAsDate = new Date();
+        }
+    };
+
+    // Vista temporal de impuestos
+    window.setTaxVista = function(vista) {
+        window._taxVista = vista;
+        ['mes','trim','sem','anual'].forEach(v => {
+            const btn = document.getElementById('tax-btn-' + v);
+            if (btn) { btn.style.background = 'var(--card)'; btn.style.color = 'var(--text)'; btn.style.borderColor = 'var(--border)'; }
+        });
+        const map = { mes: 'mes', trimestre: 'trim', semestre: 'sem', anual: 'anual' };
+        const activeBtn = document.getElementById('tax-btn-' + map[vista]);
+        if (activeBtn) { activeBtn.style.background = 'var(--blue)'; activeBtn.style.color = 'white'; activeBtn.style.borderColor = 'var(--blue)'; }
+        renderImpuestos();
+    };
+
+    // ── Registrar Factura de Venta (para impuestos) ──
     window.registrarIngreso = async function() {
         const monto = parseFloat(document.getElementById('ing-monto').value || 0);
         const fecha = document.getElementById('ing-fecha').value;
+        const nit = document.getElementById('ing-nit').value.trim();
+        const nro = document.getElementById('ing-nro').value.trim();
         if (!monto || monto <= 0) return alert('Ingresa un monto válido.');
         if (!fecha) return alert('Selecciona una fecha.');
-        const isFact = document.getElementById('ing-facturado').checked;
+        if (!nro) return alert('El número de factura es requerido.');
+        const estadoCobro = document.getElementById('ing-estado-cobro').value || 'pendiente';
         const payload = {
             monto,
             fecha,
             proyecto: document.getElementById('ing-proy-sel').value || document.getElementById('ing-proy-input').value || '',
-            is_facturado: isFact,
+            is_facturado: true,
+            nit: nit || '',
+            nro_factura: nro,
+            cuf: document.getElementById('ing-cuf').value.trim() || '',
+            cliente_rs: document.getElementById('ing-cliente-rs').value.trim() || '',
+            estado_cobro: estadoCobro,
+            fecha_cobro: estadoCobro === 'cobrado' ? (document.getElementById('ing-fecha-cobro').value || '') : '',
             timestamp: Date.now()
         };
-        if (isFact) {
-            payload.nit = document.getElementById('ing-nit').value || '';
-            payload.nro_factura = document.getElementById('ing-nro').value || '';
-        }
         try {
             await db.ref('ingresos').push(payload);
-            document.getElementById('ing-monto').value = '';
+            // Reset form
+            ['ing-monto','ing-nit','ing-nro','ing-cuf','ing-cliente-rs'].forEach(id => { document.getElementById(id).value = ''; });
             document.getElementById('ing-fecha').valueAsDate = new Date();
-            document.getElementById('ing-facturado').checked = false;
-            document.getElementById('box-factura-venta').style.display = 'none';
-            document.getElementById('ing-nit').value = '';
-            document.getElementById('ing-nro').value = '';
-            alert('Ingreso registrado.');
+            document.getElementById('ing-proy-input').value = '';
+            document.getElementById('ing-proy-sel').value = '';
+            setEstadoCobro('pendiente');
+            alert('Factura de venta registrada.');
+        } catch(e) { alert('Error: ' + e.message); }
+    };
+
+    // ── Registrar Cobro / Boucher ──
+    window._cobroBoucherFile = null;
+    window._cobroBoucherB64 = null;
+
+    window.onCobroBoucherCargado = function(input) {
+        const file = input.files[0];
+        if (!file) return;
+        window._cobroBoucherFile = file;
+        const prev = document.getElementById('cobro-boucher-preview');
+        document.getElementById('cobro-boucher-nombre').innerText = file.name;
+        prev.style.display = 'flex';
+        // Leer como base64 para posible subida
+        const reader = new FileReader();
+        reader.onload = e => { window._cobroBoucherB64 = e.target.result; };
+        reader.readAsDataURL(file);
+    };
+
+    window.limpiarCobroBoucher = function() {
+        window._cobroBoucherFile = null;
+        window._cobroBoucherB64 = null;
+        document.getElementById('cobro-boucher-upload').value = '';
+        document.getElementById('cobro-boucher-preview').style.display = 'none';
+    };
+
+    window.registrarCobro = async function() {
+        const monto = parseFloat(document.getElementById('cobro-monto').value || 0);
+        const fecha = document.getElementById('cobro-fecha').value;
+        if (!monto || monto <= 0) return alert('Ingresa un monto válido.');
+        if (!fecha) return alert('Selecciona una fecha.');
+
+        let boucherUrl = null;
+        if (window._cobroBoucherFile) {
+            try {
+                const ref = storage.ref(`cobros/${Date.now()}_${window._cobroBoucherFile.name}`);
+                await ref.put(window._cobroBoucherFile);
+                boucherUrl = await ref.getDownloadURL();
+            } catch(e) { console.warn('No se pudo subir boucher:', e); }
+        }
+
+        const payload = {
+            monto,
+            fecha,
+            proyecto: document.getElementById('cobro-proy-sel').value || document.getElementById('cobro-proy-input').value || '',
+            concepto: document.getElementById('cobro-concepto').value.trim() || '',
+            is_facturado: false,
+            tipo: 'cobro',
+            boucher: boucherUrl,
+            timestamp: Date.now()
+        };
+        try {
+            await db.ref('ingresos').push(payload);
+            document.getElementById('cobro-monto').value = '';
+            document.getElementById('cobro-fecha').valueAsDate = new Date();
+            document.getElementById('cobro-proy-input').value = '';
+            document.getElementById('cobro-proy-sel').value = '';
+            document.getElementById('cobro-concepto').value = '';
+            limpiarCobroBoucher();
+            alert('Cobro registrado correctamente.');
         } catch(e) { alert('Error: ' + e.message); }
     };
 
@@ -532,11 +759,10 @@
     function renderBuzonYContratos() {
         const listBuzon = document.getElementById('list-global-lic'); const listActive = document.getElementById('list-active-contracts');
         listBuzon.innerHTML = ''; listActive.innerHTML = '';
-        let hasCotizaciones = false; let hasActivos = false;
 
         _proyNombres = [];
         Object.keys(proyectosData).forEach(clientId => {
-            Object.keys(proyectosData[clientId]).forEach(projectId => {
+            Object.keys(proyectosData[clientId] || {}).forEach(projectId => {
                 const proyecto = proyectosData[clientId][projectId];
                 const projectName = proyecto.nombre || 'Proyecto';
                 if (!_proyNombres.includes(projectName)) _proyNombres.push(projectName);
@@ -545,10 +771,13 @@
         _proyNombres.sort();
     }
 
-    function _renderDropItems(lista, q) {
-        const drop = document.getElementById('ing-proy-drop');
+    // ── Dropdown genérico de proyectos ──
+    function _renderDropItemsTo(lista, q, dropId, onSelectFn) {
+        const drop = document.getElementById(dropId);
+        if (!drop) return;
         if (!lista.length) {
             drop.innerHTML = '<div style="padding:12px;font-size:12px;color:var(--gray);text-align:center;">Sin resultados</div>';
+            drop.style.display = 'block';
             return;
         }
         drop.innerHTML = lista.map(n => {
@@ -556,13 +785,17 @@
                 ? n.replace(new RegExp(q.trim().replace(/[.*+?^${}()|[\]\\]/g,'\\$&'), 'gi'),
                     m => `<b style="color:var(--blue);">${m}</b>`)
                 : n;
-            return `<div onmousedown="event.preventDefault()" onclick="seleccionarProyecto(this.dataset.v)"
+            return `<div onmousedown="event.preventDefault()" onclick="${onSelectFn}(this.dataset.v)"
                 data-v="${n.replace(/"/g,'&quot;')}"
                 style="padding:11px 14px;font-size:13px;font-weight:600;cursor:pointer;border-bottom:1px solid var(--border);transition:background 0.1s;"
                 onmouseover="this.style.background='rgba(0,122,255,0.08)'"
                 onmouseout="this.style.background=''">${hl}</div>`;
         }).join('');
+        drop.style.display = 'block';
     }
+
+    // Dropdown facturas de venta
+    function _renderDropItems(lista, q) { _renderDropItemsTo(lista, q, 'ing-proy-drop', 'seleccionarProyecto'); }
 
     window.abrirDropProyectos = function() {
         const q = document.getElementById('ing-proy-input').value;
@@ -570,6 +803,33 @@
         _renderDropItems(lista, q);
         document.getElementById('ing-proy-drop').style.display = lista.length ? 'block' : 'none';
     };
+
+    // Dropdown cobros
+    window.abrirDropProyectosCobro = function() {
+        const q = document.getElementById('cobro-proy-input').value;
+        const lista = q.trim() ? _proyNombres.filter(n => n.toLowerCase().includes(q.toLowerCase())) : _proyNombres;
+        _renderDropItemsTo(lista, q, 'cobro-proy-drop', 'seleccionarProyectoCobro');
+    };
+    window.filtrarProyectosCobro = function(q) {
+        const filtrados = q.trim() ? _proyNombres.filter(n => n.toLowerCase().includes(q.toLowerCase())) : _proyNombres;
+        _renderDropItemsTo(filtrados, q, 'cobro-proy-drop', 'seleccionarProyectoCobro');
+        document.getElementById('cobro-proy-sel').value = '';
+    };
+    window.seleccionarProyectoCobro = function(nombre) {
+        document.getElementById('cobro-proy-input').value = nombre;
+        document.getElementById('cobro-proy-sel').value = nombre;
+        document.getElementById('cobro-proy-drop').style.display = 'none';
+    };
+    window.navDropProyectosCobro = function(e) {
+        if (e.key === 'Escape') document.getElementById('cobro-proy-drop').style.display = 'none';
+        if (e.key === 'Enter') {
+            const first = document.querySelector('#cobro-proy-drop div[data-v]');
+            if (first) { seleccionarProyectoCobro(first.dataset.v); e.preventDefault(); }
+        }
+    };
+    document.addEventListener('click', function(e) {
+        if (!e.target.closest('#cobro-proy-container')) document.getElementById('cobro-proy-drop').style.display = 'none';
+    });
 
     window.filtrarProyectos = function(q) {
         const filtrados = q.trim()
@@ -1314,69 +1574,366 @@
 
     function renderIngresos() {
         const listCxC = document.getElementById('list-cxc');
-        const listIng = document.getElementById('list-ingresos');
-        if(!listCxC || !listIng) return;
-        listCxC.innerHTML = ''; listIng.innerHTML = '';
-        let hasCxC = false, hasIng = false;
-        Object.keys(proyectosData).forEach(cid => {
-            if(!proyectosData[cid]) return;
-            Object.keys(proyectosData[cid]).forEach(pid => {
-                const p = proyectosData[cid][pid];
-                if(!p || !['produccion','aprobado','entregado'].includes(p.estado||'')) return;
-                let montoTotal = 0;
-                if(p.presupuesto && p.presupuesto.items) Object.values(p.presupuesto.items).forEach(it => { if(it && it.type !== 'chapter') montoTotal += (parseFloat(it.cant||1)*parseFloat(it.pu||0)); });
-                if(montoTotal <= 0) return;
-                let pagado = 0;
-                Object.values(ingresosData).forEach(ing => { if(ing && (ing.proyecto||'').includes(p.nombre||'')) pagado += parseFloat(ing.monto||0); });
-                const saldo = montoTotal - pagado;
-                if(saldo <= 0) return;
-                hasCxC = true;
-                const pct = Math.min(100, Math.round((pagado/montoTotal)*100));
-                listCxC.innerHTML += `<div class="generic-card" style="border-left:3px solid var(--orange);">
-                    <div class="card-header">
-                        <div><div class="c-title">${p.nombre||'Proyecto'}</div><div class="c-sub">${p.estado}</div></div>
-                        <div class="price-badge" style="background:rgba(255,149,0,0.1);color:var(--orange);"><div style="font-size:10px;">Por cobrar</div><div>${fMoney(saldo)} Bs</div></div>
+        const listCobros = document.getElementById('list-cobros');
+        const listIng = document.getElementById('list-ingresos'); // facturas de venta
+        if(listCxC) {
+            listCxC.innerHTML = '';
+            let hasCxC = false;
+            Object.keys(proyectosData).forEach(cid => {
+                if(!proyectosData[cid]) return;
+                Object.keys(proyectosData[cid]).forEach(pid => {
+                    const p = proyectosData[cid][pid];
+                    if(!p || !['produccion','aprobado','entregado'].includes(p.estado||'')) return;
+                    let montoTotal = 0;
+                    if(p.presupuesto && p.presupuesto.items) Object.values(p.presupuesto.items).forEach(it => { if(it && it.type !== 'chapter') montoTotal += (parseFloat(it.cant||1)*parseFloat(it.pu||0)); });
+                    if(montoTotal <= 0) return;
+                    let pagado = 0;
+                    Object.values(ingresosData).forEach(ing => { if(ing && (ing.proyecto||'').includes(p.nombre||'')) pagado += parseFloat(ing.monto||0); });
+                    const saldo = montoTotal - pagado;
+                    if(saldo <= 0) return;
+                    hasCxC = true;
+                    const pct = Math.min(100, Math.round((pagado/montoTotal)*100));
+                    listCxC.innerHTML += `<div class="generic-card" style="border-left:3px solid var(--orange);">
+                        <div class="card-header">
+                            <div><div class="c-title">${p.nombre||'Proyecto'}</div><div class="c-sub">${p.estado}</div></div>
+                            <div class="price-badge" style="background:rgba(255,149,0,0.1);color:var(--orange);"><div style="font-size:10px;">Por cobrar</div><div>${fMoney(saldo)} Bs</div></div>
+                        </div>
+                        <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--gray);margin-bottom:5px;"><span>Cobrado: ${fMoney(pagado)} Bs</span><span>Total: ${fMoney(montoTotal)} Bs</span></div>
+                        <div class="prog-bar-bg"><div class="prog-bar-fill golden" style="width:${pct}%;"></div></div>
+                    </div>`;
+                });
+            });
+            if(!hasCxC) listCxC.innerHTML = '<div class="empty-msg">No hay cuentas por cobrar activas.</div>';
+        }
+
+        // Historial de cobros (bouchers, transferencias — sin factura o tipo='cobro')
+        if(listCobros) {
+            listCobros.innerHTML = '';
+            let hasCobros = false;
+            const cobrosArr = Object.entries(ingresosData)
+                .filter(([k,i]) => i && (i.tipo === 'cobro' || (!i.tipo && !i.is_facturado)))
+                .sort((a,b) => (b[1].fecha||'').localeCompare(a[1].fecha||''));
+            cobrosArr.forEach(([k, ing]) => {
+                hasCobros = true;
+                const boucherBtn = ing.boucher
+                    ? `<a href="${ing.boucher}" target="_blank" style="font-size:10px; background:rgba(0,122,255,0.1); color:var(--blue); padding:4px 8px; border-radius:6px; text-decoration:none; font-weight:800;"><i class="ph-bold ph-image"></i> Boucher</a>`
+                    : '';
+                const delBtn = `<button onclick="eliminarIngreso('${k}')" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:14px;" title="Eliminar"><i class="ph-bold ph-trash"></i></button>`;
+                listCobros.innerHTML += `<div class="generic-card" style="padding:12px; border-left:3px solid var(--green);">
+                    <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+                        <div style="flex:1;">
+                            <div style="font-weight:900;font-size:13px;">${ing.proyecto||'Cobro general'}</div>
+                            <div style="font-size:10px;color:var(--gray);margin-top:2px;">${ing.fecha||''} ${ing.concepto ? '· '+ing.concepto : ''}</div>
+                            <div style="margin-top:6px;display:flex;gap:6px;">${boucherBtn}</div>
+                        </div>
+                        <div style="display:flex;align-items:center;gap:8px;">
+                            <div style="font-size:16px;font-weight:900;color:var(--green);">${fMoney(ing.monto)} Bs</div>
+                            ${delBtn}
+                        </div>
                     </div>
-                    <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--gray);margin-bottom:5px;"><span>Pagado: ${fMoney(pagado)} Bs</span><span>Total: ${fMoney(montoTotal)} Bs</span></div>
-                    <div class="prog-bar-bg"><div class="prog-bar-fill golden" style="width:${pct}%;"></div></div>
                 </div>`;
             });
+            if(!hasCobros) listCobros.innerHTML = '<div class="empty-msg">No hay cobros registrados.</div>';
+        }
+
+        // Facturas de venta emitidas (is_facturado=true)
+        if(listIng) {
+            listIng.innerHTML = '';
+            let hasIng = false;
+            const factArr = Object.entries(ingresosData)
+                .filter(([k,i]) => i && i.is_facturado)
+                .sort((a,b) => (b[1].fecha||'').localeCompare(a[1].fecha||''));
+            factArr.forEach(([k, ing]) => {
+                hasIng = true;
+                const estadoCobro = ing.estado_cobro || 'pendiente';
+                const estadoBadge = estadoCobro === 'cobrado'
+                    ? `<span style="background:rgba(52,199,89,0.15);color:var(--green);font-size:9px;font-weight:800;padding:2px 7px;border-radius:6px;">COBRADO ${ing.fecha_cobro ? ing.fecha_cobro : ''}</span>`
+                    : `<span style="background:rgba(255,149,0,0.15);color:var(--orange);font-size:9px;font-weight:800;padding:2px 7px;border-radius:6px;">PENDIENTE</span>`;
+                const delBtn = `<button onclick="eliminarIngreso('${k}')" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:14px;" title="Eliminar"><i class="ph-bold ph-trash"></i></button>`;
+                const marcarCobradoBtn = estadoCobro !== 'cobrado'
+                    ? `<button onclick="marcarFacturaCobrada('${k}')" style="font-size:10px;background:rgba(52,199,89,0.1);color:var(--green);border:1px solid var(--green);padding:4px 8px;border-radius:6px;cursor:pointer;font-weight:800;"><i class="ph-bold ph-check"></i> Marcar cobrada</button>`
+                    : '';
+                listIng.innerHTML += `<div class="generic-card" style="padding:12px; border-left:3px solid ${estadoCobro==='cobrado'?'var(--green)':'var(--orange)'};">
+                    <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+                        <div style="flex:1;">
+                            <div style="font-weight:900;font-size:13px;">${ing.proyecto||'Venta sin proyecto'}</div>
+                            <div style="font-size:10px;color:var(--gray);margin-top:2px;">Emisión: ${ing.fecha||''}${ing.nro_factura?' | Fact. '+ing.nro_factura:''}${ing.cliente_rs?' | '+ing.cliente_rs:''}</div>
+                            <div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap;">${estadoBadge} ${marcarCobradoBtn}</div>
+                        </div>
+                        <div style="display:flex;align-items:center;gap:8px;">
+                            <div style="font-size:16px;font-weight:900;color:var(--blue);">${fMoney(ing.monto)} Bs</div>
+                            ${delBtn}
+                        </div>
+                    </div>
+                </div>`;
+            });
+            if(!hasIng) listIng.innerHTML = '<div class="empty-msg">No hay facturas de venta registradas.</div>';
+        }
+    }
+
+    window.eliminarIngreso = function(id) {
+        if(confirm('¿Eliminar este registro?')) db.ref('ingresos/'+id).remove();
+    };
+
+    window.marcarFacturaCobrada = function(id) {
+        const fecha = prompt('Fecha de cobro (YYYY-MM-DD):', new Date().toISOString().substring(0,10));
+        if (!fecha) return;
+        db.ref('ingresos/'+id).update({ estado_cobro: 'cobrado', fecha_cobro: fecha });
+    };
+
+    // ==========================================
+    // EXPORTACIONES IMPOSITIVAS
+    // ==========================================
+
+    function exportarRCVExcel() {
+        const mesBase = (document.getElementById('tax-filtro-mes')||{}).value || new Date().toISOString().substring(0,7);
+        const vista = window._taxVista || 'mes';
+        const mesesSet = new Set(_getMesesDelPeriodo(mesBase, vista));
+        const periodo = _labelPeriodo([...mesesSet].sort(), vista);
+
+        let dataCompras = []; let indexC = 1;
+        Object.values(comprasFacturadasData).forEach(c => {
+            if (!c || !c.fecha || !mesesSet.has(c.fecha.substring(0,7))) return;
+            dataCompras.push({
+                "N°": indexC++,
+                "NIT PROVEEDOR": c.nit || "0",
+                "RAZON SOCIAL PROVEEDOR": c.proveedor || "S/N",
+                "CODIGO DE AUTORIZACION": c.cuf || "0",
+                "NUMERO FACTURA": c.nro_factura || "0",
+                "NUMERO DUI/DIM": "0",
+                "FECHA DE FACTURA/DUI/DIM": c.fecha ? c.fecha.split("-").reverse().join("/") : "",
+                "IMPORTE TOTAL COMPRA": parseFloat(c.monto || 0),
+                "IMPORTE ICE": 0, "IMPORTE IEHD": 0, "IPJ": 0, "TASAS": 0,
+                "OTRO NO SUJETO A CREDITO FISCAL": 0, "IMPORTES EXENTOS": 0,
+                "IMPORTE COMPRAS GRAVADAS A TASA CERO": 0,
+                "SUBTOTAL": parseFloat(c.monto || 0),
+                "DESCUENTOS / BONIFICACIONES / REBAJAS SUJETAS AL IVA": 0,
+                "IMPORTE GIFT CARD": 0,
+                "IMPORTE BASE CREDITO FISCAL": parseFloat(c.monto || 0),
+                "CREDITO FISCAL": parseFloat(c.monto || 0) * 0.13,
+                "TIPO COMPRA": "1",
+                "CODIGO DE CONTROL": "0"
+            });
         });
-        if(!hasCxC) listCxC.innerHTML = '<div class="empty-msg">No hay cuentas por cobrar activas.</div>';
-        const ingArr = Object.entries(ingresosData).sort((a,b)=>(b[1].fecha||'').localeCompare(a[1].fecha||''));
-        ingArr.forEach(([k,ing]) => {
-            if(!ing) return; hasIng = true;
-            const facIcon = ing.is_facturado ? '<span style="background:rgba(52,199,89,0.15);color:var(--green);font-size:9px;font-weight:800;padding:2px 6px;border-radius:6px;">FACTURADO</span>' : '';
-            listIng.innerHTML += `<div class="generic-card" style="padding:12px;border-left:3px solid var(--green);">
-                <div style="display:flex;justify-content:space-between;align-items:center;">
-                    <div><div style="font-weight:900;font-size:13px;">${ing.proyecto||'Ingreso general'} ${facIcon}</div><div style="font-size:10px;color:var(--gray);margin-top:3px;">${ing.fecha||''} ${ing.nro_factura?'| Fact. '+ing.nro_factura:''}</div></div>
-                    <div style="font-size:16px;font-weight:900;color:var(--green);">${fMoney(ing.monto)} Bs</div>
-                </div>
-            </div>`;
+
+        let dataVentas = []; let indexV = 1;
+        Object.values(ingresosData).forEach(v => {
+            if (!v || !v.is_facturado || !v.fecha || !mesesSet.has(v.fecha.substring(0,7))) return;
+            dataVentas.push({
+                "N°": indexV++,
+                "FECHA DE FACTURA": v.fecha ? v.fecha.split("-").reverse().join("/") : "",
+                "NÚMERO DE FACTURA": v.nro_factura || "0",
+                "CÓDIGO DE AUTORIZACIÓN": v.cuf || "0",
+                "NIT/CI CLIENTE": v.nit || "0",
+                "COMPLEMENTO": "",
+                "RAZÓN SOCIAL CLIENTE": v.cliente_rs || "S/N",
+                "IMPORTE TOTAL VENTA": parseFloat(v.monto || 0),
+                "IMPORTE ICE": 0, "IMPORTE IEHD": 0, "IPJ": 0, "TASAS": 0,
+                "OTROS NO SUJETOS AL IVA": 0, "EXPORTACIONES Y OPERACIONES EXENTAS": 0,
+                "VENTAS GRAVADAS A TASA CERO": 0,
+                "SUBTOTAL": parseFloat(v.monto || 0),
+                "DESCUENTOS, BONIFICACIONES Y REBAJAS OTORGADAS": 0,
+                "IMPORTE GIFT CARD": 0,
+                "IMPORTE BASE DÉBITO FISCAL": parseFloat(v.monto || 0),
+                "DÉBITO FISCAL": parseFloat(v.monto || 0) * 0.13,
+                "ESTADO": "V",
+                "CÓDIGO DE CONTROL": "0"
+            });
         });
-        if(!hasIng) listIng.innerHTML = '<div class="empty-msg">No hay ingresos registrados.</div>';
+
+        if (dataCompras.length === 0 && dataVentas.length === 0) return alert("No hay compras o ventas facturadas en el período seleccionado.");
+        const wb = XLSX.utils.book_new();
+        if (dataCompras.length > 0) XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(dataCompras), "Compras_Estándar");
+        if (dataVentas.length > 0) XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(dataVentas), "Ventas_Estándar");
+        XLSX.writeFile(wb, `RCV_Rubik_${periodo.replace(/[^a-zA-Z0-9]/g,'_')}.xlsx`);
+    }
+
+    async function exportarAuditoriaPDF() {
+        const btn = document.querySelector('button[onclick="exportarAuditoriaPDF()"]');
+        if (btn) { btn.disabled = true; btn.innerHTML = '<i class="ph-bold ph-spinner"></i> Generando PDF...'; }
+        try {
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF();
+            const PW = doc.internal.pageSize.getWidth();
+            const PH = doc.internal.pageSize.getHeight();
+            const M = 14;
+            const mesBase = (document.getElementById('tax-filtro-mes')||{}).value || new Date().toISOString().substring(0,7);
+            const vista = window._taxVista || 'mes';
+            const mesesPeriodo = _getMesesDelPeriodo(mesBase, vista);
+            const mesesSet = new Set(mesesPeriodo);
+            const periodoLabel = _labelPeriodo(mesesPeriodo, vista);
+
+            function checkY(y, needed) { if (y + (needed || 20) > PH - 16) { doc.addPage(); return M; } return y; }
+
+            async function urlToBase64(url) {
+                try {
+                    const res = await fetch('/api/imagen?url=' + encodeURIComponent(url));
+                    if (!res.ok) return null;
+                    const blob = await res.blob();
+                    return await new Promise((resolve, reject) => { const fr = new FileReader(); fr.onload = () => resolve(fr.result); fr.onerror = reject; fr.readAsDataURL(blob); });
+                } catch(e) { return null; }
+            }
+
+            let totalVentas = 0, totalCompras = 0;
+            Object.values(ingresosData).forEach(i => { if (i && i.is_facturado && i.fecha && mesesSet.has(i.fecha.substring(0,7))) totalVentas += parseFloat(i.monto || 0); });
+            Object.values(comprasFacturadasData).forEach(c => { if (c && c.fecha && mesesSet.has(c.fecha.substring(0,7))) totalCompras += parseFloat(c.monto || 0); });
+            const debitoTotal = totalVentas * 0.13;
+            const itTotal = totalVentas * 0.03;
+            const creditoTotal = totalCompras * 0.13;
+            const ivaTotal = debitoTotal - creditoTotal;
+
+            // Portada
+            doc.setFontSize(15); doc.setFont(undefined, 'bold'); doc.setTextColor(0, 122, 255);
+            doc.text('Auditoría Impositiva IVA/IT - Rubik OS', M, 18);
+            doc.setFontSize(9); doc.setFont(undefined, 'normal'); doc.setTextColor(100);
+            doc.text('Período: ' + periodoLabel + '  |  Generado: ' + new Date().toLocaleDateString('es-BO'), M, 25);
+
+            doc.autoTable({
+                startY: 30,
+                head: [['Métrica Impositiva', 'Monto']],
+                body: [
+                    ['Total Ventas Facturadas', fMoney(totalVentas) + ' Bs'],
+                    ['Débito Fiscal (IVA 13%)', fMoney(debitoTotal) + ' Bs'],
+                    ['Impuesto Transacciones (IT 3%)', fMoney(itTotal) + ' Bs'],
+                    ['Total Compras Facturadas', fMoney(totalCompras) + ' Bs'],
+                    ['Crédito Fiscal (IVA 13% a favor)', fMoney(creditoTotal) + ' Bs'],
+                    [{ content: 'IVA A PAGAR AL SIN', styles: { fontStyle: 'bold' } },
+                     { content: (ivaTotal > 0 ? fMoney(ivaTotal) : '0.00') + ' Bs', styles: { fontStyle: 'bold', textColor: ivaTotal > 0 ? [220, 40, 40] : [34, 160, 80] } }]
+                ],
+                theme: 'striped', styles: { fontSize: 10, cellPadding: 3.5 },
+                headStyles: { fillColor: [0, 122, 255] }, alternateRowStyles: { fillColor: [244, 244, 248] }
+            });
+
+            // Agrupar por mes dentro del período
+            const mesesMap = {};
+            Object.values(ingresosData).forEach(i => {
+                if (!i || !i.is_facturado || !i.fecha || !mesesSet.has(i.fecha.substring(0,7))) return;
+                const m = i.fecha.substring(0, 7);
+                if (!mesesMap[m]) mesesMap[m] = { ventas: [], compras: [] };
+                mesesMap[m].ventas.push(i);
+            });
+            Object.keys(comprasFacturadasData).forEach(k => {
+                const c = comprasFacturadasData[k];
+                if (!c || !c.fecha || !mesesSet.has(c.fecha.substring(0,7))) return;
+                const m = c.fecha.substring(0, 7);
+                if (!mesesMap[m]) mesesMap[m] = { ventas: [], compras: [] };
+                mesesMap[m].compras.push({ ...c, _id: k });
+            });
+
+            for (const mes of Object.keys(mesesMap).sort()) {
+                const { ventas, compras } = mesesMap[mes];
+                doc.addPage(); let y = M;
+                const [anio, numMes] = mes.split('-');
+                const nombreMes = new Date(anio, parseInt(numMes) - 1).toLocaleString('es-BO', { month: 'long', year: 'numeric' }).toUpperCase();
+                doc.setFontSize(13); doc.setFont(undefined, 'bold'); doc.setTextColor(0, 122, 255);
+                doc.text('PERÍODO: ' + nombreMes, M, y); y += 2;
+                doc.setDrawColor(0, 122, 255); doc.setLineWidth(0.5); doc.line(M, y + 2, PW - M, y + 2); y += 7;
+                const mV = ventas.reduce((s, i) => s + parseFloat(i.monto || 0), 0);
+                const mC = compras.reduce((s, c) => s + parseFloat(c.monto || 0), 0);
+                const mDeb = mV * 0.13, mIT = mV * 0.03, mCred = mC * 0.13, mIVA = mDeb - mCred;
+                doc.autoTable({
+                    startY: y,
+                    head: [['Métrica del Mes', 'Monto']],
+                    body: [
+                        ['Ventas Facturadas', fMoney(mV) + ' Bs'], ['Débito IVA 13%', fMoney(mDeb) + ' Bs'],
+                        ['IT 3%', fMoney(mIT) + ' Bs'], ['Compras Facturadas', fMoney(mC) + ' Bs'],
+                        ['Crédito IVA 13%', fMoney(mCred) + ' Bs'],
+                        [{ content: 'Balance IVA', styles: { fontStyle: 'bold' } },
+                         { content: (mIVA > 0 ? fMoney(mIVA) : '0.00') + ' Bs', styles: { fontStyle: 'bold', textColor: mIVA > 0 ? [220, 40, 40] : [34, 160, 80] } }]
+                    ],
+                    theme: 'striped', styles: { fontSize: 9, cellPadding: 2.5 },
+                    headStyles: { fillColor: [52, 170, 100] }, margin: { left: M, right: M }
+                });
+                y = doc.lastAutoTable.finalY + 8;
+
+                // Comprobantes con fotos
+                if (compras.length > 0) {
+                    y = checkY(y, 12);
+                    doc.setFontSize(10); doc.setFont(undefined, 'bold'); doc.setTextColor(40, 40, 40);
+                    doc.text('COMPROBANTES DE COMPRA (' + compras.length + ')', M, y); y += 6;
+                    for (const c of compras) {
+                        y = checkY(y, 22);
+                        doc.setFontSize(9); doc.setFont(undefined, 'bold'); doc.setTextColor(20, 20, 20);
+                        doc.text((c.proveedor || 'S/N').substring(0, 55), M, y); y += 5;
+                        doc.setFont(undefined, 'normal'); doc.setTextColor(80, 80, 80);
+                        doc.text('NIT: '+(c.nit||'-')+'  Fact: '+(c.nro_factura||'-')+'  Fecha: '+(c.fecha||'-')+'  Monto: '+fMoney(c.monto)+' Bs', M, y); y += 4;
+                        if (c.descripcion) { doc.text('Concepto: ' + c.descripcion.substring(0,80), M, y); y += 4; }
+                        if (c.comprobante) {
+                            if (c.comprobante.toLowerCase().includes('.pdf')) {
+                                doc.setFontSize(8); doc.setTextColor(120); doc.text('[Comprobante PDF — ver original]', M, y); y += 5;
+                            } else {
+                                const b64 = await urlToBase64(c.comprobante);
+                                if (b64) {
+                                    y = checkY(y, 58);
+                                    try { const fmt = b64.startsWith('data:image/png') ? 'PNG' : 'JPEG'; doc.addImage(b64, fmt, M, y, 85, 52); y += 56; } catch(ie) { doc.text('[Imagen no disponible]', M, y); y += 5; }
+                                } else { doc.setFontSize(8); doc.setTextColor(150); doc.text('[No se pudo cargar imagen]', M, y); y += 5; }
+                            }
+                        }
+                        doc.setDrawColor(210, 210, 210); doc.setLineWidth(0.3); doc.line(M, y, PW - M, y); y += 5;
+                    }
+                }
+                if (ventas.length > 0) {
+                    y = checkY(y, 12);
+                    doc.setFontSize(10); doc.setFont(undefined, 'bold'); doc.setTextColor(40, 40, 40);
+                    doc.text('VENTAS FACTURADAS (' + ventas.length + ')', M, y); y += 6;
+                    doc.autoTable({
+                        startY: y,
+                        head: [['Fecha Emisión', 'Factura', 'Cliente', 'Estado Cobro', 'Monto']],
+                        body: ventas.map(v => [
+                            v.fecha || '-', 'F.' + (v.nro_factura || '-'),
+                            (v.cliente_rs || v.proyecto || '-').substring(0, 30),
+                            v.estado_cobro === 'cobrado' ? 'Cobrado ' + (v.fecha_cobro||'') : 'Pendiente',
+                            fMoney(v.monto) + ' Bs'
+                        ]),
+                        theme: 'grid', styles: { fontSize: 8, cellPadding: 2 },
+                        headStyles: { fillColor: [0, 80, 200] },
+                        columnStyles: { 0:{cellWidth:24}, 1:{cellWidth:18}, 3:{cellWidth:26}, 4:{cellWidth:26, halign:'right'} },
+                        margin: { left: M, right: M }
+                    });
+                    y = doc.lastAutoTable.finalY + 6;
+                }
+            }
+
+            const totalPages = doc.internal.getNumberOfPages();
+            for (let p = 1; p <= totalPages; p++) {
+                doc.setPage(p);
+                doc.setTextColor(160); doc.setFontSize(7); doc.setFont(undefined, 'normal');
+                doc.text('Generado por Rubik OS — rubikbolivia.com', M, PH - 7);
+                doc.text('Página ' + p + ' de ' + totalPages, PW - M, PH - 7, { align: 'right' });
+            }
+            doc.save('Auditoria_' + periodoLabel.replace(/[^a-zA-Z0-9]/g,'_') + '.pdf');
+        } catch(e) {
+            console.error(e);
+            alert('Error al generar auditoría PDF: ' + e.message);
+        } finally {
+            if (btn) { btn.disabled = false; btn.innerHTML = '<i class="ph-bold ph-file-pdf"></i> PDF + Fotos'; }
+        }
     }
 
     // ==========================================
     // MÓDULO IMPUESTOS
     // ==========================================
-    
+
     function registrarFacturaCompra() {
+        let proveedor = document.getElementById('fc-proveedor').value.trim();
         let nit = document.getElementById('fc-nit').value.trim();
         let nro = document.getElementById('fc-nro').value.trim();
         let cuf = document.getElementById('fc-cuf').value.trim();
         let monto = parseFloat(document.getElementById('fc-monto').value);
         let fecha = document.getElementById('fc-fecha').value;
+        let descripcion = document.getElementById('fc-descripcion').value.trim();
 
-        if(!nit || !nro || !monto || !fecha) return alert("Completa los datos requeridos de la factura.");
-        
-        let payload = { 
-            nit: nit, 
-            nro_factura: nro, 
-            cuf: cuf, 
-            monto: monto, 
-            fecha: fecha, 
-            timestamp: Date.now() 
+        if(!nro || !monto || !fecha) return alert("Completa al menos: Nro. Factura, Monto y Fecha.");
+
+        let payload = {
+            proveedor: proveedor || 'S/N',
+            nit: nit || '',
+            nro_factura: nro,
+            cuf: cuf || '',
+            monto: monto,
+            fecha: fecha,
+            descripcion: descripcion || '',
+            timestamp: Date.now()
         };
 
         if (editFacturaId && comprasFacturadasData[editFacturaId]) {
@@ -1387,47 +1944,98 @@
             });
         } else {
             payload.comprobante = window.tempComprobanteUrl || null;
-            db.ref('compras_facturadas').push(payload).then(() => {
+            db.ref('compras_facturadas').push(payload).then(async (ref) => {
                 limpiarFormularioFactura();
-                alert("Factura cargada al libro de compras.");
+                // ── Sync con Base de Datos / Proveedores ──
+                await syncFacturaCompraABD(payload, ref.key);
+                alert("Factura cargada al RCV y sincronizada con Base de Datos.");
             });
         }
     }
 
+    // Sincronizar factura de compra → BD/proveedores
+    async function syncFacturaCompraABD(factura, facturaId) {
+        try {
+            // Buscar si existe el proveedor por NIT o nombre
+            const bdSnap = await db.ref('base_datos/proveedores').once('value');
+            const bdData = bdSnap.val() || {};
+            let proveedorKey = null;
+            // Buscar por NIT primero, luego por nombre
+            Object.keys(bdData).forEach(k => {
+                const p = bdData[k];
+                if (!proveedorKey && factura.nit && p.nit === factura.nit) proveedorKey = k;
+                if (!proveedorKey && factura.proveedor && factura.proveedor !== 'S/N' &&
+                    (p.nombre||'').toLowerCase() === factura.proveedor.toLowerCase()) proveedorKey = k;
+            });
+
+            const facturaEntry = {
+                nro_factura: factura.nro_factura,
+                nit: factura.nit || '',
+                monto: factura.monto,
+                fecha: factura.fecha,
+                cuf: factura.cuf || '',
+                descripcion: factura.descripcion || '',
+                comprobante: factura.comprobante || null,
+                origen: 'impuestos',
+                factura_id: facturaId,
+                timestamp: factura.timestamp
+            };
+
+            if (proveedorKey) {
+                // Agregar factura al proveedor existente
+                await db.ref(`base_datos/proveedores/${proveedorKey}/facturas`).push(facturaEntry);
+            } else {
+                // Crear nuevo proveedor con esta factura
+                const nuevoProveedor = {
+                    nombre: factura.proveedor || 'S/N',
+                    nit: factura.nit || '',
+                    tipo: 'proveedor',
+                    creado_desde: 'impuestos',
+                    timestamp: Date.now(),
+                    facturas: { ['-auto']: facturaEntry }
+                };
+                await db.ref('base_datos/proveedores').push(nuevoProveedor);
+            }
+        } catch(e) {
+            console.warn('Sync BD falló (no crítico):', e);
+        }
+    }
+
     function limpiarFormularioFactura() {
-        document.getElementById('fc-nit').value = ''; 
-        document.getElementById('fc-nro').value = '';
-        document.getElementById('fc-cuf').value = ''; 
-        document.getElementById('fc-monto').value = '';
-        editFacturaId = null; 
+        ['fc-proveedor','fc-nit','fc-nro','fc-cuf','fc-monto','fc-descripcion'].forEach(id => {
+            const el = document.getElementById(id);
+            if(el) el.value = '';
+        });
+        document.getElementById('fc-fecha').valueAsDate = new Date();
+        editFacturaId = null;
         window.tempComprobanteUrl = null;
-        
         const btnSave = document.querySelector('button[onclick="registrarFacturaCompra()"]');
         if(btnSave) {
-            btnSave.innerHTML = `<i class="ph-bold ph-plus"></i> Añadir al Registro (RCV)`;
-            btnSave.style.background = "var(--text)";
+            btnSave.innerHTML = `<i class="ph-bold ph-plus"></i> Guardar en RCV + Sync BD`;
+            btnSave.style.background = "var(--purple)";
         }
     }
 
     window.editarFactura = function(id) {
         const f = comprasFacturadasData[id];
         if(!f) return;
-
-        document.getElementById('fc-nit').value = f.nit || '';
-        document.getElementById('fc-nro').value = f.nro_factura || '';
-        document.getElementById('fc-cuf').value = f.cuf || '';
-        document.getElementById('fc-monto').value = f.monto || '';
-        document.getElementById('fc-fecha').value = f.fecha || '';
-        
-        editFacturaId = id; 
+        const setProp = (el, val) => { const e = document.getElementById(el); if(e) e.value = val || ''; };
+        setProp('fc-proveedor', f.proveedor);
+        setProp('fc-nit', f.nit);
+        setProp('fc-nro', f.nro_factura);
+        setProp('fc-cuf', f.cuf);
+        setProp('fc-monto', f.monto);
+        setProp('fc-fecha', f.fecha);
+        setProp('fc-descripcion', f.descripcion);
+        editFacturaId = id;
         window.tempComprobanteUrl = f.comprobante || null;
-        
         const btnSave = document.querySelector('button[onclick="registrarFacturaCompra()"]');
         if(btnSave) {
             btnSave.innerHTML = `<i class="ph-bold ph-floppy-disk"></i> Guardar Cambios`;
             btnSave.style.background = "var(--orange)";
         }
-        window.scrollTo({ top: 0, behavior: 'smooth' });
+        // Scroll al formulario de facturas
+        document.getElementById('zona-scan-facturas')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     };
 
     window.eliminarFactura = function(id) {
@@ -1436,60 +2044,159 @@
         }
     };
 
+    function _getMesesDelPeriodo(mesBase, vista) {
+        // Retorna array de strings 'YYYY-MM' del período dado
+        const [y, m] = mesBase.split('-').map(Number);
+        const meses = [];
+        if (vista === 'mes') {
+            meses.push(mesBase);
+        } else if (vista === 'trimestre') {
+            const inicio = Math.floor((m - 1) / 3) * 3 + 1;
+            for (let i = 0; i < 3; i++) {
+                const mm = inicio + i;
+                meses.push(y + '-' + String(mm).padStart(2, '0'));
+            }
+        } else if (vista === 'semestre') {
+            const inicio = m <= 6 ? 1 : 7;
+            for (let i = 0; i < 6; i++) {
+                const mm = inicio + i;
+                meses.push(y + '-' + String(mm).padStart(2, '0'));
+            }
+        } else if (vista === 'anual') {
+            for (let mm = 1; mm <= 12; mm++) {
+                meses.push(y + '-' + String(mm).padStart(2, '0'));
+            }
+        }
+        return meses;
+    }
+
+    function _labelPeriodo(meses, vista) {
+        if (vista === 'mes') {
+            const [y, m] = meses[0].split('-');
+            return new Date(y, parseInt(m)-1).toLocaleString('es-BO', {month:'long', year:'numeric'}).toUpperCase();
+        }
+        if (vista === 'trimestre') {
+            const q = Math.ceil(parseInt(meses[0].split('-')[1]) / 3);
+            return `T${q} ${meses[0].split('-')[0]}  (${meses[0]} → ${meses[meses.length-1]})`;
+        }
+        if (vista === 'semestre') {
+            const s = parseInt(meses[0].split('-')[1]) <= 6 ? 1 : 2;
+            return `Semestre ${s} ${meses[0].split('-')[0]}`;
+        }
+        return `Año ${meses[0].split('-')[0]}`;
+    }
+
     function renderImpuestos() {
-        let totalVentasFacturadas = 0; let totalComprasFacturadas = 0;
-        Object.values(ingresosData).forEach(i => { if(i.is_facturado) totalVentasFacturadas += parseFloat(i.monto || 0); });
+        const mesBase = (document.getElementById('tax-filtro-mes') || {}).value || new Date().toISOString().substring(0,7);
+        const vista = window._taxVista || 'mes';
+        const mesesPeriodo = _getMesesDelPeriodo(mesBase, vista);
+        const mesesSet = new Set(mesesPeriodo);
 
-        const listFC = document.getElementById('list-facturas-compras'); listFC.innerHTML = ''; let hasFC = false;
-        
-        Object.keys(comprasFacturadasData).reverse().forEach(k => {
-            let c = comprasFacturadasData[k]; hasFC = true;
-            totalComprasFacturadas += parseFloat(c.monto || 0);
-            
-            let isPdf = c.comprobante && c.comprobante.toLowerCase().includes('.pdf?');
-            let iconBtn = isPdf ? 'ph-file-pdf' : 'ph-image';
-            let txtBtn = isPdf ? 'Ver PDF' : 'Ver Foto';
+        // Actualizar etiqueta
+        const labelEl = document.getElementById('tax-periodo-label');
+        const tituloEl = document.getElementById('tax-titulo-periodo');
+        const periodo = _labelPeriodo(mesesPeriodo, vista);
+        if (labelEl) labelEl.innerText = periodo;
+        if (tituloEl) tituloEl.innerText = 'Balance Impositivo · ' + periodo;
 
-            let btnEdit = `<button class="btn-action" style="padding:4px 8px; font-size:10px; width:auto; background:var(--bg); color:var(--text); border:1px solid var(--border);" onclick="editarFactura('${k}')"><i class="ph-bold ph-pencil"></i> Editar</button>`;
-            let btnDel = `<button class="btn-action" style="padding:4px 8px; font-size:10px; width:auto; background:var(--red); color:white; border:none;" onclick="eliminarFactura('${k}')"><i class="ph-bold ph-trash"></i></button>`;
-            let btnView = c.comprobante ? `<a href="${c.comprobante}" target="_blank" class="btn-action" style="padding:4px 8px; font-size:10px; width:auto; text-decoration:none; background:rgba(0,122,255,0.1); color:var(--blue);"><i class="ph-bold ${iconBtn}"></i> ${txtBtn}</a>` : '';
-
-            listFC.innerHTML += `
-            <div class="generic-card" style="padding:12px; margin-bottom:10px; border-left:3px solid var(--green);">
-                <div style="display:flex; justify-content:space-between; margin-bottom:4px; align-items:center;">
-                    <div style="font-weight:700; font-size:13px; color:var(--text);">${c.proveedor || 'S/N'}</div>
-                    <span style="font-size:14px; font-weight:900; color:var(--text);">${fMoney(c.monto)} Bs</span>
-                </div>
-                <div style="display:flex; justify-content:space-between; align-items:flex-end;">
-                    <div style="font-size:10px; color:var(--gray); font-weight:700; display:flex; flex-direction:column; gap:2px;">
-                        <span>Factura: ${c.nro_factura}</span>
-                        <span>NIT: ${c.nit} | Fecha: ${c.fecha}</span>
-                    </div>
-                    <div style="display:flex; gap:5px;">
-                        ${btnEdit}
-                        ${btnDel}
-                        ${btnView}
-                    </div>
-                </div>
-            </div>`;
+        // Calcular totales del período
+        let totalVentasFacturadas = 0, totalComprasFacturadas = 0;
+        Object.values(ingresosData).forEach(i => {
+            if (!i || !i.is_facturado || !i.fecha) return;
+            if (mesesSet.has(i.fecha.substring(0,7))) totalVentasFacturadas += parseFloat(i.monto || 0);
         });
-        if(!hasFC) listFC.innerHTML = '<div style="font-size:11px; text-align:center; color:var(--gray); padding:10px;">Libro vacío.</div>';
+        Object.values(comprasFacturadasData).forEach(c => {
+            if (!c || !c.fecha) return;
+            if (mesesSet.has(c.fecha.substring(0,7))) totalComprasFacturadas += parseFloat(c.monto || 0);
+        });
 
-        let debitoIVA = totalVentasFacturadas * 0.13; let it = totalVentasFacturadas * 0.03; let creditoIVA = totalComprasFacturadas * 0.13;
+        let debitoIVA = totalVentasFacturadas * 0.13;
+        let it = totalVentasFacturadas * 0.03;
+        let creditoIVA = totalComprasFacturadas * 0.13;
         let ivaAPagar = debitoIVA - creditoIVA;
 
-        document.getElementById('tax-ventas').innerText = fMoney(totalVentasFacturadas) + " Bs"; document.getElementById('tax-debito').innerText = fMoney(debitoIVA) + " Bs";
-        document.getElementById('tax-it').innerText = fMoney(it) + " Bs"; document.getElementById('tax-compras').innerText = fMoney(totalComprasFacturadas) + " Bs";
+        document.getElementById('tax-ventas').innerText = fMoney(totalVentasFacturadas) + " Bs";
+        document.getElementById('tax-debito').innerText = fMoney(debitoIVA) + " Bs";
+        document.getElementById('tax-it').innerText = fMoney(it) + " Bs";
+        document.getElementById('tax-compras').innerText = fMoney(totalComprasFacturadas) + " Bs";
         document.getElementById('tax-credito').innerText = fMoney(creditoIVA) + " Bs";
 
-        const lblPagar = document.getElementById('tax-iva-pagar'); const lblMsg = document.getElementById('tax-msg');
-        if(ivaAPagar > 0) {
+        const lblPagar = document.getElementById('tax-iva-pagar');
+        const lblMsg = document.getElementById('tax-msg');
+        const boxFaltan = document.getElementById('box-faltan-facturas');
+        if (ivaAPagar > 0) {
             lblPagar.innerText = fMoney(ivaAPagar) + " Bs"; lblPagar.style.color = "var(--red)";
-            lblMsg.innerText = `Faltan cargar facturas por ${fMoney(ivaAPagar / 0.13)} Bs para no pagar IVA.`; lblMsg.style.color = "var(--orange)";
+            lblMsg.innerText = `Crédito insuficiente — hay IVA a pagar.`; lblMsg.style.color = "var(--orange)";
+            if (boxFaltan) {
+                boxFaltan.style.display = 'block';
+                document.getElementById('tax-faltan-monto').innerText = fMoney(ivaAPagar / 0.13) + ' Bs en facturas de compra';
+            }
         } else {
             lblPagar.innerText = "0.00 Bs"; lblPagar.style.color = "var(--green)";
-            lblMsg.innerText = `El Crédito supera al Débito. Tienes saldo a favor.`; lblMsg.style.color = "var(--green)";
+            lblMsg.innerText = `Crédito supera al Débito — saldo a favor.`; lblMsg.style.color = "var(--green)";
+            if (boxFaltan) boxFaltan.style.display = 'none';
         }
+
+        // Balance por mes dentro del período (si no es vista mensual)
+        const boxMeses = document.getElementById('box-balance-meses');
+        if (boxMeses) {
+            if (vista === 'mes') {
+                boxMeses.style.display = 'none';
+            } else {
+                boxMeses.style.display = 'block';
+                let html = `<div style="font-size:12px; font-weight:900; color:var(--gray); text-transform:uppercase; margin-bottom:8px;"><i class="ph-bold ph-list"></i> Detalle por Mes</div>`;
+                mesesPeriodo.forEach(mes => {
+                    let mV = 0, mC = 0;
+                    Object.values(ingresosData).forEach(i => { if(i && i.is_facturado && i.fecha && i.fecha.substring(0,7)===mes) mV += parseFloat(i.monto||0); });
+                    Object.values(comprasFacturadasData).forEach(c => { if(c && c.fecha && c.fecha.substring(0,7)===mes) mC += parseFloat(c.monto||0); });
+                    const mDeb = mV*0.13, mCred = mC*0.13, mIVA = mDeb - mCred;
+                    const [y, m2] = mes.split('-');
+                    const nombreMes = new Date(parseInt(y), parseInt(m2)-1).toLocaleString('es-BO', {month:'short'}).toUpperCase();
+                    html += `<div class="generic-card" style="padding:10px; margin-bottom:8px;">
+                        <div style="display:flex; justify-content:space-between; align-items:center;">
+                            <div style="font-weight:900; font-size:13px; color:var(--blue);">${nombreMes} ${y}</div>
+                            <div style="font-size:12px; font-weight:900; color:${mIVA>0?'var(--red)':'var(--green)'};">${mIVA>0?'IVA: '+fMoney(mIVA)+' Bs':'Saldo a favor'}</div>
+                        </div>
+                        <div style="display:grid; grid-template-columns:1fr 1fr; gap:6px; margin-top:6px; font-size:10px; color:var(--gray);">
+                            <span>Ventas: ${fMoney(mV)} Bs</span>
+                            <span>Compras: ${fMoney(mC)} Bs</span>
+                            <span>Débito IVA: ${fMoney(mDeb)} Bs</span>
+                            <span>Crédito IVA: ${fMoney(mCred)} Bs</span>
+                        </div>
+                    </div>`;
+                });
+                boxMeses.innerHTML = html;
+            }
+        }
+
+        // Libro de compras con filtro de mes del RCV
+        const rcvFiltroMes = (document.getElementById('rcv-filtro-mes') || {}).value || '';
+        const listFC = document.getElementById('list-facturas-compras');
+        if (!listFC) return;
+        listFC.innerHTML = ''; let hasFC = false;
+
+        const comprasOrdenadas = Object.entries(comprasFacturadasData)
+            .filter(([k,c]) => c && (!rcvFiltroMes || (c.fecha && c.fecha.substring(0,7) === rcvFiltroMes)))
+            .sort((a,b) => (b[1].fecha||'').localeCompare(a[1].fecha||''));
+
+        comprasOrdenadas.forEach(([k, c]) => {
+            hasFC = true;
+            const isPdf = c.comprobante && c.comprobante.toLowerCase().includes('.pdf');
+            const btnView = c.comprobante ? `<a href="${c.comprobante}" target="_blank" style="padding:4px 8px; font-size:10px; text-decoration:none; background:rgba(0,122,255,0.1); color:var(--blue); border-radius:6px; font-weight:800;"><i class="ph-bold ${isPdf?'ph-file-pdf':'ph-image'}"></i> ${isPdf?'PDF':'Foto'}</a>` : '';
+            const btnEdit = `<button style="padding:4px 8px; font-size:10px; background:var(--bg); color:var(--text); border:1px solid var(--border); border-radius:6px; cursor:pointer; font-weight:800;" onclick="editarFactura('${k}')"><i class="ph-bold ph-pencil"></i></button>`;
+            const btnDel = `<button style="padding:4px 8px; font-size:10px; background:var(--red); color:white; border:none; border-radius:6px; cursor:pointer;" onclick="eliminarFactura('${k}')"><i class="ph-bold ph-trash"></i></button>`;
+            listFC.innerHTML += `
+            <div class="generic-card" style="padding:12px; margin-bottom:8px; border-left:3px solid var(--purple);">
+                <div style="display:flex; justify-content:space-between; margin-bottom:4px; align-items:center;">
+                    <div style="font-weight:800; font-size:13px;">${c.proveedor || 'S/N'}</div>
+                    <span style="font-size:14px; font-weight:900; color:var(--purple);">${fMoney(c.monto)} Bs</span>
+                </div>
+                <div style="font-size:10px; color:var(--gray); margin-bottom:4px;">Fact: ${c.nro_factura||'-'} · NIT: ${c.nit||'-'} · ${c.fecha||'-'}</div>
+                ${c.descripcion ? `<div style="font-size:10px; color:var(--gray); margin-bottom:6px;">${c.descripcion}</div>` : ''}
+                <div style="display:flex; gap:5px;">${btnEdit}${btnDel}${btnView}</div>
+            </div>`;
+        });
+        if (!hasFC) listFC.innerHTML = '<div style="font-size:11px; text-align:center; color:var(--gray); padding:10px;">Libro vacío para el período seleccionado.</div>';
     }
 
     // ==========================================
