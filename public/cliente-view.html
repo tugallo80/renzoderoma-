@@ -1205,6 +1205,26 @@
         });
     }
 
+    // Obtiene token de Firebase esperando auth state — evita crash cuando currentUser es null
+    async function _getCvToken() {
+        let user = firebase.auth().currentUser;
+        if (!user) {
+            user = await new Promise(resolve => {
+                let done = false;
+                const unsub = firebase.auth().onAuthStateChanged(u => {
+                    if (done) return;
+                    done = true; unsub(); resolve(u);
+                });
+                setTimeout(() => { if (!done) { done = true; try { unsub(); } catch {} resolve(null); } }, 5000);
+            });
+        }
+        if (!user) {
+            try { const cred = await firebase.auth().signInAnonymously(); user = cred.user; }
+            catch(e) { throw new Error('No se pudo autenticar: ' + e.message); }
+        }
+        return await user.getIdToken();
+    }
+
     window.enterApp = function() {
         if(!cid) return alert("🔒 Acceso Restringido. Solicita tu enlace a Rubik.");
         document.getElementById('v-landing').classList.add('hidden');
@@ -1235,28 +1255,6 @@
             // Ya hay sesión (anónima o hub) — usarla directamente sin reemplazar
             _curUser.getIdToken().then(_doWarmup).catch(() => {});
         }
-
-    // Helper seguro: espera auth state y hace signInAnonymously si hace falta.
-    // Reemplaza los firebase.auth().currentUser.getIdToken() directos que crashean
-    // cuando currentUser es null (race condition al cargar la página).
-    window._getCvToken = async function() {
-        let user = firebase.auth().currentUser;
-        if (!user) {
-            user = await new Promise(resolve => {
-                let done = false;
-                const unsub = firebase.auth().onAuthStateChanged(u => {
-                    if (done) return;
-                    done = true; unsub(); resolve(u);
-                });
-                setTimeout(() => { if (!done) { done = true; try { unsub(); } catch {} resolve(null); } }, 5000);
-            });
-        }
-        if (!user) {
-            try { const cred = await firebase.auth().signInAnonymously(); user = cred.user; }
-            catch(e) { throw new Error('No se pudo autenticar: ' + e.message); }
-        }
-        return await user.getIdToken();
-    };
         // En PC: mostrar proyectos por defecto bajo el header
         if (isPC()) {
             document.getElementById('v-proyectos').classList.remove('hidden');
