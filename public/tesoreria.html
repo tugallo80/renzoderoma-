@@ -283,8 +283,45 @@
 
     <div id="panel-ingresos" class="panel-section">
         <div class="generic-card">
-            <h3 style="margin-top:0; color:var(--green);"><i class="ph-bold ph-money"></i> Registrar Nuevo Ingreso</h3>
-            <label class="inp-lbl">Proyecto Asociado</label><select id="ing-proy-sel" class="inp-std"></select>
+            <h3 style="margin-top:0; color:var(--green);"><i class="ph-bold ph-money"></i> Registrar Ingreso / Factura de Venta</h3>
+
+            <!-- Scanner IA para facturas de venta -->
+            <div id="zona-scan-ventas" style="border:2px dashed var(--green); border-radius:12px; padding:16px; margin-bottom:15px; cursor:pointer; text-align:center;"
+                 onclick="document.getElementById('venta-factura-upload').click()"
+                 ondragover="event.preventDefault(); this.style.borderColor='var(--blue)'"
+                 ondragleave="this.style.borderColor='var(--green)'"
+                 ondrop="event.preventDefault(); this.style.borderColor='var(--green)'; handleVentaDrop(event)">
+                <i class="ph-bold ph-scan" style="font-size:26px; color:var(--green);"></i>
+                <div style="font-size:13px; font-weight:800; color:var(--green); margin-top:5px;">Escanear Factura Emitida con IA</div>
+                <div style="font-size:11px; color:var(--gray); margin-top:3px;">Toca para subir foto o PDF de la factura que emitiste</div>
+            </div>
+            <input type="file" id="venta-factura-upload" accept="image/*,application/pdf" multiple style="display:none" onchange="cargarVentasSeleccionadas(this)">
+            <div id="venta-preview-grid" style="display:none; margin-bottom:12px;">
+                <div id="venta-thumbs" style="display:flex; flex-wrap:wrap; gap:8px; margin-bottom:10px;"></div>
+                <div style="display:flex; gap:8px;">
+                    <button id="btn-scan-ventas" class="btn-action" style="background:var(--green); flex:1;" onclick="escanearFacturasVenta()">
+                        <i class="ph-bold ph-magic-wand"></i> <span id="btn-scan-venta-txt">Escanear con IA</span>
+                    </button>
+                    <button class="btn-action" style="background:var(--card); border:1px solid var(--gray); color:var(--gray); padding:10px 14px;" onclick="limpiarVentaScan()" title="Limpiar">
+                        <i class="ph-bold ph-x"></i>
+                    </button>
+                </div>
+            </div>
+            <div id="venta-scan-resultados" style="display:none; margin-bottom:15px;"></div>
+
+            <div style="text-align:center; font-size:11px; color:var(--gray); margin-bottom:12px; font-weight:bold;">O completa manualmente:</div>
+
+            <label class="inp-lbl">Proyecto Asociado</label>
+            <div id="ing-proy-container" style="position:relative; margin-bottom:14px;">
+                <input type="text" id="ing-proy-input" class="inp-std" placeholder="Buscar proyecto..." autocomplete="off"
+                       style="margin:0; padding-right:36px;"
+                       oninput="filtrarProyectos(this.value)"
+                       onfocus="abrirDropProyectos()"
+                       onkeydown="navDropProyectos(event)">
+                <i class="ph-bold ph-magnifying-glass" style="position:absolute;right:12px;top:50%;transform:translateY(-50%);color:var(--gray);pointer-events:none;font-size:16px;"></i>
+                <div id="ing-proy-drop" style="display:none;position:absolute;top:calc(100% + 4px);left:0;right:0;background:var(--card);border:1px solid var(--border);border-radius:12px;max-height:220px;overflow-y:auto;z-index:200;box-shadow:0 8px 24px rgba(0,0,0,0.2);"></div>
+            </div>
+            <input type="hidden" id="ing-proy-sel" value="">
             <div class="flex-row">
                 <div style="flex:1;"><label class="inp-lbl">Monto (Bs)</label><input type="number" step="any" id="ing-monto" class="inp-std" placeholder="0.00"></div>
                 <div style="flex:1;"><label class="inp-lbl">Fecha</label><input type="date" id="ing-fecha" class="inp-std"></div>
@@ -417,6 +454,35 @@
         }
     }
 
+    window.registrarIngreso = async function() {
+        const monto = parseFloat(document.getElementById('ing-monto').value || 0);
+        const fecha = document.getElementById('ing-fecha').value;
+        if (!monto || monto <= 0) return alert('Ingresa un monto válido.');
+        if (!fecha) return alert('Selecciona una fecha.');
+        const isFact = document.getElementById('ing-facturado').checked;
+        const payload = {
+            monto,
+            fecha,
+            proyecto: document.getElementById('ing-proy-sel').value || document.getElementById('ing-proy-input').value || '',
+            is_facturado: isFact,
+            timestamp: Date.now()
+        };
+        if (isFact) {
+            payload.nit = document.getElementById('ing-nit').value || '';
+            payload.nro_factura = document.getElementById('ing-nro').value || '';
+        }
+        try {
+            await db.ref('ingresos').push(payload);
+            document.getElementById('ing-monto').value = '';
+            document.getElementById('ing-fecha').valueAsDate = new Date();
+            document.getElementById('ing-facturado').checked = false;
+            document.getElementById('box-factura-venta').style.display = 'none';
+            document.getElementById('ing-nit').value = '';
+            document.getElementById('ing-nro').value = '';
+            alert('Ingreso registrado.');
+        } catch(e) { alert('Error: ' + e.message); }
+    };
+
     let proyectosData = {}; let personalData = {}; let ingresosData = {}; let comprasFacturadasData = {}; let cancheosData = {};
     let editFacturaId = null;
     window.tempComprobanteUrl = null;
@@ -461,20 +527,78 @@
         kpiUt.innerText = fMoney(utilidad) + " Bs"; kpiUt.style.color = utilidad >= 0 ? "var(--green)" : "var(--red)";
     }
 
+    let _proyNombres = [];
+
     function renderBuzonYContratos() {
         const listBuzon = document.getElementById('list-global-lic'); const listActive = document.getElementById('list-active-contracts');
         listBuzon.innerHTML = ''; listActive.innerHTML = '';
         let hasCotizaciones = false; let hasActivos = false;
-        const selProy = document.getElementById('ing-proy-sel'); selProy.innerHTML = '<option value="">Seleccionar Proyecto...</option>';
 
+        _proyNombres = [];
         Object.keys(proyectosData).forEach(clientId => {
             Object.keys(proyectosData[clientId]).forEach(projectId => {
                 const proyecto = proyectosData[clientId][projectId];
                 const projectName = proyecto.nombre || 'Proyecto';
-                selProy.innerHTML += `<option value="${projectName}">${projectName}</option>`;
+                if (!_proyNombres.includes(projectName)) _proyNombres.push(projectName);
             });
         });
+        _proyNombres.sort();
     }
+
+    function _renderDropItems(lista, q) {
+        const drop = document.getElementById('ing-proy-drop');
+        if (!lista.length) {
+            drop.innerHTML = '<div style="padding:12px;font-size:12px;color:var(--gray);text-align:center;">Sin resultados</div>';
+            return;
+        }
+        drop.innerHTML = lista.map(n => {
+            const hl = q.trim()
+                ? n.replace(new RegExp(q.trim().replace(/[.*+?^${}()|[\]\\]/g,'\\$&'), 'gi'),
+                    m => `<b style="color:var(--blue);">${m}</b>`)
+                : n;
+            return `<div onmousedown="event.preventDefault()" onclick="seleccionarProyecto(this.dataset.v)"
+                data-v="${n.replace(/"/g,'&quot;')}"
+                style="padding:11px 14px;font-size:13px;font-weight:600;cursor:pointer;border-bottom:1px solid var(--border);transition:background 0.1s;"
+                onmouseover="this.style.background='rgba(0,122,255,0.08)'"
+                onmouseout="this.style.background=''">${hl}</div>`;
+        }).join('');
+    }
+
+    window.abrirDropProyectos = function() {
+        const q = document.getElementById('ing-proy-input').value;
+        const lista = q.trim() ? _proyNombres.filter(n => n.toLowerCase().includes(q.toLowerCase())) : _proyNombres;
+        _renderDropItems(lista, q);
+        document.getElementById('ing-proy-drop').style.display = lista.length ? 'block' : 'none';
+    };
+
+    window.filtrarProyectos = function(q) {
+        const filtrados = q.trim()
+            ? _proyNombres.filter(n => n.toLowerCase().includes(q.toLowerCase()))
+            : _proyNombres;
+        _renderDropItems(filtrados, q);
+        document.getElementById('ing-proy-drop').style.display = filtrados.length ? 'block' : 'none';
+        document.getElementById('ing-proy-sel').value = '';
+    };
+
+    window.seleccionarProyecto = function(nombre) {
+        document.getElementById('ing-proy-input').value = nombre;
+        document.getElementById('ing-proy-sel').value = nombre;
+        document.getElementById('ing-proy-drop').style.display = 'none';
+    };
+
+    window.navDropProyectos = function(e) {
+        if (e.key === 'Escape') { document.getElementById('ing-proy-drop').style.display = 'none'; }
+        if (e.key === 'Enter') {
+            const first = document.querySelector('#ing-proy-drop div[data-v]');
+            if (first) { seleccionarProyecto(first.dataset.v); e.preventDefault(); }
+        }
+    };
+
+    document.addEventListener('click', function(e) {
+        if (!e.target.closest('#ing-proy-container')) {
+            document.getElementById('ing-proy-drop').style.display = 'none';
+        }
+    });
 
     function renderPlanillas() {
         const mesSeleccionado = document.getElementById('filtro-mes').value;
@@ -1437,50 +1561,215 @@
         XLSX.writeFile(wb, `RCV_Rubik_${document.getElementById('filtro-mes') ? document.getElementById('filtro-mes').value : 'Periodo'}.xlsx`);
     }
 
-    function exportarAuditoriaPDF() {
+    async function exportarAuditoriaPDF() {
+        const btn = document.querySelector('button[onclick="exportarAuditoriaPDF()"]');
+        if (btn) { btn.disabled = true; btn.innerHTML = '<i class="ph-bold ph-spinner"></i> Generando PDF...'; }
         try {
             const { jsPDF } = window.jspdf;
             const doc = new jsPDF();
-            let mes = document.getElementById('filtro-mes') ? document.getElementById('filtro-mes').value : 'Periodo Actual';
-            
-            doc.setFontSize(16); doc.setFont(undefined, 'bold');
-            doc.text(`Balance Impositivo (Auditoría IVA/IT) - Rubik OS`, 14, 20);
-            
-            doc.setFontSize(12); doc.setTextColor(100);
-            doc.text(`Periodo Fiscal: ${mes}`, 14, 28);
+            const PW = doc.internal.pageSize.getWidth();
+            const PH = doc.internal.pageSize.getHeight();
+            const M = 14;
 
-            // Capturar datos del DOM
-            let tVentas = document.getElementById('tax-ventas').innerText;
-            let tDebito = document.getElementById('tax-debito').innerText;
-            let tIT = document.getElementById('tax-it').innerText;
-            let tCompras = document.getElementById('tax-compras').innerText;
-            let tCredito = document.getElementById('tax-credito').innerText;
-            let tPagar = document.getElementById('tax-iva-pagar').innerText;
+            function checkY(y, needed) {
+                if (y + (needed || 20) > PH - 16) { doc.addPage(); return M; }
+                return y;
+            }
+
+            async function urlToBase64(url) {
+                try {
+                    // Ruta a través del proxy para evitar CORS de Firebase Storage
+                    const proxyUrl = '/api/imagen?url=' + encodeURIComponent(url);
+                    const res = await fetch(proxyUrl);
+                    if (!res.ok) return null;
+                    const blob = await res.blob();
+                    return await new Promise((resolve, reject) => {
+                        const fr = new FileReader();
+                        fr.onload = () => resolve(fr.result);
+                        fr.onerror = reject;
+                        fr.readAsDataURL(blob);
+                    });
+                } catch(e) { return null; }
+            }
+
+            // ── Calcular totales globales desde los datos ──
+            let totalVentas = 0, totalCompras = 0;
+            Object.values(ingresosData).forEach(i => { if (i.is_facturado) totalVentas += parseFloat(i.monto || 0); });
+            Object.values(comprasFacturadasData).forEach(c => { totalCompras += parseFloat(c.monto || 0); });
+            const debitoTotal = totalVentas * 0.13;
+            const itTotal    = totalVentas * 0.03;
+            const creditoTotal = totalCompras * 0.13;
+            const ivaTotal   = debitoTotal - creditoTotal;
+
+            // ── Portada: resumen total ──
+            doc.setFontSize(15); doc.setFont(undefined, 'bold'); doc.setTextColor(0, 122, 255);
+            doc.text('Auditoria Impositiva IVA/IT - Rubik OS', M, 18);
+            doc.setFontSize(9); doc.setFont(undefined, 'normal'); doc.setTextColor(100);
+            doc.text('Generado: ' + new Date().toLocaleDateString('es-BO') + '  |  Todos los periodos registrados', M, 25);
 
             doc.autoTable({
-                startY: 38,
-                head: [['Métrica Impositiva', 'Monto Calculado']],
+                startY: 30,
+                head: [['Metrica Impositiva (TOTAL HISTORICO)', 'Monto']],
                 body: [
-                    ['Total Ventas Facturadas', tVentas],
-                    ['Débito Fiscal (IVA 13%)', tDebito],
-                    ['Impto. Transacciones (IT 3%)', tIT],
-                    ['Total Compras Facturadas', tCompras],
-                    ['Crédito Fiscal (IVA 13% a favor)', tCredito],
-                    ['IVA A PAGAR AL SIN', tPagar]
+                    ['Total Ventas Facturadas', fMoney(totalVentas) + ' Bs'],
+                    ['Debito Fiscal (IVA 13%)', fMoney(debitoTotal) + ' Bs'],
+                    ['Impuesto Transacciones (IT 3%)', fMoney(itTotal) + ' Bs'],
+                    ['Total Compras Facturadas', fMoney(totalCompras) + ' Bs'],
+                    ['Credito Fiscal (IVA 13% a favor)', fMoney(creditoTotal) + ' Bs'],
+                    [{ content: 'IVA A PAGAR AL SIN', styles: { fontStyle: 'bold' } },
+                     { content: (ivaTotal > 0 ? fMoney(ivaTotal) : '0.00') + ' Bs',
+                       styles: { fontStyle: 'bold', textColor: ivaTotal > 0 ? [220, 40, 40] : [34, 160, 80] } }]
                 ],
                 theme: 'striped',
-                styles: { fontSize: 11, cellPadding: 4 },
-                headStyles: { fillColor: [0, 122, 255] }, // Color Azul Rubik
-                alternateRowStyles: { fillColor: [244, 244, 247] }
+                styles: { fontSize: 10, cellPadding: 3.5 },
+                headStyles: { fillColor: [0, 122, 255] },
+                alternateRowStyles: { fillColor: [244, 244, 248] }
             });
 
-            doc.setTextColor(142, 142, 147); doc.setFontSize(8); doc.setFont(undefined, 'normal');
-            doc.text('Generado por Cerebro Financiero y Contable - Rubik OS', 14, 285);
-            
-            doc.save(`Auditoria_Impositiva_${mes}.pdf`);
-        } catch(e) { 
-            console.error(e); 
-            alert('Error al generar la auditoría PDF. Revisa la consola.'); 
+            // ── Agrupar por mes ──
+            const mesesMap = {};
+            Object.values(ingresosData).forEach(i => {
+                if (!i.is_facturado || !i.fecha) return;
+                const m = i.fecha.substring(0, 7);
+                if (!mesesMap[m]) mesesMap[m] = { ventas: [], compras: [] };
+                mesesMap[m].ventas.push(i);
+            });
+            Object.keys(comprasFacturadasData).forEach(k => {
+                const c = comprasFacturadasData[k];
+                if (!c.fecha) return;
+                const m = c.fecha.substring(0, 7);
+                if (!mesesMap[m]) mesesMap[m] = { ventas: [], compras: [] };
+                mesesMap[m].compras.push({ ...c, _id: k });
+            });
+
+            const mesesOrdenados = Object.keys(mesesMap).sort();
+
+            for (const mes of mesesOrdenados) {
+                const { ventas, compras } = mesesMap[mes];
+                doc.addPage();
+                let y = M;
+
+                // Cabecera del mes
+                const [anio, numMes] = mes.split('-');
+                const nombreMes = new Date(anio, parseInt(numMes) - 1).toLocaleString('es-BO', { month: 'long', year: 'numeric' }).toUpperCase();
+                doc.setFontSize(13); doc.setFont(undefined, 'bold'); doc.setTextColor(0, 122, 255);
+                doc.text('PERIODO: ' + nombreMes, M, y); y += 2;
+                doc.setDrawColor(0, 122, 255); doc.setLineWidth(0.5);
+                doc.line(M, y + 2, PW - M, y + 2); y += 7;
+
+                // Resumen del mes
+                const mV = ventas.reduce((s, i) => s + parseFloat(i.monto || 0), 0);
+                const mC = compras.reduce((s, c) => s + parseFloat(c.monto || 0), 0);
+                const mDeb = mV * 0.13, mIT = mV * 0.03, mCred = mC * 0.13, mIVA = mDeb - mCred;
+
+                doc.autoTable({
+                    startY: y,
+                    head: [['Metrica del Mes', 'Monto']],
+                    body: [
+                        ['Ventas Facturadas', fMoney(mV) + ' Bs'],
+                        ['Debito IVA 13%', fMoney(mDeb) + ' Bs'],
+                        ['IT 3%', fMoney(mIT) + ' Bs'],
+                        ['Compras Facturadas', fMoney(mC) + ' Bs'],
+                        ['Credito IVA 13%', fMoney(mCred) + ' Bs'],
+                        [{ content: 'Balance IVA del Mes', styles: { fontStyle: 'bold' } },
+                         { content: (mIVA > 0 ? fMoney(mIVA) : '0.00') + ' Bs',
+                           styles: { fontStyle: 'bold', textColor: mIVA > 0 ? [220, 40, 40] : [34, 160, 80] } }]
+                    ],
+                    theme: 'striped',
+                    styles: { fontSize: 9, cellPadding: 2.5 },
+                    headStyles: { fillColor: [52, 170, 100] },
+                    margin: { left: M, right: M }
+                });
+                y = doc.lastAutoTable.finalY + 8;
+
+                // ── Comprobantes de compra con imágenes ──
+                if (compras.length > 0) {
+                    y = checkY(y, 12);
+                    doc.setFontSize(10); doc.setFont(undefined, 'bold'); doc.setTextColor(40, 40, 40);
+                    doc.text('COMPROBANTES DE COMPRA (' + compras.length + ')', M, y); y += 6;
+
+                    for (const c of compras) {
+                        y = checkY(y, 22);
+                        doc.setFontSize(9); doc.setFont(undefined, 'bold'); doc.setTextColor(20, 20, 20);
+                        doc.text((c.proveedor || 'S/N').substring(0, 55), M, y); y += 5;
+                        doc.setFont(undefined, 'normal'); doc.setTextColor(80, 80, 80);
+                        doc.text('NIT: ' + (c.nit || '-') + '   Factura N: ' + (c.nro_factura || '-') + '   Fecha: ' + (c.fecha || '-') + '   Monto: ' + fMoney(c.monto) + ' Bs', M, y); y += 5;
+
+                        if (c.comprobante) {
+                            const esPdf = c.comprobante.toLowerCase().includes('.pdf');
+                            if (esPdf) {
+                                doc.setFontSize(8); doc.setTextColor(120);
+                                doc.text('[Comprobante PDF - ver original]', M, y); y += 5;
+                            } else {
+                                const b64 = await urlToBase64(c.comprobante);
+                                if (b64) {
+                                    y = checkY(y, 58);
+                                    try {
+                                        const fmt = b64.startsWith('data:image/png') ? 'PNG' : 'JPEG';
+                                        const imgW = 85, imgH = 52;
+                                        doc.addImage(b64, fmt, M, y, imgW, imgH);
+                                        y += imgH + 4;
+                                    } catch(ie) {
+                                        doc.setFontSize(8); doc.setTextColor(150);
+                                        doc.text('[Imagen no disponible]', M, y); y += 5;
+                                    }
+                                } else {
+                                    doc.setFontSize(8); doc.setTextColor(150);
+                                    doc.text('[No se pudo cargar imagen]', M, y); y += 5;
+                                }
+                            }
+                        }
+
+                        doc.setDrawColor(210, 210, 210); doc.setLineWidth(0.3);
+                        doc.line(M, y, PW - M, y); y += 5;
+                    }
+                }
+
+                // ── Ventas del mes ──
+                if (ventas.length > 0) {
+                    y = checkY(y, 12);
+                    doc.setFontSize(10); doc.setFont(undefined, 'bold'); doc.setTextColor(40, 40, 40);
+                    doc.text('VENTAS FACTURADAS (' + ventas.length + ')', M, y); y += 6;
+
+                    const bodyV = ventas.map(v => [
+                        v.fecha || '-',
+                        'Fact. ' + (v.nro_factura || '-'),
+                        (v.descripcion || v.concepto || 'Ingreso').substring(0, 40),
+                        fMoney(v.monto) + ' Bs'
+                    ]);
+                    doc.autoTable({
+                        startY: y,
+                        head: [['Fecha', 'Factura', 'Descripcion', 'Monto']],
+                        body: bodyV,
+                        theme: 'grid',
+                        styles: { fontSize: 8, cellPadding: 2 },
+                        headStyles: { fillColor: [0, 80, 200] },
+                        columnStyles: { 0: { cellWidth: 24 }, 1: { cellWidth: 22 }, 3: { cellWidth: 28, halign: 'right' } },
+                        margin: { left: M, right: M }
+                    });
+                    y = doc.lastAutoTable.finalY + 6;
+                }
+            }
+
+            // Pie de todas las páginas
+            const totalPages = doc.internal.getNumberOfPages();
+            for (let p = 1; p <= totalPages; p++) {
+                doc.setPage(p);
+                doc.setTextColor(160); doc.setFontSize(7); doc.setFont(undefined, 'normal');
+                doc.text('Generado por Cerebro Financiero y Contable - Rubik OS', M, PH - 7);
+                doc.text('Pagina ' + p + ' de ' + totalPages, PW - M, PH - 7, { align: 'right' });
+            }
+
+            const periodo = mesesOrdenados.length > 0
+                ? mesesOrdenados[0] + '_a_' + mesesOrdenados[mesesOrdenados.length - 1]
+                : (document.getElementById('filtro-mes')?.value || 'periodo');
+            doc.save('Auditoria_Impositiva_' + periodo + '.pdf');
+
+        } catch(e) {
+            console.error(e);
+            alert('Error al generar la auditoria PDF: ' + e.message);
+        } finally {
+            if (btn) { btn.disabled = false; btn.innerHTML = '<i class="ph-bold ph-file-pdf"></i> Exportar Auditoria (Imagenes)'; }
         }
     }
 
@@ -1763,6 +2052,158 @@
 
     // ── Escaneador Multi-Factura con IA ──────────────────────────────
     let _facturasEnCola = []; // [{file, b64, mime, nombre}]
+
+    // ── Scanner Facturas de Venta (emitidas) ─────────────────────────────
+    let _ventasEnCola = [];
+
+    window.handleVentaDrop = function(event) {
+        const files = Array.from(event.dataTransfer.files).filter(f => f.type.startsWith('image/') || f.type === 'application/pdf');
+        if (!files.length) return;
+        agregarArchivosVenta(files);
+    };
+
+    window.cargarVentasSeleccionadas = function(input) {
+        const files = Array.from(input.files);
+        if (files.length) { agregarArchivosVenta(files); input.value = ''; }
+    };
+
+    function agregarArchivosVenta(files) {
+        files.forEach(file => {
+            if (_ventasEnCola.find(f => f.nombre === file.name)) return;
+            _ventasEnCola.push({ file, b64: null, mime: file.type || 'image/jpeg', nombre: file.name });
+        });
+        renderVentaThumbs();
+        document.getElementById('venta-preview-grid').style.display = 'block';
+        document.getElementById('venta-scan-resultados').style.display = 'none';
+        const n = _ventasEnCola.length;
+        document.getElementById('btn-scan-venta-txt').textContent = n === 1 ? 'Escanear con IA' : `Escanear ${n} facturas`;
+    }
+
+    function renderVentaThumbs() {
+        const grid = document.getElementById('venta-thumbs');
+        grid.innerHTML = '';
+        _ventasEnCola.forEach((item, idx) => {
+            const thumb = document.createElement('div');
+            thumb.style.cssText = 'position:relative;width:72px;height:72px;border-radius:8px;overflow:hidden;border:2px solid var(--card);flex-shrink:0;';
+            thumb.id = `vthumb-${idx}`;
+            if (item.mime.startsWith('image/')) {
+                const reader = new FileReader();
+                reader.onload = e => { thumb.innerHTML = `<img src="${e.target.result}" style="width:100%;height:100%;object-fit:cover;"><div onclick="quitarVenta(${idx})" style="position:absolute;top:2px;right:2px;background:rgba(0,0,0,0.7);border-radius:50%;width:18px;height:18px;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:10px;color:#fff;"><i class="ph-bold ph-x"></i></div>`; };
+                reader.readAsDataURL(item.file);
+            } else {
+                thumb.innerHTML = `<div style="width:100%;height:100%;background:var(--card);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;"><i class="ph-bold ph-file-pdf" style="font-size:22px;color:var(--red);"></i><div style="font-size:8px;color:var(--gray);text-align:center;padding:0 4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:68px;">${item.nombre}</div></div><div onclick="quitarVenta(${idx})" style="position:absolute;top:2px;right:2px;background:rgba(0,0,0,0.7);border-radius:50%;width:18px;height:18px;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:10px;color:#fff;"><i class="ph-bold ph-x"></i></div>`;
+            }
+            grid.appendChild(thumb);
+        });
+        const addMore = document.createElement('div');
+        addMore.onclick = () => document.getElementById('venta-factura-upload').click();
+        addMore.style.cssText = 'width:72px;height:72px;border-radius:8px;border:2px dashed var(--gray);display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;gap:3px;flex-shrink:0;';
+        addMore.innerHTML = '<i class="ph-bold ph-plus" style="font-size:20px;color:var(--gray);"></i><div style="font-size:9px;color:var(--gray);font-weight:700;">MAS</div>';
+        grid.appendChild(addMore);
+    }
+
+    window.quitarVenta = function(idx) {
+        _ventasEnCola.splice(idx, 1);
+        if (!_ventasEnCola.length) {
+            document.getElementById('venta-preview-grid').style.display = 'none';
+            document.getElementById('venta-scan-resultados').style.display = 'none';
+        } else { renderVentaThumbs(); }
+    };
+
+    window.limpiarVentaScan = function() {
+        _ventasEnCola = [];
+        document.getElementById('venta-preview-grid').style.display = 'none';
+        document.getElementById('venta-scan-resultados').style.display = 'none';
+    };
+
+    window.escanearFacturasVenta = async function() {
+        if (!_ventasEnCola.length) return;
+        const btn = document.getElementById('btn-scan-ventas');
+        btn.disabled = true;
+        const resultados = [];
+        for (let i = 0; i < _ventasEnCola.length; i++) {
+            const item = _ventasEnCola[i];
+            document.getElementById('btn-scan-venta-txt').textContent = `Leyendo ${i+1} de ${_ventasEnCola.length}...`;
+            const thumb = document.getElementById(`vthumb-${i}`);
+            if (thumb) thumb.style.border = '2px solid var(--blue)';
+            try {
+                if (!item.b64) {
+                    item.b64 = await new Promise((res, rej) => {
+                        const reader = new FileReader();
+                        reader.onload = e => res(e.target.result.split(',')[1]);
+                        reader.onerror = rej;
+                        reader.readAsDataURL(item.file);
+                    });
+                }
+                const resp = await callGemini({
+                    model: 'gemini-2.5-flash',
+                    contents: [{ role: 'user', parts: [
+                        { inlineData: { mimeType: item.mime, data: item.b64 } },
+                        { text: 'Analiza esta factura de venta boliviana que YO emiti. Responde SOLO el JSON:\n{"nit_cliente":"<NIT del comprador o null>","nro_factura":"<numero>","monto":<total Bs>,"fecha":"<YYYY-MM-DD>"}' }
+                    ]}]
+                });
+                const raw = (resp.candidates?.[0]?.content?.parts?.[0]?.text || '').trim();
+                const parsed = JSON.parse(raw.replace(/```json/gi,'').replace(/```/g,'').trim());
+                resultados.push({ ok: true, nombre: item.nombre, data: parsed, idx: i });
+                if (thumb) thumb.style.border = '2px solid var(--green)';
+            } catch(e) {
+                resultados.push({ ok: false, nombre: item.nombre, error: e.message, idx: i });
+                if (thumb) thumb.style.border = '2px solid var(--red)';
+            }
+        }
+        mostrarResultadosVenta(resultados);
+        btn.disabled = false;
+        document.getElementById('btn-scan-venta-txt').textContent = 'Escanear con IA';
+    };
+
+    function mostrarResultadosVenta(resultados) {
+        const box = document.getElementById('venta-scan-resultados');
+        box.style.display = 'block';
+        const exitosas = resultados.filter(r => r.ok);
+        const fallidas = resultados.filter(r => !r.ok);
+        let html = `<div style="font-size:12px;font-weight:800;color:var(--text);margin-bottom:8px;"><i class="ph-bold ph-check-circle" style="color:var(--green);"></i> ${exitosas.length} leida(s)${fallidas.length ? ` &nbsp;&middot;&nbsp; <i class="ph-bold ph-warning" style="color:var(--red);"></i> ${fallidas.length} con error` : ''}</div>`;
+        exitosas.forEach((r, i) => {
+            const d = r.data;
+            html += `<div style="background:rgba(52,199,89,0.08);border:1px solid var(--green);border-radius:10px;padding:12px;margin-bottom:8px;">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+                    <div style="font-size:11px;font-weight:800;color:var(--green);">Factura de Venta</div>
+                    <button onclick="cargarVentaEnFormulario(${i})" class="btn-action" style="padding:6px 12px;font-size:11px;background:var(--green);">
+                        <i class="ph-bold ph-arrow-down"></i> Cargar
+                    </button>
+                </div>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;font-size:11px;">
+                    <div><span style="color:var(--gray);">NIT Cliente:</span> <b>${d.nit_cliente||'&mdash;'}</b></div>
+                    <div><span style="color:var(--gray);">Nro. Fact.:</span> <b>${d.nro_factura||'&mdash;'}</b></div>
+                    <div><span style="color:var(--gray);">Monto:</span> <b style="color:var(--green);">${d.monto ? parseFloat(d.monto).toFixed(2)+' Bs' : '&mdash;'}</b></div>
+                    <div><span style="color:var(--gray);">Fecha:</span> <b>${d.fecha||'&mdash;'}</b></div>
+                </div>
+            </div>`;
+        });
+        fallidas.forEach(r => {
+            html += `<div style="background:rgba(255,59,48,0.08);border:1px solid var(--red);border-radius:10px;padding:10px;margin-bottom:8px;font-size:11px;"><i class="ph-bold ph-warning" style="color:var(--red);"></i> <b>${r.nombre}</b> &mdash; No se pudo leer.</div>`;
+        });
+        box._resultados = exitosas;
+        box.innerHTML = html;
+        if (exitosas.length === 1) cargarVentaEnFormularioDatos(exitosas[0].data);
+    }
+
+    window.cargarVentaEnFormulario = function(idx) {
+        const box = document.getElementById('venta-scan-resultados');
+        const r = box._resultados && box._resultados[idx];
+        if (r) cargarVentaEnFormularioDatos(r.data);
+    };
+
+    function cargarVentaEnFormularioDatos(d) {
+        if (d.monto)        document.getElementById('ing-monto').value = parseFloat(d.monto) || '';
+        if (d.fecha)        document.getElementById('ing-fecha').value = d.fecha;
+        if (d.nit_cliente || d.nro_factura) {
+            document.getElementById('ing-facturado').checked = true;
+            document.getElementById('box-factura-venta').style.display = 'block';
+            if (d.nit_cliente)  document.getElementById('ing-nit').value = d.nit_cliente;
+            if (d.nro_factura)  document.getElementById('ing-nro').value = d.nro_factura;
+        }
+        document.getElementById('ing-monto').scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
 
     window.handleFacturaDrop = function(event) {
         const files = Array.from(event.dataTransfer.files).filter(f => f.type.startsWith('image/') || f.type === 'application/pdf');

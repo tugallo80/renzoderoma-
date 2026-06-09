@@ -8,6 +8,7 @@
  *   /api/gemini    -> geminiProxy
  *   /api/ingesta   -> procesarIngestaIA
  *   /api/whatsapp  -> whatsappWebhook
+ *   /api/imagen    -> proxyImagen
  */
 
 const { onRequest } = require("firebase-functions/v2/https");
@@ -730,6 +731,42 @@ exports.asistenteCajaChica = onValueCreated(
         } catch (err) {
             console.error("asistenteCajaChica error:", err);
             return null;
+        }
+    }
+);
+
+// ============================================================================
+// PROXY IMÁGENES — evita CORS al cargar comprobantes de Storage en el PDF
+// ============================================================================
+exports.proxyImagen = onRequest(
+    { timeoutSeconds: 30, memory: "256MiB", region: "us-central1", invoker: "public", cors: false },
+    async (req, res) => {
+        res.set("Access-Control-Allow-Origin", "*");
+        res.set("Access-Control-Allow-Methods", "GET, OPTIONS");
+        if (req.method === "OPTIONS") { res.status(204).send(""); return; }
+
+        const url = req.query.url;
+        if (!url) { res.status(400).send("Falta parametro url"); return; }
+
+        const ALLOWED_BUCKETS = [
+            "https://firebasestorage.googleapis.com/v0/b/rubik-bolivia.appspot.com/",
+            "https://firebasestorage.googleapis.com/v0/b/rubik-bolivia.firebasestorage.app/",
+        ];
+        if (!ALLOWED_BUCKETS.some(b => url.startsWith(b))) {
+            res.status(403).send("URL no permitida"); return;
+        }
+
+        try {
+            const response = await fetch(url);
+            if (!response.ok) { res.status(response.status).send("Error obteniendo imagen"); return; }
+            const contentType = response.headers.get("content-type") || "image/jpeg";
+            const buffer = await response.arrayBuffer();
+            res.set("Content-Type", contentType);
+            res.set("Cache-Control", "private, max-age=3600");
+            res.send(Buffer.from(buffer));
+        } catch (e) {
+            console.error("proxyImagen error:", e.message);
+            res.status(500).send("Error interno");
         }
     }
 );

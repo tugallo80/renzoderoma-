@@ -62,6 +62,13 @@
           "functionId": "whatsappWebhook",
           "region": "us-central1"
         }
+      },
+      {
+        "source": "/api/imagen",
+        "function": {
+          "functionId": "proxyImagen",
+          "region": "us-central1"
+        }
       }
     ]
   },
