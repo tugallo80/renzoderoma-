@@ -1437,50 +1437,212 @@
         XLSX.writeFile(wb, `RCV_Rubik_${document.getElementById('filtro-mes') ? document.getElementById('filtro-mes').value : 'Periodo'}.xlsx`);
     }
 
-    function exportarAuditoriaPDF() {
+    async function exportarAuditoriaPDF() {
+        const btn = document.querySelector('button[onclick="exportarAuditoriaPDF()"]');
+        if (btn) { btn.disabled = true; btn.innerHTML = '<i class="ph-bold ph-spinner"></i> Generando PDF...'; }
         try {
             const { jsPDF } = window.jspdf;
             const doc = new jsPDF();
-            let mes = document.getElementById('filtro-mes') ? document.getElementById('filtro-mes').value : 'Periodo Actual';
-            
-            doc.setFontSize(16); doc.setFont(undefined, 'bold');
-            doc.text(`Balance Impositivo (Auditoría IVA/IT) - Rubik OS`, 14, 20);
-            
-            doc.setFontSize(12); doc.setTextColor(100);
-            doc.text(`Periodo Fiscal: ${mes}`, 14, 28);
+            const PW = doc.internal.pageSize.getWidth();
+            const PH = doc.internal.pageSize.getHeight();
+            const M = 14;
 
-            // Capturar datos del DOM
-            let tVentas = document.getElementById('tax-ventas').innerText;
-            let tDebito = document.getElementById('tax-debito').innerText;
-            let tIT = document.getElementById('tax-it').innerText;
-            let tCompras = document.getElementById('tax-compras').innerText;
-            let tCredito = document.getElementById('tax-credito').innerText;
-            let tPagar = document.getElementById('tax-iva-pagar').innerText;
+            function checkY(y, needed) {
+                if (y + (needed || 20) > PH - 16) { doc.addPage(); return M; }
+                return y;
+            }
+
+            async function urlToBase64(url) {
+                try {
+                    const res = await fetch(url);
+                    const blob = await res.blob();
+                    return await new Promise((resolve, reject) => {
+                        const fr = new FileReader();
+                        fr.onload = () => resolve(fr.result);
+                        fr.onerror = reject;
+                        fr.readAsDataURL(blob);
+                    });
+                } catch(e) { return null; }
+            }
+
+            // ── Calcular totales globales desde los datos ──
+            let totalVentas = 0, totalCompras = 0;
+            Object.values(ingresosData).forEach(i => { if (i.is_facturado) totalVentas += parseFloat(i.monto || 0); });
+            Object.values(comprasFacturadasData).forEach(c => { totalCompras += parseFloat(c.monto || 0); });
+            const debitoTotal = totalVentas * 0.13;
+            const itTotal    = totalVentas * 0.03;
+            const creditoTotal = totalCompras * 0.13;
+            const ivaTotal   = debitoTotal - creditoTotal;
+
+            // ── Portada: resumen total ──
+            doc.setFontSize(15); doc.setFont(undefined, 'bold'); doc.setTextColor(0, 122, 255);
+            doc.text('Auditoria Impositiva IVA/IT - Rubik OS', M, 18);
+            doc.setFontSize(9); doc.setFont(undefined, 'normal'); doc.setTextColor(100);
+            doc.text('Generado: ' + new Date().toLocaleDateString('es-BO') + '  |  Todos los periodos registrados', M, 25);
 
             doc.autoTable({
-                startY: 38,
-                head: [['Métrica Impositiva', 'Monto Calculado']],
+                startY: 30,
+                head: [['Metrica Impositiva (TOTAL HISTORICO)', 'Monto']],
                 body: [
-                    ['Total Ventas Facturadas', tVentas],
-                    ['Débito Fiscal (IVA 13%)', tDebito],
-                    ['Impto. Transacciones (IT 3%)', tIT],
-                    ['Total Compras Facturadas', tCompras],
-                    ['Crédito Fiscal (IVA 13% a favor)', tCredito],
-                    ['IVA A PAGAR AL SIN', tPagar]
+                    ['Total Ventas Facturadas', fMoney(totalVentas) + ' Bs'],
+                    ['Debito Fiscal (IVA 13%)', fMoney(debitoTotal) + ' Bs'],
+                    ['Impuesto Transacciones (IT 3%)', fMoney(itTotal) + ' Bs'],
+                    ['Total Compras Facturadas', fMoney(totalCompras) + ' Bs'],
+                    ['Credito Fiscal (IVA 13% a favor)', fMoney(creditoTotal) + ' Bs'],
+                    [{ content: 'IVA A PAGAR AL SIN', styles: { fontStyle: 'bold' } },
+                     { content: (ivaTotal > 0 ? fMoney(ivaTotal) : '0.00') + ' Bs',
+                       styles: { fontStyle: 'bold', textColor: ivaTotal > 0 ? [220, 40, 40] : [34, 160, 80] } }]
                 ],
                 theme: 'striped',
-                styles: { fontSize: 11, cellPadding: 4 },
-                headStyles: { fillColor: [0, 122, 255] }, // Color Azul Rubik
-                alternateRowStyles: { fillColor: [244, 244, 247] }
+                styles: { fontSize: 10, cellPadding: 3.5 },
+                headStyles: { fillColor: [0, 122, 255] },
+                alternateRowStyles: { fillColor: [244, 244, 248] }
             });
 
-            doc.setTextColor(142, 142, 147); doc.setFontSize(8); doc.setFont(undefined, 'normal');
-            doc.text('Generado por Cerebro Financiero y Contable - Rubik OS', 14, 285);
-            
-            doc.save(`Auditoria_Impositiva_${mes}.pdf`);
-        } catch(e) { 
-            console.error(e); 
-            alert('Error al generar la auditoría PDF. Revisa la consola.'); 
+            // ── Agrupar por mes ──
+            const mesesMap = {};
+            Object.values(ingresosData).forEach(i => {
+                if (!i.is_facturado || !i.fecha) return;
+                const m = i.fecha.substring(0, 7);
+                if (!mesesMap[m]) mesesMap[m] = { ventas: [], compras: [] };
+                mesesMap[m].ventas.push(i);
+            });
+            Object.keys(comprasFacturadasData).forEach(k => {
+                const c = comprasFacturadasData[k];
+                if (!c.fecha) return;
+                const m = c.fecha.substring(0, 7);
+                if (!mesesMap[m]) mesesMap[m] = { ventas: [], compras: [] };
+                mesesMap[m].compras.push({ ...c, _id: k });
+            });
+
+            const mesesOrdenados = Object.keys(mesesMap).sort();
+
+            for (const mes of mesesOrdenados) {
+                const { ventas, compras } = mesesMap[mes];
+                doc.addPage();
+                let y = M;
+
+                // Cabecera del mes
+                const [anio, numMes] = mes.split('-');
+                const nombreMes = new Date(anio, parseInt(numMes) - 1).toLocaleString('es-BO', { month: 'long', year: 'numeric' }).toUpperCase();
+                doc.setFontSize(13); doc.setFont(undefined, 'bold'); doc.setTextColor(0, 122, 255);
+                doc.text('PERIODO: ' + nombreMes, M, y); y += 2;
+                doc.setDrawColor(0, 122, 255); doc.setLineWidth(0.5);
+                doc.line(M, y + 2, PW - M, y + 2); y += 7;
+
+                // Resumen del mes
+                const mV = ventas.reduce((s, i) => s + parseFloat(i.monto || 0), 0);
+                const mC = compras.reduce((s, c) => s + parseFloat(c.monto || 0), 0);
+                const mDeb = mV * 0.13, mIT = mV * 0.03, mCred = mC * 0.13, mIVA = mDeb - mCred;
+
+                doc.autoTable({
+                    startY: y,
+                    head: [['Metrica del Mes', 'Monto']],
+                    body: [
+                        ['Ventas Facturadas', fMoney(mV) + ' Bs'],
+                        ['Debito IVA 13%', fMoney(mDeb) + ' Bs'],
+                        ['IT 3%', fMoney(mIT) + ' Bs'],
+                        ['Compras Facturadas', fMoney(mC) + ' Bs'],
+                        ['Credito IVA 13%', fMoney(mCred) + ' Bs'],
+                        [{ content: 'Balance IVA del Mes', styles: { fontStyle: 'bold' } },
+                         { content: (mIVA > 0 ? fMoney(mIVA) : '0.00') + ' Bs',
+                           styles: { fontStyle: 'bold', textColor: mIVA > 0 ? [220, 40, 40] : [34, 160, 80] } }]
+                    ],
+                    theme: 'striped',
+                    styles: { fontSize: 9, cellPadding: 2.5 },
+                    headStyles: { fillColor: [52, 170, 100] },
+                    margin: { left: M, right: M }
+                });
+                y = doc.lastAutoTable.finalY + 8;
+
+                // ── Comprobantes de compra con imágenes ──
+                if (compras.length > 0) {
+                    y = checkY(y, 12);
+                    doc.setFontSize(10); doc.setFont(undefined, 'bold'); doc.setTextColor(40, 40, 40);
+                    doc.text('COMPROBANTES DE COMPRA (' + compras.length + ')', M, y); y += 6;
+
+                    for (const c of compras) {
+                        y = checkY(y, 22);
+                        doc.setFontSize(9); doc.setFont(undefined, 'bold'); doc.setTextColor(20, 20, 20);
+                        doc.text((c.proveedor || 'S/N').substring(0, 55), M, y); y += 5;
+                        doc.setFont(undefined, 'normal'); doc.setTextColor(80, 80, 80);
+                        doc.text('NIT: ' + (c.nit || '-') + '   Factura N: ' + (c.nro_factura || '-') + '   Fecha: ' + (c.fecha || '-') + '   Monto: ' + fMoney(c.monto) + ' Bs', M, y); y += 5;
+
+                        if (c.comprobante) {
+                            const esPdf = c.comprobante.toLowerCase().includes('.pdf');
+                            if (esPdf) {
+                                doc.setFontSize(8); doc.setTextColor(120);
+                                doc.text('[Comprobante PDF - ver original]', M, y); y += 5;
+                            } else {
+                                const b64 = await urlToBase64(c.comprobante);
+                                if (b64) {
+                                    y = checkY(y, 58);
+                                    try {
+                                        const fmt = b64.startsWith('data:image/png') ? 'PNG' : 'JPEG';
+                                        const imgW = 85, imgH = 52;
+                                        doc.addImage(b64, fmt, M, y, imgW, imgH);
+                                        y += imgH + 4;
+                                    } catch(ie) {
+                                        doc.setFontSize(8); doc.setTextColor(150);
+                                        doc.text('[Imagen no disponible]', M, y); y += 5;
+                                    }
+                                } else {
+                                    doc.setFontSize(8); doc.setTextColor(150);
+                                    doc.text('[No se pudo cargar imagen]', M, y); y += 5;
+                                }
+                            }
+                        }
+
+                        doc.setDrawColor(210, 210, 210); doc.setLineWidth(0.3);
+                        doc.line(M, y, PW - M, y); y += 5;
+                    }
+                }
+
+                // ── Ventas del mes ──
+                if (ventas.length > 0) {
+                    y = checkY(y, 12);
+                    doc.setFontSize(10); doc.setFont(undefined, 'bold'); doc.setTextColor(40, 40, 40);
+                    doc.text('VENTAS FACTURADAS (' + ventas.length + ')', M, y); y += 6;
+
+                    const bodyV = ventas.map(v => [
+                        v.fecha || '-',
+                        'Fact. ' + (v.nro_factura || '-'),
+                        (v.descripcion || v.concepto || 'Ingreso').substring(0, 40),
+                        fMoney(v.monto) + ' Bs'
+                    ]);
+                    doc.autoTable({
+                        startY: y,
+                        head: [['Fecha', 'Factura', 'Descripcion', 'Monto']],
+                        body: bodyV,
+                        theme: 'grid',
+                        styles: { fontSize: 8, cellPadding: 2 },
+                        headStyles: { fillColor: [0, 80, 200] },
+                        columnStyles: { 0: { cellWidth: 24 }, 1: { cellWidth: 22 }, 3: { cellWidth: 28, halign: 'right' } },
+                        margin: { left: M, right: M }
+                    });
+                    y = doc.lastAutoTable.finalY + 6;
+                }
+            }
+
+            // Pie de todas las páginas
+            const totalPages = doc.internal.getNumberOfPages();
+            for (let p = 1; p <= totalPages; p++) {
+                doc.setPage(p);
+                doc.setTextColor(160); doc.setFontSize(7); doc.setFont(undefined, 'normal');
+                doc.text('Generado por Cerebro Financiero y Contable - Rubik OS', M, PH - 7);
+                doc.text('Pagina ' + p + ' de ' + totalPages, PW - M, PH - 7, { align: 'right' });
+            }
+
+            const periodo = mesesOrdenados.length > 0
+                ? mesesOrdenados[0] + '_a_' + mesesOrdenados[mesesOrdenados.length - 1]
+                : (document.getElementById('filtro-mes')?.value || 'periodo');
+            doc.save('Auditoria_Impositiva_' + periodo + '.pdf');
+
+        } catch(e) {
+            console.error(e);
+            alert('Error al generar la auditoria PDF: ' + e.message);
+        } finally {
+            if (btn) { btn.disabled = false; btn.innerHTML = '<i class="ph-bold ph-file-pdf"></i> Exportar Auditoria (Imagenes)'; }
         }
     }
 
