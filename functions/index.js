@@ -107,8 +107,8 @@ exports.geminiProxy = onRequest(GEMINI_PROXY_OPTS, async (req, res) => {
         if (body.generateImage) {
             const imgPrompt = body.prompt || body.text || "imagen profesional corporativa";
             const imgModels = [
-                "gemini-2.5-flash-preview-image-generation",
                 "gemini-2.0-flash-preview-image-generation",
+                "gemini-2.0-flash-exp",
                 "gemini-2.0-flash-exp-image-generation",
             ];
             const errors = [];

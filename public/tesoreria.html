@@ -2165,7 +2165,6 @@
                                     if (imgData) { doc.addImage(imgData, 'JPEG', M, y, 50, 40); y += 44; }
                                 } catch(e) { doc.setFontSize(8); doc.setTextColor(120); doc.text('[Error al cargar imagen]', M, y); y += 5; }
                             }
-                        }
                         doc.setDrawColor(220); doc.setLineWidth(0.2); doc.line(M, y, PW - M, y); y += 5;
                     }
                 }
