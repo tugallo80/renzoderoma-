@@ -2496,7 +2496,7 @@
                 const d = JSON.parse(jsonMatch[0]);
                 if (d.monto)    document.getElementById('cobro-monto').value    = d.monto;
                 if (d.fecha)    document.getElementById('cobro-fecha').value    = d.fecha;
-                if (d.concepto) document.getElement('cobro-concepto').value = d.concepto + (d.banco_origen ? ' · ' + d.banco_origen : '');
+                if (d.concepto) document.getElementById('cobro-concepto').value = d.concepto + (d.banco_origen ? ' · ' + d.banco_origen : '');
                 document.getElementById('cobro-boucher-nombre').innerText = '✓ Leído con IA · ' + (window._cobroBoucherFile?.name || '');
             } else {
                 alert('No se pudieron extraer datos. Intentá con imagen más nítida.');
