@@ -2529,21 +2529,30 @@
         document.getElementById('ant-nota').value = '';
         document.getElementById('ant-fecha').valueAsDate = new Date();
 
-        // Poblar select de trabajadores
+        // Poblar select de trabajadores copiando del filtro-trabajador ya populado
         const selTrab = document.getElementById('ant-trabajador');
         selTrab.innerHTML = '<option value="">Seleccionar trabajador...</option>';
-        const trabSet = new Set();
-        Object.values(proyectosData).forEach(cliente => {
-            Object.values(cliente || {}).forEach(p => {
-                Object.values(p.licitaciones || {}).forEach(lic => {
-                    const t = lic.worker_name || lic.trabajador_nombre || lic.asignado || lic.nombre_trabajador;
-                    if (t) trabSet.add(t);
+        const filtroSel = document.getElementById('filtro-trabajador');
+        if (filtroSel && filtroSel.options.length > 1) {
+            Array.from(filtroSel.options).slice(1).forEach(opt => {
+                selTrab.innerHTML += `<option value="${opt.value}">${opt.text}</option>`;
+            });
+        } else {
+            // Fallback: escanear proyectosData directamente
+            const trabSet = new Set();
+            Object.values(proyectosData).forEach(cliente => {
+                Object.values(cliente || {}).forEach(p => {
+                    if (!p || typeof p !== 'object') return;
+                    Object.values(p.licitaciones || {}).forEach(lic => {
+                        const t = lic.worker_name || lic.trabajador_nombre || lic.asignado || lic.nombre_trabajador;
+                        if (t) trabSet.add(t);
+                    });
                 });
             });
-        });
-        Array.from(trabSet).sort().forEach(t => {
-            selTrab.innerHTML += `<option value="${t}">${t}</option>`;
-        });
+            Array.from(trabSet).sort().forEach(t => {
+                selTrab.innerHTML += `<option value="${t}">${t}</option>`;
+            });
+        }
 
         document.getElementById('ant-proyecto').innerHTML = '<option value="">Primero selecciona un trabajador</option>';
         document.getElementById('ant-licitacion').innerHTML = '<option value="">Primero selecciona un proyecto</option>';
@@ -2628,7 +2637,7 @@
                     systemInstruction: 'Eres un extractor de datos de comprobantes de pago. Devuelve SOLO JSON válido, sin markdown.',
                     contents: [{ role: 'user', parts: [
                         { inlineData: { mimeType: mime, data: b64 } },
-                        { text: 'Extrae de este comprobante de pago: monto (número), fecha (YYYY-MM-DD), concepto. Devuelve SOLO JSON con claves: monto, fecha, concepto. Si no hay campo usa null.' }
+                        { text: 'Extrae de este comprobante de pago. Devuelve SOLO JSON con estas claves: monto (número), fecha (YYYY-MM-DD), concepto (descripción breve del pago), destinatario (nombre completo de la persona que RECIBE el dinero). Si no hay campo usa null.' }
                     ]}]
                 })
             });
@@ -2640,6 +2649,25 @@
                 if (d.monto)    document.getElementById('ant-monto').value = d.monto;
                 if (d.fecha)    document.getElementById('ant-fecha').value  = d.fecha;
                 if (d.concepto) document.getElementById('ant-nota').value   = d.concepto;
+                // Auto-seleccionar trabajador si el destinatario coincide
+                if (d.destinatario) {
+                    const selTrab = document.getElementById('ant-trabajador');
+                    const destNorm = d.destinatario.toLowerCase().replace(/\s+/g, ' ').trim();
+                    let bestOpt = null, bestScore = 0;
+                    Array.from(selTrab.options).forEach(opt => {
+                        if (!opt.value) return;
+                        const optNorm = opt.value.toLowerCase().replace(/\s+/g, ' ').trim();
+                        // Contar palabras en común
+                        const wordsA = destNorm.split(' ');
+                        const wordsB = optNorm.split(' ');
+                        const common = wordsA.filter(w => w.length > 2 && wordsB.some(b => b.includes(w) || w.includes(b))).length;
+                        if (common > bestScore) { bestScore = common; bestOpt = opt; }
+                    });
+                    if (bestOpt && bestScore >= 1) {
+                        selTrab.value = bestOpt.value;
+                        onAntTrabajadorChange();
+                    }
+                }
             } else {
                 alert('No se pudieron extraer datos. Revisá la imagen.');
             }
