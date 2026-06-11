@@ -1205,6 +1205,26 @@
         });
     }
 
+    // Obtiene token de Firebase esperando auth state — evita crash cuando currentUser es null
+    async function _getCvToken() {
+        let user = firebase.auth().currentUser;
+        if (!user) {
+            user = await new Promise(resolve => {
+                let done = false;
+                const unsub = firebase.auth().onAuthStateChanged(u => {
+                    if (done) return;
+                    done = true; unsub(); resolve(u);
+                });
+                setTimeout(() => { if (!done) { done = true; try { unsub(); } catch(e) {} resolve(null); } }, 5000);
+            });
+        }
+        if (!user) {
+            try { const cred = await firebase.auth().signInAnonymously(); user = cred.user; }
+            catch(e) { throw new Error('No se pudo autenticar: ' + e.message); }
+        }
+        return await user.getIdToken();
+    }
+
     window.enterApp = function() {
         if(!cid) return alert("🔒 Acceso Restringido. Solicita tu enlace a Rubik.");
         document.getElementById('v-landing').classList.add('hidden');
@@ -2090,7 +2110,7 @@ Consulta actual del cliente: ${texto}`;
             const _imgCv1 = parts.find(p => p.inlineData);
             const _bodyCv1 = { prompt: _promptCv1, model: 'gemini-2.5-flash' };
             if (_imgCv1) _bodyCv1.image = _imgCv1.inlineData;
-            const _tokCv1 = await firebase.auth().currentUser.getIdToken();
+            const _tokCv1 = await _getCvToken();
             const _resCv1 = await fetch('/api/gemini', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + _tokCv1 },
@@ -2779,7 +2799,7 @@ Solicitud: ${texto}`;
         try {
             // Sin googleSearch: precios del proyecto ya están en el prompt, es más rápido y preciso
             // Proxy /api/gemini
-            const _tokCv2 = await firebase.auth().currentUser.getIdToken();
+            const _tokCv2 = await _getCvToken();
             const _resCv2 = await fetch('/api/gemini', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + _tokCv2 },
@@ -3338,7 +3358,7 @@ Solicitud: ${texto}`;
     // _geminiModel: objeto compatible que usa el proxy /api/gemini
     window._geminiModel = {
         generateContent: async function(prompt) {
-            const token = await firebase.auth().currentUser.getIdToken();
+            const token = await _getCvToken();
             const body = typeof prompt === 'string'
                 ? { prompt, model: 'gemini-2.5-flash' }
                 : { contents: prompt?.contents || prompt, model: 'gemini-2.5-flash' };
@@ -3498,33 +3518,61 @@ Solicitud: ${texto}`;
     });
 
     let recognition; let isRecording = false;
-    if ('webkitSpeechRecognition' in window) {
-        recognition = new webkitSpeechRecognition();
+    const SpeechAPI = window.SpeechRecognition || window.webkitSpeechRecognition || null;
+
+    if (SpeechAPI) {
+        recognition = new SpeechAPI();
         recognition.continuous = false;
-        recognition.interimResults = false;
-        recognition.lang = 'es-BO';
+        recognition.interimResults = true;
+        recognition.lang = 'es';
+
+        const _micBtn = () => document.getElementById('btn-mic');
+        const _input  = () => document.getElementById('ia-text-input');
+        let _baseText = '';
 
         recognition.onstart = function() {
             isRecording = true;
-            document.getElementById('btn-mic').classList.add('recording');
-            document.getElementById('ia-text-input').placeholder = "Escuchando...";
+            _baseText = _input().value;
+            _micBtn().classList.add('recording');
+            _micBtn().innerHTML = '<i class="ph-bold ph-stop-circle"></i>';
+            _input().placeholder = "Escuchando...";
         };
+
         recognition.onresult = function(event) {
-            const transcript = event.results[0][0].transcript;
-            const input = document.getElementById('ia-text-input');
-            input.value = (input.value + " " + transcript).trim();
+            let interim = '';
+            let final = '';
+            for (let i = event.resultIndex; i < event.results.length; i++) {
+                const t = event.results[i][0].transcript;
+                if (event.results[i].isFinal) final += t;
+                else interim += t;
+            }
+            _input().value = (_baseText + ' ' + (final || interim)).trim();
         };
-        recognition.onerror = function(event) { console.error("Speech error", event); };
+
+        recognition.onerror = function(event) {
+            const msgs = {
+                'not-allowed':   'Permití el micrófono en tu navegador e intentá de nuevo.',
+                'no-speech':     'No se detectó voz. Intentá de nuevo.',
+                'network':       'Error de red al procesar voz. Revisá tu conexión.',
+                'audio-capture': 'No se encontró micrófono.',
+            };
+            const msg = msgs[event.error] || ('Error de voz: ' + event.error);
+            _input().placeholder = msg;
+            setTimeout(() => { _input().placeholder = 'Escribe aquí o pega una imagen...'; }, 3000);
+        };
+
         recognition.onend = function() {
             isRecording = false;
-            document.getElementById('btn-mic').classList.remove('recording');
-            document.getElementById('ia-text-input').placeholder = "Escribe aquí o pega una imagen...";
+            _micBtn().classList.remove('recording');
+            _micBtn().innerHTML = '<i class="ph-bold ph-microphone"></i>';
+            _input().placeholder = 'Escribe aquí o pega una imagen...';
+            _baseText = '';
         };
     }
 
     window.toggleMic = function() {
-        if(!recognition) return alert("Tu navegador no soporta entrada por voz.");
-        if(isRecording) recognition.stop(); else recognition.start();
+        if (!recognition) return alert('Tu navegador no soporta entrada por voz. Usá Chrome en Android o Safari en iOS.');
+        if (isRecording) { recognition.stop(); } else { recognition.start(); }
     };
 
         window.selectOpcion = function(btn, inputId) {
@@ -3777,7 +3825,7 @@ Mensaje del cliente: ${text}`;
             const _imgsCv3 = parts.filter(p => p.inlineData);
             const _bodyCv3 = { prompt: _promptCv3, model: 'gemini-2.5-flash' };
             if (_imgsCv3.length > 0) _bodyCv3.image = _imgsCv3[0].inlineData;
-            const _tokCv3 = await firebase.auth().currentUser.getIdToken();
+            const _tokCv3 = await _getCvToken();
             const _resCv3 = await fetch('/api/gemini', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + _tokCv3 },
@@ -4064,7 +4112,7 @@ Mensaje del cliente: ${text}`;
 
             const _bodyItems = { prompt: textPrompt, model: 'gemini-2.5-flash' };
             if (allImgParts.length > 0) _bodyItems.image = allImgParts[0].inlineData;
-            const _tokItems = await firebase.auth().currentUser.getIdToken();
+            const _tokItems = await _getCvToken();
             const _resItems = await fetch('/api/gemini', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + _tokItems },

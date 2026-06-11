@@ -574,6 +574,18 @@
 
     function fMoney(num) { return parseFloat(num || 0).toLocaleString('es-BO', {minimumFractionDigits: 2, maximumFractionDigits: 2}); }
 
+    async function _getHubToken() {
+        const user = firebase.auth().currentUser;
+        if (user) return await user.getIdToken();
+        return await new Promise((resolve, reject) => {
+            const unsub = firebase.auth().onAuthStateChanged(u => {
+                unsub();
+                if (u) u.getIdToken().then(resolve).catch(reject);
+                else reject(new Error('No autenticado'));
+            });
+        });
+    }
+
     function switchMainTab(tabId, btn) {
         document.querySelectorAll('.panel-section').forEach(el => el.classList.remove('active'));
         document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
@@ -2165,7 +2177,6 @@
                                     if (imgData) { doc.addImage(imgData, 'JPEG', M, y, 50, 40); y += 44; }
                                 } catch(e) { doc.setFontSize(8); doc.setTextColor(120); doc.text('[Error al cargar imagen]', M, y); y += 5; }
                             }
-                        }
                         doc.setDrawColor(220); doc.setLineWidth(0.2); doc.line(M, y, PW - M, y); y += 5;
                     }
                 }
@@ -2273,7 +2284,7 @@
                 const mime = file.type.startsWith('image/') ? file.type : 'image/jpeg';
                 const resp = await fetch('/api/gemini', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${await _getHubToken()}` },
                     body: JSON.stringify({
                         model: 'gemini-2.5-flash',
                         systemInstruction: 'Eres un extractor de datos de facturas bolivianas de compra. Devuelve SOLO JSON válido, sin markdown ni explicaciones.',
@@ -2410,7 +2421,7 @@
             const mime = file.type.startsWith('image/') ? file.type : 'image/jpeg';
             const resp = await fetch('/api/gemini', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${await _getHubToken()}` },
                 body: JSON.stringify({
                     model: 'gemini-2.5-flash',
                     systemInstruction: 'Eres un extractor de datos de facturas bolivianas emitidas. Devuelve SOLO JSON v\u00e1lido, sin markdown ni explicaciones.',
@@ -2463,7 +2474,7 @@
             const mime = window._cobroBoucherFile?.type?.startsWith('image/') ? window._cobroBoucherFile.type : 'image/jpeg';
             const resp = await fetch('/api/gemini', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${await _getHubToken()}` },
                 body: JSON.stringify({
                     model: 'gemini-2.5-flash',
                     systemInstruction: 'Eres un extractor de datos de comprobantes de pago y bouchers bancarios. Devuelve SOLO JSON v\u00e1lido, sin markdown ni explicaciones.',
@@ -2485,7 +2496,7 @@
                 const d = JSON.parse(jsonMatch[0]);
                 if (d.monto)    document.getElementById('cobro-monto').value    = d.monto;
                 if (d.fecha)    document.getElementById('cobro-fecha').value    = d.fecha;
-                if (d.concepto) document.getElement('cobro-concepto').value = d.concepto + (d.banco_origen ? ' · ' + d.banco_origen : '');
+                if (d.concepto) document.getElementById('cobro-concepto').value = d.concepto + (d.banco_origen ? ' · ' + d.banco_origen : '');
                 document.getElementById('cobro-boucher-nombre').innerText = '✓ Leído con IA · ' + (window._cobroBoucherFile?.name || '');
             } else {
                 alert('No se pudieron extraer datos. Intentá con imagen más nítida.');
@@ -2505,6 +2516,209 @@
             reader.readAsDataURL(file);
         });
     }
+
+    // ── MODAL ANTICIPO ────────────────────────────────────────────────────────
+    let _antFile = null;
+
+    window.abrirModalAnticipo = function() {
+        _antFile = null;
+        document.getElementById('ant-foto').value = '';
+        document.getElementById('ant-foto-preview').style.display = 'none';
+        document.getElementById('btn-ia-ant').style.display = 'none';
+        document.getElementById('ant-monto').value = '';
+        document.getElementById('ant-nota').value = '';
+        document.getElementById('ant-fecha').valueAsDate = new Date();
+
+        // Poblar select de trabajadores copiando del filtro-trabajador ya populado
+        const selTrab = document.getElementById('ant-trabajador');
+        selTrab.innerHTML = '<option value="">Seleccionar trabajador...</option>';
+        const filtroSel = document.getElementById('filtro-trabajador');
+        if (filtroSel && filtroSel.options.length > 1) {
+            Array.from(filtroSel.options).slice(1).forEach(opt => {
+                selTrab.innerHTML += `<option value="${opt.value}">${opt.text}</option>`;
+            });
+        } else {
+            // Fallback: escanear proyectosData directamente
+            const trabSet = new Set();
+            Object.values(proyectosData).forEach(cliente => {
+                Object.values(cliente || {}).forEach(p => {
+                    if (!p || typeof p !== 'object') return;
+                    Object.values(p.licitaciones || {}).forEach(lic => {
+                        const t = lic.worker_name || lic.trabajador_nombre || lic.asignado || lic.nombre_trabajador;
+                        if (t) trabSet.add(t);
+                    });
+                });
+            });
+            Array.from(trabSet).sort().forEach(t => {
+                selTrab.innerHTML += `<option value="${t}">${t}</option>`;
+            });
+        }
+
+        document.getElementById('ant-proyecto').innerHTML = '<option value="">Primero selecciona un trabajador</option>';
+        document.getElementById('ant-licitacion').innerHTML = '<option value="">Primero selecciona un proyecto</option>';
+        document.getElementById('mod-anticipo').style.display = 'block';
+    };
+
+    window.onAntFotoCargada = function(input) {
+        const file = input.files[0];
+        if (!file) return;
+        _antFile = file;
+        document.getElementById('ant-foto-nombre').textContent = file.name;
+        document.getElementById('ant-foto-preview').style.display = 'flex';
+        document.getElementById('btn-ia-ant').style.display = 'flex';
+    };
+
+    window.onAntTrabajadorChange = function() {
+        const trab = document.getElementById('ant-trabajador').value;
+        const selProy = document.getElementById('ant-proyecto');
+        selProy.innerHTML = '<option value="">Seleccionar proyecto...</option>';
+        document.getElementById('ant-licitacion').innerHTML = '<option value="">Primero selecciona un proyecto</option>';
+        if (!trab) return;
+
+        const proyMap = {}; // nombre → {cid, pid}
+        Object.entries(proyectosData).forEach(([cid, cliente]) => {
+            Object.entries(cliente || {}).forEach(([pid, p]) => {
+                const hasLic = Object.values(p.licitaciones || {}).some(lic => {
+                    const t = lic.worker_name || lic.trabajador_nombre || lic.asignado || lic.nombre_trabajador;
+                    return t === trab;
+                });
+                if (hasLic) {
+                    const nombre = p.nombre || pid;
+                    if (!proyMap[nombre]) proyMap[nombre] = { cid, pid };
+                    selProy.innerHTML += `<option value="${nombre}">${nombre}</option>`;
+                }
+            });
+        });
+        selProy._proyMap = proyMap;
+    };
+
+    window.onAntProyectoChange = function() {
+        const trab = document.getElementById('ant-trabajador').value;
+        const pNombre = document.getElementById('ant-proyecto').value;
+        const selLic = document.getElementById('ant-licitacion');
+        selLic.innerHTML = '<option value="">Seleccionar contrato...</option>';
+        if (!trab || !pNombre) return;
+
+        Object.entries(proyectosData).forEach(([cid, cliente]) => {
+            Object.entries(cliente || {}).forEach(([pid, p]) => {
+                if ((p.nombre || pid) !== pNombre) return;
+                Object.entries(p.licitaciones || {}).forEach(([licId, lic]) => {
+                    const licTrab = lic.worker_name || lic.trabajador_nombre || lic.asignado || lic.nombre_trabajador;
+                    if (licTrab !== trab) return;
+                    // Compute monto: stored directly or summed from tasks
+                    let monto = parseFloat(lic.monto_total || lic.monto || 0);
+                    if (!monto) {
+                        Object.values(lic.tareas || {}).forEach(tk => {
+                            monto += parseFloat(tk.precio || tk.monto || 0);
+                        });
+                    }
+                    // Label: prefer stored name, fallback to date or short key
+                    const label = lic.nombre || lic.tipo || lic.descripcion
+                        || (lic.fecha_inicio ? `Contrato ${lic.fecha_inicio}` : `Contrato #${licId.slice(-6)}`);
+                    selLic.innerHTML += `<option value="${cid}|${pid}|${licId}">${label} (${fMoney(monto)} Bs)</option>`;
+                });
+            });
+        });
+    };
+
+    window.leerComprobanteAnticipo = async function() {
+        if (!_antFile) return alert('Primero cargá un comprobante.');
+        const btn = document.getElementById('btn-ia-ant');
+        if (btn) { btn.disabled = true; btn.innerHTML = '<i class="ph-bold ph-spinner" style="font-size:20px;"></i><span>Leyendo...</span>'; }
+        try {
+            const b64full = await _fileToBase64(_antFile);
+            const mime = _antFile.type.startsWith('image/') ? _antFile.type : 'image/jpeg';
+            const b64 = b64full.split(',')[1];
+            const resp = await fetch('/api/gemini', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${await _getHubToken()}` },
+                body: JSON.stringify({
+                    model: 'gemini-2.5-flash',
+                    systemInstruction: 'Eres un extractor de datos de comprobantes de pago. Devuelve SOLO JSON válido, sin markdown.',
+                    contents: [{ role: 'user', parts: [
+                        { inlineData: { mimeType: mime, data: b64 } },
+                        { text: 'Extrae de este comprobante de pago. Devuelve SOLO JSON con estas claves: monto (número), fecha (YYYY-MM-DD), concepto (descripción breve del pago), destinatario (nombre completo de la persona que RECIBE el dinero). Si no hay campo usa null.' }
+                    ]}]
+                })
+            });
+            const data = await resp.json();
+            let texto = data.candidates?.[0]?.content?.parts?.[0]?.text || data.text || '';
+            const match = texto.match(/\{[\s\S]*\}/);
+            if (match) {
+                const d = JSON.parse(match[0]);
+                if (d.monto)    document.getElementById('ant-monto').value = d.monto;
+                if (d.fecha)    document.getElementById('ant-fecha').value  = d.fecha;
+                if (d.concepto) document.getElementById('ant-nota').value   = d.concepto;
+                // Auto-seleccionar trabajador si el destinatario coincide
+                if (d.destinatario) {
+                    const selTrab = document.getElementById('ant-trabajador');
+                    const destNorm = d.destinatario.toLowerCase().replace(/\s+/g, ' ').trim();
+                    let bestOpt = null, bestScore = 0;
+                    Array.from(selTrab.options).forEach(opt => {
+                        if (!opt.value) return;
+                        const optNorm = opt.value.toLowerCase().replace(/\s+/g, ' ').trim();
+                        // Contar palabras en común
+                        const wordsA = destNorm.split(' ');
+                        const wordsB = optNorm.split(' ');
+                        const common = wordsA.filter(w => w.length > 2 && wordsB.some(b => b.includes(w) || w.includes(b))).length;
+                        if (common > bestScore) { bestScore = common; bestOpt = opt; }
+                    });
+                    if (bestOpt && bestScore >= 1) {
+                        selTrab.value = bestOpt.value;
+                        onAntTrabajadorChange();
+                    }
+                }
+            } else {
+                alert('No se pudieron extraer datos. Revisá la imagen.');
+            }
+        } catch(e) {
+            alert('Error al leer comprobante: ' + e.message);
+        } finally {
+            if (btn) { btn.disabled = false; btn.innerHTML = '<i class="ph-bold ph-magic-wand" style="font-size:20px;"></i><span>Leer IA</span>'; }
+        }
+    };
+
+    window.guardarAnticipo = async function() {
+        const monto = parseFloat(document.getElementById('ant-monto').value || 0);
+        const fecha = document.getElementById('ant-fecha').value;
+        const nota  = document.getElementById('ant-nota').value.trim() || 'Anticipo / Pago a cuenta';
+        const licVal = document.getElementById('ant-licitacion').value;
+        if (!monto || monto <= 0) return alert('Ingresá un monto válido.');
+        if (!fecha) return alert('Seleccioná una fecha.');
+        if (!licVal) return alert('Seleccioná un contrato.');
+
+        const [cid, pid, licId] = licVal.split('|');
+        const btn = document.getElementById('btn-guardar-anticipo');
+        if (btn) { btn.disabled = true; btn.innerHTML = '<i class="ph-bold ph-spinner"></i> Guardando...'; }
+
+        let comprobanteUrl = null;
+        if (_antFile) {
+            try {
+                const ref = storage.ref(`anticipos/${Date.now()}_${_antFile.name}`);
+                await ref.put(_antFile);
+                comprobanteUrl = await ref.getDownloadURL();
+            } catch(e) { console.warn('No se pudo subir comprobante:', e.message); }
+        }
+
+        const trab = document.getElementById('ant-trabajador').value;
+        try {
+            await db.ref(`proyectos/${cid}/${pid}/licitaciones/${licId}/pagos`).push({
+                monto,
+                fecha,
+                nota,
+                comprobante: comprobanteUrl,
+                wid: trab,
+                timestamp: Date.now(),
+            });
+            document.getElementById('mod-anticipo').style.display = 'none';
+            renderPlanillas();
+            alert('Anticipo registrado correctamente.');
+        } catch(e) {
+            alert('Error al guardar: ' + e.message);
+        } finally {
+            if (btn) { btn.disabled = false; btn.innerHTML = '<i class="ph-bold ph-check-circle"></i> Guardar Anticipo'; }
+        }
+    };
 
     </script>
 <script src="/paste-image.js"></script>

@@ -98,12 +98,62 @@ exports.geminiProxy = onRequest(GEMINI_PROXY_OPTS, async (req, res) => {
 
     try {
         const { GoogleGenerativeAI } = require("@google/generative-ai");
-        const genAI = new GoogleGenerativeAI(GEMINI_API_KEY.value());
+        const geminiKey = GEMINI_API_KEY.value();
+        const genAI = new GoogleGenerativeAI(geminiKey);
 
         const body = req.body || {};
+
+        // ── Generación de imagen — manejo temprano, NO usa el modelo de texto ──
+        if (body.generateImage) {
+            const imgPrompt = body.prompt || body.text || "imagen profesional corporativa";
+            const imgModels = [
+                "gemini-2.0-flash-preview-image-generation",
+                "gemini-2.0-flash-exp",
+                "gemini-2.0-flash-exp-image-generation",
+            ];
+            const errors = [];
+            for (const imgModel of imgModels) {
+                try {
+                    const restRes = await fetch(
+                        `https://generativelanguage.googleapis.com/v1beta/models/${imgModel}:generateContent?key=${geminiKey}`,
+                        {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({
+                                contents: [{ role: "user", parts: [{ text: imgPrompt }] }],
+                                generationConfig: { responseModalities: ["TEXT", "IMAGE"] },
+                            }),
+                        }
+                    );
+                    const restData = await restRes.json();
+                    if (!restRes.ok) {
+                        const detail = restData?.error?.message || JSON.stringify(restData).slice(0, 200);
+                        errors.push(`${imgModel} → ${restRes.status}: ${detail}`);
+                        console.warn(`imagen-gen: ${imgModel} error ${restRes.status}: ${detail}`);
+                        continue;
+                    }
+                    const imgParts = restData?.candidates?.[0]?.content?.parts || [];
+                    for (const p of imgParts) {
+                        const inline = p.inlineData || p.inline_data;
+                        if (inline && inline.data) {
+                            const mime = inline.mimeType || inline.mime_type || "image/png";
+                            return res.status(200).json({ imageUrl: `data:${mime};base64,${inline.data}` });
+                        }
+                    }
+                    const finishReason = restData?.candidates?.[0]?.finishReason || "sin imagen";
+                    errors.push(`${imgModel} → no produjo imagen (${finishReason})`);
+                    console.warn(`imagen-gen: ${imgModel} no produjo imagen. finishReason=${finishReason}`);
+                } catch(imgErr) {
+                    errors.push(`${imgModel} → excepcion: ${imgErr.message}`);
+                    console.error(`imagen-gen: ${imgModel} excepcion:`, imgErr.message);
+                    continue;
+                }
+            }
+            return res.status(500).json({ error: "Ningún modelo de imagen disponible.", detalle: errors.join(" | ") });
+        }
+
         const requestedModel = body.model || "gemini-2.5-flash";
         const generationConfig = body.generationConfig;
-        // systemInstruction enviado por el frontend (presupuesto, cotizador, etc.)
         const systemInstruction = body.systemInstruction || null;
 
         async function llamarModelo(modelName) {
@@ -115,15 +165,12 @@ exports.geminiProxy = onRequest(GEMINI_PROXY_OPTS, async (req, res) => {
             const model = genAI.getGenerativeModel(modelOpts);
             let result;
             if (body.contents) {
-                // Formato nativo Gemini SDK — { systemInstruction ya en modelOpts, contents aquí }
                 result = await model.generateContent({ contents: body.contents });
             } else if (Array.isArray(body.parts)) {
                 result = await model.generateContent(body.parts);
             } else if (typeof body.prompt === "string" || typeof body.text === "string") {
-                // Formato simplificado del frontend: { prompt, model, image? }
                 const promptText = body.prompt || body.text;
                 const parts = [{ text: promptText }];
-                // Soporte de imagen inline: { data: base64, mimeType: "image/jpeg" }
                 if (body.image && body.image.data && body.image.mimeType) {
                     parts.unshift({ inlineData: { data: body.image.data, mimeType: body.image.mimeType } });
                 }
@@ -155,7 +202,7 @@ exports.geminiProxy = onRequest(GEMINI_PROXY_OPTS, async (req, res) => {
                 const isRetriable = msg.includes("503") || msg.includes("unavailable") ||
                     msg.includes("high demand") || msg.includes("Service Unavailable") ||
                     msg.includes("500") || msg.includes("Internal") || msg.includes("overloaded");
-                if (!isRetriable) throw err; // error definitivo, no reintentar
+                if (!isRetriable) throw err;
                 console.warn(`geminiProxy: ${modelName} falló (${msg.slice(0,80)}), probando siguiente…`);
             }
         }
@@ -163,41 +210,6 @@ exports.geminiProxy = onRequest(GEMINI_PROXY_OPTS, async (req, res) => {
 
         let text = "";
         try { text = result.response.text() || ""; } catch (_) { text = ""; }
-
-        // ── Generación de imagen via Imagen 3 REST API ──────────────────
-        if (body.generateImage) {
-            try {
-                const geminiKey = GEMINI_API_KEY.value();
-                const imgPrompt = body.prompt || body.text || "imagen profesional corporativa";
-                const imgRes = await fetch(
-                    `https://generativelanguage.googleapis.com/v1beta/models/imagen-3.0-generate-002:predict?key=${geminiKey}`,
-                    {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({
-                            instances: [{ prompt: imgPrompt }],
-                            parameters: {
-                                sampleCount: 1,
-                                aspectRatio: "16:9",
-                                safetySetting: "block_only_high",
-                                personGeneration: "dont_allow"
-                            }
-                        })
-                    }
-                );
-                const imgData = await imgRes.json();
-                console.log("imagen-3 response status:", imgRes.status, JSON.stringify(imgData).slice(0, 400));
-                const b64 = imgData?.predictions?.[0]?.bytesBase64Encoded;
-                const mime = imgData?.predictions?.[0]?.mimeType || "image/png";
-                if (b64) {
-                    return res.status(200).json({ imageUrl: `data:${mime};base64,${b64}` });
-                }
-                return res.status(500).json({ error: "Sin imagen en respuesta", detalle: JSON.stringify(imgData).slice(0, 300) });
-            } catch(imgErr) {
-                console.error("imagen-gen error:", imgErr.message);
-                return res.status(500).json({ error: "No se pudo generar imagen", detalle: imgErr.message });
-            }
-        }
 
         return res.status(200).json({
             text,
