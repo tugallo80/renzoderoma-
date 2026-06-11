@@ -2594,10 +2594,18 @@
             Object.entries(cliente || {}).forEach(([pid, p]) => {
                 if ((p.nombre || pid) !== pNombre) return;
                 Object.entries(p.licitaciones || {}).forEach(([licId, lic]) => {
-                    const t = lic.worker_name || lic.trabajador_nombre || lic.asignado || lic.nombre_trabajador;
-                    if (t !== trab) return;
-                    const label = lic.nombre || lic.descripcion || lic.tipo || licId;
-                    const monto = lic.monto_total || lic.monto || 0;
+                    const licTrab = lic.worker_name || lic.trabajador_nombre || lic.asignado || lic.nombre_trabajador;
+                    if (licTrab !== trab) return;
+                    // Compute monto: stored directly or summed from tasks
+                    let monto = parseFloat(lic.monto_total || lic.monto || 0);
+                    if (!monto) {
+                        Object.values(lic.tareas || {}).forEach(tk => {
+                            monto += parseFloat(tk.precio || tk.monto || 0);
+                        });
+                    }
+                    // Label: prefer stored name, fallback to date or short key
+                    const label = lic.nombre || lic.tipo || lic.descripcion
+                        || (lic.fecha_inicio ? `Contrato ${lic.fecha_inicio}` : `Contrato #${licId.slice(-6)}`);
                     selLic.innerHTML += `<option value="${cid}|${pid}|${licId}">${label} (${fMoney(monto)} Bs)</option>`;
                 });
             });
