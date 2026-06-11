@@ -2505,6 +2505,173 @@
         });
     }
 
+    // ── MODAL ANTICIPO ────────────────────────────────────────────────────────
+    let _antFile = null;
+
+    window.abrirModalAnticipo = function() {
+        _antFile = null;
+        document.getElementById('ant-foto').value = '';
+        document.getElementById('ant-foto-preview').style.display = 'none';
+        document.getElementById('btn-ia-ant').style.display = 'none';
+        document.getElementById('ant-monto').value = '';
+        document.getElementById('ant-nota').value = '';
+        document.getElementById('ant-fecha').valueAsDate = new Date();
+
+        // Poblar select de trabajadores
+        const selTrab = document.getElementById('ant-trabajador');
+        selTrab.innerHTML = '<option value="">Seleccionar trabajador...</option>';
+        const trabSet = new Set();
+        Object.values(proyectosData).forEach(cliente => {
+            Object.values(cliente || {}).forEach(p => {
+                Object.values(p.licitaciones || {}).forEach(lic => {
+                    const t = lic.worker_name || lic.trabajador_nombre || lic.asignado || lic.nombre_trabajador;
+                    if (t) trabSet.add(t);
+                });
+            });
+        });
+        Array.from(trabSet).sort().forEach(t => {
+            selTrab.innerHTML += `<option value="${t}">${t}</option>`;
+        });
+
+        document.getElementById('ant-proyecto').innerHTML = '<option value="">Primero selecciona un trabajador</option>';
+        document.getElementById('ant-licitacion').innerHTML = '<option value="">Primero selecciona un proyecto</option>';
+        document.getElementById('mod-anticipo').style.display = 'block';
+    };
+
+    window.onAntFotoCargada = function(input) {
+        const file = input.files[0];
+        if (!file) return;
+        _antFile = file;
+        document.getElementById('ant-foto-nombre').textContent = file.name;
+        document.getElementById('ant-foto-preview').style.display = 'flex';
+        document.getElementById('btn-ia-ant').style.display = 'flex';
+    };
+
+    window.onAntTrabajadorChange = function() {
+        const trab = document.getElementById('ant-trabajador').value;
+        const selProy = document.getElementById('ant-proyecto');
+        selProy.innerHTML = '<option value="">Seleccionar proyecto...</option>';
+        document.getElementById('ant-licitacion').innerHTML = '<option value="">Primero selecciona un proyecto</option>';
+        if (!trab) return;
+
+        const proyMap = {}; // nombre → {cid, pid}
+        Object.entries(proyectosData).forEach(([cid, cliente]) => {
+            Object.entries(cliente || {}).forEach(([pid, p]) => {
+                const hasLic = Object.values(p.licitaciones || {}).some(lic => {
+                    const t = lic.worker_name || lic.trabajador_nombre || lic.asignado || lic.nombre_trabajador;
+                    return t === trab;
+                });
+                if (hasLic) {
+                    const nombre = p.nombre || pid;
+                    if (!proyMap[nombre]) proyMap[nombre] = { cid, pid };
+                    selProy.innerHTML += `<option value="${nombre}">${nombre}</option>`;
+                }
+            });
+        });
+        selProy._proyMap = proyMap;
+    };
+
+    window.onAntProyectoChange = function() {
+        const trab = document.getElementById('ant-trabajador').value;
+        const pNombre = document.getElementById('ant-proyecto').value;
+        const selLic = document.getElementById('ant-licitacion');
+        selLic.innerHTML = '<option value="">Seleccionar contrato...</option>';
+        if (!trab || !pNombre) return;
+
+        Object.entries(proyectosData).forEach(([cid, cliente]) => {
+            Object.entries(cliente || {}).forEach(([pid, p]) => {
+                if ((p.nombre || pid) !== pNombre) return;
+                Object.entries(p.licitaciones || {}).forEach(([licId, lic]) => {
+                    const t = lic.worker_name || lic.trabajador_nombre || lic.asignado || lic.nombre_trabajador;
+                    if (t !== trab) return;
+                    const label = lic.nombre || lic.descripcion || lic.tipo || licId;
+                    const monto = lic.monto_total || lic.monto || 0;
+                    selLic.innerHTML += `<option value="${cid}|${pid}|${licId}">${label} (${fMoney(monto)} Bs)</option>`;
+                });
+            });
+        });
+    };
+
+    window.leerComprobanteAnticipo = async function() {
+        if (!_antFile) return alert('Primero cargá un comprobante.');
+        const btn = document.getElementById('btn-ia-ant');
+        if (btn) { btn.disabled = true; btn.innerHTML = '<i class="ph-bold ph-spinner" style="font-size:20px;"></i><span>Leyendo...</span>'; }
+        try {
+            const b64full = await _fileToBase64(_antFile);
+            const mime = _antFile.type.startsWith('image/') ? _antFile.type : 'image/jpeg';
+            const b64 = b64full.split(',')[1];
+            const resp = await fetch('/api/gemini', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    model: 'gemini-2.5-flash',
+                    systemInstruction: 'Eres un extractor de datos de comprobantes de pago. Devuelve SOLO JSON válido, sin markdown.',
+                    contents: [{ role: 'user', parts: [
+                        { inlineData: { mimeType: mime, data: b64 } },
+                        { text: 'Extrae de este comprobante de pago: monto (número), fecha (YYYY-MM-DD), concepto. Devuelve SOLO JSON con claves: monto, fecha, concepto. Si no hay campo usa null.' }
+                    ]}]
+                })
+            });
+            const data = await resp.json();
+            let texto = data.candidates?.[0]?.content?.parts?.[0]?.text || data.text || '';
+            const match = texto.match(/\{[\s\S]*\}/);
+            if (match) {
+                const d = JSON.parse(match[0]);
+                if (d.monto)    document.getElementById('ant-monto').value = d.monto;
+                if (d.fecha)    document.getElementById('ant-fecha').value  = d.fecha;
+                if (d.concepto) document.getElementById('ant-nota').value   = d.concepto;
+            } else {
+                alert('No se pudieron extraer datos. Revisá la imagen.');
+            }
+        } catch(e) {
+            alert('Error al leer comprobante: ' + e.message);
+        } finally {
+            if (btn) { btn.disabled = false; btn.innerHTML = '<i class="ph-bold ph-magic-wand" style="font-size:20px;"></i><span>Leer IA</span>'; }
+        }
+    };
+
+    window.guardarAnticipo = async function() {
+        const monto = parseFloat(document.getElementById('ant-monto').value || 0);
+        const fecha = document.getElementById('ant-fecha').value;
+        const nota  = document.getElementById('ant-nota').value.trim() || 'Anticipo / Pago a cuenta';
+        const licVal = document.getElementById('ant-licitacion').value;
+        if (!monto || monto <= 0) return alert('Ingresá un monto válido.');
+        if (!fecha) return alert('Seleccioná una fecha.');
+        if (!licVal) return alert('Seleccioná un contrato.');
+
+        const [cid, pid, licId] = licVal.split('|');
+        const btn = document.getElementById('btn-guardar-anticipo');
+        if (btn) { btn.disabled = true; btn.innerHTML = '<i class="ph-bold ph-spinner"></i> Guardando...'; }
+
+        let comprobanteUrl = null;
+        if (_antFile) {
+            try {
+                const ref = storage.ref(`anticipos/${Date.now()}_${_antFile.name}`);
+                await ref.put(_antFile);
+                comprobanteUrl = await ref.getDownloadURL();
+            } catch(e) { console.warn('No se pudo subir comprobante:', e.message); }
+        }
+
+        const trab = document.getElementById('ant-trabajador').value;
+        try {
+            await db.ref(`proyectos/${cid}/${pid}/licitaciones/${licId}/pagos`).push({
+                monto,
+                fecha,
+                nota,
+                comprobante: comprobanteUrl,
+                wid: trab,
+                timestamp: Date.now(),
+            });
+            document.getElementById('mod-anticipo').style.display = 'none';
+            renderPlanillas();
+            alert('Anticipo registrado correctamente.');
+        } catch(e) {
+            alert('Error al guardar: ' + e.message);
+        } finally {
+            if (btn) { btn.disabled = false; btn.innerHTML = '<i class="ph-bold ph-check-circle"></i> Guardar Anticipo'; }
+        }
+    };
+
     </script>
 <script src="/paste-image.js"></script>
 </body>
