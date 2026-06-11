@@ -742,7 +742,6 @@ exports.whatsappWebhook = onRequest(WA_OPTS, async (req, res) => {
     }
 });
 
-
 // ─────────────────────────────────────────────────────────
 // PROXY IMÁGENES (Firebase Storage → PDF sin CORS)
 // ─────────────────────────────────────────────────────────
