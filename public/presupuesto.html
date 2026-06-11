@@ -367,6 +367,13 @@
     <input type="file" id="ia-pdf-upload" accept="application/pdf" style="display:none" onchange="handleIAPdfUpload(this)">
 </div>
 <div id="ia-pdf-name" style="font-size: 11px; color: var(--green); margin-bottom: 10px; display: none; font-weight:bold;">PDF cargado: <span id="ia-pdf-filename"></span> <i class="ph-bold ph-x" style="cursor:pointer; color:var(--red); font-size:14px; vertical-align:middle; margin-left:5px;" onclick="removeIAPdf()"></i></div>
+
+<div style="margin-bottom: 10px; padding: 10px; background: rgba(255,149,0,0.08); border: 1px dashed var(--orange); border-radius: 12px; display: flex; justify-content: space-between; align-items: center;">
+    <div style="font-size:12px; font-weight:600; color:var(--orange); display:flex; align-items:center; gap:5px;"><i class="ph-bold ph-images" style="font-size:18px;"></i> Fotos del Proyecto (contexto IA)</div>
+    <button class="btn-mini" style="background:var(--orange); width:auto; padding:8px 12px;" onclick="document.getElementById('ia-imgs-upload').click()">+ Imágenes</button>
+    <input type="file" id="ia-imgs-upload" accept="image/*" multiple style="display:none" onchange="handleIAImgsUpload(this)">
+</div>
+<div id="ia-imgs-preview" style="display:flex; flex-wrap:wrap; gap:6px; margin-bottom:10px;"></div>
 <div id="ia-items-container" style="display:flex; flex-direction:column; gap:10px; margin-bottom:15px; max-height: 45vh; overflow-y:auto; padding-right:5px;"></div>
 
 <button class="btn" style="background:transparent; color:var(--purple); border:1px dashed var(--purple); margin-bottom:15px; width: 100%; justify-content: center; padding: 12px; font-size:12px;" onclick="addIARow()"><i class="ph-bold ph-plus"></i> Añadir fila de ítem</button>
@@ -1412,11 +1419,14 @@
         }
     });
     let currentIAPdfBase64 = null;
+    let currentIAImages = []; // imágenes de contexto del proyecto
     let iaRowCounter = 0;
 
     // --- CONFIGURACIÓN DE MODAL ---
     window.abrirModalIABudget = function() {
         currentIAPdfBase64 = null;
+        currentIAImages = [];
+        document.getElementById('ia-imgs-preview').innerHTML = '';
         const container = document.getElementById('ia-items-container');
         if(container) container.innerHTML = '';
         
@@ -1595,6 +1605,33 @@ Devolvé exactamente este formato (sin texto adicional):
     }
 
     // --- CARGA DE PDF ---
+    window.handleIAImgsUpload = function(inp) {
+        if (!inp.files || inp.files.length === 0) return;
+        const preview = document.getElementById('ia-imgs-preview');
+        Array.from(inp.files).forEach(file => {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const b64full = e.target.result;
+                currentIAImages.push({ data: b64full.split(',')[1], mimeType: file.type });
+                // miniatura
+                const wrap = document.createElement('div');
+                wrap.style.cssText = 'position:relative; width:52px; height:52px;';
+                const img = document.createElement('img');
+                img.src = b64full;
+                img.style.cssText = 'width:52px; height:52px; object-fit:cover; border-radius:8px; border:1px solid var(--border);';
+                const del = document.createElement('span');
+                del.innerHTML = '×';
+                del.style.cssText = 'position:absolute; top:-4px; right:-4px; background:var(--red); color:#fff; border-radius:50%; width:16px; height:16px; font-size:12px; line-height:16px; text-align:center; cursor:pointer;';
+                const idx = currentIAImages.length - 1;
+                del.onclick = () => { currentIAImages.splice(idx, 1); wrap.remove(); };
+                wrap.appendChild(img); wrap.appendChild(del);
+                preview.appendChild(wrap);
+            };
+            reader.readAsDataURL(file);
+        });
+        inp.value = '';
+    };
+
     window.handleIAPdfUpload = function(inp) {
         if (inp.files && inp.files[0]) {
             const file = inp.files[0];
@@ -2082,6 +2119,12 @@ F3. MATERIALES POR PIEZAS COMPLEJAS — preguntar si no se especifica:
         }
 
         // 3. Adjuntar PDF si existe
+        // Imágenes de contexto del proyecto
+        if(currentIAImages.length > 0) {
+            currentIAImages.slice(0, 10).forEach(img => {
+                parts.push({ inlineData: { data: img.data, mimeType: img.mimeType } });
+            });
+        }
         if(currentIAPdfBase64) {
             parts.push({ inlineData: { data: currentIAPdfBase64.split(',')[1], mimeType: "application/pdf" } });
             textPrompt += `\nDOCUMENTO PDF ADJUNTO: Extrae los ítems de aquí también.\n`;
