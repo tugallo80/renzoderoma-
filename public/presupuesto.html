@@ -2392,15 +2392,62 @@ EJEMPLO VÁLIDO:
     <!-- PASO 2 -->
     <div id="r3d-step2" style="display:none;text-align:center;">
       <img id="r3d-preview-img" style="max-width:100%;border-radius:10px;border:1px solid #ddd;">
-      <div style="display:flex;gap:10px;margin-top:16px;flex-wrap:wrap;">
-        <button onclick="aprobarRender3D()" style="flex:1;background:var(--green);color:#fff;border:none;border-radius:9px;padding:11px;font-size:.9rem;font-weight:700;cursor:pointer;">
-          <i class="ph-bold ph-check-circle"></i> Aprobar y Cotizar con IA
+      <div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap;">
+        <button onclick="aprobarRender3D()" style="flex:2;min-width:140px;background:var(--green);color:#fff;border:none;border-radius:9px;padding:11px;font-size:.9rem;font-weight:700;cursor:pointer;">
+          <i class="ph-bold ph-check-circle"></i> Aprobar y Cotizar
         </button>
-        <button onclick="reGenerarRender3D()" style="flex:1;background:#6c757d;color:#fff;border:none;border-radius:9px;padding:11px;font-size:.9rem;cursor:pointer;">
+        <button onclick="abrirEditorMarcas()" style="flex:1;min-width:110px;background:#5b6cf6;color:#fff;border:none;border-radius:9px;padding:11px;font-size:.9rem;cursor:pointer;">
+          <i class="ph-bold ph-paint-brush"></i> Marcar cambios
+        </button>
+        <button onclick="reGenerarRender3D()" style="flex:1;min-width:100px;background:#6c757d;color:#fff;border:none;border-radius:9px;padding:11px;font-size:.9rem;cursor:pointer;">
           <i class="ph-bold ph-arrows-clockwise"></i> Re-generar
         </button>
-        <button onclick="volverR3dStep1()" style="flex:1;background:#f0f0f0;color:#333;border:none;border-radius:9px;padding:11px;font-size:.9rem;cursor:pointer;">
+        <button onclick="volverR3dStep1()" style="flex:1;min-width:100px;background:#f0f0f0;color:#333;border:none;border-radius:9px;padding:11px;font-size:.9rem;cursor:pointer;">
           <i class="ph-bold ph-pencil"></i> Editar datos
+        </button>
+      </div>
+    </div>
+
+    <!-- PASO 3: Editor de marcas -->
+    <div id="r3d-step3" style="display:none;">
+      <div style="font-size:.82rem;color:#555;margin-bottom:10px;">
+        Elegí un color y marcá la zona que querés cambiar. Podés usar varios colores para zonas diferentes.
+      </div>
+
+      <!-- Paleta de colores -->
+      <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:10px;">
+        <span style="font-size:.78rem;font-weight:700;color:#555;">Marcador:</span>
+        <button class="r3d-cbtn" data-c="#e74c3c" onclick="setR3dColor('#e74c3c',this)"
+          style="background:#e74c3c;color:#fff;border:3px solid transparent;border-radius:8px;padding:4px 10px;font-size:.78rem;cursor:pointer;font-weight:600;">Rojo</button>
+        <button class="r3d-cbtn" data-c="#3498db" onclick="setR3dColor('#3498db',this)"
+          style="background:#3498db;color:#fff;border:3px solid transparent;border-radius:8px;padding:4px 10px;font-size:.78rem;cursor:pointer;font-weight:600;">Azul</button>
+        <button class="r3d-cbtn" data-c="#27ae60" onclick="setR3dColor('#27ae60',this)"
+          style="background:#27ae60;color:#fff;border:3px solid transparent;border-radius:8px;padding:4px 10px;font-size:.78rem;cursor:pointer;font-weight:600;">Verde</button>
+        <button class="r3d-cbtn" data-c="#f39c12" onclick="setR3dColor('#f39c12',this)"
+          style="background:#f39c12;color:#fff;border:3px solid transparent;border-radius:8px;padding:4px 10px;font-size:.78rem;cursor:pointer;font-weight:600;">Amarillo</button>
+        <button class="r3d-cbtn" data-c="#e67e22" onclick="setR3dColor('#e67e22',this)"
+          style="background:#e67e22;color:#fff;border:3px solid transparent;border-radius:8px;padding:4px 10px;font-size:.78rem;cursor:pointer;font-weight:600;">Naranja</button>
+        <button class="r3d-cbtn" data-c="#8e44ad" onclick="setR3dColor('#8e44ad',this)"
+          style="background:#8e44ad;color:#fff;border:3px solid transparent;border-radius:8px;padding:4px 10px;font-size:.78rem;cursor:pointer;font-weight:600;">Morado</button>
+        <button onclick="limpiarCanvas3D()"
+          style="background:#f0f0f0;color:#555;border:2px solid #ddd;border-radius:8px;padding:4px 10px;font-size:.78rem;cursor:pointer;">Limpiar</button>
+      </div>
+
+      <!-- Canvas -->
+      <div style="position:relative;width:100%;overflow:hidden;border-radius:10px;border:1px solid #ddd;background:#f8f8f8;">
+        <canvas id="r3d-canvas" style="display:block;width:100%;touch-action:none;cursor:crosshair;"></canvas>
+      </div>
+      <div style="font-size:.72rem;color:#aaa;margin-top:4px;text-align:center;">Dibujá con el dedo o mouse · Elegí distintos colores para zonas diferentes</div>
+
+      <!-- Descripciones por color (se generan dinámicamente) -->
+      <div id="r3d-color-descs" style="margin-top:14px;display:grid;gap:8px;"></div>
+
+      <div style="display:flex;gap:8px;margin-top:16px;">
+        <button onclick="volverR3dStep2()" style="flex:1;background:#f0f0f0;color:#333;border:none;border-radius:9px;padding:11px;font-size:.9rem;cursor:pointer;">
+          <i class="ph-bold ph-arrow-left"></i> Volver
+        </button>
+        <button onclick="reGenerarConMarcas()" style="flex:2;background:#5b6cf6;color:#fff;border:none;border-radius:9px;padding:11px;font-size:.9rem;font-weight:700;cursor:pointer;">
+          <i class="ph-bold ph-magic-wand"></i> Re-generar con cambios
         </button>
       </div>
     </div>
@@ -2427,6 +2474,7 @@ EJEMPLO VÁLIDO:
         renderDims3D();
         document.getElementById('r3d-step1').style.display = 'block';
         document.getElementById('r3d-step2').style.display = 'none';
+        document.getElementById('r3d-step3').style.display = 'none';
         document.getElementById('r3d-step-lbl').textContent = 'Paso 1 — Describir objeto';
         document.getElementById('mod-render3d').style.display = 'block';
     };
@@ -2585,6 +2633,184 @@ Objeto: ${desc}`;
         document.getElementById('r3d-step-lbl').textContent = 'Paso 1 — Describir objeto';
         generarRender3D();
     };
+
+    // ── CANVAS EDITOR ──────────────────────────────────────────────
+    var _cvs, _ctx, _drawing = false, _activeColor = '#e74c3c';
+    var _usedColors = [];   // ordered array of colors actually drawn
+    var _colorNames = { '#e74c3c':'Rojo','#3498db':'Azul','#27ae60':'Verde','#f39c12':'Amarillo','#e67e22':'Naranja','#8e44ad':'Morado' };
+
+    window.abrirEditorMarcas = function() {
+        document.getElementById('r3d-step2').style.display = 'none';
+        document.getElementById('r3d-step3').style.display = 'block';
+        document.getElementById('r3d-step-lbl').textContent = 'Paso 3 — Marcar cambios';
+        _usedColors = [];
+        document.getElementById('r3d-color-descs').innerHTML = '';
+        // Activate first color button
+        setR3dColor('#e74c3c', document.querySelector('.r3d-cbtn[data-c="#e74c3c"]'));
+        _initCanvas();
+    };
+
+    window.volverR3dStep2 = function() {
+        document.getElementById('r3d-step3').style.display = 'none';
+        document.getElementById('r3d-step2').style.display = 'block';
+        document.getElementById('r3d-step-lbl').textContent = 'Paso 2 — Aprobar render';
+    };
+
+    window.setR3dColor = function(color, btn) {
+        _activeColor = color;
+        document.querySelectorAll('.r3d-cbtn').forEach(b => b.style.borderColor = 'transparent');
+        if (btn) btn.style.borderColor = '#333';
+    };
+
+    window.limpiarCanvas3D = function() {
+        if (!_cvs || !_ctx) return;
+        // Redraw original render onto canvas
+        const img = new Image();
+        img.onload = function() { _ctx.drawImage(img, 0, 0, _cvs.width, _cvs.height); };
+        img.src = _r3dRenderDataUrl;
+        _usedColors = [];
+        document.getElementById('r3d-color-descs').innerHTML = '';
+    };
+
+    function _initCanvas() {
+        _cvs = document.getElementById('r3d-canvas');
+        _ctx = _cvs.getContext('2d');
+        const img = new Image();
+        img.onload = function() {
+            _cvs.width  = img.naturalWidth  || img.width  || 800;
+            _cvs.height = img.naturalHeight || img.height || 600;
+            _ctx.drawImage(img, 0, 0);
+            _attachCanvasEvents();
+        };
+        img.crossOrigin = 'anonymous';
+        img.src = _r3dRenderDataUrl;
+    }
+
+    function _attachCanvasEvents() {
+        // Remove old listeners by cloning
+        const old = _cvs;
+        const neo = old.cloneNode(false);
+        old.parentNode.replaceChild(neo, old);
+        _cvs = neo;
+        _ctx = _cvs.getContext('2d');
+        // Re-draw image
+        const img = new Image();
+        img.onload = function() { _ctx.drawImage(img, 0, 0, _cvs.width, _cvs.height); };
+        img.src = _r3dRenderDataUrl;
+
+        function pos(e) {
+            const r = _cvs.getBoundingClientRect();
+            const scaleX = _cvs.width  / r.width;
+            const scaleY = _cvs.height / r.height;
+            const src = e.touches ? e.touches[0] : e;
+            return { x: (src.clientX - r.left) * scaleX, y: (src.clientY - r.top) * scaleY };
+        }
+        function startDraw(e) {
+            e.preventDefault();
+            _drawing = true;
+            const p = pos(e);
+            _ctx.beginPath();
+            _ctx.moveTo(p.x, p.y);
+            _registerColor(_activeColor);
+        }
+        function doDraw(e) {
+            if (!_drawing) return;
+            e.preventDefault();
+            const p = pos(e);
+            _ctx.lineWidth   = Math.round(_cvs.width / 22);
+            _ctx.lineCap     = 'round';
+            _ctx.lineJoin    = 'round';
+            _ctx.strokeStyle = _activeColor + 'cc'; // ~80% opacity
+            _ctx.lineTo(p.x, p.y);
+            _ctx.stroke();
+            _ctx.beginPath();
+            _ctx.moveTo(p.x, p.y);
+        }
+        function stopDraw() { _drawing = false; }
+
+        _cvs.addEventListener('mousedown',  startDraw);
+        _cvs.addEventListener('mousemove',  doDraw);
+        _cvs.addEventListener('mouseup',    stopDraw);
+        _cvs.addEventListener('mouseleave', stopDraw);
+        _cvs.addEventListener('touchstart', startDraw, { passive:false });
+        _cvs.addEventListener('touchmove',  doDraw,    { passive:false });
+        _cvs.addEventListener('touchend',   stopDraw);
+    }
+
+    function _registerColor(color) {
+        if (_usedColors.includes(color)) return;
+        _usedColors.push(color);
+        const name = _colorNames[color] || color;
+        const id   = 'r3d-cdesc-' + color.replace('#','');
+        const cont = document.getElementById('r3d-color-descs');
+        const div  = document.createElement('div');
+        div.style.cssText = 'display:flex;align-items:center;gap:8px;';
+        div.innerHTML = `
+          <span style="display:inline-block;width:18px;height:18px;border-radius:4px;background:${color};flex-shrink:0;"></span>
+          <label style="font-size:.8rem;font-weight:700;color:#333;white-space:nowrap;">Zona ${name}:</label>
+          <input id="${id}" type="text" placeholder="Describí qué cambiar en esta zona..."
+            style="flex:1;border:1px solid #ddd;border-radius:7px;padding:6px 9px;font-size:.82rem;">`;
+        cont.appendChild(div);
+    }
+
+    window.reGenerarConMarcas = async function() {
+        if (!_cvs) return;
+        // Collect descriptions per color
+        const cambios = _usedColors.map(c => {
+            const name = _colorNames[c] || c;
+            const val  = (document.getElementById('r3d-cdesc-' + c.replace('#','')) || {}).value || '';
+            return val.trim() ? `- Zona marcada en ${name.toUpperCase()}: ${val.trim()}` : null;
+        }).filter(Boolean);
+
+        if (!cambios.length) { alert('Describí al menos un cambio en los campos de color.'); return; }
+
+        const btn = document.querySelector('#r3d-step3 button[onclick="reGenerarConMarcas()"]');
+        btn.disabled = true;
+        btn.innerHTML = '<i class="ph-bold ph-spinner"></i> Generando...';
+
+        try {
+            const markedDataUrl = _cvs.toDataURL('image/png');
+            const markedBase64  = markedDataUrl.split(',')[1];
+
+            const basePrompt = _buildRenderPrompt();
+            const fullPrompt = basePrompt + `
+
+MODIFICACIONES SOLICITADAS (las zonas están marcadas con colores en la imagen de referencia):
+${cambios.join('\n')}
+
+Genera una nueva axonometría técnica aplicando EXACTAMENTE los cambios indicados en cada zona de color. Mantené el mismo estilo técnico, fondo blanco, cotas en metros y etiquetas en español.`;
+
+            const token = firebase.auth().currentUser ? await firebase.auth().currentUser.getIdToken() : null;
+            const headers = { 'Content-Type': 'application/json' };
+            if (token) headers['Authorization'] = 'Bearer ' + token;
+
+            const resp = await fetch('/api/gemini', {
+                method: 'POST', headers,
+                body: JSON.stringify({
+                    generateImage: true,
+                    prompt: fullPrompt,
+                    referenceImage: { data: markedBase64, mimeType: 'image/png' }
+                })
+            });
+            if (!resp.ok) { const t = await resp.text(); throw new Error(`HTTP ${resp.status}: ${t}`); }
+            const result = await resp.json();
+            const imgUrl = result.imageUrl;
+            if (!imgUrl) throw new Error('La IA no devolvió imagen');
+
+            _r3dRenderDataUrl = imgUrl;
+            document.getElementById('r3d-preview-img').src = imgUrl;
+            document.getElementById('r3d-step3').style.display = 'none';
+            document.getElementById('r3d-step2').style.display = 'block';
+            document.getElementById('r3d-step-lbl').textContent = 'Paso 2 — Aprobar render';
+
+        } catch(e) {
+            alert('Error al re-generar: ' + e.message);
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="ph-bold ph-magic-wand"></i> Re-generar con cambios';
+        }
+    };
+    // ── FIN CANVAS EDITOR ──────────────────────────────────────────
 
     window.aprobarRender3D = async function() {
         if (!_r3dRenderDataUrl) return;
