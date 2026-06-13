@@ -2320,7 +2320,356 @@ EJEMPLO VÁLIDO:
     <button class="m-act-btn purple" onclick="abrirModalIABudget()"><i class="ph-bold ph-magic-wand"></i><span>IA</span></button>
     <button class="m-act-btn orange" onclick="syncDatabasePrices()"><i class="ph-bold ph-arrows-clockwise"></i><span>Precios</span></button>
     <button class="m-act-btn" onclick="abrirModalPDF()"><i class="ph-bold ph-file-pdf"></i><span>PDF</span></button>
+    <button class="m-act-btn" style="color:var(--blue);" onclick="abrirModalRender3D()"><i class="ph-bold ph-cube"></i><span>Render</span></button>
 </div>
+
+<!-- ============================================================ -->
+<!-- MODAL RENDER 3D IA                                           -->
+<!-- ============================================================ -->
+<div id="mod-render3d" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.55);overflow-y:auto;">
+  <div style="background:#fff;border-radius:14px;max-width:560px;margin:24px auto;padding:24px 20px;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
+      <div>
+        <div style="font-size:1.1rem;font-weight:700;color:var(--blue);"><i class="ph-bold ph-cube"></i> Render 3D IA</div>
+        <div id="r3d-step-lbl" style="font-size:.8rem;color:#888;margin-top:2px;">Paso 1 — Describir objeto</div>
+      </div>
+      <button onclick="cerrarModalRender3D()" style="background:none;border:none;font-size:1.4rem;cursor:pointer;color:#888;">&times;</button>
+    </div>
+
+    <!-- PASO 1 -->
+    <div id="r3d-step1">
+      <label style="font-size:.85rem;font-weight:600;">Descripción del objeto *</label>
+      <textarea id="r3d-desc" rows="3" placeholder="Ej: Letrero de acero inoxidable con letras en relieve y retroiluminación LED..."
+        style="width:100%;box-sizing:border-box;border:1px solid #ddd;border-radius:8px;padding:8px;font-size:.9rem;margin-top:4px;resize:vertical;"></textarea>
+
+      <!-- Imagen de referencia -->
+      <div style="margin-top:12px;">
+        <label style="font-size:.85rem;font-weight:600;">Imagen de referencia (opcional)</label>
+        <div id="r3d-ref-drop" style="border:2px dashed #c5d0e6;border-radius:8px;padding:14px;text-align:center;cursor:pointer;margin-top:4px;position:relative;">
+          <input type="file" id="r3d-ref-input" accept="image/*" style="position:absolute;inset:0;opacity:0;cursor:pointer;" onchange="onR3dRefImagen(this)">
+          <div id="r3d-ref-preview" style="display:none;position:relative;">
+            <img id="r3d-ref-img" style="max-height:140px;border-radius:6px;">
+            <button onclick="limpiarR3dRef()" style="position:absolute;top:-8px;right:-8px;background:#e74c3c;color:#fff;border:none;border-radius:50%;width:22px;height:22px;cursor:pointer;font-size:.85rem;line-height:1;">&times;</button>
+          </div>
+          <div id="r3d-ref-placeholder"><i class="ph-bold ph-image" style="font-size:1.6rem;color:#aaa;"></i><br><span style="font-size:.8rem;color:#aaa;">Adjuntar imagen o pegar (Ctrl+V)</span></div>
+        </div>
+      </div>
+
+      <!-- Contexto técnico -->
+      <div style="margin-top:14px;display:grid;gap:10px;">
+        <div>
+          <label style="font-size:.82rem;font-weight:600;">Materiales</label>
+          <input id="r3d-mat" type="text" placeholder="Ej: Acero inoxidable 304, acrílico 6mm, LEDs 5050" style="width:100%;box-sizing:border-box;border:1px solid #ddd;border-radius:7px;padding:7px 10px;font-size:.88rem;margin-top:3px;">
+        </div>
+        <div>
+          <label style="font-size:.82rem;font-weight:600;">Estructura</label>
+          <input id="r3d-est" type="text" placeholder="Ej: Perfil cuadrado 40×40mm, base anclada al piso" style="width:100%;box-sizing:border-box;border:1px solid #ddd;border-radius:7px;padding:7px 10px;font-size:.88rem;margin-top:3px;">
+        </div>
+        <div>
+          <label style="font-size:.82rem;font-weight:600;">Acabado</label>
+          <input id="r3d-acab" type="text" placeholder="Ej: Pintura electroestática blanca, pulido espejo" style="width:100%;box-sizing:border-box;border:1px solid #ddd;border-radius:7px;padding:7px 10px;font-size:.88rem;margin-top:3px;">
+        </div>
+        <div>
+          <label style="font-size:.82rem;font-weight:600;">Branding</label>
+          <input id="r3d-brand" type="text" placeholder="Ej: Logo empresa en vinilo, colores corporativos azul/blanco" style="width:100%;box-sizing:border-box;border:1px solid #ddd;border-radius:7px;padding:7px 10px;font-size:.88rem;margin-top:3px;">
+        </div>
+      </div>
+
+      <!-- Dimensiones dinámicas -->
+      <div style="margin-top:14px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+          <label style="font-size:.82rem;font-weight:600;">Dimensiones</label>
+          <button onclick="agregarDimension3D()" style="background:var(--blue);color:#fff;border:none;border-radius:7px;padding:4px 10px;font-size:.8rem;cursor:pointer;">+ Agregar</button>
+        </div>
+        <div id="r3d-dims-list"></div>
+      </div>
+
+      <button onclick="generarRender3D()" style="margin-top:18px;width:100%;background:var(--blue);color:#fff;border:none;border-radius:9px;padding:12px;font-size:.95rem;font-weight:700;cursor:pointer;">
+        <i class="ph-bold ph-magic-wand"></i> Generar Render Axonométrico
+      </button>
+    </div>
+
+    <!-- PASO 2 -->
+    <div id="r3d-step2" style="display:none;text-align:center;">
+      <img id="r3d-preview-img" style="max-width:100%;border-radius:10px;border:1px solid #ddd;">
+      <div style="display:flex;gap:10px;margin-top:16px;flex-wrap:wrap;">
+        <button onclick="aprobarRender3D()" style="flex:1;background:var(--green);color:#fff;border:none;border-radius:9px;padding:11px;font-size:.9rem;font-weight:700;cursor:pointer;">
+          <i class="ph-bold ph-check-circle"></i> Aprobar y Cotizar con IA
+        </button>
+        <button onclick="reGenerarRender3D()" style="flex:1;background:#6c757d;color:#fff;border:none;border-radius:9px;padding:11px;font-size:.9rem;cursor:pointer;">
+          <i class="ph-bold ph-arrows-clockwise"></i> Re-generar
+        </button>
+        <button onclick="volverR3dStep1()" style="flex:1;background:#f0f0f0;color:#333;border:none;border-radius:9px;padding:11px;font-size:.9rem;cursor:pointer;">
+          <i class="ph-bold ph-pencil"></i> Editar datos
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+    var _r3dDims      = [];
+    var _r3dRefBase64 = null;
+    var _r3dRefMime   = 'image/jpeg';
+    var _r3dRenderDataUrl = null;
+
+    window.abrirModalRender3D = function() {
+        document.getElementById('r3d-desc').value = '';
+        document.getElementById('r3d-mat').value  = '';
+        document.getElementById('r3d-est').value  = '';
+        document.getElementById('r3d-acab').value = '';
+        document.getElementById('r3d-brand').value= '';
+        _r3dDims = [];
+        _r3dRefBase64 = null;
+        _r3dRenderDataUrl = null;
+        limpiarR3dRef();
+        renderDims3D();
+        document.getElementById('r3d-step1').style.display = 'block';
+        document.getElementById('r3d-step2').style.display = 'none';
+        document.getElementById('r3d-step-lbl').textContent = 'Paso 1 — Describir objeto';
+        document.getElementById('mod-render3d').style.display = 'block';
+    };
+
+    window.cerrarModalRender3D = function() {
+        document.getElementById('mod-render3d').style.display = 'none';
+    };
+
+    window.volverR3dStep1 = function() {
+        document.getElementById('r3d-step2').style.display = 'none';
+        document.getElementById('r3d-step1').style.display = 'block';
+        document.getElementById('r3d-step-lbl').textContent = 'Paso 1 — Describir objeto';
+    };
+
+    window.onR3dRefImagen = function(input) {
+        const file = input.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            _r3dRefBase64 = e.target.result.split(',')[1];
+            _r3dRefMime   = file.type || 'image/jpeg';
+            document.getElementById('r3d-ref-img').src = e.target.result;
+            document.getElementById('r3d-ref-preview').style.display = 'block';
+            document.getElementById('r3d-ref-placeholder').style.display = 'none';
+        };
+        reader.readAsDataURL(file);
+    };
+
+    window.limpiarR3dRef = function() {
+        _r3dRefBase64 = null;
+        document.getElementById('r3d-ref-img').src = '';
+        document.getElementById('r3d-ref-preview').style.display = 'none';
+        document.getElementById('r3d-ref-placeholder').style.display = 'block';
+        document.getElementById('r3d-ref-input').value = '';
+    };
+
+    // Paste image into reference drop zone
+    document.addEventListener('paste', function(e) {
+        if (document.getElementById('mod-render3d').style.display === 'none') return;
+        const items = e.clipboardData && e.clipboardData.items;
+        if (!items) return;
+        for (let i = 0; i < items.length; i++) {
+            if (items[i].type.startsWith('image/')) {
+                const file = items[i].getAsFile();
+                const reader = new FileReader();
+                reader.onload = function(ev) {
+                    _r3dRefBase64 = ev.target.result.split(',')[1];
+                    _r3dRefMime   = file.type || 'image/jpeg';
+                    document.getElementById('r3d-ref-img').src = ev.target.result;
+                    document.getElementById('r3d-ref-preview').style.display = 'block';
+                    document.getElementById('r3d-ref-placeholder').style.display = 'none';
+                };
+                reader.readAsDataURL(file);
+                break;
+            }
+        }
+    });
+
+    window.agregarDimension3D = function() {
+        _r3dDims.push({ nombre:'', base:'', altura:'', prof:'' });
+        renderDims3D();
+    };
+
+    window.borrarDimension3D = function(i) {
+        _r3dDims.splice(i, 1);
+        renderDims3D();
+    };
+
+    function renderDims3D() {
+        const cont = document.getElementById('r3d-dims-list');
+        if (!_r3dDims.length) {
+            cont.innerHTML = '<div style="font-size:.8rem;color:#aaa;text-align:center;padding:8px;">Sin dimensiones — presiona "+ Agregar"</div>';
+            return;
+        }
+        cont.innerHTML = _r3dDims.map((d, i) => `
+        <div style="display:grid;grid-template-columns:2fr 1fr 1fr 1fr auto;gap:5px;align-items:center;margin-bottom:6px;">
+            <input placeholder="Nombre parte" value="${d.nombre||''}" oninput="_r3dDims[${i}].nombre=this.value"
+                style="border:1px solid #ddd;border-radius:6px;padding:5px 7px;font-size:.8rem;">
+            <input placeholder="Ancho m" type="number" step="0.01" value="${d.base||''}" oninput="_r3dDims[${i}].base=this.value"
+                style="border:1px solid #ddd;border-radius:6px;padding:5px 7px;font-size:.8rem;">
+            <input placeholder="Alto m" type="number" step="0.01" value="${d.altura||''}" oninput="_r3dDims[${i}].altura=this.value"
+                style="border:1px solid #ddd;border-radius:6px;padding:5px 7px;font-size:.8rem;">
+            <input placeholder="Prof m" type="number" step="0.01" value="${d.prof||''}" oninput="_r3dDims[${i}].prof=this.value"
+                style="border:1px solid #ddd;border-radius:6px;padding:5px 7px;font-size:.8rem;">
+            <button onclick="borrarDimension3D(${i})" style="background:#e74c3c;color:#fff;border:none;border-radius:6px;padding:5px 8px;cursor:pointer;font-size:.8rem;">&times;</button>
+        </div>`).join('');
+    }
+
+    function _buildRenderPrompt() {
+        const desc  = document.getElementById('r3d-desc').value.trim();
+        const mat   = document.getElementById('r3d-mat').value.trim();
+        const est   = document.getElementById('r3d-est').value.trim();
+        const acab  = document.getElementById('r3d-acab').value.trim();
+        const brand = document.getElementById('r3d-brand').value.trim();
+        const dims  = _r3dDims.filter(d => d.nombre || d.base).map(d =>
+            `${d.nombre||'Parte'}: ${d.base||'?'}m ancho × ${d.altura||'?'}m alto × ${d.prof||'?'}m prof`).join('; ');
+
+        let prompt = `AXONOMETRÍA TÉCNICA PROFESIONAL — estilo CAD industrial.
+Fondo blanco liso. Perspectiva isométrica 30°. Líneas de cotas en metros con flechas de acotación. Etiquetas de materiales con líneas de referencia. Sin sombras dramáticas. Colores neutros y realistas.
+
+Objeto: ${desc}`;
+        if (mat)   prompt += `\nMateriales: ${mat}`;
+        if (est)   prompt += `\nEstructura: ${est}`;
+        if (acab)  prompt += `\nAcabado: ${acab}`;
+        if (brand) prompt += `\nBranding: ${brand}`;
+        if (dims)  prompt += `\nDimensiones: ${dims}`;
+        prompt += `\n\nMostrar: vista isométrica completa con todas las partes etiquetadas, cotas principales en metros, materiales indicados con texto en español.`;
+        return prompt;
+    }
+
+    window.generarRender3D = async function() {
+        const desc = document.getElementById('r3d-desc').value.trim();
+        if (!desc) { alert('Ingresá una descripción primero.'); return; }
+
+        const btn = document.querySelector('#r3d-step1 button[onclick="generarRender3D()"]');
+        btn.disabled = true;
+        btn.innerHTML = '<i class="ph-bold ph-spinner"></i> Generando render...';
+
+        try {
+            const prompt = _buildRenderPrompt();
+            const token = firebase.auth().currentUser ? await firebase.auth().currentUser.getIdToken() : null;
+            const headers = { 'Content-Type': 'application/json' };
+            if (token) headers['Authorization'] = 'Bearer ' + token;
+
+            const body = { generateImage: true, prompt };
+            if (_r3dRefBase64) {
+                body.referenceImage = { data: _r3dRefBase64, mimeType: _r3dRefMime };
+            }
+
+            const resp = await fetch('/api/gemini', {
+                method: 'POST', headers,
+                body: JSON.stringify(body)
+            });
+            if (!resp.ok) { const t = await resp.text(); throw new Error(`HTTP ${resp.status}: ${t}`); }
+            const result = await resp.json();
+            const imgUrl = result.imageUrl;
+            if (!imgUrl) throw new Error('La IA no devolvió imagen');
+
+            _r3dRenderDataUrl = imgUrl;
+            document.getElementById('r3d-preview-img').src = imgUrl;
+            document.getElementById('r3d-step1').style.display = 'none';
+            document.getElementById('r3d-step2').style.display = 'block';
+            document.getElementById('r3d-step-lbl').textContent = 'Paso 2 — Aprobar render';
+
+        } catch(e) {
+            alert('Error al generar render: ' + e.message);
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="ph-bold ph-cube"></i> Generar Render Axonométrico';
+        }
+    };
+
+    window.reGenerarRender3D = function() {
+        document.getElementById('r3d-step2').style.display = 'none';
+        document.getElementById('r3d-step1').style.display = 'block';
+        document.getElementById('r3d-step-lbl').textContent = 'Paso 1 — Describir objeto';
+        generarRender3D();
+    };
+
+    window.aprobarRender3D = async function() {
+        if (!_r3dRenderDataUrl) return;
+        const btn = document.querySelector('#r3d-step2 button[onclick="aprobarRender3D()"]');
+        btn.disabled = true;
+        btn.innerHTML = '<i class="ph-bold ph-spinner"></i> Cotizando con IA...';
+
+        try {
+            const desc   = document.getElementById('r3d-desc').value.trim();
+            const mat    = document.getElementById('r3d-mat').value.trim();
+            const est    = document.getElementById('r3d-est').value.trim();
+            const acab   = document.getElementById('r3d-acab').value.trim();
+            const brand  = document.getElementById('r3d-brand').value.trim();
+            const dimStr = _r3dDims.filter(d => d.nombre || d.base).map(d =>
+                `${d.nombre}: ${d.base||'?'}m × ${d.altura||'?'}m × ${d.prof||'?'}m`).join('; ');
+
+            const sysPrompt = `Eres un cotizador de proyectos de señalética, mobiliario y publicidad en Bolivia.
+Devuelve EXACTAMENTE este JSON (sin texto extra, sin markdown):
+[{"desc":"NOMBRE TÉCNICO DEL ÍTEM","cant":1,"und":"glb","feat":"- Característica 1\\n- Característica 2\\n- Material: ...\\n- Dimensiones: ...","apu":{"mat":[{"d":"MATERIAL","u":"und","q":1,"p":0}],"mo":[{"d":"MANO DE OBRA","u":"hr","q":4,"p":25}],"eq":[],"sub":[]},"util":40,"ind":15}]
+Cada precio "p" en bolivianos. util = % utilidad, ind = % indirectos. Incluye todos los materiales y mano de obra necesaria.`;
+
+            const userPrompt = `Cotizar el siguiente ítem en Bolivia:
+Descripción: ${desc}
+${mat    ? `Materiales: ${mat}`   : ''}
+${est    ? `Estructura: ${est}`   : ''}
+${acab   ? `Acabado: ${acab}`     : ''}
+${brand  ? `Branding: ${brand}`   : ''}
+${dimStr ? `Dimensiones: ${dimStr}` : ''}
+
+Genera UN ítem de presupuesto detallado con APU completo (materiales con precios en Bs, mano de obra).`;
+
+            const token = firebase.auth().currentUser ? await firebase.auth().currentUser.getIdToken() : null;
+            const headers = { 'Content-Type': 'application/json' };
+            if (token) headers['Authorization'] = 'Bearer ' + token;
+
+            const resp = await fetch('/api/gemini', {
+                method: 'POST', headers,
+                body: JSON.stringify({
+                    systemInstruction: { parts: [{ text: sysPrompt }] },
+                    contents: [{ role: 'user', parts: [{ text: userPrompt }] }]
+                })
+            });
+            if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+            const respData = await resp.json();
+            let raw = respData?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+            raw = raw.replace(/```json|```/g, '').trim();
+            const s = raw.indexOf('['), e2 = raw.lastIndexOf(']');
+            if (s === -1) throw new Error('La IA no devolvió JSON');
+            const items = JSON.parse(raw.slice(s, e2 + 1));
+            if (!Array.isArray(items) || !items.length) throw new Error('Respuesta vacía');
+
+            const it = items[0];
+            const apuObj = typeof ApuUtils !== 'undefined'
+                ? ApuUtils.normalizeApu(it.apu, it)
+                : (it.apu || { mat:[], mo:[], eq:[], sub:[] });
+            const pu   = typeof ApuUtils !== 'undefined' ? ApuUtils.calcPuFromApu(apuObj) : 0;
+            const feat = Array.isArray(it.feat) ? it.feat.join('\n') : (it.feat || '');
+
+            const newItem = {
+                type: 'item',
+                desc: it.desc || desc,
+                cant: parseFloat(it.cant || 1),
+                und:  it.und || 'glb',
+                feat: feat.replace(/\\n/g, '\n').trim(),
+                pu:   Math.round(pu * 100) / 100,
+                apu:  apuObj,
+                img:  _r3dRenderDataUrl,
+                iaPrompt: JSON.stringify({ nombre: desc, render3d: true })
+            };
+
+            data.push(newItem);
+            saveDB(true);
+            render();
+            cerrarModalRender3D();
+            alert('✓ Ítem "' + newItem.desc + '" agregado con render axonométrico.');
+
+        } catch(e) {
+            alert('Error al cotizar: ' + e.message);
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="ph-bold ph-check-circle"></i> Aprobar y Cotizar con IA';
+        }
+    };
+})();
+</script>
 <script src="/paste-image.js"></script>
 </body>
 </html>
