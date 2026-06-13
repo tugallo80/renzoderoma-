@@ -114,7 +114,12 @@
 
     <div class="nav">
         <button class="btn-nav" onclick="rutearAtras()"><i class="ph-bold ph-caret-left"></i> Atrás</button>
-        <button class="btn-nav" style="border:none; background:transparent;" onclick="document.body.classList.toggle('dark-mode')"><i class="ph-fill ph-moon"></i></button>
+        <div style="display:flex;gap:8px;">
+            <button class="btn-nav" style="background:var(--blue);color:#fff;border:none;" onclick="abrirMedicion()">
+                <i class="ph-bold ph-ruler"></i> Medir
+            </button>
+            <button class="btn-nav" style="border:none; background:transparent;" onclick="document.body.classList.toggle('dark-mode')"><i class="ph-fill ph-moon"></i></button>
+        </div>
     </div>
 
     <div>
@@ -920,5 +925,385 @@ REGLAS DE DIBUJO:
     window.closeAIChat = function() { const m = document.getElementById('ai-chat-modal'); if (m) m.style.display = 'none'; };
 </script>
 <script src="/paste-image.js"></script>
+
+<!-- ============================================================ -->
+<!-- MODAL MEDICIÓN CON LÍNEAS                                    -->
+<!-- ============================================================ -->
+<div id="mod-medicion" style="display:none;position:fixed;inset:0;z-index:9000;background:#111;flex-direction:column;touch-action:none;">
+
+  <!-- Barra superior -->
+  <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 14px;background:#1c1c1e;flex-shrink:0;gap:8px;">
+    <button onclick="cerrarMedicion()"
+      style="background:rgba(255,255,255,.1);color:#fff;border:none;border-radius:10px;padding:8px 13px;font-size:.85rem;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:5px;">
+      <i class="ph-bold ph-caret-left"></i> Salir
+    </button>
+    <span style="color:#fff;font-size:.9rem;font-weight:700;white-space:nowrap;">📐 Medición</span>
+    <div style="display:flex;gap:7px;align-items:center;">
+      <button id="med-unit-btn" onclick="toggleMedUnit()"
+        style="background:#3a3a3c;color:#fff;border:1px solid #555;border-radius:9px;padding:6px 12px;font-size:.82rem;cursor:pointer;font-weight:700;">
+        <span id="med-unit-lbl">m</span> ⇄ cm
+      </button>
+      <button onclick="undoMedicion()"
+        style="background:#3a3a3c;color:#fff;border:none;border-radius:9px;padding:7px 11px;font-size:.82rem;cursor:pointer;">
+        <i class="ph-bold ph-arrow-counter-clockwise"></i>
+      </button>
+      <button onclick="guardarMedicion()"
+        style="background:#34c759;color:#fff;border:none;border-radius:9px;padding:7px 12px;font-size:.82rem;font-weight:700;cursor:pointer;">
+        <i class="ph-bold ph-download-simple"></i> Guardar
+      </button>
+    </div>
+  </div>
+
+  <!-- Zona de imagen / canvas -->
+  <div id="med-drop-area" style="flex:1;display:flex;align-items:center;justify-content:center;overflow:hidden;position:relative;cursor:crosshair;">
+
+    <!-- Estado vacío -->
+    <div id="med-empty-state" style="text-align:center;color:#aaa;">
+      <i class="ph-bold ph-image" style="font-size:3rem;display:block;margin-bottom:12px;color:#555;"></i>
+      <div style="font-size:1rem;font-weight:700;color:#ddd;margin-bottom:16px;">Cargá una imagen para medir</div>
+      <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;">
+        <label for="med-file-input"
+          style="background:#007aff;color:#fff;border-radius:10px;padding:10px 18px;font-size:.88rem;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:6px;">
+          <i class="ph-bold ph-upload-simple"></i> Subir foto
+        </label>
+        <label for="med-cam-input"
+          style="background:#5856d6;color:#fff;border-radius:10px;padding:10px 18px;font-size:.88rem;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:6px;">
+          <i class="ph-bold ph-camera"></i> Tomar foto
+        </label>
+      </div>
+      <div style="margin-top:12px;font-size:.78rem;color:#666;">o pegá una imagen con Ctrl+V</div>
+    </div>
+
+    <input type="file" id="med-file-input" accept="image/*" style="display:none;" onchange="medCargarImagen(this)">
+    <input type="file" id="med-cam-input"  accept="image/*" capture="environment" style="display:none;" onchange="medCargarImagen(this)">
+
+    <!-- Canvas (oculto hasta cargar imagen) -->
+    <canvas id="med-canvas" style="display:none;max-width:100%;max-height:100%;touch-action:none;"></canvas>
+
+    <!-- Input flotante para escribir la medida -->
+    <div id="med-label-popup" style="display:none;position:absolute;z-index:10;background:#1c1c1e;border:1px solid #444;border-radius:12px;padding:10px 12px;box-shadow:0 8px 30px rgba(0,0,0,.5);min-width:200px;">
+      <div style="font-size:.75rem;color:#aaa;margin-bottom:6px;">Medida de esta línea:</div>
+      <div style="display:flex;gap:7px;align-items:center;">
+        <input id="med-label-input" type="number" step="0.01" placeholder="0.00"
+          style="flex:1;background:#2c2c2e;color:#fff;border:1px solid #555;border-radius:8px;padding:7px 10px;font-size:.95rem;font-weight:700;min-width:0;"
+          onkeydown="if(event.key==='Enter') confirmarMedida()">
+        <span id="med-label-unit" style="color:#aaa;font-size:.85rem;font-weight:700;white-space:nowrap;">m</span>
+        <button onclick="confirmarMedida()" style="background:#34c759;color:#fff;border:none;border-radius:8px;padding:7px 11px;cursor:pointer;font-size:.9rem;">✓</button>
+        <button onclick="cancelarMedida()" style="background:#3a3a3c;color:#fff;border:none;border-radius:8px;padding:7px 9px;cursor:pointer;font-size:.9rem;">✗</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+    var _medLines   = [];   // [{x1,y1,x2,y2,label,unit}]
+    var _medUnit    = 'm';
+    var _medImg     = null; // HTMLImageElement
+    var _medCanvas, _medCtx;
+    var _medDrawing = false;
+    var _medSx = 0, _medSy = 0; // start coords in canvas space
+    var _medPending = null;      // line awaiting label
+    var _medScale   = 1;         // canvas/CSS scale ratio
+
+    // ── Abrir / cerrar ──────────────────────────────────────────────
+    window.abrirMedicion = function() {
+        document.getElementById('mod-medicion').style.display = 'flex';
+        _medCanvas = document.getElementById('med-canvas');
+        _medCtx    = _medCanvas.getContext('2d');
+        _attachMedEvents();
+    };
+
+    window.cerrarMedicion = function() {
+        document.getElementById('mod-medicion').style.display = 'none';
+    };
+
+    // Paste global
+    document.addEventListener('paste', function(e) {
+        if (document.getElementById('mod-medicion').style.display === 'none') return;
+        const items = e.clipboardData && e.clipboardData.items;
+        if (!items) return;
+        for (var i = 0; i < items.length; i++) {
+            if (items[i].type.startsWith('image/')) {
+                _loadFileIntoCanvas(items[i].getAsFile());
+                break;
+            }
+        }
+    });
+
+    // ── Cargar imagen ──────────────────────────────────────────────
+    window.medCargarImagen = function(input) {
+        if (!input.files || !input.files[0]) return;
+        _loadFileIntoCanvas(input.files[0]);
+        input.value = '';
+    };
+
+    function _loadFileIntoCanvas(file) {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            const img = new Image();
+            img.onload = function() {
+                _medImg  = img;
+                _medLines = [];
+                _resizeCanvas();
+                document.getElementById('med-empty-state').style.display = 'none';
+                _medCanvas.style.display = 'block';
+            };
+            img.src = e.target.result;
+        };
+        reader.readAsDataURL(file);
+    }
+
+    function _resizeCanvas() {
+        if (!_medImg) return;
+        const area   = document.getElementById('med-drop-area');
+        const maxW   = area.clientWidth;
+        const maxH   = area.clientHeight;
+        const ratio  = Math.min(maxW / _medImg.naturalWidth, maxH / _medImg.naturalHeight, 1);
+        _medCanvas.width  = Math.round(_medImg.naturalWidth  * ratio);
+        _medCanvas.height = Math.round(_medImg.naturalHeight * ratio);
+        _medScale = ratio;
+        _redrawMed();
+    }
+
+    // ── Toggle unidad ──────────────────────────────────────────────
+    window.toggleMedUnit = function() {
+        var from = _medUnit, to = from === 'm' ? 'cm' : 'm';
+        var factor = to === 'cm' ? 100 : 0.01;
+        _medLines.forEach(function(l) {
+            var n = parseFloat(l.label);
+            if (!isNaN(n)) l.label = String(Math.round(n * factor * 1000) / 1000);
+            l.unit = to;
+        });
+        _medUnit = to;
+        document.getElementById('med-unit-lbl').textContent  = to;
+        document.getElementById('med-label-unit').textContent = to;
+        _redrawMed();
+    };
+
+    // ── Canvas events ──────────────────────────────────────────────
+    function _attachMedEvents() {
+        var cvs = _medCanvas;
+        // Remove previous listeners by replacing node
+        var neo = cvs.cloneNode(false);
+        cvs.parentNode.replaceChild(neo, cvs);
+        _medCanvas = neo;
+        _medCtx    = neo.getContext('2d');
+        if (_medImg) { _resizeCanvas(); }
+
+        neo.addEventListener('mousedown',  _mStart, false);
+        neo.addEventListener('mousemove',  _mMove,  false);
+        neo.addEventListener('mouseup',    _mEnd,   false);
+        neo.addEventListener('mouseleave', _mEnd,   false);
+        neo.addEventListener('touchstart', _tStart, { passive: false });
+        neo.addEventListener('touchmove',  _tMove,  { passive: false });
+        neo.addEventListener('touchend',   _tEnd,   false);
+    }
+
+    function _pos(e) {
+        var r = _medCanvas.getBoundingClientRect();
+        var scaleX = _medCanvas.width  / r.width;
+        var scaleY = _medCanvas.height / r.height;
+        var src = e.touches ? e.touches[0] : e;
+        return { x: (src.clientX - r.left) * scaleX, y: (src.clientY - r.top) * scaleY };
+    }
+
+    function _mStart(e) { e.preventDefault(); var p = _pos(e); _drawStart(p.x, p.y); }
+    function _mMove(e)  { e.preventDefault(); var p = _pos(e); _drawMove(p.x, p.y); }
+    function _mEnd(e)   { e.preventDefault(); var p = _pos(e); _drawEnd(p.x, p.y); }
+    function _tStart(e) { e.preventDefault(); var p = _pos(e); _drawStart(p.x, p.y); }
+    function _tMove(e)  { e.preventDefault(); var p = _pos(e); _drawMove(p.x, p.y); }
+    function _tEnd(e)   { e.preventDefault(); if (e.changedTouches) { var t = e.changedTouches[0]; var r = _medCanvas.getBoundingClientRect(); var scX = _medCanvas.width/r.width, scY = _medCanvas.height/r.height; _drawEnd((t.clientX-r.left)*scX, (t.clientY-r.top)*scY); } }
+
+    function _drawStart(x, y) {
+        if (_medPending) return; // esperando label
+        if (!_medImg) return;
+        _medDrawing = true;
+        _medSx = x; _medSy = y;
+    }
+
+    function _drawMove(x, y) {
+        if (!_medDrawing) return;
+        _redrawMed();
+        // Línea fantasma
+        var ctx = _medCtx;
+        ctx.save();
+        ctx.strokeStyle = 'rgba(0,200,255,.85)';
+        ctx.lineWidth   = Math.max(2, _medCanvas.width / 300);
+        ctx.setLineDash([8, 5]);
+        ctx.lineCap = 'round';
+        ctx.beginPath();
+        ctx.moveTo(_medSx, _medSy);
+        ctx.lineTo(x, y);
+        ctx.stroke();
+        // Puntos de inicio y fin
+        ctx.setLineDash([]);
+        ctx.fillStyle = 'rgba(0,200,255,.9)';
+        ctx.beginPath(); ctx.arc(_medSx, _medSy, 5, 0, Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.arc(x, y, 5, 0, Math.PI*2); ctx.fill();
+        ctx.restore();
+    }
+
+    function _drawEnd(x, y) {
+        if (!_medDrawing) return;
+        _medDrawing = false;
+        var dx = x - _medSx, dy = y - _medSy;
+        if (Math.sqrt(dx*dx + dy*dy) < 10) return; // muy corta, ignorar
+        _medPending = { x1: _medSx, y1: _medSy, x2: x, y2: y, label: '', unit: _medUnit };
+        _redrawMed();
+        _showLabelPopup(x, y);
+    }
+
+    // ── Popup de medida ────────────────────────────────────────────
+    function _showLabelPopup(cx, cy) {
+        var popup = document.getElementById('med-label-popup');
+        var area  = document.getElementById('med-drop-area');
+        var cvsr  = _medCanvas.getBoundingClientRect();
+        var arear = area.getBoundingClientRect();
+        // Convertir coords canvas → viewport → relativo al área
+        var vx = cvsr.left + cx * (cvsr.width  / _medCanvas.width)  - arear.left;
+        var vy = cvsr.top  + cy * (cvsr.height / _medCanvas.height) - arear.top;
+        // Asegurar que no se salga de la pantalla
+        var pw = 220, ph = 80;
+        vx = Math.min(Math.max(vx - pw/2, 8), arear.width  - pw - 8);
+        vy = Math.min(Math.max(vy + 14,   8), arear.height - ph - 8);
+        popup.style.left    = vx + 'px';
+        popup.style.top     = vy + 'px';
+        popup.style.display = 'block';
+        document.getElementById('med-label-unit').textContent = _medUnit;
+        var inp = document.getElementById('med-label-input');
+        inp.value = '';
+        setTimeout(function() { inp.focus(); }, 80);
+    }
+
+    window.confirmarMedida = function() {
+        if (!_medPending) return;
+        var val = document.getElementById('med-label-input').value.trim();
+        _medPending.label = val;
+        _medPending.unit  = _medUnit;
+        _medLines.push(_medPending);
+        _medPending = null;
+        document.getElementById('med-label-popup').style.display = 'none';
+        _redrawMed();
+    };
+
+    window.cancelarMedida = function() {
+        _medPending = null;
+        document.getElementById('med-label-popup').style.display = 'none';
+        _redrawMed();
+    };
+
+    // ── Deshacer ───────────────────────────────────────────────────
+    window.undoMedicion = function() {
+        if (_medPending) { cancelarMedida(); return; }
+        _medLines.pop();
+        _redrawMed();
+    };
+
+    // ── Re-dibujo completo ─────────────────────────────────────────
+    function _redrawMed() {
+        if (!_medCtx || !_medCanvas.width) return;
+        var ctx = _medCtx;
+        ctx.clearRect(0, 0, _medCanvas.width, _medCanvas.height);
+        if (_medImg) ctx.drawImage(_medImg, 0, 0, _medCanvas.width, _medCanvas.height);
+
+        var lw = Math.max(2, _medCanvas.width / 280);
+        var r  = Math.max(5, _medCanvas.width / 120);
+        var fs = Math.max(12, _medCanvas.width / 40);
+
+        _medLines.forEach(function(l) {
+            var x1 = l.x1, y1 = l.y1, x2 = l.x2, y2 = l.y2;
+            var ang = Math.atan2(y2 - y1, x2 - x1);
+            var mx  = (x1 + x2) / 2, my = (y1 + y2) / 2;
+
+            // Línea principal
+            ctx.save();
+            ctx.strokeStyle = '#00c8ff';
+            ctx.lineWidth   = lw;
+            ctx.lineCap     = 'round';
+            ctx.shadowColor = 'rgba(0,0,0,.6)';
+            ctx.shadowBlur  = 4;
+            ctx.beginPath();
+            ctx.moveTo(x1, y1);
+            ctx.lineTo(x2, y2);
+            ctx.stroke();
+
+            // Flechas en los extremos
+            var al = Math.max(10, lw * 4);
+            [[x1, y1, ang + Math.PI], [x2, y2, ang]].forEach(function(pt) {
+                ctx.beginPath();
+                ctx.moveTo(pt[0], pt[1]);
+                ctx.lineTo(pt[0] - al * Math.cos(pt[2] - 0.4), pt[1] - al * Math.sin(pt[2] - 0.4));
+                ctx.moveTo(pt[0], pt[1]);
+                ctx.lineTo(pt[0] - al * Math.cos(pt[2] + 0.4), pt[1] - al * Math.sin(pt[2] + 0.4));
+                ctx.stroke();
+            });
+
+            // Punto en extremos
+            ctx.shadowBlur = 0;
+            ctx.fillStyle  = '#00c8ff';
+            ctx.beginPath(); ctx.arc(x1, y1, r, 0, Math.PI*2); ctx.fill();
+            ctx.beginPath(); ctx.arc(x2, y2, r, 0, Math.PI*2); ctx.fill();
+
+            // Etiqueta
+            if (l.label) {
+                var txt = l.label + ' ' + l.unit;
+                ctx.font = 'bold ' + fs + 'px -apple-system,sans-serif';
+                var tw   = ctx.measureText(txt).width;
+                var pad  = fs * 0.5;
+                // Fondo
+                ctx.shadowBlur  = 6;
+                ctx.shadowColor = 'rgba(0,0,0,.7)';
+                ctx.fillStyle   = '#1c1c2e';
+                var bx = mx - tw/2 - pad, by = my - fs - pad;
+                var bw = tw + pad*2,      bh = fs + pad*2;
+                _roundRect(ctx, bx, by, bw, bh, fs * 0.35);
+                ctx.fill();
+                // Texto
+                ctx.shadowBlur  = 0;
+                ctx.fillStyle   = '#fff';
+                ctx.textAlign   = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(txt, mx, by + bh/2);
+            }
+            ctx.restore();
+        });
+
+        // Línea pendiente (dibujada desde _medSx,_medSy si hay pending)
+        if (_medPending) {
+            var l = _medPending;
+            ctx.save();
+            ctx.strokeStyle = 'rgba(0,200,255,.5)';
+            ctx.lineWidth   = lw;
+            ctx.setLineDash([8,5]);
+            ctx.beginPath(); ctx.moveTo(l.x1, l.y1); ctx.lineTo(l.x2, l.y2); ctx.stroke();
+            ctx.setLineDash([]);
+            ctx.fillStyle = 'rgba(0,200,255,.8)';
+            ctx.beginPath(); ctx.arc(l.x1, l.y1, r, 0, Math.PI*2); ctx.fill();
+            ctx.beginPath(); ctx.arc(l.x2, l.y2, r, 0, Math.PI*2); ctx.fill();
+            ctx.restore();
+        }
+    }
+
+    function _roundRect(ctx, x, y, w, h, rad) {
+        ctx.beginPath();
+        ctx.moveTo(x + rad, y);
+        ctx.arcTo(x+w, y,   x+w, y+h, rad);
+        ctx.arcTo(x+w, y+h, x,   y+h, rad);
+        ctx.arcTo(x,   y+h, x,   y,   rad);
+        ctx.arcTo(x,   y,   x+w, y,   rad);
+        ctx.closePath();
+    }
+
+    // ── Guardar imagen ─────────────────────────────────────────────
+    window.guardarMedicion = function() {
+        if (!_medImg) return;
+        var a = document.createElement('a');
+        a.download = 'medicion-' + Date.now() + '.png';
+        a.href = _medCanvas.toDataURL('image/png');
+        a.click();
+    };
+})();
+</script>
 </body>
 </html>
