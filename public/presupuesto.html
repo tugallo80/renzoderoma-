@@ -2487,6 +2487,10 @@ EJEMPLO VÁLIDO:
       <div style="display:flex;gap:4px;flex-shrink:0;">
         <button onclick="r3dMarkZoom(0.8)" style="background:#3a3a3c;color:#fff;border:1px solid #555;border-radius:7px;padding:4px 8px;font-size:.8rem;cursor:pointer;">−</button>
         <button onclick="r3dMarkZoom(1.25)" style="background:#3a3a3c;color:#fff;border:1px solid #555;border-radius:7px;padding:4px 8px;font-size:.8rem;cursor:pointer;">+</button>
+        <button onclick="undoMarca()" title="Deshacer último trazo"
+          style="background:#3a3a3c;color:#fff;border:1px solid #555;border-radius:7px;padding:4px 8px;font-size:.78rem;cursor:pointer;font-weight:700;">↩</button>
+        <button id="r3d-eraser-btn" onclick="toggleEraserMark(this)" title="Borrador"
+          style="background:#3a3a3c;color:#fff;border:1px solid #555;border-radius:7px;padding:4px 8px;font-size:.78rem;cursor:pointer;font-weight:700;">⌫</button>
         <button onclick="limpiarCanvas3D()" style="background:#3a3a3c;color:#fff;border:1px solid #555;border-radius:7px;padding:4px 8px;font-size:.75rem;cursor:pointer;font-weight:600;">Limpiar</button>
       </div>
     </div>
@@ -2719,7 +2723,10 @@ Objeto: ${desc}`;
 
     // ── CANVAS EDITOR (pantalla completa) ─────────────────────────
     var _cvs, _ctx, _drawing = false, _activeColor = '#e74c3c', _activeThick = 'S';
-    var _usedColors  = [];
+    var _markMode   = 'draw'; // 'draw' | 'erase'
+    var _usedColors = [];
+    var _undoStack  = [];     // array of ImageData snapshots
+    var _origImg    = null;   // clean original render for eraser
     var _markZoom    = 1;
     var _markPinch0  = 0, _markPinchZ0 = 1;
     var _markedDataUrl = null;  // saved after confirmarMarcas
@@ -2727,10 +2734,15 @@ Objeto: ${desc}`;
 
     window.abrirEditorMarcas = function() {
         document.getElementById('mod-r3d-mark').style.display = 'flex';
-        _usedColors = [];
-        _activeThick = 'S';
+        _usedColors = []; _undoStack = []; _markMode = 'draw';
+        var eb = document.getElementById('r3d-eraser-btn');
+        if (eb) { eb.style.background = '#3a3a3c'; eb.style.borderColor = '#555'; }
         setR3dColor('#e74c3c', document.querySelector('.r3d-cbtn[data-c="#e74c3c"]'));
         setR3dThick('S', document.getElementById('r3d-th-S'));
+        // Preload original image for eraser
+        _origImg = new Image();
+        _origImg.crossOrigin = 'anonymous';
+        _origImg.src = _r3dRenderDataUrl;
         _initCanvas();
     };
 
@@ -2791,6 +2803,13 @@ Objeto: ${desc}`;
         _activeColor = color;
         document.querySelectorAll('.r3d-cbtn').forEach(function(b){ b.style.borderColor = 'transparent'; });
         if (btn) btn.style.borderColor = '#fff';
+        // Exit eraser mode when a color is picked
+        if (_markMode === 'erase') {
+            _markMode = 'draw';
+            var eb = document.getElementById('r3d-eraser-btn');
+            if (eb) { eb.style.background = '#3a3a3c'; eb.style.borderColor = '#555'; }
+            if (_cvs) _cvs.style.cursor = 'crosshair';
+        }
     };
 
     window.setR3dThick = function(t, btn) {
@@ -2825,7 +2844,23 @@ Objeto: ${desc}`;
         const img = new Image();
         img.onload = function() { _ctx.drawImage(img, 0, 0, _cvs.width, _cvs.height); };
         img.src = _r3dRenderDataUrl;
-        _usedColors = [];
+        _usedColors = []; _undoStack = [];
+    };
+
+    window.undoMarca = function() {
+        if (!_undoStack.length || !_ctx) return;
+        _ctx.putImageData(_undoStack.pop(), 0, 0);
+    };
+
+    window.toggleEraserMark = function(btn) {
+        _markMode = _markMode === 'erase' ? 'draw' : 'erase';
+        btn.style.background  = _markMode === 'erase' ? '#ff9500' : '#3a3a3c';
+        btn.style.borderColor = _markMode === 'erase' ? '#ff9500' : '#555';
+        if (_cvs) _cvs.style.cursor = _markMode === 'erase' ? 'cell' : 'crosshair';
+        // Deselect color buttons when erasing
+        if (_markMode === 'erase') {
+            document.querySelectorAll('.r3d-cbtn').forEach(function(b){ b.style.borderColor='transparent'; });
+        }
     };
 
     function _thickPxMark() {
@@ -2860,6 +2895,7 @@ Objeto: ${desc}`;
         const old = _cvs, neo = old.cloneNode(false);
         old.parentNode.replaceChild(neo, old);
         _cvs = neo; _ctx = neo.getContext('2d');
+        if (_markMode === 'erase') _cvs.style.cursor = 'cell';
 
         // Re-draw
         const img = new Image();
@@ -2872,33 +2908,66 @@ Objeto: ${desc}`;
             const src = e.touches ? e.touches[0] : e;
             return { x: (src.clientX - r.left) * sx, y: (src.clientY - r.top) * sy };
         }
+        function midpoint(e) {
+            return { x: (e.touches[0].clientX + e.touches[1].clientX) / 2,
+                     y: (e.touches[0].clientY + e.touches[1].clientY) / 2 };
+        }
+
+        var _prevMidX = 0, _prevMidY = 0;
 
         function startDraw(e) {
-            if (e.touches && e.touches.length === 2) return; // pinch
+            if (e.touches && e.touches.length === 2) {
+                e.preventDefault();
+                _drawing = false;
+                _markPinch0 = _pinchDist(e); _markPinchZ0 = _markZoom;
+                var m = midpoint(e); _prevMidX = m.x; _prevMidY = m.y;
+                return;
+            }
             e.preventDefault();
+            // Save undo snapshot before each stroke
+            if (_cvs.width && _cvs.height) {
+                if (_undoStack.length >= 15) _undoStack.shift();
+                _undoStack.push(_ctx.getImageData(0, 0, _cvs.width, _cvs.height));
+            }
             _drawing = true;
             const p = pos(e);
             _ctx.beginPath(); _ctx.moveTo(p.x, p.y);
-            _registerColor(_activeColor);
+            if (_markMode === 'draw') _registerColor(_activeColor);
         }
         function doDraw(e) {
             if (e.touches && e.touches.length === 2) {
                 e.preventDefault();
-                if (!_markPinch0) { _markPinch0 = _pinchDist(e); _markPinchZ0 = _markZoom; return; }
-                var newFactor = _pinchDist(e) / _markPinch0;
-                _markZoom = Math.max(0.1, Math.min(10, _markPinchZ0 * newFactor));
-                _cvs.style.width  = Math.round(_cvs.width  * _markZoom) + 'px';
-                _cvs.style.height = Math.round(_cvs.height * _markZoom) + 'px';
+                // Pan: move scroll by midpoint delta
+                var sc = document.getElementById('r3d-mark-scroll');
+                var m  = midpoint(e);
+                sc.scrollLeft -= m.x - _prevMidX;
+                sc.scrollTop  -= m.y - _prevMidY;
+                _prevMidX = m.x; _prevMidY = m.y;
+                // Zoom: pinch
+                if (_markPinch0) {
+                    _markZoom = Math.max(0.1, Math.min(10, _markPinchZ0 * (_pinchDist(e) / _markPinch0)));
+                    _cvs.style.width  = Math.round(_cvs.width  * _markZoom) + 'px';
+                    _cvs.style.height = Math.round(_cvs.height * _markZoom) + 'px';
+                }
                 return;
             }
             if (!_drawing) return;
             e.preventDefault();
             const p = pos(e);
-            _ctx.lineWidth = _thickPxMark();
-            _ctx.lineCap = 'round'; _ctx.lineJoin = 'round';
-            _ctx.strokeStyle = _activeColor + 'cc';
-            _ctx.lineTo(p.x, p.y); _ctx.stroke();
-            _ctx.beginPath(); _ctx.moveTo(p.x, p.y);
+            if (_markMode === 'erase' && _origImg) {
+                // Erase: restore original image pixels in a circle
+                var r = _thickPxMark() * 1.5;
+                _ctx.save();
+                _ctx.beginPath(); _ctx.arc(p.x, p.y, r, 0, Math.PI * 2); _ctx.clip();
+                _ctx.drawImage(_origImg, 0, 0, _cvs.width, _cvs.height);
+                _ctx.restore();
+            } else {
+                _ctx.lineWidth = _thickPxMark();
+                _ctx.lineCap = 'round'; _ctx.lineJoin = 'round';
+                _ctx.strokeStyle = _activeColor + 'cc';
+                _ctx.lineTo(p.x, p.y); _ctx.stroke();
+                _ctx.beginPath(); _ctx.moveTo(p.x, p.y);
+            }
         }
         function stopDraw(e) {
             _drawing = false;
