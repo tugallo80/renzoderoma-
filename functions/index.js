@@ -157,15 +157,17 @@ exports.geminiProxy = onRequest(GEMINI_PROXY_OPTS, async (req, res) => {
             }
 
             // ── Estrategia 2: Gemini generateContent (soporta imagen referencia) ──
-            const gcModels = [
-                "gemini-2.0-flash-preview-image-generation",
-                "gemini-2.0-flash-exp-image-generation",
-                "gemini-2.0-flash",
+            // Modelos y versiones a probar
+            const gcAttempts = [
+                { apiVer: "v1beta", model: "gemini-2.0-flash-preview-image-generation" },
+                { apiVer: "v1alpha", model: "gemini-2.0-flash-preview-image-generation" },
+                { apiVer: "v1beta", model: "gemini-2.5-flash-preview-image-generation" },
+                { apiVer: "v1beta", model: "gemini-2.0-flash-exp-image-generation" },
             ];
-            for (const m of gcModels) {
+            for (const { apiVer, model: m } of gcAttempts) {
                 try {
                     const r = await fetch(
-                        `https://generativelanguage.googleapis.com/v1beta/models/${m}:generateContent?key=${geminiKey}`,
+                        `https://generativelanguage.googleapis.com/${apiVer}/models/${m}:generateContent?key=${geminiKey}`,
                         {
                             method: "POST",
                             headers: { "Content-Type": "application/json" },
@@ -178,8 +180,8 @@ exports.geminiProxy = onRequest(GEMINI_PROXY_OPTS, async (req, res) => {
                     const d = await r.json();
                     if (!r.ok) {
                         const detail = d?.error?.message || JSON.stringify(d).slice(0, 200);
-                        errors.push(`${m} → ${r.status}: ${detail}`);
-                        console.warn(`imagen-gen GC: ${m} error ${r.status}:`, detail);
+                        errors.push(`${m}@${apiVer} → ${r.status}: ${detail}`);
+                        console.warn(`imagen-gen GC: ${m}@${apiVer} error ${r.status}:`, detail);
                         continue;
                     }
                     const imgParts = d?.candidates?.[0]?.content?.parts || [];
@@ -187,16 +189,16 @@ exports.geminiProxy = onRequest(GEMINI_PROXY_OPTS, async (req, res) => {
                         const inline = p.inlineData || p.inline_data;
                         if (inline && inline.data) {
                             const mime = inline.mimeType || inline.mime_type || "image/png";
-                            console.log(`imagen-gen: OK con ${m}`);
+                            console.log(`imagen-gen: OK con ${m}@${apiVer}`);
                             return res.status(200).json({ imageUrl: `data:${mime};base64,${inline.data}` });
                         }
                     }
                     const finishReason = d?.candidates?.[0]?.finishReason || "sin imagen";
-                    errors.push(`${m} → no produjo imagen (${finishReason})`);
-                    console.warn(`imagen-gen GC: ${m} no produjo imagen, finishReason=${finishReason}`);
+                    errors.push(`${m}@${apiVer} → no produjo imagen (${finishReason})`);
+                    console.warn(`imagen-gen GC: ${m}@${apiVer} no produjo imagen, finishReason=${finishReason}`);
                 } catch(e) {
-                    errors.push(`${m} → excepcion: ${e.message}`);
-                    console.error(`imagen-gen GC excepcion (${m}):`, e.message);
+                    errors.push(`${m}@${apiVer} → excepcion: ${e.message}`);
+                    console.error(`imagen-gen GC excepcion (${m}@${apiVer}):`, e.message);
                 }
             }
 

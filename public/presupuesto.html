@@ -2379,7 +2379,13 @@ EJEMPLO VÁLIDO:
       <div style="margin-top:14px;">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
           <label style="font-size:.82rem;font-weight:600;">Dimensiones</label>
-          <button onclick="agregarDimension3D()" style="background:var(--blue);color:#fff;border:none;border-radius:7px;padding:4px 10px;font-size:.8rem;cursor:pointer;">+ Agregar</button>
+          <div style="display:flex;gap:6px;align-items:center;">
+            <button id="r3d-unit-btn" onclick="toggleR3dUnit()"
+              style="background:#f0f0f0;color:#555;border:1px solid #ddd;border-radius:7px;padding:3px 10px;font-size:.78rem;cursor:pointer;font-weight:600;">
+              <span id="r3d-unit-lbl">m</span> ⇄ cm
+            </button>
+            <button onclick="agregarDimension3D()" style="background:var(--blue);color:#fff;border:none;border-radius:7px;padding:4px 10px;font-size:.8rem;cursor:pointer;">+ Agregar</button>
+          </div>
         </div>
         <div id="r3d-dims-list"></div>
       </div>
@@ -2533,6 +2539,26 @@ EJEMPLO VÁLIDO:
         }
     });
 
+    var _r3dUnit = 'm'; // 'm' o 'cm'
+
+    // Setter global — los oninput inline no pueden acceder a variables de closure
+    window._r3dSetDim = function(i, field, val) {
+        if (_r3dDims[i]) _r3dDims[i][field] = val;
+    };
+
+    window.toggleR3dUnit = function() {
+        const from = _r3dUnit, to = from === 'm' ? 'cm' : 'm';
+        const factor = to === 'cm' ? 100 : 0.01;
+        _r3dDims.forEach(d => {
+            if (d.base)   d.base   = String(Math.round(parseFloat(d.base)   * factor * 1000) / 1000);
+            if (d.altura) d.altura = String(Math.round(parseFloat(d.altura) * factor * 1000) / 1000);
+            if (d.prof)   d.prof   = String(Math.round(parseFloat(d.prof)   * factor * 1000) / 1000);
+        });
+        _r3dUnit = to;
+        document.getElementById('r3d-unit-lbl').textContent = to;
+        renderDims3D();
+    };
+
     window.agregarDimension3D = function() {
         _r3dDims.push({ nombre:'', base:'', altura:'', prof:'' });
         renderDims3D();
@@ -2545,21 +2571,31 @@ EJEMPLO VÁLIDO:
 
     function renderDims3D() {
         const cont = document.getElementById('r3d-dims-list');
+        const u = _r3dUnit;
         if (!_r3dDims.length) {
-            cont.innerHTML = '<div style="font-size:.8rem;color:#aaa;text-align:center;padding:8px;">Sin dimensiones — presiona "+ Agregar"</div>';
+            cont.innerHTML = '<div style="font-size:.8rem;color:#aaa;text-align:center;padding:8px;">Sin dimensiones — presioná "+ Agregar"</div>';
             return;
         }
         cont.innerHTML = _r3dDims.map((d, i) => `
-        <div style="display:grid;grid-template-columns:2fr 1fr 1fr 1fr auto;gap:5px;align-items:center;margin-bottom:6px;">
-            <input placeholder="Nombre parte" value="${d.nombre||''}" oninput="_r3dDims[${i}].nombre=this.value"
-                style="border:1px solid #ddd;border-radius:6px;padding:5px 7px;font-size:.8rem;">
-            <input placeholder="Ancho m" type="number" step="0.01" value="${d.base||''}" oninput="_r3dDims[${i}].base=this.value"
-                style="border:1px solid #ddd;border-radius:6px;padding:5px 7px;font-size:.8rem;">
-            <input placeholder="Alto m" type="number" step="0.01" value="${d.altura||''}" oninput="_r3dDims[${i}].altura=this.value"
-                style="border:1px solid #ddd;border-radius:6px;padding:5px 7px;font-size:.8rem;">
-            <input placeholder="Prof m" type="number" step="0.01" value="${d.prof||''}" oninput="_r3dDims[${i}].prof=this.value"
-                style="border:1px solid #ddd;border-radius:6px;padding:5px 7px;font-size:.8rem;">
-            <button onclick="borrarDimension3D(${i})" style="background:#e74c3c;color:#fff;border:none;border-radius:6px;padding:5px 8px;cursor:pointer;font-size:.8rem;">&times;</button>
+        <div style="border:1px solid #e8e8e8;border-radius:9px;padding:9px 10px;margin-bottom:7px;background:#fafafa;">
+          <div style="display:flex;gap:6px;align-items:center;margin-bottom:6px;">
+            <input placeholder="Nombre de la parte" value="${(d.nombre||'').replace(/"/g,'&quot;')}"
+              oninput="window._r3dSetDim(${i},'nombre',this.value)"
+              style="flex:1;min-width:0;border:1px solid #ddd;border-radius:6px;padding:6px 8px;font-size:.83rem;">
+            <button onclick="borrarDimension3D(${i})"
+              style="background:#e74c3c;color:#fff;border:none;border-radius:6px;width:28px;height:28px;cursor:pointer;font-size:.95rem;flex-shrink:0;">&times;</button>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:5px;">
+            <input type="number" step="0.01" placeholder="Ancho ${u}" value="${d.base||''}"
+              oninput="window._r3dSetDim(${i},'base',this.value)"
+              style="border:1px solid #ddd;border-radius:6px;padding:6px 7px;font-size:.82rem;min-width:0;">
+            <input type="number" step="0.01" placeholder="Alto ${u}" value="${d.altura||''}"
+              oninput="window._r3dSetDim(${i},'altura',this.value)"
+              style="border:1px solid #ddd;border-radius:6px;padding:6px 7px;font-size:.82rem;min-width:0;">
+            <input type="number" step="0.01" placeholder="Prof ${u}" value="${d.prof||''}"
+              oninput="window._r3dSetDim(${i},'prof',this.value)"
+              style="border:1px solid #ddd;border-radius:6px;padding:6px 7px;font-size:.82rem;min-width:0;">
+          </div>
         </div>`).join('');
     }
 
@@ -2569,8 +2605,10 @@ EJEMPLO VÁLIDO:
         const est   = document.getElementById('r3d-est').value.trim();
         const acab  = document.getElementById('r3d-acab').value.trim();
         const brand = document.getElementById('r3d-brand').value.trim();
+        const toM   = _r3dUnit === 'cm' ? 0.01 : 1;
+        const fmt   = v => v ? (parseFloat(v) * toM).toFixed(2) : '?';
         const dims  = _r3dDims.filter(d => d.nombre || d.base).map(d =>
-            `${d.nombre||'Parte'}: ${d.base||'?'}m ancho × ${d.altura||'?'}m alto × ${d.prof||'?'}m prof`).join('; ');
+            `${d.nombre||'Parte'}: ${fmt(d.base)}m ancho × ${fmt(d.altura)}m alto × ${fmt(d.prof)}m prof`).join('; ');
 
         let prompt = `AXONOMETRÍA TÉCNICA PROFESIONAL — estilo CAD industrial.
 Fondo blanco liso. Perspectiva isométrica 30°. Líneas de cotas en metros con flechas de acotación. Etiquetas de materiales con líneas de referencia. Sin sombras dramáticas. Colores neutros y realistas.
