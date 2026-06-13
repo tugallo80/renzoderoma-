@@ -940,7 +940,15 @@ REGLAS DE DIBUJO:
         <i class="ph-bold ph-caret-left"></i> Salir
       </button>
       <span style="color:#fff;font-size:.85rem;font-weight:700;white-space:nowrap;">📐 Medición</span>
-      <div style="display:flex;gap:6px;align-items:center;">
+      <div style="display:flex;gap:4px;align-items:center;flex-wrap:wrap;justify-content:flex-end;">
+        <button onclick="medZoomBy(0.8)" title="Alejar"
+          style="background:#3a3a3c;color:#fff;border:1px solid #555;border-radius:8px;padding:5px 8px;font-size:.8rem;cursor:pointer;font-weight:900;">−🔍</button>
+        <button onclick="medZoomBy(1.25)" title="Acercar"
+          style="background:#3a3a3c;color:#fff;border:1px solid #555;border-radius:8px;padding:5px 8px;font-size:.8rem;cursor:pointer;font-weight:900;">+🔍</button>
+        <button onclick="medFontBy(0.8)" title="Texto chico"
+          style="background:#3a3a3c;color:#fff;border:1px solid #555;border-radius:8px;padding:5px 7px;font-size:.72rem;cursor:pointer;font-weight:700;">A−</button>
+        <button onclick="medFontBy(1.25)" title="Texto grande"
+          style="background:#3a3a3c;color:#fff;border:1px solid #555;border-radius:8px;padding:5px 7px;font-size:.8rem;cursor:pointer;font-weight:700;">A+</button>
         <button onclick="toggleMedUnit()"
           style="background:#3a3a3c;color:#fff;border:1px solid #555;border-radius:8px;padding:5px 10px;font-size:.78rem;cursor:pointer;font-weight:700;white-space:nowrap;">
           <span id="med-unit-lbl">m</span> ⇄ cm
@@ -1016,7 +1024,7 @@ REGLAS DE DIBUJO:
     <input type="file" id="med-cam-input"  accept="image/*" capture="environment" style="display:none;" onchange="medCargarImagen(this)">
 
     <!-- Canvas -->
-    <canvas id="med-canvas" style="display:none;touch-action:pan-x pan-y;cursor:crosshair;"></canvas>
+    <canvas id="med-canvas" style="display:none;touch-action:none;cursor:crosshair;"></canvas>
 
     <!-- Input flotante para escribir la medida -->
     <div id="med-label-popup" style="display:none;position:fixed;z-index:9100;background:#1c1c1e;border:1px solid #444;border-radius:12px;padding:10px 12px;box-shadow:0 8px 30px rgba(0,0,0,.7);min-width:210px;">
@@ -1030,40 +1038,58 @@ REGLAS DE DIBUJO:
         <button onclick="cancelarMedida()" style="background:#3a3a3c;color:#fff;border:none;border-radius:8px;padding:7px 9px;cursor:pointer;font-size:.9rem;">✗</button>
       </div>
     </div>
+
+    <!-- Barra flotante de selección -->
+    <div id="med-sel-bar" style="display:none;position:fixed;z-index:9100;background:#1c1c1e;border:1px solid #555;border-radius:12px;padding:8px 10px;box-shadow:0 6px 24px rgba(0,0,0,.8);gap:8px;align-items:center;">
+      <span style="color:#aaa;font-size:.75rem;white-space:nowrap;">Línea sel.</span>
+      <button onclick="medEditLabel()" style="background:#007aff;color:#fff;border:none;border-radius:8px;padding:5px 10px;font-size:.78rem;cursor:pointer;font-weight:700;">✎ Etiqueta</button>
+      <button onclick="medDeleteSelected()" style="background:#ff3b30;color:#fff;border:none;border-radius:8px;padding:5px 10px;font-size:.78rem;cursor:pointer;font-weight:700;">✕ Borrar</button>
+      <button onclick="medDeselect()" style="background:#3a3a3c;color:#fff;border:none;border-radius:8px;padding:5px 8px;font-size:.8rem;cursor:pointer;">✕</button>
+    </div>
   </div>
 </div>
 
 <script>
 (function(){
-    var _medLines   = [];
-    var _medUnit    = 'm';
-    var _medColor   = '#00c8ff';
-    var _medThick   = 'S';
-    var _medMode    = 'draw'; // 'draw' | 'pan'
-    var _medImg     = null;
-    var _medCanvas, _medCtx;
-    var _medDrawing = false;
-    var _medSx = 0, _medSy = 0;
-    var _medPending = null;
-    // Pinch state
-    var _pinch0 = 0, _pinchZoom0 = 1, _medZoom = 1;
+    var _lines   = [];
+    var _unit    = 'm';
+    var _color   = '#00c8ff';
+    var _thick   = 'S';
+    var _mode    = 'draw';
+    var _img     = null;
+    var _cvs, _ctx;
+    var _zoom      = 1;
+    var _fontScale = 1;
 
-    // ── Abrir / cerrar ──────────────────────────────────────────────
+    // Drawing state
+    var _drawing = false;
+    var _sx = 0, _sy = 0;
+    var _pending = null;
+
+    // Selection / edit state
+    var _selIdx = -1;
+    var _drag   = null; // 'start'|'end'|'move'|null
+    var _dragOx = 0, _dragOy = 0;
+
+    // Pinch state
+    var _pinch0 = 0, _pinchZ0 = 1;
+
+    // ── Abrir / cerrar ─────────────────────────────────────────────
     window.abrirMedicion = function() {
         var m = document.getElementById('mod-medicion');
         m.style.display = 'flex';
-        _medCanvas = document.getElementById('med-canvas');
-        _medCtx    = _medCanvas.getContext('2d');
+        _cvs = document.getElementById('med-canvas');
+        _ctx = _cvs.getContext('2d');
         setMedColor('#00c8ff', document.querySelector('.med-cbtn[data-c="#00c8ff"]'));
         setMedThick('S', document.getElementById('med-th-S'));
-        _attachMedEvents();
+        _attachEvents();
     };
 
     window.cerrarMedicion = function() {
         document.getElementById('mod-medicion').style.display = 'none';
+        _hideSelBar();
     };
 
-    // Paste
     document.addEventListener('paste', function(e) {
         if (document.getElementById('mod-medicion').style.display === 'none') return;
         var items = e.clipboardData && e.clipboardData.items;
@@ -1085,12 +1111,11 @@ REGLAS DE DIBUJO:
         reader.onload = function(e) {
             var img = new Image();
             img.onload = function() {
-                _medImg   = img;
-                _medLines = [];
-                _medZoom  = 1;
+                _img = img; _lines = []; _zoom = 1; _selIdx = -1;
+                _hideSelBar();
                 _setupCanvas();
                 document.getElementById('med-empty-state').style.display = 'none';
-                _medCanvas.style.display = 'block';
+                _cvs.style.display = 'block';
             };
             img.src = e.target.result;
         };
@@ -1098,306 +1123,397 @@ REGLAS DE DIBUJO:
     }
 
     function _setupCanvas() {
-        var scroll  = document.getElementById('med-scroll');
-        var maxW    = scroll.clientWidth  || window.innerWidth;
-        var maxH    = scroll.clientHeight || window.innerHeight - 120;
-        var ratio   = Math.min(maxW / _medImg.naturalWidth, maxH / _medImg.naturalHeight, 1);
-        _medCanvas.width  = _medImg.naturalWidth;
-        _medCanvas.height = _medImg.naturalHeight;
-        var cssW = Math.round(_medImg.naturalWidth  * ratio);
-        var cssH = Math.round(_medImg.naturalHeight * ratio);
-        _medCanvas.style.width  = cssW + 'px';
-        _medCanvas.style.height = cssH + 'px';
-        _medZoom = ratio;
-        _redrawMed();
+        var sc  = document.getElementById('med-scroll');
+        var maxW = sc.clientWidth  || window.innerWidth;
+        var maxH = sc.clientHeight || window.innerHeight - 120;
+        var r    = Math.min(maxW / _img.naturalWidth, maxH / _img.naturalHeight, 1);
+        _cvs.width  = _img.naturalWidth;
+        _cvs.height = _img.naturalHeight;
+        _zoom = r;
+        _applyZoom();
+        _redraw();
     }
 
-    // ── Colores y grosor ───────────────────────────────────────────
+    function _applyZoom() {
+        _cvs.style.width  = Math.round(_img.naturalWidth  * _zoom) + 'px';
+        _cvs.style.height = Math.round(_img.naturalHeight * _zoom) + 'px';
+    }
+
+    // ── Zoom ──────────────────────────────────────────────────────
+    window.medZoomBy = function(factor) {
+        if (!_img) return;
+        var sc = document.getElementById('med-scroll');
+        var cx = (sc.scrollLeft + sc.clientWidth  / 2) / (_img.naturalWidth  * _zoom);
+        var cy = (sc.scrollTop  + sc.clientHeight / 2) / (_img.naturalHeight * _zoom);
+        _zoom = Math.max(0.1, Math.min(10, _zoom * factor));
+        _applyZoom();
+        requestAnimationFrame(function(){
+            sc.scrollLeft = cx * _img.naturalWidth  * _zoom - sc.clientWidth  / 2;
+            sc.scrollTop  = cy * _img.naturalHeight * _zoom - sc.clientHeight / 2;
+        });
+    };
+
+    // ── Tamaño de texto ────────────────────────────────────────────
+    window.medFontBy = function(factor) {
+        _fontScale = Math.max(0.3, Math.min(5, _fontScale * factor));
+        _redraw();
+    };
+
+    // ── Color y grosor ─────────────────────────────────────────────
     window.setMedColor = function(c, btn) {
-        _medColor = c;
-        document.querySelectorAll('.med-cbtn').forEach(function(b) { b.style.borderColor = 'transparent'; });
+        _color = c;
+        document.querySelectorAll('.med-cbtn').forEach(function(b){ b.style.borderColor = 'transparent'; });
         if (btn) btn.style.borderColor = '#fff';
     };
 
     window.setMedThick = function(t, btn) {
-        _medThick = t;
+        _thick = t;
         ['S','M','L'].forEach(function(k) {
             var b = document.getElementById('med-th-' + k);
-            if (b) { b.style.background = k === t ? '#555' : '#3a3a3c'; b.style.borderColor = k === t ? '#aaa' : 'transparent'; }
+            if (b) { b.style.background = k===t ? '#555' : '#3a3a3c'; b.style.borderColor = k===t ? '#aaa' : 'transparent'; }
         });
     };
 
-    // ── Modo toggle ────────────────────────────────────────────────
+    // ── Modo ───────────────────────────────────────────────────────
     window.toggleMedMode = function() {
-        _medMode = _medMode === 'draw' ? 'pan' : 'draw';
+        _mode = _mode === 'draw' ? 'pan' : 'draw';
         var icon = document.getElementById('med-mode-icon');
         var lbl  = document.getElementById('med-mode-lbl');
         var btn  = document.getElementById('med-mode-btn');
-        if (_medMode === 'draw') {
-            icon.className = 'ph-bold ph-ruler';
-            lbl.textContent = 'Dibujar';
-            btn.style.background = '#007aff';
-            _medCanvas.style.cursor = 'crosshair';
-            _medCanvas.style.touchAction = 'pan-x pan-y'; // pinch scroll libre, overrideado por touchstart
+        if (_mode === 'draw') {
+            icon.className = 'ph-bold ph-ruler'; lbl.textContent = 'Dibujar';
+            btn.style.background = '#007aff'; _cvs.style.cursor = 'crosshair';
+            _cvs.style.touchAction = 'none';
         } else {
-            icon.className = 'ph-bold ph-hand';
-            lbl.textContent = 'Mover';
-            btn.style.background = '#5856d6';
-            _medCanvas.style.cursor = 'grab';
-            _medCanvas.style.touchAction = 'pan-x pan-y';
+            icon.className = 'ph-bold ph-hand'; lbl.textContent = 'Mover';
+            btn.style.background = '#5856d6'; _cvs.style.cursor = 'grab';
+            _cvs.style.touchAction = 'pan-x pan-y';
         }
+        _selIdx = -1; _drag = null; _hideSelBar();
     };
 
-    // ── Toggle unidad ──────────────────────────────────────────────
+    // ── Unidad ─────────────────────────────────────────────────────
     window.toggleMedUnit = function() {
-        var to = _medUnit === 'm' ? 'cm' : 'm';
+        var to = _unit === 'm' ? 'cm' : 'm';
         var f  = to === 'cm' ? 100 : 0.01;
-        _medLines.forEach(function(l) {
+        _lines.forEach(function(l) {
             var n = parseFloat(l.label);
             if (!isNaN(n)) l.label = String(Math.round(n * f * 10000) / 10000);
             l.unit = to;
         });
-        _medUnit = to;
+        _unit = to;
         document.getElementById('med-unit-lbl').textContent  = to;
         document.getElementById('med-label-unit').textContent = to;
-        _redrawMed();
+        _redraw();
     };
 
-    // ── Eventos del canvas ─────────────────────────────────────────
-    function _attachMedEvents() {
-        var old = _medCanvas, neo = old.cloneNode(false);
-        old.parentNode.replaceChild(neo, old);
-        _medCanvas = neo;
-        _medCtx    = neo.getContext('2d');
-        if (_medImg) { _setupCanvas(); }
+    // ── Hit testing ────────────────────────────────────────────────
+    function _distSeg(px, py, x1, y1, x2, y2) {
+        var dx = x2-x1, dy = y2-y1, len2 = dx*dx+dy*dy;
+        var t  = len2 ? Math.max(0, Math.min(1, ((px-x1)*dx+(py-y1)*dy)/len2)) : 0;
+        var nx = x1+t*dx-px, ny = y1+t*dy-py;
+        return Math.sqrt(nx*nx+ny*ny);
+    }
 
-        // Mouse
-        neo.addEventListener('mousedown',  function(e){ if(_medMode==='draw') _dStart(_mPos(e)); });
-        neo.addEventListener('mousemove',  function(e){ if(_medMode==='draw') _dMove(_mPos(e)); });
-        neo.addEventListener('mouseup',    function(e){ if(_medMode==='draw') _dEnd(_mPos(e)); });
-        neo.addEventListener('mouseleave', function(e){ if(_medMode==='draw') _dEnd(_mPos(e)); });
-        // Wheel zoom
+    function _hitHandle(p, l) {
+        var hr = Math.max(24, _cvs.width / 26);
+        if (Math.hypot(p.x-l.x1, p.y-l.y1) < hr) return 'start';
+        if (Math.hypot(p.x-l.x2, p.y-l.y2) < hr) return 'end';
+        return null;
+    }
+
+    function _hitLine(p) {
+        var tol = Math.max(22, _cvs.width / 32);
+        for (var i = _lines.length-1; i >= 0; i--) {
+            var l = _lines[i];
+            if (_distSeg(p.x, p.y, l.x1, l.y1, l.x2, l.y2) < tol) return i;
+        }
+        return -1;
+    }
+
+    // ── Eventos ────────────────────────────────────────────────────
+    function _attachEvents() {
+        var old = _cvs, neo = old.cloneNode(false);
+        old.parentNode.replaceChild(neo, old);
+        _cvs = neo; _ctx = neo.getContext('2d');
+        if (_img) _setupCanvas();
+
+        neo.addEventListener('mousedown',  function(e){ _handleDown(_mPos(e)); });
+        neo.addEventListener('mousemove',  function(e){ _handleMove(_mPos(e)); });
+        neo.addEventListener('mouseup',    function(e){ _handleUp(_mPos(e)); });
+        neo.addEventListener('mouseleave', function(e){ if (_drawing||_drag) _handleUp(_mPos(e)); });
+
         neo.addEventListener('wheel', function(e) {
             e.preventDefault();
-            var delta  = e.deltaY < 0 ? 1.15 : 0.87;
-            var newZ   = Math.max(0.3, Math.min(8, _medZoom * delta));
-            var cssW   = Math.round(_medImg.naturalWidth  * newZ);
-            var cssH   = Math.round(_medImg.naturalHeight * newZ);
-            _medCanvas.style.width  = cssW + 'px';
-            _medCanvas.style.height = cssH + 'px';
-            _medZoom = newZ;
+            medZoomBy(e.deltaY < 0 ? 1.12 : 0.89);
         }, { passive: false });
-        // Touch
+
         neo.addEventListener('touchstart', _onTouchStart, { passive: false });
         neo.addEventListener('touchmove',  _onTouchMove,  { passive: false });
         neo.addEventListener('touchend',   _onTouchEnd,   { passive: false });
     }
 
     function _mPos(e) {
-        var r = _medCanvas.getBoundingClientRect();
-        var sx = _medCanvas.width / r.width, sy = _medCanvas.height / r.height;
-        return { x: (e.clientX - r.left) * sx, y: (e.clientY - r.top) * sy };
+        var r = _cvs.getBoundingClientRect();
+        return { x:(e.clientX-r.left)*(_cvs.width/r.width), y:(e.clientY-r.top)*(_cvs.height/r.height) };
     }
-
-    function _tPos(touch) {
-        var r = _medCanvas.getBoundingClientRect();
-        var sx = _medCanvas.width / r.width, sy = _medCanvas.height / r.height;
-        return { x: (touch.clientX - r.left) * sx, y: (touch.clientY - r.top) * sy };
+    function _tPos(t) {
+        var r = _cvs.getBoundingClientRect();
+        return { x:(t.clientX-r.left)*(_cvs.width/r.width), y:(t.clientY-r.top)*(_cvs.height/r.height) };
     }
-
     function _pinchDist(e) {
-        var dx = e.touches[0].clientX - e.touches[1].clientX;
-        var dy = e.touches[0].clientY - e.touches[1].clientY;
-        return Math.sqrt(dx*dx + dy*dy);
+        var dx=e.touches[0].clientX-e.touches[1].clientX, dy=e.touches[0].clientY-e.touches[1].clientY;
+        return Math.sqrt(dx*dx+dy*dy);
     }
 
     function _onTouchStart(e) {
         if (e.touches.length === 2) {
             e.preventDefault();
-            _pinch0     = _pinchDist(e);
-            _pinchZoom0 = _medZoom;
-            _medDrawing = false;
-        } else if (e.touches.length === 1 && _medMode === 'draw') {
+            _pinch0=_pinchDist(e); _pinchZ0=_zoom;
+            _drawing=false; _drag=null;
+        } else if (e.touches.length === 1) {
+            if (_mode === 'pan') return;
             e.preventDefault();
-            _dStart(_tPos(e.touches[0]));
+            _handleDown(_tPos(e.touches[0]));
         }
-        // pan mode: let browser scroll naturally
     }
-
     function _onTouchMove(e) {
         if (e.touches.length === 2) {
             e.preventDefault();
-            var dist   = _pinchDist(e);
-            var newZ   = Math.max(0.3, Math.min(8, _pinchZoom0 * (dist / _pinch0)));
-            var cssW   = Math.round(_medImg ? _medImg.naturalWidth  * newZ : _medCanvas.width  * newZ / _medZoom);
-            var cssH   = Math.round(_medImg ? _medImg.naturalHeight * newZ : _medCanvas.height * newZ / _medZoom);
-            _medCanvas.style.width  = cssW + 'px';
-            _medCanvas.style.height = cssH + 'px';
-            _medZoom = newZ;
-        } else if (e.touches.length === 1 && _medMode === 'draw') {
+            var sc=document.getElementById('med-scroll');
+            var cx=(sc.scrollLeft+sc.clientWidth/2)/(_img.naturalWidth*_zoom);
+            var cy=(sc.scrollTop+sc.clientHeight/2)/(_img.naturalHeight*_zoom);
+            _zoom=Math.max(0.1,Math.min(10,_pinchZ0*(_pinchDist(e)/_pinch0)));
+            _applyZoom();
+            requestAnimationFrame(function(){
+                sc.scrollLeft=cx*_img.naturalWidth*_zoom-sc.clientWidth/2;
+                sc.scrollTop=cy*_img.naturalHeight*_zoom-sc.clientHeight/2;
+            });
+        } else if (e.touches.length===1 && _mode==='draw') {
             e.preventDefault();
-            _dMove(_tPos(e.touches[0]));
+            _handleMove(_tPos(e.touches[0]));
         }
     }
-
     function _onTouchEnd(e) {
-        if (e.touches.length === 0 && _medMode === 'draw' && e.changedTouches.length) {
+        if (e.touches.length===0 && _mode==='draw' && e.changedTouches.length) {
             e.preventDefault();
-            _dEnd(_tPos(e.changedTouches[0]));
+            _handleUp(_tPos(e.changedTouches[0]));
         }
     }
 
-    // ── Lógica de dibujo ──────────────────────────────────────────
-    function _dStart(p) {
-        if (_medPending) return;
-        if (!_medImg)    return;
-        _medDrawing = true;
-        _medSx = p.x; _medSy = p.y;
+    // ── Lógica unificada de puntero ────────────────────────────────
+    function _handleDown(p) {
+        if (_pending || !_img) return;
+        if (_mode !== 'draw') return;
+
+        // If line selected, try its handles first
+        if (_selIdx >= 0) {
+            var h = _hitHandle(p, _lines[_selIdx]);
+            if (h) { _drag = h; return; }
+        }
+
+        // Try to hit any line
+        var idx = _hitLine(p);
+        if (idx >= 0) {
+            _selIdx=idx; _drag='move'; _dragOx=p.x; _dragOy=p.y;
+            _redraw(); _showSelBar(); return;
+        }
+
+        // Start new line
+        _selIdx=-1; _drag=null; _hideSelBar();
+        _drawing=true; _sx=p.x; _sy=p.y;
     }
 
-    function _dMove(p) {
-        if (!_medDrawing) return;
-        _redrawMed();
-        var ctx = _medCtx, lw = _thickPx();
-        ctx.save();
-        ctx.strokeStyle = _medColor + 'cc';
-        ctx.lineWidth   = lw;
-        ctx.lineCap     = 'round';
-        ctx.setLineDash([lw * 3, lw * 2]);
-        ctx.beginPath(); ctx.moveTo(_medSx, _medSy); ctx.lineTo(p.x, p.y); ctx.stroke();
-        ctx.setLineDash([]);
-        ctx.fillStyle = _medColor + 'cc';
-        ctx.beginPath(); ctx.arc(_medSx, _medSy, lw * 1.8, 0, Math.PI*2); ctx.fill();
-        ctx.beginPath(); ctx.arc(p.x, p.y, lw * 1.8, 0, Math.PI*2); ctx.fill();
-        ctx.restore();
-    }
-
-    function _dEnd(p) {
-        if (!_medDrawing) return;
-        _medDrawing = false;
-        var dx = p.x - _medSx, dy = p.y - _medSy;
-        if (Math.sqrt(dx*dx + dy*dy) < 8) return;
-        _medPending = { x1:_medSx, y1:_medSy, x2:p.x, y2:p.y, label:'', unit:_medUnit, color:_medColor, thick:_medThick };
-        _redrawMed();
-        _showPopup(p.x, p.y);
-    }
-
-    function _thickPx(thick) {
-        var t = thick || _medThick;
-        var base = _medCanvas.width / 300;
-        return t==='S' ? Math.max(1.5, base) : t==='M' ? Math.max(3, base*2.5) : Math.max(6, base*5);
-    }
-
-    // ── Popup de medida ────────────────────────────────────────────
-    function _showPopup(cx, cy) {
-        var popup = document.getElementById('med-label-popup');
-        var cvsr  = _medCanvas.getBoundingClientRect();
-        var vx    = cvsr.left + cx * (cvsr.width  / _medCanvas.width);
-        var vy    = cvsr.top  + cy * (cvsr.height / _medCanvas.height) + 16;
-        var pw    = 220, ph = 78;
-        vx = Math.min(Math.max(vx - pw/2, 8), window.innerWidth  - pw - 8);
-        vy = Math.min(Math.max(vy, 8),         window.innerHeight - ph - 8);
-        popup.style.left    = vx + 'px';
-        popup.style.top     = vy + 'px';
-        popup.style.display = 'block';
-        document.getElementById('med-label-unit').textContent = _medUnit;
-        var inp = document.getElementById('med-label-input');
-        inp.value = '';
-        setTimeout(function(){ inp.focus(); }, 80);
-    }
-
-    window.confirmarMedida = function() {
-        if (!_medPending) return;
-        _medPending.label = document.getElementById('med-label-input').value.trim();
-        _medPending.unit  = _medUnit;
-        _medLines.push(_medPending);
-        _medPending = null;
-        document.getElementById('med-label-popup').style.display = 'none';
-        _redrawMed();
-    };
-
-    window.cancelarMedida = function() {
-        _medPending = null;
-        document.getElementById('med-label-popup').style.display = 'none';
-        _redrawMed();
-    };
-
-    window.undoMedicion = function() {
-        if (_medPending) { cancelarMedida(); return; }
-        _medLines.pop();
-        _redrawMed();
-    };
-
-    // ── Redibujado ─────────────────────────────────────────────────
-    function _redrawMed() {
-        if (!_medCtx || !_medCanvas.width) return;
-        var ctx = _medCtx;
-        ctx.clearRect(0, 0, _medCanvas.width, _medCanvas.height);
-        if (_medImg) ctx.drawImage(_medImg, 0, 0, _medCanvas.width, _medCanvas.height);
-
-        var fs = Math.max(13, _medCanvas.width / 35);
-
-        _medLines.forEach(function(l) { _drawLine(ctx, l, fs); });
-        if (_medPending) {
+    function _handleMove(p) {
+        if (_drag==='start') {
+            _lines[_selIdx].x1=p.x; _lines[_selIdx].y1=p.y; _redraw(); return;
+        }
+        if (_drag==='end') {
+            _lines[_selIdx].x2=p.x; _lines[_selIdx].y2=p.y; _redraw(); return;
+        }
+        if (_drag==='move') {
+            var dx=p.x-_dragOx, dy=p.y-_dragOy;
+            _lines[_selIdx].x1+=dx; _lines[_selIdx].y1+=dy;
+            _lines[_selIdx].x2+=dx; _lines[_selIdx].y2+=dy;
+            _dragOx=p.x; _dragOy=p.y; _redraw(); return;
+        }
+        if (_drawing) {
+            _redraw();
+            var ctx=_ctx, lw=_thickPx();
             ctx.save();
-            ctx.strokeStyle = (_medPending.color || _medColor) + '88';
-            ctx.lineWidth   = _thickPx(_medPending.thick);
-            ctx.setLineDash([8, 5]); ctx.lineCap = 'round';
-            ctx.beginPath(); ctx.moveTo(_medPending.x1, _medPending.y1); ctx.lineTo(_medPending.x2, _medPending.y2); ctx.stroke();
+            ctx.strokeStyle=_color+'cc'; ctx.lineWidth=lw; ctx.lineCap='round';
+            ctx.setLineDash([lw*3,lw*2]);
+            ctx.beginPath(); ctx.moveTo(_sx,_sy); ctx.lineTo(p.x,p.y); ctx.stroke();
+            ctx.setLineDash([]);
+            ctx.fillStyle=_color+'cc';
+            ctx.beginPath(); ctx.arc(_sx,_sy,lw*1.8,0,Math.PI*2); ctx.fill();
+            ctx.beginPath(); ctx.arc(p.x,p.y,lw*1.8,0,Math.PI*2); ctx.fill();
             ctx.restore();
         }
     }
 
-    function _drawLine(ctx, l, fs) {
-        var lw  = _thickPx(l.thick);
-        var r   = lw * 2;
-        var al  = Math.max(lw * 4, 14);
-        var mx  = (l.x1 + l.x2) / 2, my = (l.y1 + l.y2) / 2;
-        var ang = Math.atan2(l.y2 - l.y1, l.x2 - l.x1);
-        var col = l.color || '#00c8ff';
+    function _handleUp(p) {
+        if (_drag) { _drag=null; _redraw(); _showSelBar(); return; }
+        if (!_drawing) return;
+        _drawing=false;
+        var dx=p.x-_sx, dy=p.y-_sy;
+        if (Math.sqrt(dx*dx+dy*dy)<8) return;
+        _pending={x1:_sx,y1:_sy,x2:p.x,y2:p.y,label:'',unit:_unit,color:_color,thick:_thick};
+        _redraw(); _showPopup(p.x,p.y);
+    }
+
+    function _thickPx(t) {
+        t=t||_thick; var base=_cvs.width/300;
+        return t==='S'?Math.max(1.5,base):t==='M'?Math.max(3,base*2.5):Math.max(6,base*5);
+    }
+
+    // ── Popup medida ───────────────────────────────────────────────
+    function _showPopup(cx, cy) {
+        var popup=document.getElementById('med-label-popup');
+        var cvsr=_cvs.getBoundingClientRect();
+        var vx=cvsr.left+cx*(cvsr.width/_cvs.width);
+        var vy=cvsr.top+cy*(cvsr.height/_cvs.height)+16;
+        var pw=220, ph=78;
+        vx=Math.min(Math.max(vx-pw/2,8),window.innerWidth-pw-8);
+        vy=Math.min(Math.max(vy,8),window.innerHeight-ph-8);
+        popup.style.left=vx+'px'; popup.style.top=vy+'px'; popup.style.display='block';
+        document.getElementById('med-label-unit').textContent=_unit;
+        var inp=document.getElementById('med-label-input');
+        inp.value='';
+        setTimeout(function(){ inp.focus(); },80);
+    }
+
+    window.confirmarMedida = function() {
+        if (!_pending) return;
+        _pending.label=document.getElementById('med-label-input').value.trim();
+        _pending.unit=_unit;
+        _lines.push(_pending); _pending=null;
+        document.getElementById('med-label-popup').style.display='none';
+        _redraw();
+    };
+
+    window.cancelarMedida = function() {
+        _pending=null;
+        document.getElementById('med-label-popup').style.display='none';
+        _redraw();
+    };
+
+    window.undoMedicion = function() {
+        if (_pending) { cancelarMedida(); return; }
+        if (_selIdx>=0) { medDeleteSelected(); return; }
+        _lines.pop(); _redraw();
+    };
+
+    // ── Barra de selección ─────────────────────────────────────────
+    function _showSelBar() {
+        if (_selIdx<0) return;
+        var bar=document.getElementById('med-sel-bar');
+        bar.style.display='flex'; bar.style.left='50%'; bar.style.top='70px';
+        bar.style.transform='translateX(-50%)';
+    }
+    function _hideSelBar() {
+        var bar=document.getElementById('med-sel-bar');
+        if (bar) bar.style.display='none';
+    }
+
+    window.medDeselect = function() {
+        _selIdx=-1; _drag=null; _hideSelBar(); _redraw();
+    };
+    window.medDeleteSelected = function() {
+        if (_selIdx<0) return;
+        _lines.splice(_selIdx,1); _selIdx=-1; _drag=null; _hideSelBar(); _redraw();
+    };
+    window.medEditLabel = function() {
+        if (_selIdx<0) return;
+        var l=_lines[_selIdx];
+        var mx=(l.x1+l.x2)/2, my=(l.y1+l.y2)/2;
+        _pending=l; _lines.splice(_selIdx,1);
+        _selIdx=-1; _hideSelBar();
+        _showPopup(mx,my);
+        document.getElementById('med-label-input').value=l.label||'';
+    };
+
+    // ── Redibujado ─────────────────────────────────────────────────
+    function _redraw() {
+        if (!_ctx||!_cvs.width) return;
+        var ctx=_ctx;
+        ctx.clearRect(0,0,_cvs.width,_cvs.height);
+        if (_img) ctx.drawImage(_img,0,0,_cvs.width,_cvs.height);
+        var fs=Math.max(13,_cvs.width/35)*_fontScale;
+        _lines.forEach(function(l,i){ _drawLine(ctx,l,fs,i===_selIdx); });
+        if (_pending) {
+            ctx.save();
+            ctx.strokeStyle=(_pending.color||_color)+'88';
+            ctx.lineWidth=_thickPx(_pending.thick); ctx.setLineDash([8,5]); ctx.lineCap='round';
+            ctx.beginPath(); ctx.moveTo(_pending.x1,_pending.y1); ctx.lineTo(_pending.x2,_pending.y2); ctx.stroke();
+            ctx.restore();
+        }
+    }
+
+    function _drawLine(ctx, l, fs, sel) {
+        var lw=_thickPx(l.thick), r=lw*2, al=Math.max(lw*4,14);
+        var mx=(l.x1+l.x2)/2, my=(l.y1+l.y2)/2;
+        var ang=Math.atan2(l.y2-l.y1,l.x2-l.x1);
+        var col=l.color||'#00c8ff';
 
         ctx.save();
-        ctx.strokeStyle = col;
-        ctx.lineWidth   = lw;
-        ctx.lineCap     = 'round';
-        ctx.shadowColor = 'rgba(0,0,0,.5)'; ctx.shadowBlur = 4;
-        ctx.beginPath(); ctx.moveTo(l.x1, l.y1); ctx.lineTo(l.x2, l.y2); ctx.stroke();
+        ctx.strokeStyle=col; ctx.lineWidth=lw; ctx.lineCap='round';
+        if (sel) { ctx.shadowColor=col; ctx.shadowBlur=16; }
+        else     { ctx.shadowColor='rgba(0,0,0,.5)'; ctx.shadowBlur=4; }
+        ctx.beginPath(); ctx.moveTo(l.x1,l.y1); ctx.lineTo(l.x2,l.y2); ctx.stroke();
 
-        // Flechas
-        [[l.x1, l.y1, ang + Math.PI], [l.x2, l.y2, ang]].forEach(function(pt) {
+        // Arrow heads
+        [[l.x1,l.y1,ang+Math.PI],[l.x2,l.y2,ang]].forEach(function(pt){
             ctx.beginPath();
-            ctx.moveTo(pt[0], pt[1]);
-            ctx.lineTo(pt[0] - al * Math.cos(pt[2] - 0.38), pt[1] - al * Math.sin(pt[2] - 0.38));
-            ctx.moveTo(pt[0], pt[1]);
-            ctx.lineTo(pt[0] - al * Math.cos(pt[2] + 0.38), pt[1] - al * Math.sin(pt[2] + 0.38));
+            ctx.moveTo(pt[0],pt[1]);
+            ctx.lineTo(pt[0]-al*Math.cos(pt[2]-0.38),pt[1]-al*Math.sin(pt[2]-0.38));
+            ctx.moveTo(pt[0],pt[1]);
+            ctx.lineTo(pt[0]-al*Math.cos(pt[2]+0.38),pt[1]-al*Math.sin(pt[2]+0.38));
             ctx.stroke();
         });
 
-        // Puntos
-        ctx.shadowBlur = 0;
-        ctx.fillStyle = col;
-        ctx.beginPath(); ctx.arc(l.x1, l.y1, r, 0, Math.PI*2); ctx.fill();
-        ctx.beginPath(); ctx.arc(l.x2, l.y2, r, 0, Math.PI*2); ctx.fill();
+        // Endpoint handles
+        ctx.shadowBlur=0;
+        if (sel) {
+            ctx.fillStyle=col; ctx.strokeStyle='#fff'; ctx.lineWidth=lw*0.7;
+            [{x:l.x1,y:l.y1},{x:l.x2,y:l.y2}].forEach(function(pt){
+                ctx.beginPath(); ctx.arc(pt.x,pt.y,r*2,0,Math.PI*2); ctx.fill(); ctx.stroke();
+            });
+        } else {
+            ctx.fillStyle=col;
+            ctx.beginPath(); ctx.arc(l.x1,l.y1,r,0,Math.PI*2); ctx.fill();
+            ctx.beginPath(); ctx.arc(l.x2,l.y2,r,0,Math.PI*2); ctx.fill();
+        }
 
-        // Etiqueta
+        // Label rotated along line
         if (l.label) {
-            var txt  = l.label + ' ' + l.unit;
-            ctx.font = 'bold ' + fs + 'px -apple-system,sans-serif';
-            var tw   = ctx.measureText(txt).width;
-            var pad  = fs * 0.45;
-            var bx   = mx - tw/2 - pad, by = my - fs - pad*2;
-            ctx.shadowBlur  = 8; ctx.shadowColor = 'rgba(0,0,0,.8)';
-            ctx.fillStyle   = 'rgba(20,20,30,.85)';
-            _roundRect(ctx, bx, by, tw + pad*2, fs + pad*2, fs * 0.3); ctx.fill();
-            ctx.shadowBlur  = 0;
-            ctx.fillStyle   = '#fff';
-            ctx.textAlign   = 'center'; ctx.textBaseline = 'middle';
-            ctx.fillText(txt, mx, by + (fs + pad*2)/2);
+            var txt=l.label+' '+l.unit;
+            ctx.font='bold '+fs+'px -apple-system,sans-serif';
+            var tw=ctx.measureText(txt).width;
+            var pad=fs*0.45;
+            var offset=fs*1.5+lw*2;
+
+            // Normalize: never upside-down
+            var da=ang;
+            if (da>Math.PI/2)  da-=Math.PI;
+            if (da<-Math.PI/2) da+=Math.PI;
+
+            ctx.save();
+            ctx.translate(mx,my);
+            ctx.rotate(da);
+            ctx.shadowBlur=8; ctx.shadowColor='rgba(0,0,0,.8)';
+            ctx.fillStyle='rgba(20,20,30,.88)';
+            _roundRect(ctx,-tw/2-pad,-offset-fs/2-pad,tw+pad*2,fs+pad*2,fs*0.3);
+            ctx.fill();
+            ctx.shadowBlur=0;
+            ctx.fillStyle='#fff'; ctx.textAlign='center'; ctx.textBaseline='middle';
+            ctx.fillText(txt,0,-offset);
+            ctx.restore();
         }
         ctx.restore();
     }
 
-    function _roundRect(ctx, x, y, w, h, r) {
+    function _roundRect(ctx,x,y,w,h,r) {
         ctx.beginPath();
         ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r);
         ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath();
@@ -1405,28 +1521,26 @@ REGLAS DE DIBUJO:
 
     // ── Guardar en Firebase ────────────────────────────────────────
     window.guardarMedicion = async function() {
-        if (!_medImg) return;
-        var btn = document.querySelector('#mod-medicion button[onclick="guardarMedicion()"]');
-        if (btn) { btn.disabled = true; btn.innerHTML = '<i class="ph-bold ph-spinner"></i> Guardando...'; }
+        if (!_img) return;
+        var btn=document.querySelector('#mod-medicion button[onclick="guardarMedicion()"]');
+        if (btn) { btn.disabled=true; btn.innerHTML='<i class="ph-bold ph-spinner"></i> Guardando...'; }
         try {
-            var dataUrl = _medCanvas.toDataURL('image/png');
-            var blob    = await fetch(dataUrl).then(function(r){ return r.blob(); });
-            var ts      = Date.now();
-            var fname   = 'disenos/' + (cid||'gen') + '/' + (pid||'gen') + '/fotos/medicion_' + ts + '.png';
-            var snap    = await storage.ref(fname).put(blob, { contentType: 'image/png' });
-            var url     = await snap.ref.getDownloadURL();
-            if (cid && pid) {
-                await db.ref('proyectos/' + cid + '/' + pid + '/diseno/fotos').push({ name: 'Medición ' + new Date(ts).toLocaleDateString('es-BO'), url: url });
+            var dataUrl=_cvs.toDataURL('image/png');
+            var blob=await fetch(dataUrl).then(function(r){ return r.blob(); });
+            var ts=Date.now();
+            var fname='disenos/'+(cid||'gen')+'/'+(pid||'gen')+'/fotos/medicion_'+ts+'.png';
+            var snap=await storage.ref(fname).put(blob,{contentType:'image/png'});
+            var url=await snap.ref.getDownloadURL();
+            if (cid&&pid) {
+                await db.ref('proyectos/'+cid+'/'+pid+'/diseno/fotos').push({name:'Medición '+new Date(ts).toLocaleDateString('es-BO'),url:url});
             }
-            // También descargar localmente
-            var a = document.createElement('a');
-            a.download = 'medicion_' + ts + '.png';
-            a.href = dataUrl; a.click();
+            var a=document.createElement('a');
+            a.download='medicion_'+ts+'.png'; a.href=dataUrl; a.click();
             alert('✅ Guardado en Fotos del proyecto y descargado.');
         } catch(e) {
-            alert('Error al guardar: ' + e.message);
+            alert('Error al guardar: '+e.message);
         } finally {
-            if (btn) { btn.disabled = false; btn.innerHTML = '<i class="ph-bold ph-cloud-arrow-up"></i> Guardar'; }
+            if (btn) { btn.disabled=false; btn.innerHTML='<i class="ph-bold ph-cloud-arrow-up"></i> Guardar'; }
         }
     };
 })();
