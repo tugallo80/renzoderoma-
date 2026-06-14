@@ -997,6 +997,13 @@ REGLAS DE DIBUJO:
         <i class="ph-bold ph-ruler" id="med-mode-icon"></i>
         <span id="med-mode-lbl">Dibujar</span>
       </button>
+      <div style="width:1px;height:22px;background:#444;flex-shrink:0;"></div>
+      <!-- Nota -->
+      <button id="med-note-btn" onclick="toggleNoteMode()"
+        style="background:#3a3a3c;color:#fff;border:none;border-radius:8px;padding:5px 11px;font-size:.78rem;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:5px;flex-shrink:0;white-space:nowrap;">
+        <i class="ph-bold ph-note-pencil"></i>
+        <span>Nota</span>
+      </button>
     </div>
   </div>
 
@@ -1039,6 +1046,18 @@ REGLAS DE DIBUJO:
       </div>
     </div>
 
+    <!-- Popup para nota -->
+    <div id="med-note-popup" style="display:none;position:fixed;z-index:9100;background:#1c1c1e;border:1px solid #444;border-radius:12px;padding:10px 12px;box-shadow:0 8px 30px rgba(0,0,0,.7);min-width:230px;max-width:300px;">
+      <div style="font-size:.75rem;color:#aaa;margin-bottom:6px;">Texto de la nota:</div>
+      <textarea id="med-note-input" rows="3"
+        style="width:100%;background:#2c2c2e;color:#fff;border:1px solid #555;border-radius:8px;padding:7px 10px;font-size:.88rem;resize:none;box-sizing:border-box;"
+        placeholder="Escribe la nota..."></textarea>
+      <div style="display:flex;gap:7px;margin-top:7px;justify-content:flex-end;">
+        <button onclick="cancelarNota()" style="background:#3a3a3c;color:#fff;border:none;border-radius:8px;padding:6px 10px;cursor:pointer;font-size:.85rem;">✗ Cancelar</button>
+        <button onclick="confirmarNota()" style="background:#34c759;color:#fff;border:none;border-radius:8px;padding:6px 12px;cursor:pointer;font-size:.85rem;font-weight:700;">✓ OK</button>
+      </div>
+    </div>
+
     <!-- Barra flotante de selección -->
     <div id="med-sel-bar" style="display:none;position:fixed;z-index:9100;background:#1c1c1e;border:1px solid #555;border-radius:12px;padding:8px 10px;box-shadow:0 6px 24px rgba(0,0,0,.8);gap:8px;align-items:center;">
       <span style="color:#aaa;font-size:.75rem;white-space:nowrap;">Línea sel.</span>
@@ -1055,26 +1074,24 @@ REGLAS DE DIBUJO:
     var _unit    = 'm';
     var _color   = '#00c8ff';
     var _thick   = 'S';
-    var _mode    = 'draw';
+    var _mode    = 'draw';   // 'draw' | 'pan' | 'note'
     var _img     = null;
     var _cvs, _ctx;
     var _zoom      = 1;
     var _fontScale = 1;
 
-    // Drawing state
     var _drawing = false;
     var _sx = 0, _sy = 0;
-    var _pending = null;
+    var _pending     = null;
+    var _pendingNote = null;   // { x1, y1, x2, y2 } while awaiting popup confirm
 
-    // Selection / edit state
     var _selIdx = -1;
-    var _drag   = null; // 'start'|'end'|'move'|null
+    var _drag   = null;
     var _dragOx = 0, _dragOy = 0;
 
-    // Pinch state
     var _pinch0 = 0, _pinchZ0 = 1;
 
-    // ── Abrir / cerrar ─────────────────────────────────────────────
+    // ── Abrir / cerrar ────────────────────────────────────────────
     window.abrirMedicion = function() {
         var m = document.getElementById('mod-medicion');
         m.style.display = 'flex';
@@ -1088,6 +1105,9 @@ REGLAS DE DIBUJO:
     window.cerrarMedicion = function() {
         document.getElementById('mod-medicion').style.display = 'none';
         _hideSelBar();
+        document.getElementById('med-note-popup').style.display = 'none';
+        document.getElementById('med-label-popup').style.display = 'none';
+        _pendingNote = null; _pending = null;
     };
 
     document.addEventListener('paste', function(e) {
@@ -1099,7 +1119,7 @@ REGLAS DE DIBUJO:
         }
     });
 
-    // ── Cargar imagen ──────────────────────────────────────────────
+    // ── Cargar imagen ─────────────────────────────────────────────
     window.medCargarImagen = function(input) {
         if (!input.files || !input.files[0]) return;
         _loadFile(input.files[0]);
@@ -1112,6 +1132,7 @@ REGLAS DE DIBUJO:
             var img = new Image();
             img.onload = function() {
                 _img = img; _lines = []; _zoom = 1; _selIdx = -1;
+                _pendingNote = null; _pending = null;
                 _hideSelBar();
                 _setupCanvas();
                 document.getElementById('med-empty-state').style.display = 'none';
@@ -1142,24 +1163,26 @@ REGLAS DE DIBUJO:
     // ── Zoom ──────────────────────────────────────────────────────
     window.medZoomBy = function(factor) {
         if (!_img) return;
-        var sc = document.getElementById('med-scroll');
-        var cx = (sc.scrollLeft + sc.clientWidth  / 2) / (_img.naturalWidth  * _zoom);
-        var cy = (sc.scrollTop  + sc.clientHeight / 2) / (_img.naturalHeight * _zoom);
+        var sc   = document.getElementById('med-scroll');
+        var cssW = _img.naturalWidth  * _zoom;
+        var cssH = _img.naturalHeight * _zoom;
+        var cx = cssW >= sc.clientWidth  ? (sc.scrollLeft + sc.clientWidth  / 2) / cssW : 0.5;
+        var cy = cssH >= sc.clientHeight ? (sc.scrollTop  + sc.clientHeight / 2) / cssH : 0.5;
         _zoom = Math.max(0.1, Math.min(10, _zoom * factor));
         _applyZoom();
-        requestAnimationFrame(function(){
+        requestAnimationFrame(function() {
             sc.scrollLeft = cx * _img.naturalWidth  * _zoom - sc.clientWidth  / 2;
             sc.scrollTop  = cy * _img.naturalHeight * _zoom - sc.clientHeight / 2;
         });
     };
 
-    // ── Tamaño de texto ────────────────────────────────────────────
+    // ── Tamaño de texto ───────────────────────────────────────────
     window.medFontBy = function(factor) {
         _fontScale = Math.max(0.3, Math.min(5, _fontScale * factor));
         _redraw();
     };
 
-    // ── Color y grosor ─────────────────────────────────────────────
+    // ── Color y grosor ────────────────────────────────────────────
     window.setMedColor = function(c, btn) {
         _color = c;
         document.querySelectorAll('.med-cbtn').forEach(function(b){ b.style.borderColor = 'transparent'; });
@@ -1170,12 +1193,13 @@ REGLAS DE DIBUJO:
         _thick = t;
         ['S','M','L'].forEach(function(k) {
             var b = document.getElementById('med-th-' + k);
-            if (b) { b.style.background = k===t ? '#555' : '#3a3a3c'; b.style.borderColor = k===t ? '#aaa' : 'transparent'; }
+            if (b) { b.style.background = k===t?'#555':'#3a3a3c'; b.style.borderColor = k===t?'#aaa':'transparent'; }
         });
     };
 
-    // ── Modo ───────────────────────────────────────────────────────
+    // ── Modo medir / mover / nota ─────────────────────────────────
     window.toggleMedMode = function() {
+        _deactivateNoteMode();
         _mode = _mode === 'draw' ? 'pan' : 'draw';
         var icon = document.getElementById('med-mode-icon');
         var lbl  = document.getElementById('med-mode-lbl');
@@ -1192,11 +1216,35 @@ REGLAS DE DIBUJO:
         _selIdx = -1; _drag = null; _hideSelBar();
     };
 
-    // ── Unidad ─────────────────────────────────────────────────────
+    window.toggleNoteMode = function() {
+        if (_mode === 'note') {
+            _deactivateNoteMode();
+            _mode = 'draw';
+        } else {
+            _mode = 'note';
+            var noteBtn = document.getElementById('med-note-btn');
+            if (noteBtn) { noteBtn.style.background = '#ff9500'; noteBtn.style.color = '#fff'; }
+            // Reset draw mode button visuals
+            var modeBtn = document.getElementById('med-mode-btn');
+            if (modeBtn) { modeBtn.style.background = '#3a3a3c'; }
+            if (_cvs) { _cvs.style.cursor = 'cell'; _cvs.style.touchAction = 'none'; }
+            _selIdx = -1; _drag = null; _hideSelBar();
+        }
+    };
+
+    function _deactivateNoteMode() {
+        var noteBtn = document.getElementById('med-note-btn');
+        if (noteBtn) { noteBtn.style.background = '#3a3a3c'; noteBtn.style.color = '#fff'; }
+        document.getElementById('med-note-popup').style.display = 'none';
+        _pendingNote = null;
+    }
+
+    // ── Unidad ────────────────────────────────────────────────────
     window.toggleMedUnit = function() {
         var to = _unit === 'm' ? 'cm' : 'm';
         var f  = to === 'cm' ? 100 : 0.01;
         _lines.forEach(function(l) {
+            if (l.type === 'note') return;
             var n = parseFloat(l.label);
             if (!isNaN(n)) l.label = String(Math.round(n * f * 10000) / 10000);
             l.unit = to;
@@ -1207,7 +1255,7 @@ REGLAS DE DIBUJO:
         _redraw();
     };
 
-    // ── Hit testing ────────────────────────────────────────────────
+    // ── Hit testing ───────────────────────────────────────────────
     function _distSeg(px, py, x1, y1, x2, y2) {
         var dx = x2-x1, dy = y2-y1, len2 = dx*dx+dy*dy;
         var t  = len2 ? Math.max(0, Math.min(1, ((px-x1)*dx+(py-y1)*dy)/len2)) : 0;
@@ -1216,6 +1264,10 @@ REGLAS DE DIBUJO:
     }
 
     function _hitHandle(p, l) {
+        if (l.type === 'note') {
+            if (Math.hypot(p.x-l.x1, p.y-l.y1) < Math.max(24, _cvs.width/26)) return 'start';
+            return null;
+        }
         var hr = Math.max(24, _cvs.width / 26);
         if (Math.hypot(p.x-l.x1, p.y-l.y1) < hr) return 'start';
         if (Math.hypot(p.x-l.x2, p.y-l.y2) < hr) return 'end';
@@ -1224,14 +1276,24 @@ REGLAS DE DIBUJO:
 
     function _hitLine(p) {
         var tol = Math.max(22, _cvs.width / 32);
+        var fs  = Math.max(13, _cvs.width / 35) * _fontScale;
         for (var i = _lines.length-1; i >= 0; i--) {
             var l = _lines[i];
-            if (_distSeg(p.x, p.y, l.x1, l.y1, l.x2, l.y2) < tol) return i;
+            if (l.type === 'note') {
+                var pad  = fs * 0.5;
+                var rows = (l.text || '').split('\n');
+                var bw   = Math.max.apply(null, rows.map(function(r){ return r.length * fs * 0.55; })) + pad*2 + fs;
+                var bh   = rows.length * fs * 1.3 + pad * 2;
+                if (p.x >= l.x2-bw/2 && p.x <= l.x2+bw/2 && p.y >= l.y2-bh/2 && p.y <= l.y2+bh/2) return i;
+                if (_distSeg(p.x, p.y, l.x1, l.y1, l.x2, l.y2) < tol) return i;
+            } else {
+                if (_distSeg(p.x, p.y, l.x1, l.y1, l.x2, l.y2) < tol) return i;
+            }
         }
         return -1;
     }
 
-    // ── Eventos ────────────────────────────────────────────────────
+    // ── Eventos ───────────────────────────────────────────────────
     function _attachEvents() {
         var old = _cvs, neo = old.cloneNode(false);
         old.parentNode.replaceChild(neo, old);
@@ -1281,8 +1343,9 @@ REGLAS DE DIBUJO:
         if (e.touches.length === 2) {
             e.preventDefault();
             var sc=document.getElementById('med-scroll');
-            var cx=(sc.scrollLeft+sc.clientWidth/2)/(_img.naturalWidth*_zoom);
-            var cy=(sc.scrollTop+sc.clientHeight/2)/(_img.naturalHeight*_zoom);
+            var cssW=_img.naturalWidth*_zoom, cssH=_img.naturalHeight*_zoom;
+            var cx=cssW>=sc.clientWidth?(sc.scrollLeft+sc.clientWidth/2)/cssW:0.5;
+            var cy=cssH>=sc.clientHeight?(sc.scrollTop+sc.clientHeight/2)/cssH:0.5;
             _zoom=Math.max(0.1,Math.min(10,_pinchZ0*(_pinchDist(e)/_pinch0)));
             _applyZoom();
             requestAnimationFrame(function(){
@@ -1301,25 +1364,31 @@ REGLAS DE DIBUJO:
         }
     }
 
-    // ── Lógica unificada de puntero ────────────────────────────────
+    // ── Lógica unificada de puntero ───────────────────────────────
     function _handleDown(p) {
-        if (_pending || !_img) return;
+        if (!_img) return;
+
+        // Note placement mode
+        if (_mode === 'note') {
+            if (_pendingNote) return;
+            _noteStart(p);
+            return;
+        }
+
+        if (_pending) return;
         if (_mode !== 'draw') return;
 
-        // If line selected, try its handles first
         if (_selIdx >= 0) {
             var h = _hitHandle(p, _lines[_selIdx]);
             if (h) { _drag = h; return; }
         }
 
-        // Try to hit any line
         var idx = _hitLine(p);
         if (idx >= 0) {
             _selIdx=idx; _drag='move'; _dragOx=p.x; _dragOy=p.y;
             _redraw(); _showSelBar(); return;
         }
 
-        // Start new line
         _selIdx=-1; _drag=null; _hideSelBar();
         _drawing=true; _sx=p.x; _sy=p.y;
     }
@@ -1367,7 +1436,7 @@ REGLAS DE DIBUJO:
         return t==='S'?Math.max(1.5,base):t==='M'?Math.max(3,base*2.5):Math.max(6,base*5);
     }
 
-    // ── Popup medida ───────────────────────────────────────────────
+    // ── Popup medida ──────────────────────────────────────────────
     function _showPopup(cx, cy) {
         var popup=document.getElementById('med-label-popup');
         var cvsr=_cvs.getBoundingClientRect();
@@ -1399,21 +1468,76 @@ REGLAS DE DIBUJO:
     };
 
     window.undoMedicion = function() {
+        if (_pendingNote) { cancelarNota(); return; }
         if (_pending) { cancelarMedida(); return; }
         if (_selIdx>=0) { medDeleteSelected(); return; }
         _lines.pop(); _redraw();
     };
 
-    // ── Barra de selección ─────────────────────────────────────────
+    // ── Herramienta Nota ──────────────────────────────────────────
+    function _noteStart(p) {
+        var offX = _cvs.width / 6;
+        var offY = -_cvs.height / 8;
+        var bx = Math.max(60, Math.min(_cvs.width  - 60, p.x + offX));
+        var by = Math.max(40, Math.min(_cvs.height - 40, p.y + offY));
+        _pendingNote = { x1: p.x, y1: p.y, x2: bx, y2: by };
+        _showNotePopup(bx, by);
+        document.getElementById('med-note-input').value = '';
+        setTimeout(function(){ document.getElementById('med-note-input').focus(); }, 80);
+    }
+
+    function _showNotePopup(cx, cy) {
+        var popup = document.getElementById('med-note-popup');
+        var cvsr  = _cvs.getBoundingClientRect();
+        var vx = cvsr.left + cx * (cvsr.width  / _cvs.width);
+        var vy = cvsr.top  + cy * (cvsr.height / _cvs.height) + 12;
+        var pw = 250, ph = 140;
+        vx = Math.min(Math.max(vx - pw/2, 8), window.innerWidth  - pw - 8);
+        vy = Math.min(Math.max(vy,        8), window.innerHeight - ph - 8);
+        popup.style.left = vx + 'px';
+        popup.style.top  = vy + 'px';
+        popup.style.display = 'block';
+    }
+
+    window.confirmarNota = function() {
+        var text = (document.getElementById('med-note-input').value || '').trim();
+        if (!text) { cancelarNota(); return; }
+        if (_pendingNote) {
+            _lines.push({ type:'note', x1:_pendingNote.x1, y1:_pendingNote.y1,
+                          x2:_pendingNote.x2, y2:_pendingNote.y2,
+                          text: text, color: _color, thick: _thick });
+            _pendingNote = null;
+        } else if (_selIdx >= 0 && _lines[_selIdx] && _lines[_selIdx].type === 'note') {
+            _lines[_selIdx].text = text;
+            _selIdx = -1; _hideSelBar();
+        }
+        document.getElementById('med-note-popup').style.display = 'none';
+        _redraw();
+    };
+
+    window.cancelarNota = function() {
+        _pendingNote = null;
+        document.getElementById('med-note-popup').style.display = 'none';
+        _redraw();
+    };
+
+    // ── Barra de selección ────────────────────────────────────────
     function _showSelBar() {
-        if (_selIdx<0) return;
-        var bar=document.getElementById('med-sel-bar');
-        bar.style.display='flex'; bar.style.left='50%'; bar.style.top='70px';
-        bar.style.transform='translateX(-50%)';
+        if (_selIdx < 0) return;
+        var l = _lines[_selIdx];
+        var isNote = l && l.type === 'note';
+        var bar = document.getElementById('med-sel-bar');
+        bar.innerHTML =
+            '<span style="color:#aaa;font-size:.75rem;white-space:nowrap;">' + (isNote ? 'Nota sel.' : 'Línea sel.') + '</span>' +
+            '<button onclick="medEditLabel()" style="background:#007aff;color:#fff;border:none;border-radius:8px;padding:5px 10px;font-size:.78rem;cursor:pointer;font-weight:700;">' + (isNote ? '✎ Texto' : '✎ Etiqueta') + '</button>' +
+            '<button onclick="medDeleteSelected()" style="background:#ff3b30;color:#fff;border:none;border-radius:8px;padding:5px 10px;font-size:.78rem;cursor:pointer;font-weight:700;">✕ Borrar</button>' +
+            '<button onclick="medDeselect()" style="background:#3a3a3c;color:#fff;border:none;border-radius:8px;padding:5px 8px;font-size:.8rem;cursor:pointer;">✕</button>';
+        bar.style.display = 'flex'; bar.style.left = '50%'; bar.style.top = '70px';
+        bar.style.transform = 'translateX(-50%)';
     }
     function _hideSelBar() {
-        var bar=document.getElementById('med-sel-bar');
-        if (bar) bar.style.display='none';
+        var bar = document.getElementById('med-sel-bar');
+        if (bar) bar.style.display = 'none';
     }
 
     window.medDeselect = function() {
@@ -1424,8 +1548,15 @@ REGLAS DE DIBUJO:
         _lines.splice(_selIdx,1); _selIdx=-1; _drag=null; _hideSelBar(); _redraw();
     };
     window.medEditLabel = function() {
-        if (_selIdx<0) return;
-        var l=_lines[_selIdx];
+        if (_selIdx < 0) return;
+        var l = _lines[_selIdx];
+        if (l.type === 'note') {
+            _pendingNote = null;
+            _showNotePopup(l.x2, l.y2);
+            document.getElementById('med-note-input').value = l.text || '';
+            setTimeout(function(){ document.getElementById('med-note-input').focus(); }, 80);
+            return;
+        }
         var mx=(l.x1+l.x2)/2, my=(l.y1+l.y2)/2;
         _pending=l; _lines.splice(_selIdx,1);
         _selIdx=-1; _hideSelBar();
@@ -1433,7 +1564,7 @@ REGLAS DE DIBUJO:
         document.getElementById('med-label-input').value=l.label||'';
     };
 
-    // ── Redibujado ─────────────────────────────────────────────────
+    // ── Redibujado ────────────────────────────────────────────────
     function _redraw() {
         if (!_ctx||!_cvs.width) return;
         var ctx=_ctx;
@@ -1451,6 +1582,7 @@ REGLAS DE DIBUJO:
     }
 
     function _drawLine(ctx, l, fs, sel) {
+        if (l.type === 'note') { _drawNote(ctx, l, fs, sel); return; }
         var lw=_thickPx(l.thick), r=lw*2, al=Math.max(lw*4,14);
         var mx=(l.x1+l.x2)/2, my=(l.y1+l.y2)/2;
         var ang=Math.atan2(l.y2-l.y1,l.x2-l.x1);
@@ -1462,7 +1594,6 @@ REGLAS DE DIBUJO:
         else     { ctx.shadowColor='rgba(0,0,0,.5)'; ctx.shadowBlur=4; }
         ctx.beginPath(); ctx.moveTo(l.x1,l.y1); ctx.lineTo(l.x2,l.y2); ctx.stroke();
 
-        // Arrow heads
         [[l.x1,l.y1,ang+Math.PI],[l.x2,l.y2,ang]].forEach(function(pt){
             ctx.beginPath();
             ctx.moveTo(pt[0],pt[1]);
@@ -1472,7 +1603,6 @@ REGLAS DE DIBUJO:
             ctx.stroke();
         });
 
-        // Endpoint handles
         ctx.shadowBlur=0;
         if (sel) {
             ctx.fillStyle=col; ctx.strokeStyle='#fff'; ctx.lineWidth=lw*0.7;
@@ -1485,22 +1615,17 @@ REGLAS DE DIBUJO:
             ctx.beginPath(); ctx.arc(l.x2,l.y2,r,0,Math.PI*2); ctx.fill();
         }
 
-        // Label rotated along line
         if (l.label) {
             var txt=l.label+' '+l.unit;
             ctx.font='bold '+fs+'px -apple-system,sans-serif';
             var tw=ctx.measureText(txt).width;
             var pad=fs*0.45;
             var offset=fs*1.5+lw*2;
-
-            // Normalize: never upside-down
             var da=ang;
             if (da>Math.PI/2)  da-=Math.PI;
             if (da<-Math.PI/2) da+=Math.PI;
-
             ctx.save();
-            ctx.translate(mx,my);
-            ctx.rotate(da);
+            ctx.translate(mx,my); ctx.rotate(da);
             ctx.shadowBlur=8; ctx.shadowColor='rgba(0,0,0,.8)';
             ctx.fillStyle='rgba(20,20,30,.88)';
             _roundRect(ctx,-tw/2-pad,-offset-fs/2-pad,tw+pad*2,fs+pad*2,fs*0.3);
@@ -1513,34 +1638,95 @@ REGLAS DE DIBUJO:
         ctx.restore();
     }
 
+    function _drawNote(ctx, l, fs, sel) {
+        var col = l.color || '#00c8ff';
+        var lw  = _thickPx(l.thick);
+        var rows = (l.text || '').split('\n');
+        ctx.font = 'bold ' + fs + 'px -apple-system,sans-serif';
+        var maxTW = 0;
+        rows.forEach(function(r){ maxTW = Math.max(maxTW, ctx.measureText(r).width); });
+        var pad  = fs * 0.55;
+        var lineH = fs * 1.35;
+        var bw   = maxTW + pad * 2;
+        var bh   = rows.length * lineH + pad * 2;
+
+        ctx.save();
+        if (sel) { ctx.shadowColor = col; ctx.shadowBlur = 16; }
+        else     { ctx.shadowColor = 'rgba(0,0,0,.6)'; ctx.shadowBlur = 4; }
+
+        // Arrow line from box center to tip
+        ctx.strokeStyle = col; ctx.lineWidth = lw; ctx.lineCap = 'round';
+        ctx.beginPath(); ctx.moveTo(l.x2, l.y2); ctx.lineTo(l.x1, l.y1); ctx.stroke();
+
+        // Arrowhead at tip (x1, y1)
+        var ang = Math.atan2(l.y1 - l.y2, l.x1 - l.x2);
+        var al  = Math.max(lw * 4, 16);
+        ctx.beginPath();
+        ctx.moveTo(l.x1, l.y1);
+        ctx.lineTo(l.x1 - al*Math.cos(ang-0.38), l.y1 - al*Math.sin(ang-0.38));
+        ctx.moveTo(l.x1, l.y1);
+        ctx.lineTo(l.x1 - al*Math.cos(ang+0.38), l.y1 - al*Math.sin(ang+0.38));
+        ctx.stroke();
+
+        ctx.shadowBlur = 0;
+
+        // Box background
+        var bx = l.x2 - bw/2, by = l.y2 - bh/2;
+        ctx.fillStyle = 'rgba(18,18,28,.93)';
+        _roundRect(ctx, bx, by, bw, bh, fs * 0.35);
+        ctx.fill();
+
+        // Color border
+        ctx.strokeStyle = col; ctx.lineWidth = sel ? lw * 1.6 : Math.max(lw * 0.9, 1.5);
+        _roundRect(ctx, bx, by, bw, bh, fs * 0.35);
+        ctx.stroke();
+
+        // Text
+        ctx.fillStyle = '#fff'; ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+        rows.forEach(function(r, i) { ctx.fillText(r, bx + pad, by + pad + i * lineH); });
+
+        // Tip dot
+        ctx.fillStyle = col;
+        ctx.beginPath(); ctx.arc(l.x1, l.y1, lw * (sel ? 3 : 2), 0, Math.PI*2); ctx.fill();
+        if (sel) { ctx.strokeStyle = '#fff'; ctx.lineWidth = lw * 0.7; ctx.stroke(); }
+
+        ctx.restore();
+    }
+
     function _roundRect(ctx,x,y,w,h,r) {
         ctx.beginPath();
         ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r);
         ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath();
     }
 
-    // ── Guardar en Firebase ────────────────────────────────────────
+    // ── Guardar en Firebase ───────────────────────────────────────
     window.guardarMedicion = async function() {
         if (!_img) return;
-        var btn=document.querySelector('#mod-medicion button[onclick="guardarMedicion()"]');
-        if (btn) { btn.disabled=true; btn.innerHTML='<i class="ph-bold ph-spinner"></i> Guardando...'; }
+        var btn = document.querySelector('#mod-medicion button[onclick="guardarMedicion()"]');
+        if (btn) { btn.disabled = true; btn.innerHTML = '<i class="ph-bold ph-spinner"></i> Guardando...'; }
         try {
-            var dataUrl=_cvs.toDataURL('image/png');
-            var blob=await fetch(dataUrl).then(function(r){ return r.blob(); });
-            var ts=Date.now();
-            var fname='disenos/'+(cid||'gen')+'/'+(pid||'gen')+'/fotos/medicion_'+ts+'.png';
-            var snap=await storage.ref(fname).put(blob,{contentType:'image/png'});
-            var url=await snap.ref.getDownloadURL();
-            if (cid&&pid) {
-                await db.ref('proyectos/'+cid+'/'+pid+'/diseno/fotos').push({name:'Medición '+new Date(ts).toLocaleDateString('es-BO'),url:url});
+            var dataUrl = _cvs.toDataURL('image/png');
+            var byteStr = atob(dataUrl.split(',')[1]);
+            var arr = new Uint8Array(byteStr.length);
+            for (var i = 0; i < byteStr.length; i++) arr[i] = byteStr.charCodeAt(i);
+            var blob = new Blob([arr], { type: 'image/png' });
+            var ts   = Date.now();
+            var fname = 'disenos/' + (cid||'gen') + '/' + (pid||'gen') + '/fotos/medicion_' + ts + '.png';
+            var snap = await storage.ref(fname).put(blob, { contentType: 'image/png' });
+            var url  = await snap.ref.getDownloadURL();
+            if (cid && pid) {
+                await db.ref('proyectos/' + cid + '/' + pid + '/diseno/fotos').push({
+                    name: 'Medición ' + new Date(ts).toLocaleDateString('es-BO'),
+                    url:  url
+                });
             }
-            var a=document.createElement('a');
-            a.download='medicion_'+ts+'.png'; a.href=dataUrl; a.click();
-            alert('✅ Guardado en Fotos del proyecto y descargado.');
+            cargarArchivosGenerales();
+            cerrarMedicion();
+            switchTab('fotos');
         } catch(e) {
-            alert('Error al guardar: '+e.message);
+            alert('Error al guardar: ' + e.message);
         } finally {
-            if (btn) { btn.disabled=false; btn.innerHTML='<i class="ph-bold ph-cloud-arrow-up"></i> Guardar'; }
+            if (btn) { btn.disabled = false; btn.innerHTML = '<i class="ph-bold ph-cloud-arrow-up"></i> Guardar'; }
         }
     };
 })();
