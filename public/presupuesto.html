@@ -3156,77 +3156,21 @@ Genera UN ítem de presupuesto detallado con APU completo (materiales con precio
 <!-- ============================================================ -->
 <div id="mod-medicion-pres" style="display:none;position:fixed;inset:0;z-index:9200;background:#111;flex-direction:column;">
 
-  <div style="background:#1c1c1e;flex-shrink:0;">
-    <!-- Fila 1 -->
-    <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;gap:6px;">
-      <button onclick="cerrarMedicionPres()"
-        style="background:rgba(255,255,255,.1);color:#fff;border:none;border-radius:10px;padding:7px 11px;font-size:.82rem;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:5px;flex-shrink:0;">
-        <i class="ph-bold ph-caret-left"></i> Salir
+  <!-- Barra superior: solo navegación -->
+  <div style="background:#1c1c1e;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:10px 12px;gap:8px;">
+    <button onclick="cerrarMedicionPres()"
+      style="background:rgba(255,255,255,.1);color:#fff;border:none;border-radius:10px;padding:7px 11px;font-size:.82rem;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:5px;flex-shrink:0;">
+      <i class="ph-bold ph-caret-left"></i> Salir
+    </button>
+    <span style="color:#fff;font-size:.85rem;font-weight:700;white-space:nowrap;">📐 Medir / Anotar</span>
+    <div style="display:flex;gap:5px;align-items:center;flex-shrink:0;">
+      <button onclick="pmedUndo()" title="Deshacer"
+        style="background:#3a3a3c;color:#fff;border:none;border-radius:8px;padding:6px 10px;font-size:.9rem;cursor:pointer;">
+        <i class="ph-bold ph-arrow-counter-clockwise"></i>
       </button>
-      <span style="color:#fff;font-size:.85rem;font-weight:700;white-space:nowrap;">📐 Medir / Anotar</span>
-      <div style="display:flex;gap:4px;align-items:center;flex-wrap:wrap;justify-content:flex-end;">
-        <button onclick="pmedZoomBy(0.8)" title="Alejar"
-          style="background:#3a3a3c;color:#fff;border:1px solid #555;border-radius:8px;padding:5px 8px;font-size:.8rem;cursor:pointer;font-weight:900;">−🔍</button>
-        <button onclick="pmedZoomBy(1.25)" title="Acercar"
-          style="background:#3a3a3c;color:#fff;border:1px solid #555;border-radius:8px;padding:5px 8px;font-size:.8rem;cursor:pointer;font-weight:900;">+🔍</button>
-        <button onclick="pmedFontBy(0.8)"
-          style="background:#3a3a3c;color:#fff;border:1px solid #555;border-radius:8px;padding:5px 7px;font-size:.72rem;cursor:pointer;font-weight:700;">A−</button>
-        <button onclick="pmedFontBy(1.25)"
-          style="background:#3a3a3c;color:#fff;border:1px solid #555;border-radius:8px;padding:5px 7px;font-size:.8rem;cursor:pointer;font-weight:700;">A+</button>
-        <div style="display:flex;align-items:center;gap:4px;cursor:pointer;" onclick="pmedToggleUnit()">
-          <span style="color:#aaa;font-size:.72rem;font-weight:600;">m</span>
-          <div id="pmed-unit-toggle" style="position:relative;width:46px;height:27px;border-radius:14px;background:#555;transition:background .25s;">
-            <div id="pmed-unit-thumb" style="position:absolute;top:3px;left:3px;width:21px;height:21px;border-radius:50%;background:#fff;box-shadow:0 1px 4px rgba(0,0,0,.5);transition:transform .25s;"></div>
-          </div>
-          <span style="color:#aaa;font-size:.72rem;font-weight:600;">cm</span>
-        </div>
-        <span id="pmed-unit-lbl" style="display:none;">m</span>
-        <button onclick="pmedUndo()"
-          style="background:#3a3a3c;color:#fff;border:none;border-radius:8px;padding:6px 9px;font-size:.82rem;cursor:pointer;">
-          <i class="ph-bold ph-arrow-counter-clockwise"></i>
-        </button>
-        <button onclick="guardarMedicionPres()"
-          style="background:#34c759;color:#fff;border:none;border-radius:8px;padding:6px 11px;font-size:.8rem;font-weight:700;cursor:pointer;white-space:nowrap;">
-          <i class="ph-bold ph-cloud-arrow-up"></i> Guardar
-        </button>
-      </div>
-    </div>
-    <!-- Fila 2: Herramientas -->
-    <div style="display:flex;align-items:center;gap:8px;padding:8px 12px 10px;border-top:1px solid #2c2c2e;overflow-x:auto;">
-      <div style="display:flex;gap:5px;flex-shrink:0;">
-        <button class="pmed-cbtn" data-c="#00c8ff" onclick="pmedSetColor('#00c8ff',this)"
-          style="width:24px;height:24px;border-radius:50%;background:#00c8ff;border:3px solid #fff;cursor:pointer;"></button>
-        <button class="pmed-cbtn" data-c="#ffcc00" onclick="pmedSetColor('#ffcc00',this)"
-          style="width:24px;height:24px;border-radius:50%;background:#ffcc00;border:3px solid transparent;cursor:pointer;"></button>
-        <button class="pmed-cbtn" data-c="#ff3b30" onclick="pmedSetColor('#ff3b30',this)"
-          style="width:24px;height:24px;border-radius:50%;background:#ff3b30;border:3px solid transparent;cursor:pointer;"></button>
-        <button class="pmed-cbtn" data-c="#34c759" onclick="pmedSetColor('#34c759',this)"
-          style="width:24px;height:24px;border-radius:50%;background:#34c759;border:3px solid transparent;cursor:pointer;"></button>
-        <button class="pmed-cbtn" data-c="#ffffff" onclick="pmedSetColor('#ffffff',this)"
-          style="width:24px;height:24px;border-radius:50%;background:#ffffff;border:3px solid transparent;cursor:pointer;"></button>
-        <button class="pmed-cbtn" data-c="#ff9500" onclick="pmedSetColor('#ff9500',this)"
-          style="width:24px;height:24px;border-radius:50%;background:#ff9500;border:3px solid transparent;cursor:pointer;"></button>
-      </div>
-      <div style="width:1px;height:22px;background:#444;flex-shrink:0;"></div>
-      <div style="display:flex;gap:4px;flex-shrink:0;align-items:center;">
-        <button id="pmed-th-S" onclick="pmedSetThick('S',this)"
-          style="background:#555;color:#fff;border:2px solid #777;border-radius:7px;padding:4px 9px;cursor:pointer;font-size:.75rem;font-weight:700;">━</button>
-        <button id="pmed-th-M" onclick="pmedSetThick('M',this)"
-          style="background:#3a3a3c;color:#fff;border:2px solid transparent;border-radius:7px;padding:4px 9px;cursor:pointer;font-size:.85rem;font-weight:700;">━</button>
-        <button id="pmed-th-L" onclick="pmedSetThick('L',this)"
-          style="background:#3a3a3c;color:#fff;border:2px solid transparent;border-radius:7px;padding:4px 9px;cursor:pointer;font-size:1rem;font-weight:900;">━</button>
-      </div>
-      <div style="width:1px;height:22px;background:#444;flex-shrink:0;"></div>
-      <button id="pmed-mode-btn" onclick="pmedToggleMode()"
-        style="background:#007aff;color:#fff;border:none;border-radius:8px;padding:5px 11px;font-size:.78rem;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:5px;flex-shrink:0;white-space:nowrap;">
-        <i class="ph-bold ph-ruler" id="pmed-mode-icon"></i>
-        <span id="pmed-mode-lbl">Dibujar</span>
-      </button>
-      <div style="width:1px;height:22px;background:#444;flex-shrink:0;"></div>
-      <button id="pmed-note-btn" onclick="pmedToggleNote()"
-        style="background:#3a3a3c;color:#fff;border:none;border-radius:8px;padding:5px 11px;font-size:.78rem;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:5px;flex-shrink:0;white-space:nowrap;">
-        <i class="ph-bold ph-note-pencil"></i>
-        <span>Nota</span>
+      <button onclick="guardarMedicionPres()"
+        style="background:#34c759;color:#fff;border:none;border-radius:8px;padding:6px 13px;font-size:.8rem;font-weight:700;cursor:pointer;white-space:nowrap;">
+        <i class="ph-bold ph-cloud-arrow-up"></i> Guardar
       </button>
     </div>
   </div>
@@ -3293,11 +3237,73 @@ Genera UN ítem de presupuesto detallado con APU completo (materiales con precio
       <button onclick="pmedDeselect()" style="background:#3a3a3c;color:#fff;border:none;border-radius:8px;padding:5px 8px;font-size:.8rem;cursor:pointer;">✕</button>
     </div>
   </div>
+
+  <!-- Barra inferior de herramientas (fija, scrollable) -->
+  <div style="background:#1c1c1e;flex-shrink:0;border-top:1px solid #2c2c2e;padding:8px 10px;overflow-x:auto;-webkit-overflow-scrolling:touch;display:flex;align-items:center;gap:7px;padding-bottom:max(8px,env(safe-area-inset-bottom));">
+    <!-- Colores -->
+    <div style="display:flex;gap:5px;flex-shrink:0;">
+      <button class="pmed-cbtn" data-c="#007aff" onclick="pmedSetColor('#007aff',this)"
+        style="width:26px;height:26px;border-radius:50%;background:#007aff;border:3px solid #fff;cursor:pointer;" title="Azul"></button>
+      <button class="pmed-cbtn" data-c="#ffcc00" onclick="pmedSetColor('#ffcc00',this)"
+        style="width:26px;height:26px;border-radius:50%;background:#ffcc00;border:3px solid transparent;cursor:pointer;" title="Amarillo"></button>
+      <button class="pmed-cbtn" data-c="#ffffff" onclick="pmedSetColor('#ffffff',this)"
+        style="width:26px;height:26px;border-radius:50%;background:#ffffff;border:3px solid transparent;cursor:pointer;" title="Blanco"></button>
+      <button class="pmed-cbtn" data-c="#000000" onclick="pmedSetColor('#000000',this)"
+        style="width:26px;height:26px;border-radius:50%;background:#000000;border:3px solid transparent;cursor:pointer;" title="Negro"></button>
+    </div>
+    <div style="width:1px;height:22px;background:#444;flex-shrink:0;"></div>
+    <!-- Grosor -->
+    <div style="display:flex;gap:4px;flex-shrink:0;align-items:center;">
+      <button id="pmed-th-S" onclick="pmedSetThick('S',this)"
+        style="background:#555;color:#fff;border:2px solid #777;border-radius:7px;padding:4px 9px;cursor:pointer;font-size:.75rem;font-weight:700;">━</button>
+      <button id="pmed-th-M" onclick="pmedSetThick('M',this)"
+        style="background:#3a3a3c;color:#fff;border:2px solid transparent;border-radius:7px;padding:4px 9px;cursor:pointer;font-size:.85rem;font-weight:700;">━</button>
+      <button id="pmed-th-L" onclick="pmedSetThick('L',this)"
+        style="background:#3a3a3c;color:#fff;border:2px solid transparent;border-radius:7px;padding:4px 9px;cursor:pointer;font-size:1rem;font-weight:900;">━</button>
+    </div>
+    <div style="width:1px;height:22px;background:#444;flex-shrink:0;"></div>
+    <!-- Modo Dibujar/Mover -->
+    <button id="pmed-mode-btn" onclick="pmedToggleMode()"
+      style="background:#007aff;color:#fff;border:none;border-radius:8px;padding:5px 11px;font-size:.78rem;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:5px;flex-shrink:0;white-space:nowrap;">
+      <i class="ph-bold ph-ruler" id="pmed-mode-icon"></i>
+      <span id="pmed-mode-lbl">Dibujar</span>
+    </button>
+    <div style="width:1px;height:22px;background:#444;flex-shrink:0;"></div>
+    <!-- Nota -->
+    <button id="pmed-note-btn" onclick="pmedToggleNote()"
+      style="background:#3a3a3c;color:#fff;border:none;border-radius:8px;padding:5px 11px;font-size:.78rem;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:5px;flex-shrink:0;white-space:nowrap;">
+      <i class="ph-bold ph-note-pencil"></i>
+      <span>Nota</span>
+    </button>
+    <div style="width:1px;height:22px;background:#444;flex-shrink:0;"></div>
+    <!-- Texto A−/A+ -->
+    <button onclick="pmedFontBy(0.8)"
+      style="background:#3a3a3c;color:#fff;border:none;border-radius:7px;padding:5px 7px;font-size:.72rem;cursor:pointer;font-weight:700;flex-shrink:0;">A−</button>
+    <button onclick="pmedFontBy(1.25)"
+      style="background:#3a3a3c;color:#fff;border:none;border-radius:7px;padding:5px 8px;font-size:.8rem;cursor:pointer;font-weight:700;flex-shrink:0;">A+</button>
+    <div style="width:1px;height:22px;background:#444;flex-shrink:0;"></div>
+    <!-- Unidad -->
+    <div style="display:flex;align-items:center;gap:4px;flex-shrink:0;cursor:pointer;" onclick="pmedToggleUnit()">
+      <span style="color:#aaa;font-size:.72rem;font-weight:600;flex-shrink:0;">m</span>
+      <div id="pmed-unit-toggle" style="position:relative;width:46px;height:27px;border-radius:14px;background:#555;transition:background .25s;flex-shrink:0;">
+        <div id="pmed-unit-thumb" style="position:absolute;top:3px;left:3px;width:21px;height:21px;border-radius:50%;background:#fff;box-shadow:0 1px 4px rgba(0,0,0,.5);transition:transform .25s;"></div>
+      </div>
+      <span style="color:#aaa;font-size:.72rem;font-weight:600;flex-shrink:0;">cm</span>
+    </div>
+    <span id="pmed-unit-lbl" style="display:none;">m</span>
+    <div style="width:1px;height:22px;background:#444;flex-shrink:0;"></div>
+    <!-- Zoom -->
+    <button onclick="pmedZoomBy(0.8)"
+      style="background:#3a3a3c;color:#fff;border:none;border-radius:7px;padding:5px 9px;font-size:.8rem;cursor:pointer;font-weight:900;flex-shrink:0;">−🔍</button>
+    <button onclick="pmedZoomBy(1.25)"
+      style="background:#3a3a3c;color:#fff;border:none;border-radius:7px;padding:5px 9px;font-size:.8rem;cursor:pointer;font-weight:900;flex-shrink:0;">+🔍</button>
+  </div>
+
 </div>
 
 <script>
 (function(){
-    var _lines = [], _unit = 'm', _color = '#00c8ff', _thick = 'S';
+    var _lines = [], _unit = 'm', _color = '#007aff', _thick = 'S';
     var _mode = 'draw';
     var _img = null, _cvs, _ctx;
     var _zoom = 1, _fontScale = 1;
@@ -3324,7 +3330,7 @@ Genera UN ítem de presupuesto detallado con APU completo (materiales con precio
         _cvs = document.getElementById('pmed-canvas');
         if (!_cvs) return;
         _ctx = _cvs.getContext('2d');
-        pmedSetColor('#00c8ff', document.querySelector('.pmed-cbtn[data-c="#00c8ff"]'));
+        pmedSetColor('#007aff', document.querySelector('.pmed-cbtn[data-c="#007aff"]'));
         pmedSetThick('S', document.getElementById('pmed-th-S'));
         _attachEvents();
         if (urlToLoad) _loadUrl(urlToLoad);

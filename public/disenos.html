@@ -1014,18 +1014,14 @@ REGLAS DE DIBUJO:
   <div style="background:#1c1c1e;flex-shrink:0;border-top:1px solid #2c2c2e;padding:8px 10px;overflow-x:auto;-webkit-overflow-scrolling:touch;display:flex;align-items:center;gap:7px;padding-bottom:max(8px,env(safe-area-inset-bottom));">
     <!-- Colores -->
     <div style="display:flex;gap:5px;flex-shrink:0;">
-      <button class="med-cbtn" data-c="#00c8ff" onclick="setMedColor('#00c8ff',this)"
-        style="width:26px;height:26px;border-radius:50%;background:#00c8ff;border:3px solid #fff;cursor:pointer;" title="Cian"></button>
+      <button class="med-cbtn" data-c="#007aff" onclick="setMedColor('#007aff',this)"
+        style="width:26px;height:26px;border-radius:50%;background:#007aff;border:3px solid #fff;cursor:pointer;" title="Azul"></button>
       <button class="med-cbtn" data-c="#ffcc00" onclick="setMedColor('#ffcc00',this)"
         style="width:26px;height:26px;border-radius:50%;background:#ffcc00;border:3px solid transparent;cursor:pointer;" title="Amarillo"></button>
-      <button class="med-cbtn" data-c="#ff3b30" onclick="setMedColor('#ff3b30',this)"
-        style="width:26px;height:26px;border-radius:50%;background:#ff3b30;border:3px solid transparent;cursor:pointer;" title="Rojo"></button>
-      <button class="med-cbtn" data-c="#34c759" onclick="setMedColor('#34c759',this)"
-        style="width:26px;height:26px;border-radius:50%;background:#34c759;border:3px solid transparent;cursor:pointer;" title="Verde"></button>
       <button class="med-cbtn" data-c="#ffffff" onclick="setMedColor('#ffffff',this)"
         style="width:26px;height:26px;border-radius:50%;background:#ffffff;border:3px solid transparent;cursor:pointer;" title="Blanco"></button>
-      <button class="med-cbtn" data-c="#ff9500" onclick="setMedColor('#ff9500',this)"
-        style="width:26px;height:26px;border-radius:50%;background:#ff9500;border:3px solid transparent;cursor:pointer;" title="Naranja"></button>
+      <button class="med-cbtn" data-c="#000000" onclick="setMedColor('#000000',this)"
+        style="width:26px;height:26px;border-radius:50%;background:#000000;border:3px solid transparent;cursor:pointer;" title="Negro"></button>
     </div>
     <div style="width:1px;height:22px;background:#444;flex-shrink:0;"></div>
     <!-- Grosor -->
@@ -1081,7 +1077,7 @@ REGLAS DE DIBUJO:
 (function(){
     var _lines   = [];
     var _unit    = 'm';
-    var _color   = '#00c8ff';
+    var _color   = '#007aff';
     var _thick   = 'S';
     var _mode    = 'draw';   // 'draw' | 'pan' | 'note'
     var _img     = null;
@@ -1107,7 +1103,7 @@ REGLAS DE DIBUJO:
         m.style.display = 'flex';
         _cvs = document.getElementById('med-canvas');
         _ctx = _cvs.getContext('2d');
-        setMedColor('#00c8ff', document.querySelector('.med-cbtn[data-c="#00c8ff"]'));
+        setMedColor('#007aff', document.querySelector('.med-cbtn[data-c="#007aff"]'));
         setMedThick('S', document.getElementById('med-th-S'));
         _attachEvents();
     };
