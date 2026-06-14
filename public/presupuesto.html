@@ -345,7 +345,7 @@
             <div class="photo-opt" onclick="openDesignGallery()"><i class="ph-bold ph-images" style="color:var(--orange)"></i> Galería Diseño (Proyecto)</div>
             <div class="photo-opt" onclick="triggerUpload()"><i class="ph-bold ph-upload" style="color:var(--blue)"></i> Subir desde Dispositivo</div>
             <div class="photo-opt" onclick="pasteImageClick()"><i class="ph-bold ph-clipboard" style="color:var(--green)"></i> Pegar Portapapeles (Ctrl+V)</div>
-            <div class="photo-opt" onclick="document.getElementById('mod-photo').style.display='none'; abrirMedicionPres();"><i class="ph-bold ph-ruler" style="color:var(--purple)"></i> 📐 Medir / Anotar</div>
+            <div class="photo-opt" onclick="abrirMedicionPres()"><i class="ph-bold ph-ruler" style="color:var(--purple)"></i> 📐 Medir / Anotar</div>
             
             <div id="gallery-container" style="display:none; margin-top:10px; border-top:1px solid var(--border); padding-top:10px;">
                 <div style="font-size:10px; font-weight:bold; color:var(--gray); margin-bottom:5px;">SELECCIONA UNA IMAGEN O PLANO:</div>
@@ -3222,10 +3222,10 @@ Genera UN ítem de presupuesto detallado con APU completo (materiales con precio
   </div>
 
   <div id="pmed-scroll" style="flex:1;overflow:auto;background:#000;display:flex;align-items:flex-start;justify-content:flex-start;position:relative;">
-    <div id="pmed-empty-state" style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;color:#aaa;">
+    <div id="pmed-empty-state" style="position:absolute;inset:0;overflow-y:auto;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;padding:24px 16px;text-align:center;color:#aaa;">
       <i class="ph-bold ph-image" style="font-size:3rem;display:block;margin-bottom:12px;color:#555;"></i>
       <div style="font-size:1rem;font-weight:700;color:#ddd;margin-bottom:16px;">Cargá una imagen para medir</div>
-      <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;">
+      <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin-bottom:10px;">
         <label for="pmed-file-input"
           style="background:#007aff;color:#fff;border-radius:10px;padding:10px 18px;font-size:.88rem;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:6px;">
           <i class="ph-bold ph-upload-simple"></i> Subir foto
@@ -3234,8 +3234,16 @@ Genera UN ítem de presupuesto detallado con APU completo (materiales con precio
           style="background:#5856d6;color:#fff;border-radius:10px;padding:10px 18px;font-size:.88rem;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:6px;">
           <i class="ph-bold ph-camera"></i> Tomar foto
         </label>
+        <button onclick="pmedOpenDesignGallery()"
+          style="background:#ff9500;color:#fff;border:none;border-radius:10px;padding:10px 18px;font-size:.88rem;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:6px;">
+          <i class="ph-bold ph-images"></i> Galería Diseño
+        </button>
       </div>
-      <div style="margin-top:12px;font-size:.78rem;color:#666;">o pegá una imagen con Ctrl+V</div>
+      <div style="margin-bottom:14px;font-size:.78rem;color:#666;">o pegá una imagen con Ctrl+V</div>
+      <div id="pmed-gallery-panel" style="display:none;width:100%;max-width:500px;">
+        <div style="font-size:.75rem;font-weight:700;color:#888;margin-bottom:8px;text-transform:uppercase;">Seleccioná una imagen o plano:</div>
+        <div id="pmed-gallery-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(80px,1fr));gap:6px;"></div>
+      </div>
     </div>
 
     <input type="file" id="pmed-file-input" accept="image/*" style="display:none;" onchange="pmedCargarImagen(this)">
@@ -3289,9 +3297,19 @@ Genera UN ítem de presupuesto detallado con APU completo (materiales con precio
     var _pinch0 = 0, _pinchZ0 = 1;
 
     window.abrirMedicionPres = function() {
+        // Close photo modal first
+        var ph = document.getElementById('mod-photo');
+        if (ph) ph.style.display = 'none';
+        // Show measurement panel
         var m = document.getElementById('mod-medicion-pres');
+        if (!m) { alert('Error: modal de medición no encontrado'); return; }
         m.style.display = 'flex';
+        // Reset gallery panel
+        var gp = document.getElementById('pmed-gallery-panel');
+        if (gp) gp.style.display = 'none';
+        // Init canvas
         _cvs = document.getElementById('pmed-canvas');
+        if (!_cvs) return;
         _ctx = _cvs.getContext('2d');
         pmedSetColor('#00c8ff', document.querySelector('.pmed-cbtn[data-c="#00c8ff"]'));
         pmedSetThick('S', document.getElementById('pmed-th-S'));
@@ -3322,19 +3340,59 @@ Genera UN ítem de presupuesto detallado con APU completo (materiales con precio
 
     function _loadFile(file) {
         var reader = new FileReader();
-        reader.onload = function(e) {
-            var img = new Image();
-            img.onload = function() {
-                _img = img; _lines = []; _zoom = 1; _selIdx = -1;
-                _pendingNote = null; _pending = null; _hideSelBar();
-                _setupCanvas();
-                document.getElementById('pmed-empty-state').style.display = 'none';
-                _cvs.style.display = 'block';
-            };
-            img.src = e.target.result;
-        };
+        reader.onload = function(e) { _loadUrl(e.target.result); };
         reader.readAsDataURL(file);
     }
+
+    function _loadUrl(src) {
+        var img = new Image();
+        img.crossOrigin = 'anonymous';
+        img.onload = function() {
+            _img = img; _lines = []; _zoom = 1; _selIdx = -1;
+            _pendingNote = null; _pending = null; _hideSelBar();
+            _setupCanvas();
+            document.getElementById('pmed-empty-state').style.display = 'none';
+            _cvs.style.display = 'block';
+        };
+        img.onerror = function() {
+            // CORS fallback — draw via canvas proxy
+            var tmp = new Image();
+            tmp.onload = function() {
+                var c = document.createElement('canvas');
+                c.width = tmp.naturalWidth; c.height = tmp.naturalHeight;
+                c.getContext('2d').drawImage(tmp, 0, 0);
+                _loadUrl(c.toDataURL('image/png'));
+            };
+            tmp.src = src;
+        };
+        img.src = src;
+    }
+
+    window.pmedOpenDesignGallery = function() {
+        var gp = document.getElementById('pmed-gallery-panel');
+        var grid = document.getElementById('pmed-gallery-grid');
+        if (!gp || !grid) return;
+        gp.style.display = 'block';
+        grid.innerHTML = '<div style="color:#888;font-size:.8rem;padding:8px;">Cargando...</div>';
+        db.ref('proyectos/' + cid + '/' + pid + '/diseno').once('value', function(snap) {
+            var d = snap.val(); grid.innerHTML = '';
+            if (!d) { grid.innerHTML = '<div style="color:#666;font-size:.8rem;">Sin imágenes en Diseño.</div>'; return; }
+            var images = [];
+            if (d.renders) Object.values(d.renders).forEach(function(i){ if(i.url) images.push(i.url); });
+            if (d.fotos)   Object.values(d.fotos).forEach(function(i){ if(i.url) images.push(i.url); });
+            if (d.planos)  Object.values(d.planos).forEach(function(i){ if(i.url) images.push(i.url); });
+            if (!images.length) { grid.innerHTML = '<div style="color:#666;font-size:.8rem;">Sin imágenes.</div>'; return; }
+            images.forEach(function(url) {
+                var div = document.createElement('div');
+                div.style.cssText = 'position:relative;width:100%;padding-bottom:100%;border-radius:8px;overflow:hidden;cursor:pointer;background:#222;border:2px solid transparent;';
+                div.innerHTML = '<img src="'+url+'" crossorigin="anonymous" style="position:absolute;top:0;left:0;width:100%;height:100%;object-fit:cover;" loading="lazy">';
+                div.onmouseover = function(){ this.style.borderColor='#ff9500'; };
+                div.onmouseout  = function(){ this.style.borderColor='transparent'; };
+                div.onclick = function(){ _loadUrl(url); };
+                grid.appendChild(div);
+            });
+        });
+    };
 
     function _setupCanvas() {
         var sc = document.getElementById('pmed-scroll');
@@ -3441,10 +3499,10 @@ Genera UN ítem de presupuesto detallado con APU completo (materiales con precio
         for (var i=_lines.length-1; i>=0; i--) {
             var l=_lines[i];
             if (l.type==='note') {
-                var pad=fs*0.5;
+                var nfs=fs*0.82, pad=nfs*0.5;
                 var rows=(l.text||'').split('\n');
-                var bw=Math.max.apply(null,rows.map(function(r){ return r.length*fs*0.55; }))+pad*2+fs;
-                var bh=rows.length*fs*1.3+pad*2;
+                var bw=Math.max.apply(null,rows.map(function(r){ return r.length*nfs*0.55; }))+pad*2+nfs;
+                var bh=rows.length*nfs*1.3+pad*2;
                 if (p.x>=l.x2-bw/2&&p.x<=l.x2+bw/2&&p.y>=l.y2-bh/2&&p.y<=l.y2+bh/2) return i;
                 if (_distSeg(p.x,p.y,l.x1,l.y1,l.x2,l.y2)<tol) return i;
             } else {
@@ -3668,10 +3726,11 @@ Genera UN ítem de presupuesto detallado con APU completo (materiales con precio
     }
     function _drawNote(ctx, l, fs, sel) {
         var col=l.color||'#00c8ff', lw=_thickPx(l.thick);
+        var nfs=fs*0.82;
         var rows=(l.text||'').split('\n');
-        ctx.font='bold '+fs+'px -apple-system,sans-serif';
+        ctx.font='bold '+nfs+'px -apple-system,sans-serif';
         var maxTW=0; rows.forEach(function(r){ maxTW=Math.max(maxTW,ctx.measureText(r).width); });
-        var pad=fs*0.55, lineH=fs*1.35, bw=maxTW+pad*2, bh=rows.length*lineH+pad*2;
+        var pad=nfs*0.55, lineH=nfs*1.35, bw=maxTW+pad*2, bh=rows.length*lineH+pad*2;
         ctx.save();
         if (sel) { ctx.shadowColor=col; ctx.shadowBlur=16; } else { ctx.shadowColor='rgba(0,0,0,.6)'; ctx.shadowBlur=4; }
         ctx.strokeStyle=col; ctx.lineWidth=lw; ctx.lineCap='round';
@@ -3683,9 +3742,9 @@ Genera UN ítem de presupuesto detallado con APU completo (materiales con precio
         ctx.lineTo(l.x1-al*Math.cos(ang+0.38),l.y1-al*Math.sin(ang+0.38)); ctx.stroke();
         ctx.shadowBlur=0;
         var bx=l.x2-bw/2, by=l.y2-bh/2;
-        ctx.fillStyle='rgba(18,18,28,.93)'; _roundRect(ctx,bx,by,bw,bh,fs*0.35); ctx.fill();
+        ctx.fillStyle='rgba(18,18,28,.5)'; _roundRect(ctx,bx,by,bw,bh,nfs*0.35); ctx.fill();
         ctx.strokeStyle=col; ctx.lineWidth=sel?lw*1.6:Math.max(lw*0.9,1.5);
-        _roundRect(ctx,bx,by,bw,bh,fs*0.35); ctx.stroke();
+        _roundRect(ctx,bx,by,bw,bh,nfs*0.35); ctx.stroke();
         ctx.fillStyle='#fff'; ctx.textAlign='left'; ctx.textBaseline='top';
         rows.forEach(function(r,i){ ctx.fillText(r,bx+pad,by+pad+i*lineH); });
         ctx.fillStyle=col; ctx.beginPath(); ctx.arc(l.x1,l.y1,lw*(sel?3:2),0,Math.PI*2); ctx.fill();

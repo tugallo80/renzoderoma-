@@ -1280,10 +1280,10 @@ REGLAS DE DIBUJO:
         for (var i = _lines.length-1; i >= 0; i--) {
             var l = _lines[i];
             if (l.type === 'note') {
-                var pad  = fs * 0.5;
+                var nfs = fs * 0.82, pad = nfs * 0.5;
                 var rows = (l.text || '').split('\n');
-                var bw   = Math.max.apply(null, rows.map(function(r){ return r.length * fs * 0.55; })) + pad*2 + fs;
-                var bh   = rows.length * fs * 1.3 + pad * 2;
+                var bw   = Math.max.apply(null, rows.map(function(r){ return r.length * nfs * 0.55; })) + pad*2 + nfs;
+                var bh   = rows.length * nfs * 1.3 + pad * 2;
                 if (p.x >= l.x2-bw/2 && p.x <= l.x2+bw/2 && p.y >= l.y2-bh/2 && p.y <= l.y2+bh/2) return i;
                 if (_distSeg(p.x, p.y, l.x1, l.y1, l.x2, l.y2) < tol) return i;
             } else {
@@ -1641,12 +1641,13 @@ REGLAS DE DIBUJO:
     function _drawNote(ctx, l, fs, sel) {
         var col = l.color || '#00c8ff';
         var lw  = _thickPx(l.thick);
+        var nfs = fs * 0.82;
         var rows = (l.text || '').split('\n');
-        ctx.font = 'bold ' + fs + 'px -apple-system,sans-serif';
+        ctx.font = 'bold ' + nfs + 'px -apple-system,sans-serif';
         var maxTW = 0;
         rows.forEach(function(r){ maxTW = Math.max(maxTW, ctx.measureText(r).width); });
-        var pad  = fs * 0.55;
-        var lineH = fs * 1.35;
+        var pad  = nfs * 0.55;
+        var lineH = nfs * 1.35;
         var bw   = maxTW + pad * 2;
         var bh   = rows.length * lineH + pad * 2;
 
@@ -1670,15 +1671,15 @@ REGLAS DE DIBUJO:
 
         ctx.shadowBlur = 0;
 
-        // Box background
+        // Box background — semi-transparent so image shows through
         var bx = l.x2 - bw/2, by = l.y2 - bh/2;
-        ctx.fillStyle = 'rgba(18,18,28,.93)';
-        _roundRect(ctx, bx, by, bw, bh, fs * 0.35);
+        ctx.fillStyle = 'rgba(18,18,28,.5)';
+        _roundRect(ctx, bx, by, bw, bh, nfs * 0.35);
         ctx.fill();
 
         // Color border
         ctx.strokeStyle = col; ctx.lineWidth = sel ? lw * 1.6 : Math.max(lw * 0.9, 1.5);
-        _roundRect(ctx, bx, by, bw, bh, fs * 0.35);
+        _roundRect(ctx, bx, by, bw, bh, nfs * 0.35);
         ctx.stroke();
 
         // Text
