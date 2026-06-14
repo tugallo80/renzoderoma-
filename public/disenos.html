@@ -1059,10 +1059,14 @@ REGLAS DE DIBUJO:
       style="background:#3a3a3c;color:#fff;border:none;border-radius:7px;padding:5px 8px;font-size:.8rem;cursor:pointer;font-weight:700;flex-shrink:0;">A+</button>
     <div style="width:1px;height:22px;background:#444;flex-shrink:0;"></div>
     <!-- Unidad -->
-    <button onclick="toggleMedUnit()"
-      style="background:#3a3a3c;color:#fff;border:none;border-radius:7px;padding:5px 9px;font-size:.78rem;cursor:pointer;font-weight:700;white-space:nowrap;flex-shrink:0;">
-      <span id="med-unit-lbl">m</span> ⇄ cm
-    </button>
+    <div style="display:flex;align-items:center;gap:4px;flex-shrink:0;cursor:pointer;" onclick="toggleMedUnit()">
+      <span style="color:#aaa;font-size:.72rem;font-weight:600;flex-shrink:0;">m</span>
+      <div id="med-unit-toggle" style="position:relative;width:46px;height:27px;border-radius:14px;background:#555;transition:background .25s;flex-shrink:0;">
+        <div id="med-unit-thumb" style="position:absolute;top:3px;left:3px;width:21px;height:21px;border-radius:50%;background:#fff;box-shadow:0 1px 4px rgba(0,0,0,.5);transition:transform .25s;"></div>
+      </div>
+      <span style="color:#aaa;font-size:.72rem;font-weight:600;flex-shrink:0;">cm</span>
+    </div>
+    <span id="med-unit-lbl" style="display:none;">m</span>
     <div style="width:1px;height:22px;background:#444;flex-shrink:0;"></div>
     <!-- Zoom -->
     <button onclick="medZoomBy(0.8)"
@@ -1258,6 +1262,10 @@ REGLAS DE DIBUJO:
         _unit = to;
         document.getElementById('med-unit-lbl').textContent  = to;
         document.getElementById('med-label-unit').textContent = to;
+        var tog = document.getElementById('med-unit-toggle');
+        var thumb = document.getElementById('med-unit-thumb');
+        if (tog) tog.style.background = to === 'cm' ? '#34c759' : '#555';
+        if (thumb) thumb.style.transform = to === 'cm' ? 'translateX(19px)' : 'translateX(0)';
         _redraw();
     };
 

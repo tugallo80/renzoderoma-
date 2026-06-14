@@ -2349,7 +2349,10 @@ EJEMPLO VÁLIDO:
         <div id="r3d-ref-drop" style="border:2px dashed #c5d0e6;border-radius:8px;padding:14px;text-align:center;cursor:pointer;margin-top:4px;position:relative;">
           <input type="file" id="r3d-ref-input" accept="image/*" style="position:absolute;inset:0;opacity:0;cursor:pointer;" onchange="onR3dRefImagen(this)">
           <div id="r3d-ref-preview" style="display:none;position:relative;">
-            <img id="r3d-ref-img" style="max-height:140px;border-radius:6px;">
+            <img id="r3d-ref-img" style="max-height:140px;border-radius:6px;cursor:pointer;display:block;" onclick="abrirMedicionPres(this.src)" title="Tocá para medir y anotar">
+            <div style="position:absolute;bottom:0;left:0;right:0;background:rgba(0,0,0,.45);color:#fff;font-size:.65rem;text-align:center;padding:3px 4px;border-radius:0 0 6px 6px;pointer-events:none;">
+              <i class="ph-bold ph-ruler"></i> Tocar para medir
+            </div>
             <button onclick="limpiarR3dRef()" style="position:absolute;top:-8px;right:-8px;background:#e74c3c;color:#fff;border:none;border-radius:50%;width:22px;height:22px;cursor:pointer;font-size:.85rem;line-height:1;">&times;</button>
           </div>
           <div id="r3d-ref-placeholder"><i class="ph-bold ph-image" style="font-size:1.6rem;color:#aaa;"></i><br><span style="font-size:.8rem;color:#aaa;">Adjuntar imagen o pegar (Ctrl+V)</span></div>
@@ -3170,10 +3173,14 @@ Genera UN ítem de presupuesto detallado con APU completo (materiales con precio
           style="background:#3a3a3c;color:#fff;border:1px solid #555;border-radius:8px;padding:5px 7px;font-size:.72rem;cursor:pointer;font-weight:700;">A−</button>
         <button onclick="pmedFontBy(1.25)"
           style="background:#3a3a3c;color:#fff;border:1px solid #555;border-radius:8px;padding:5px 7px;font-size:.8rem;cursor:pointer;font-weight:700;">A+</button>
-        <button onclick="pmedToggleUnit()"
-          style="background:#3a3a3c;color:#fff;border:1px solid #555;border-radius:8px;padding:5px 10px;font-size:.78rem;cursor:pointer;font-weight:700;white-space:nowrap;">
-          <span id="pmed-unit-lbl">m</span> ⇄ cm
-        </button>
+        <div style="display:flex;align-items:center;gap:4px;cursor:pointer;" onclick="pmedToggleUnit()">
+          <span style="color:#aaa;font-size:.72rem;font-weight:600;">m</span>
+          <div id="pmed-unit-toggle" style="position:relative;width:46px;height:27px;border-radius:14px;background:#555;transition:background .25s;">
+            <div id="pmed-unit-thumb" style="position:absolute;top:3px;left:3px;width:21px;height:21px;border-radius:50%;background:#fff;box-shadow:0 1px 4px rgba(0,0,0,.5);transition:transform .25s;"></div>
+          </div>
+          <span style="color:#aaa;font-size:.72rem;font-weight:600;">cm</span>
+        </div>
+        <span id="pmed-unit-lbl" style="display:none;">m</span>
         <button onclick="pmedUndo()"
           style="background:#3a3a3c;color:#fff;border:none;border-radius:8px;padding:6px 9px;font-size:.82rem;cursor:pointer;">
           <i class="ph-bold ph-arrow-counter-clockwise"></i>
@@ -3485,6 +3492,10 @@ Genera UN ítem de presupuesto detallado con APU completo (materiales con precio
         _unit = to;
         document.getElementById('pmed-unit-lbl').textContent  = to;
         document.getElementById('pmed-label-unit').textContent = to;
+        var tog = document.getElementById('pmed-unit-toggle');
+        var thumb = document.getElementById('pmed-unit-thumb');
+        if (tog) tog.style.background = to === 'cm' ? '#34c759' : '#555';
+        if (thumb) thumb.style.transform = to === 'cm' ? 'translateX(19px)' : 'translateX(0)';
         _redraw();
     };
 
