@@ -2359,24 +2359,16 @@ EJEMPLO VÁLIDO:
         </div>
       </div>
 
-      <!-- Contexto técnico -->
-      <div style="margin-top:14px;display:grid;gap:10px;">
-        <div>
-          <label style="font-size:.82rem;font-weight:600;">Materiales</label>
-          <input id="r3d-mat" type="text" placeholder="Ej: Acero inoxidable 304, acrílico 6mm, LEDs 5050" style="width:100%;box-sizing:border-box;border:1px solid #ddd;border-radius:7px;padding:7px 10px;font-size:.88rem;margin-top:3px;">
+      <!-- Elementos dinámicos -->
+      <div style="margin-top:14px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+          <label style="font-size:.82rem;font-weight:700;">Elementos de la pieza</label>
+          <button onclick="agregarElementoR3D()"
+            style="background:var(--blue);color:#fff;border:none;border-radius:7px;padding:5px 11px;font-size:.8rem;font-weight:700;cursor:pointer;">
+            + Agregar elemento
+          </button>
         </div>
-        <div>
-          <label style="font-size:.82rem;font-weight:600;">Estructura</label>
-          <input id="r3d-est" type="text" placeholder="Ej: Perfil cuadrado 40×40mm, base anclada al piso" style="width:100%;box-sizing:border-box;border:1px solid #ddd;border-radius:7px;padding:7px 10px;font-size:.88rem;margin-top:3px;">
-        </div>
-        <div>
-          <label style="font-size:.82rem;font-weight:600;">Acabado</label>
-          <input id="r3d-acab" type="text" placeholder="Ej: Pintura electroestática blanca, pulido espejo" style="width:100%;box-sizing:border-box;border:1px solid #ddd;border-radius:7px;padding:7px 10px;font-size:.88rem;margin-top:3px;">
-        </div>
-        <div>
-          <label style="font-size:.82rem;font-weight:600;">Branding</label>
-          <input id="r3d-brand" type="text" placeholder="Ej: Logo empresa en vinilo, colores corporativos azul/blanco" style="width:100%;box-sizing:border-box;border:1px solid #ddd;border-radius:7px;padding:7px 10px;font-size:.88rem;margin-top:3px;">
-        </div>
+        <div id="r3d-elementos-list"></div>
       </div>
 
       <!-- Dimensiones dinámicas -->
@@ -2513,21 +2505,20 @@ EJEMPLO VÁLIDO:
 <script>
 (function(){
     var _r3dDims      = [];
+    var _r3dElements  = [];   // [{nombre,mat,est,acab}]
     var _r3dRefBase64 = null;
     var _r3dRefMime   = 'image/jpeg';
     var _r3dRenderDataUrl = null;
 
     window.abrirModalRender3D = function() {
         document.getElementById('r3d-desc').value = '';
-        document.getElementById('r3d-mat').value  = '';
-        document.getElementById('r3d-est').value  = '';
-        document.getElementById('r3d-acab').value = '';
-        document.getElementById('r3d-brand').value= '';
         _r3dDims = [];
+        _r3dElements = [{ nombre: '', mat: '', est: '', acab: '' }];
         _r3dRefBase64 = null;
         _r3dRenderDataUrl = null;
         limpiarR3dRef();
         renderDims3D();
+        renderElementosR3D();
         document.getElementById('r3d-step1').style.display = 'block';
         document.getElementById('r3d-step2').style.display = 'none';
         document.getElementById('r3d-step3').style.display = 'none';
@@ -2662,15 +2653,60 @@ EJEMPLO VÁLIDO:
         </div>`).join('');
     }
 
+    // ── Elementos dinámicos ────────────────────────────────────────
+    function _syncElementos() {
+        document.querySelectorAll('.r3d-elem-card').forEach(function(card, i) {
+            if (!_r3dElements[i]) return;
+            _r3dElements[i].nombre = card.querySelector('.r3d-en').value;
+            _r3dElements[i].mat    = card.querySelector('.r3d-em').value;
+            _r3dElements[i].est    = card.querySelector('.r3d-ee').value;
+            _r3dElements[i].acab   = card.querySelector('.r3d-ea').value;
+        });
+    }
+
+    function renderElementosR3D() {
+        const cont = document.getElementById('r3d-elementos-list');
+        if (!cont) return;
+        cont.innerHTML = _r3dElements.map(function(el, i) {
+            const canDel = _r3dElements.length > 1;
+            return `<div class="r3d-elem-card" style="border:1px solid #ddd;border-radius:9px;padding:10px;margin-bottom:8px;background:#fafafa;">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:7px;">
+    <span style="font-size:.8rem;font-weight:700;color:var(--blue);">Elemento ${i+1}</span>
+    ${canDel ? `<button onclick="eliminarElementoR3D(${i})" style="background:#e74c3c;color:#fff;border:none;border-radius:6px;width:26px;height:26px;cursor:pointer;font-size:.9rem;">&times;</button>` : ''}
+  </div>
+  <input class="r3d-en" placeholder="Nombre (ej: Panel de fondo, Producto a escala)" value="${(el.nombre||'').replace(/"/g,'&quot;')}"
+    style="width:100%;box-sizing:border-box;border:1px solid #ddd;border-radius:7px;padding:7px 9px;font-size:.85rem;margin-bottom:5px;font-weight:600;">
+  <input class="r3d-em" placeholder="Materiales (ej: Vinilo, acrílico, LEDs)" value="${(el.mat||'').replace(/"/g,'&quot;')}"
+    style="width:100%;box-sizing:border-box;border:1px solid #ddd;border-radius:7px;padding:6px 9px;font-size:.82rem;margin-bottom:5px;">
+  <input class="r3d-ee" placeholder="Estructura (ej: Perfil aluminio, base anclada)" value="${(el.est||'').replace(/"/g,'&quot;')}"
+    style="width:100%;box-sizing:border-box;border:1px solid #ddd;border-radius:7px;padding:6px 9px;font-size:.82rem;margin-bottom:5px;">
+  <input class="r3d-ea" placeholder="Acabado / branding (ej: Impresión UV, neon, pulido)" value="${(el.acab||'').replace(/"/g,'&quot;')}"
+    style="width:100%;box-sizing:border-box;border:1px solid #ddd;border-radius:7px;padding:6px 9px;font-size:.82rem;">
+</div>`;
+        }).join('');
+    }
+
+    window.agregarElementoR3D = function() {
+        _syncElementos();
+        _r3dElements.push({ nombre: '', mat: '', est: '', acab: '' });
+        renderElementosR3D();
+        // Scroll to new card
+        var list = document.getElementById('r3d-elementos-list');
+        if (list) list.lastElementChild && list.lastElementChild.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    };
+
+    window.eliminarElementoR3D = function(i) {
+        _syncElementos();
+        _r3dElements.splice(i, 1);
+        renderElementosR3D();
+    };
+
     function _buildRenderPrompt() {
-        const desc  = document.getElementById('r3d-desc').value.trim();
-        const mat   = document.getElementById('r3d-mat').value.trim();
-        const est   = document.getElementById('r3d-est').value.trim();
-        const acab  = document.getElementById('r3d-acab').value.trim();
-        const brand = document.getElementById('r3d-brand').value.trim();
-        const toM   = _r3dUnit === 'cm' ? 0.01 : 1;
-        const fmt   = v => v ? (parseFloat(v) * toM).toFixed(2) : null;
-        const dims  = _r3dDims.filter(d => d.nombre || d.base).map(d => {
+        _syncElementos();
+        const desc = document.getElementById('r3d-desc').value.trim();
+        const toM  = _r3dUnit === 'cm' ? 0.01 : 1;
+        const fmt  = v => v ? (parseFloat(v) * toM).toFixed(2) : null;
+        const dims = _r3dDims.filter(d => d.nombre || d.base).map(d => {
             const parts = [];
             if (fmt(d.base))   parts.push(fmt(d.base) + 'm ancho');
             if (fmt(d.altura)) parts.push(fmt(d.altura) + 'm alto');
@@ -2683,12 +2719,25 @@ Fondo blanco liso. Perspectiva isométrica a 30°. Líneas de cotas en metros co
 IMPORTANTE: Dibujá SOLO lo que se describe aquí. No inventes vistas adicionales, dimensiones extra, ni elementos no solicitados. Si hay imagen de referencia, respetá exactamente sus proporciones y forma.
 
 Objeto: ${desc}`;
-        if (mat)   prompt += `\nMateriales: ${mat}`;
-        if (est)   prompt += `\nEstructura: ${est}`;
-        if (acab)  prompt += `\nAcabado: ${acab}`;
-        if (brand) prompt += `\nBranding: ${brand}`;
-        if (dims)  prompt += `\nDimensiones: ${dims}`;
-        prompt += `\n\nMostrar: vista isométrica completa con las partes etiquetadas, cotas en metros, materiales indicados en español. No agregues vistas laterales ni frontales que no hayan sido solicitadas.`;
+
+        const elems = _r3dElements.filter(e => e.nombre || e.mat || e.est || e.acab);
+        if (elems.length > 1) {
+            prompt += '\n\nCOMPOSICIÓN DE ELEMENTOS:';
+            elems.forEach(function(el, i) {
+                prompt += `\n\nElemento ${i+1}${el.nombre ? ' — ' + el.nombre : ''}:`;
+                if (el.mat)  prompt += `\n  Materiales: ${el.mat}`;
+                if (el.est)  prompt += `\n  Estructura: ${el.est}`;
+                if (el.acab) prompt += `\n  Acabado/Branding: ${el.acab}`;
+            });
+        } else if (elems.length === 1) {
+            const el = elems[0];
+            if (el.mat)  prompt += `\nMateriales: ${el.mat}`;
+            if (el.est)  prompt += `\nEstructura: ${el.est}`;
+            if (el.acab) prompt += `\nAcabado: ${el.acab}`;
+        }
+
+        if (dims) prompt += `\nDimensiones: ${dims}`;
+        prompt += `\n\nMostrar: vista isométrica completa con todos los elementos etiquetados, cotas en metros, materiales indicados en español. No agregues vistas que no hayan sido solicitadas.`;
         return prompt;
     }
 
@@ -3085,26 +3134,27 @@ INSTRUCCIONES:
         btn.innerHTML = '<i class="ph-bold ph-spinner"></i> Cotizando con IA...';
 
         try {
+            _syncElementos();
             const desc   = document.getElementById('r3d-desc').value.trim();
-            const mat    = document.getElementById('r3d-mat').value.trim();
-            const est    = document.getElementById('r3d-est').value.trim();
-            const acab   = document.getElementById('r3d-acab').value.trim();
-            const brand  = document.getElementById('r3d-brand').value.trim();
             const dimStr = _r3dDims.filter(d => d.nombre || d.base).map(d =>
                 `${d.nombre}: ${d.base||'?'}m × ${d.altura||'?'}m × ${d.prof||'?'}m`).join('; ');
+            const elemsStr = _r3dElements.filter(e => e.nombre || e.mat || e.est || e.acab).map(function(el, i) {
+                let s = `Elemento ${i+1}${el.nombre ? ' — ' + el.nombre : ''}:`;
+                if (el.mat)  s += ` Materiales: ${el.mat}.`;
+                if (el.est)  s += ` Estructura: ${el.est}.`;
+                if (el.acab) s += ` Acabado: ${el.acab}.`;
+                return s;
+            }).join(' | ');
 
             const sysPrompt = `Eres un cotizador de proyectos de señalética, mobiliario y publicidad en Bolivia.
 Devuelve EXACTAMENTE este JSON (sin texto extra, sin markdown):
 [{"desc":"NOMBRE TÉCNICO DEL ÍTEM","cant":1,"und":"glb","feat":"- Característica 1\\n- Característica 2\\n- Material: ...\\n- Dimensiones: ...","apu":{"mat":[{"d":"MATERIAL","u":"und","q":1,"p":0}],"mo":[{"d":"MANO DE OBRA","u":"hr","q":4,"p":25}],"eq":[],"sub":[]},"util":40,"ind":15}]
-Cada precio "p" en bolivianos. util = % utilidad, ind = % indirectos. Incluye todos los materiales y mano de obra necesaria.`;
+Cada precio "p" en bolivianos. util = % utilidad, ind = % indirectos. Incluye todos los materiales y mano de obra necesaria. Si hay múltiples elementos cotizá el conjunto como un ítem.`;
 
             const userPrompt = `Cotizar el siguiente ítem en Bolivia:
-Descripción: ${desc}
-${mat    ? `Materiales: ${mat}`   : ''}
-${est    ? `Estructura: ${est}`   : ''}
-${acab   ? `Acabado: ${acab}`     : ''}
-${brand  ? `Branding: ${brand}`   : ''}
-${dimStr ? `Dimensiones: ${dimStr}` : ''}
+Descripción general: ${desc}
+${elemsStr ? `Elementos: ${elemsStr}` : ''}
+${dimStr   ? `Dimensiones: ${dimStr}` : ''}
 
 Genera UN ítem de presupuesto detallado con APU completo (materiales con precios en Bs, mano de obra).`;
 
