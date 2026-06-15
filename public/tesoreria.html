@@ -137,31 +137,56 @@
     </div>
 
     <div id="panel-sueldos" class="panel-section">
-        <!-- Botón principal para registrar anticipo -->
-        <button class="btn-action" style="margin-bottom:15px; background:var(--orange); gap:10px;" onclick="abrirModalAnticipo()">
-            <i class="ph-bold ph-receipt"></i> Registrar Anticipo / Pago a Trabajador
-        </button>
+        <!-- Sub-tabs Trabajadores / Supervisores -->
+        <div style="display:flex; gap:8px; margin-bottom:16px; background:var(--bg); border-radius:14px; padding:4px;">
+            <button id="stab-trab" onclick="switchPlanillaTab('trab')" style="flex:1;padding:10px;border:none;border-radius:10px;font-weight:900;font-size:13px;cursor:pointer;background:var(--blue);color:white;">
+                <i class="ph-bold ph-hard-hat"></i> Trabajadores
+            </button>
+            <button id="stab-sup" onclick="switchPlanillaTab('sup')" style="flex:1;padding:10px;border:none;border-radius:10px;font-weight:900;font-size:13px;cursor:pointer;background:var(--card);color:var(--text);">
+                <i class="ph-bold ph-user-gear"></i> Supervisores
+            </button>
+        </div>
 
-        <div style="display:flex; gap:10px; align-items:center; margin-bottom:10px;">
-            <div style="flex:1;"><label class="inp-lbl">Filtrar por Mes</label><input type="month" id="filtro-mes" class="inp-std" style="margin:0;" onchange="renderPlanillas()"></div>
-            <button class="btn-action btn-outline" style="width:auto; height:50px; margin-top:20px;" onclick="renderPlanillas()"><i class="ph-bold ph-arrows-clockwise"></i></button>
-        </div>
-        <div style="margin-bottom:15px;">
-            <label class="inp-lbl">Filtrar por Trabajador</label>
-            <select id="filtro-trabajador" class="inp-std" style="margin:0;" onchange="renderPlanillas()">
-                <option value="">Todos los trabajadores</option>
-            </select>
-        </div>
-        <!-- Botones de exportación -->
-        <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:15px;">
-            <button class="btn-action btn-outline" style="font-size:11px; border-color:var(--purple); color:var(--purple);" onclick="exportarMesConAnterior()">
-                <i class="ph-bold ph-file-pdf"></i> PDF Mes + Saldo Anterior
+        <!-- PANEL TRABAJADORES -->
+        <div id="spanel-trab">
+            <button class="btn-action" style="margin-bottom:15px; background:var(--orange); gap:10px;" onclick="abrirModalAnticipo()">
+                <i class="ph-bold ph-receipt"></i> Registrar Anticipo / Pago a Trabajador
             </button>
-            <button class="btn-action btn-outline" style="font-size:11px; border-color:var(--blue); color:var(--blue);" onclick="abrirModalExportAmplio()">
-                <i class="ph-bold ph-calendar-blank"></i> Exportar Rango de Meses
-            </button>
+            <div style="display:flex; gap:10px; align-items:center; margin-bottom:10px;">
+                <div style="flex:1;"><label class="inp-lbl">Filtrar por Mes</label><input type="month" id="filtro-mes" class="inp-std" style="margin:0;" onchange="renderPlanillas()"></div>
+                <button class="btn-action btn-outline" style="width:auto; height:50px; margin-top:20px;" onclick="renderPlanillas()"><i class="ph-bold ph-arrows-clockwise"></i></button>
+            </div>
+            <div style="margin-bottom:15px;">
+                <label class="inp-lbl">Filtrar por Trabajador</label>
+                <select id="filtro-trabajador" class="inp-std" style="margin:0;" onchange="renderPlanillas()">
+                    <option value="">Todos los trabajadores</option>
+                </select>
+            </div>
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:15px;">
+                <button class="btn-action btn-outline" style="font-size:11px; border-color:var(--purple); color:var(--purple);" onclick="exportarMesConAnterior()">
+                    <i class="ph-bold ph-file-pdf"></i> PDF Mes + Saldo Anterior
+                </button>
+                <button class="btn-action btn-outline" style="font-size:11px; border-color:var(--blue); color:var(--blue);" onclick="abrirModalExportAmplio()">
+                    <i class="ph-bold ph-calendar-blank"></i> Exportar Rango de Meses
+                </button>
+            </div>
+            <div id="list-planillas"></div>
         </div>
-        <div id="list-planillas"></div>
+
+        <!-- PANEL SUPERVISORES -->
+        <div id="spanel-sup" style="display:none;">
+            <div style="display:flex; gap:10px; align-items:center; margin-bottom:14px;">
+                <div style="flex:1;"><label class="inp-lbl">Filtrar por Supervisor</label>
+                    <select id="filtro-supervisor" class="inp-std" style="margin:0;" onchange="renderPlanillasSupervisores()">
+                        <option value="">Todos los supervisores</option>
+                    </select>
+                </div>
+                <button class="btn-action btn-outline" style="width:auto; height:50px; margin-top:20px;" onclick="renderPlanillasSupervisores()">
+                    <i class="ph-bold ph-arrows-clockwise"></i>
+                </button>
+            </div>
+            <div id="list-planillas-sup"><div class="empty-msg">Cargando supervisores...</div></div>
+        </div>
     </div>
 
     <!-- ================================================================ -->
@@ -740,21 +765,37 @@
     let editFacturaId = null;
     window.tempComprobanteUrl = null;
 
+    let supervisoresData = {}; // { wid: { nombre, proyectos: { pid: { depositos, gastos, extras } } } }
+
     async function cargarTesoreraData() {
         try {
-            const [proySnap, ingSnap, compSnap, cancSnap] = await Promise.all([
+            const [proySnap, ingSnap, compSnap, cancSnap, supSnap, personalSnap] = await Promise.all([
                 db.ref('proyectos').once('value'),
                 db.ref('ingresos').once('value'),
                 db.ref('compras_facturadas').once('value'),
-                db.ref('cancheos').once('value')
+                db.ref('cancheos').once('value'),
+                db.ref('supervisores').once('value'),
+                db.ref('personal').once('value')
             ]);
             proyectosData         = proySnap.val()  || {};
             ingresosData          = ingSnap.val()   || {};
             comprasFacturadasData = compSnap.val()  || {};
             cancheosData          = cancSnap.val()  || {};
+            const personalData    = personalSnap.val() || {};
+            const rawSup          = supSnap.val()   || {};
+            // Enriquecer supervisoresData con nombre del personal
+            supervisoresData = {};
+            Object.entries(rawSup).forEach(([wid, wdata]) => {
+                const persona = personalData[wid] || {};
+                supervisoresData[wid] = {
+                    nombre: persona.nombre || persona.name || wdata.nombre || wid,
+                    proyectos: wdata.proyectos || {}
+                };
+            });
             calcularBalancesGlobales();
             renderBuzonYContratos();
             renderPlanillas();
+            renderPlanillasSupervisores();
             renderIngresos();
             renderImpuestos();
         } catch(e) { console.error('Error cargando tesoreria:', e); }
@@ -885,6 +926,287 @@
             document.getElementById('ing-proy-drop').style.display = 'none';
         }
     });
+
+    // ── Sub-tabs Planillas ─────────────────────────────────────────────────
+    function switchPlanillaTab(tab) {
+        const trab = document.getElementById('spanel-trab');
+        const sup  = document.getElementById('spanel-sup');
+        const btnT = document.getElementById('stab-trab');
+        const btnS = document.getElementById('stab-sup');
+        if (tab === 'trab') {
+            trab.style.display = ''; sup.style.display = 'none';
+            btnT.style.background = 'var(--blue)'; btnT.style.color = 'white';
+            btnS.style.background = 'var(--card)'; btnS.style.color = 'var(--text)';
+        } else {
+            trab.style.display = 'none'; sup.style.display = '';
+            btnS.style.background = 'var(--purple)'; btnS.style.color = 'white';
+            btnT.style.background = 'var(--card)'; btnT.style.color = 'var(--text)';
+            renderPlanillasSupervisores();
+        }
+    }
+
+    // ── Planillas de Supervisores ───────────────────────────────────────────
+    async function renderPlanillasSupervisores() {
+        const container = document.getElementById('list-planillas-sup');
+        if (!container) return;
+        container.innerHTML = '<div class="empty-msg">Cargando...</div>';
+
+        // Recargar supervisores frescos si hace falta
+        if (!supervisoresData || Object.keys(supervisoresData).length === 0) {
+            const [supSnap, persSnap] = await Promise.all([
+                db.ref('supervisores').once('value'),
+                db.ref('personal').once('value')
+            ]);
+            const rawSup   = supSnap.val()  || {};
+            const personal = persSnap.val() || {};
+            supervisoresData = {};
+            Object.entries(rawSup).forEach(([wid, wdata]) => {
+                const p = personal[wid] || {};
+                supervisoresData[wid] = { nombre: p.nombre || p.name || wdata.nombre || wid, proyectos: wdata.proyectos || {} };
+            });
+        }
+
+        const filtroSup = (document.getElementById('filtro-supervisor') || {}).value || '';
+
+        // Poblar select supervisor
+        const sel = document.getElementById('filtro-supervisor');
+        if (sel) {
+            const prev = sel.value;
+            sel.innerHTML = '<option value="">Todos los supervisores</option>';
+            Object.entries(supervisoresData).sort((a,b) => a[1].nombre.localeCompare(b[1].nombre))
+                .forEach(([wid, d]) => { sel.innerHTML += `<option value="${wid}" ${wid===prev?'selected':''}>${d.nombre}</option>`; });
+        }
+
+        const entries = Object.entries(supervisoresData)
+            .filter(([wid]) => !filtroSup || wid === filtroSup)
+            .sort((a,b) => a[1].nombre.localeCompare(b[1].nombre));
+
+        if (entries.length === 0) {
+            container.innerHTML = '<div class="empty-msg">No hay supervisores registrados.</div>';
+            return;
+        }
+
+        // Para cada supervisor, necesitamos los nombres de los proyectos
+        const fM = n => parseFloat(n||0).toLocaleString('es-BO',{minimumFractionDigits:2,maximumFractionDigits:2});
+
+        // Cargar datos frescos de proyectos para obtener nombres
+        const pData = proyectosData || {};
+        // Mapa pid → nombre proyecto
+        const pidNombre = {};
+        Object.values(pData).forEach(cliente => {
+            if (!cliente || typeof cliente !== 'object') return;
+            Object.entries(cliente).forEach(([pid, proy]) => { if (proy && proy.nombre) pidNombre[pid] = proy.nombre; });
+        });
+
+        // Para cada supervisor, también buscar licitación de supervisión para obtener monto contrato
+        // licitaciones en proyectos/{cid}/{pid}/licitaciones con is_supervision=true && worker_id===wid
+        const supLicitaciones = {}; // wid → [{ pid, monto, nombre_proyecto, estado }]
+        Object.entries(pData).forEach(([cid, cliente]) => {
+            if (!cliente || typeof cliente !== 'object') return;
+            Object.entries(cliente).forEach(([pid, proy]) => {
+                if (!proy || !proy.licitaciones) return;
+                Object.values(proy.licitaciones).forEach(lic => {
+                    if (!lic || !lic.is_supervision) return;
+                    const wid = lic.worker_id || lic.wid || '';
+                    if (!wid) return;
+                    if (!supLicitaciones[wid]) supLicitaciones[wid] = [];
+                    supLicitaciones[wid].push({
+                        pid,
+                        nombre_proyecto: proy.nombre || pid,
+                        monto_contrato: parseFloat(lic.precio_propuesto || lic.precio_final || 0),
+                        estado: lic.estado || 'enviado'
+                    });
+                });
+            });
+        });
+
+        container.innerHTML = '';
+        let grandTotal = 0, grandDep = 0, grandGas = 0, grandExt = 0;
+
+        for (const [wid, supData] of entries) {
+            const nombre = supData.nombre;
+            const proyectosSupNode = supData.proyectos || {};
+            const lics = supLicitaciones[wid] || [];
+
+            // Construir resumen por proyecto
+            const proyResumen = {};
+            lics.forEach(l => {
+                if (!proyResumen[l.pid]) proyResumen[l.pid] = { nombre: l.nombre_proyecto, monto_contrato: 0, depositos: [], gastos: [], extras: [], totalDep: 0, totalGas: 0, totalExt: 0 };
+                proyResumen[l.pid].monto_contrato += l.monto_contrato;
+            });
+
+            // Leer depósitos, gastos, extras de Firebase para cada pid
+            const pids = [...new Set([...Object.keys(proyectosSupNode), ...lics.map(l => l.pid)])];
+            for (const pid of pids) {
+                if (!proyResumen[pid]) proyResumen[pid] = { nombre: pidNombre[pid] || pid, monto_contrato: 0, depositos: [], gastos: [], extras: [], totalDep: 0, totalGas: 0, totalExt: 0 };
+                const node = proyectosSupNode[pid] || {};
+                // Depósitos
+                Object.entries(node.depositos || {}).forEach(([k, d]) => {
+                    proyResumen[pid].depositos.push(d);
+                    proyResumen[pid].totalDep += parseFloat(d.monto||0);
+                });
+                // Gastos
+                Object.entries(node.gastos || {}).forEach(([k, g]) => {
+                    proyResumen[pid].gastos.push(g);
+                    proyResumen[pid].totalGas += parseFloat(g.monto||0);
+                });
+                // Extras
+                Object.entries(node.extras || {}).forEach(([k, e]) => {
+                    proyResumen[pid].extras.push(e);
+                    proyResumen[pid].totalExt += parseFloat(e.monto||0);
+                });
+            }
+
+            // Totales del supervisor
+            let totalContrato = 0, totalDep = 0, totalGas = 0, totalExt = 0;
+            Object.values(proyResumen).forEach(p => {
+                totalContrato += p.monto_contrato;
+                totalDep      += p.totalDep;
+                totalGas      += p.totalGas;
+                totalExt      += p.totalExt;
+            });
+            const totalContMasExt = totalContrato + totalExt;
+            // Saldo: lo que se le debe = (Contrato + Extras + Gastos cargo) - Depósitos recibidos
+            const saldo = totalContMasExt + totalGas - totalDep;
+            const sc    = saldo > 0 ? 'var(--orange)' : 'var(--green)';
+
+            grandTotal += totalContrato; grandDep += totalDep; grandGas += totalGas; grandExt += totalExt;
+
+            // Generar HTML de proyectos
+            const proyHtml = Object.entries(proyResumen).map(([pid, proy]) => {
+                const saldoProy = proy.monto_contrato + proy.totalExt + proy.totalGas - proy.totalDep;
+                return `
+                <div style="background:var(--bg);border-radius:10px;padding:12px;margin-bottom:8px;">
+                    <div style="font-weight:900;font-size:13px;margin-bottom:8px;display:flex;align-items:center;gap:6px;">
+                        <i class="ph-fill ph-folder" style="color:var(--blue);"></i> ${proy.nombre}
+                    </div>
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:11px;margin-bottom:8px;">
+                        <div><span style="color:var(--gray);">Contrato</span><br><strong style="color:var(--blue);">${fM(proy.monto_contrato)} Bs</strong></div>
+                        <div><span style="color:var(--gray);">Extras</span><br><strong style="color:var(--purple);">${fM(proy.totalExt)} Bs</strong></div>
+                        <div><span style="color:var(--gray);">Depósitos recibidos</span><br><strong style="color:var(--green);">-${fM(proy.totalDep)} Bs</strong></div>
+                        <div><span style="color:var(--gray);">Gastos cargados</span><br><strong style="color:var(--red);">+${fM(proy.totalGas)} Bs</strong></div>
+                    </div>
+                    ${proy.depositos.length > 0 ? `
+                    <div style="font-size:11px;margin-bottom:6px;">
+                        <div style="font-weight:800;color:var(--green);margin-bottom:3px;">✅ Depósitos</div>
+                        ${proy.depositos.map(d=>`<div style="display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px dashed var(--border);font-size:10px;"><span>${d.descripcion||'Depósito'} · ${d.fecha||''}</span><span style="color:var(--green);font-weight:900;">+${fM(d.monto)} Bs</span></div>`).join('')}
+                    </div>` : ''}
+                    ${proy.gastos.length > 0 ? `
+                    <div style="font-size:11px;margin-bottom:6px;">
+                        <div style="font-weight:800;color:var(--red);margin-bottom:3px;">🧾 Gastos cargo</div>
+                        ${proy.gastos.map(g=>`<div style="display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px dashed var(--border);font-size:10px;"><span>${g.descripcion||'Gasto'} · ${g.fecha||''}</span><span style="color:var(--red);font-weight:900;">+${fM(g.monto)} Bs</span></div>`).join('')}
+                    </div>` : ''}
+                    ${proy.extras.length > 0 ? `
+                    <div style="font-size:11px;margin-bottom:6px;">
+                        <div style="font-weight:800;color:var(--purple);margin-bottom:3px;">➕ Extras</div>
+                        ${proy.extras.map(e=>`<div style="display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px dashed var(--border);font-size:10px;"><span>${e.descripcion||'Extra'} · ${e.fecha||''}</span><span style="color:var(--purple);font-weight:900;">+${fM(e.monto)} Bs</span></div>`).join('')}
+                    </div>` : ''}
+                    <div style="display:flex;justify-content:space-between;margin-top:8px;padding-top:6px;border-top:2px solid var(--border);">
+                        <span style="font-size:12px;font-weight:800;">Saldo del proyecto</span>
+                        <span style="font-weight:900;font-size:13px;color:${saldoProy>0?'var(--orange)':'var(--green)'};">${fM(saldoProy)} Bs</span>
+                    </div>
+                </div>`;
+            }).join('');
+
+            const supDataForExport = { nombre, proyResumen, totalContrato, totalDep, totalGas, totalExt };
+            const supJSON = JSON.stringify(supDataForExport).replace(/'/g, "\'").replace(/"/g, '&quot;');
+
+            container.innerHTML += `
+            <div class="generic-card" style="border-left:4px solid var(--purple);">
+                <div class="card-header">
+                    <div>
+                        <div class="c-title"><i class="ph-fill ph-user-gear" style="color:var(--purple);"></i> ${nombre}</div>
+                        <div class="c-sub">${pids.length} proyecto(s)</div>
+                    </div>
+                    <div style="text-align:right;">
+                        <div style="font-size:10px;color:var(--gray);">Saldo pendiente</div>
+                        <div style="font-size:20px;font-weight:900;color:${sc};">${fM(saldo)} Bs</div>
+                    </div>
+                </div>
+                <div class="bal-grid" style="margin-bottom:12px;">
+                    <div><div class="b-lbl">Contrato</div><div class="b-val" style="color:var(--blue);">${fM(totalContrato)} Bs</div></div>
+                    <div><div class="b-lbl">Extras</div><div class="b-val" style="color:var(--purple);">${fM(totalExt)} Bs</div></div>
+                    <div><div class="b-lbl">Depósitos</div><div class="b-val" style="color:var(--green);">${fM(totalDep)} Bs</div></div>
+                    <div><div class="b-lbl">Gastos cargo</div><div class="b-val" style="color:var(--red);">${fM(totalGas)} Bs</div></div>
+                </div>
+                <div style="margin-bottom:12px;">${proyHtml}</div>
+                <button class="btn-action btn-outline" style="font-size:11px;width:100%;border-color:var(--purple);color:var(--purple);"
+                    onclick='exportarPlanillaSupPDF(${JSON.stringify(nombre)}, ${JSON.stringify(supDataForExport)})'>
+                    <i class="ph-bold ph-file-pdf"></i> Exportar PDF Supervisor
+                </button>
+            </div>`;
+        }
+    }
+
+    // ── Export PDF Planilla Supervisor ──────────────────────────────────────
+    function exportarPlanillaSupPDF(nombre, data) {
+        try {
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF();
+            const fM = n => parseFloat(n||0).toLocaleString('es-BO',{minimumFractionDigits:2,maximumFractionDigits:2});
+            let y = 20;
+
+            // Encabezado
+            doc.setFillColor(88, 86, 214);
+            doc.roundedRect(10, 10, 190, 22, 4, 4, 'F');
+            doc.setTextColor(255,255,255); doc.setFontSize(14); doc.setFont(undefined,'bold');
+            doc.text('Planilla Supervisor: ' + nombre, 15, 22);
+            doc.setFontSize(9); doc.setFont(undefined,'normal');
+            doc.text('Rubik OS · ' + new Date().toLocaleDateString('es-BO'), 15, 29);
+            doc.setTextColor(0); y = 40;
+
+            // Resumen global
+            const totalContMasExt = (data.totalContrato||0) + (data.totalExt||0);
+            const saldo = totalContMasExt + (data.totalGas||0) - (data.totalDep||0);
+            const rows = [
+                ['Monto Contrato', fM(data.totalContrato) + ' Bs'],
+                ['Extras aprobados', fM(data.totalExt) + ' Bs'],
+                ['Total a cobrar', fM(totalContMasExt) + ' Bs'],
+                ['Depósitos recibidos', '-' + fM(data.totalDep) + ' Bs'],
+                ['Gastos cargados', '+' + fM(data.totalGas) + ' Bs'],
+                ['SALDO PENDIENTE', fM(saldo) + ' Bs'],
+            ];
+            doc.autoTable({
+                startY: y, head: [['Concepto','Monto']],
+                body: rows, theme: 'striped',
+                styles: { fontSize: 10, cellPadding: 3 },
+                headStyles: { fillColor: [88,86,214] },
+                didParseCell: d => { if(d.row.index === 5) { d.cell.styles.fontStyle='bold'; d.cell.styles.textColor = saldo>0 ? [255,149,0] : [52,199,89]; } }
+            });
+            y = doc.lastAutoTable.finalY + 12;
+
+            // Detalle por proyecto
+            Object.entries(data.proyResumen || {}).forEach(([pid, proy]) => {
+                if (y > 250) { doc.addPage(); y = 15; }
+                doc.setFontSize(11); doc.setFont(undefined,'bold'); doc.setTextColor(0,122,255);
+                doc.text('Proyecto: ' + proy.nombre, 14, y); y += 6;
+                doc.setTextColor(0); doc.setFont(undefined,'normal'); doc.setFontSize(9);
+
+                const detRows = [];
+                proy.depositos.forEach(d => detRows.push(['✅ Depósito', d.descripcion||'Depósito', d.fecha||'', '-'+fM(d.monto)+' Bs']));
+                proy.gastos.forEach(g   => detRows.push(['🧾 Gasto cargo', g.descripcion||'Gasto', g.fecha||'', '+'+fM(g.monto)+' Bs']));
+                proy.extras.forEach(e   => detRows.push(['➕ Extra', e.descripcion||'Extra', e.fecha||'', '+'+fM(e.monto)+' Bs']));
+
+                if (detRows.length > 0) {
+                    doc.autoTable({
+                        startY: y, head:[['Tipo','Descripción','Fecha','Monto']],
+                        body: detRows, theme:'striped',
+                        styles: { fontSize:8, cellPadding:2 },
+                        headStyles: { fillColor:[100,100,100] },
+                        margin: { left:14, right:14 }
+                    });
+                    y = doc.lastAutoTable.finalY + 6;
+                }
+                const saldoProy = proy.monto_contrato + proy.totalExt + proy.totalGas - proy.totalDep;
+                doc.setFont(undefined,'bold');
+                doc.text('Saldo proyecto: ' + fM(saldoProy) + ' Bs', 14, y); y += 10;
+            });
+
+            doc.setTextColor(150); doc.setFontSize(7); doc.setFont(undefined,'normal');
+            doc.text('Rubik OS - rubikbolivia.com', 14, 288);
+            doc.save('Planilla_Supervisor_' + nombre.replace(/\s+/g,'_') + '.pdf');
+        } catch(e) { alert('Error PDF: ' + e.message); console.error(e); }
+    }
 
     function renderPlanillas() {
         const mesSeleccionado = document.getElementById('filtro-mes').value;
