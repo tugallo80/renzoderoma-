@@ -234,7 +234,13 @@
     // Antes: db.ref().on('value') descargaba 12MB completos (incluyendo 8MB de imágenes base64)
     // Ahora: cargamos solo los 6 nodos necesarios (~250 KB total) en paralelo
     async function cargarDatosIniciales() {
+        const box = document.getElementById('list-container');
         try {
+            if (box) box.innerHTML = '<div style="padding:16px;text-align:center;color:#888;font-size:13px;">⏳ Conectando a Firebase...</div>';
+            const user = firebase.auth().currentUser;
+            const uid  = user ? user.uid : null;
+            const email = user ? user.email : null;
+
             const [persSnap, provSnap, matSnap, moSnap, eqSnap, invSnap] = await Promise.all([
                 db.ref('personal').once('value'),
                 db.ref('base_datos/proveedores').once('value'),
@@ -249,12 +255,29 @@
             dbData.mo   = moSnap.val()   || {};
             dbData.eq   = eqSnap.val()   || {};
             dbData.inv  = invSnap.val()  || {};
-            // Items se carga solo si el usuario abre esa pestaña (lazy load)
             dbData.apu  = {};
+
+            const persCount = Object.keys(dbData.pers).length;
+            const provCount = Object.keys(dbData.prov).length;
+            // Mostrar diagnóstico si no hay datos en ninguna pestaña
+            if (persCount === 0 && provCount === 0 && Object.keys(dbData.mat).length === 0) {
+                if (box) box.innerHTML = `<div style="padding:16px;background:#fff3cd;border:1px solid #ffc107;border-radius:8px;font-size:12px;color:#856404;margin:8px;">
+                    ⚠️ Firebase respondió pero sin datos.<br>
+                    Usuario: ${email || uid || 'no identificado'}<br>
+                    Personal: ${persCount} registros · Proveedores: ${provCount} registros<br>
+                    <span style="font-size:10px;color:#666;">Los datos pueden estar en otra ruta o fueron eliminados.</span>
+                </div>`;
+                return;
+            }
+
             actualizarComboProveedores();
             renderCurrentTab();
         } catch(error) {
             console.error("Error cargando datos:", error);
+            if (box) box.innerHTML = `<div style="padding:16px;background:#f8d7da;border:1px solid #f5c6cb;border-radius:8px;font-size:12px;color:#721c24;margin:8px;">
+                ❌ Error al leer Firebase:<br><b>${error.message || error.code || error}</b><br>
+                <span style="font-size:10px;">Usuario: ${(firebase.auth().currentUser||{}).email || 'no autenticado'}</span>
+            </div>`;
         } finally {
             document.getElementById('global-loader').style.display = 'none';
         }
