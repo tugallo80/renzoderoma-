@@ -141,6 +141,8 @@
         <button class="tab-btn" id="tab-planos" onclick="switchTab('planos')">Diseños</button>
         <button class="tab-btn" id="tab-prod" onclick="switchTab('prod')">Producción</button>
         <button class="tab-btn" id="tab-comp" onclick="switchTab('comp')">Compras</button>
+        <button class="tab-btn" id="tab-finanzas" onclick="switchTab('finanzas')">💰 Finanzas</button>
+        <button class="tab-btn" id="tab-extras" onclick="switchTab('extras')">➕ Extras</button>
     </div>
 
     <input type="text" id="search-box" class="search-bar" placeholder="🔍 Buscar ítem o tarea..." onkeyup="filtrarContenido()">
@@ -149,6 +151,8 @@
     <div id="panel-planos" class="tab-content" style="display:none;"></div>
     <div id="panel-prod" class="tab-content" style="display:none;"></div>
     <div id="panel-comp" class="tab-content" style="display:none;"></div>
+    <div id="panel-finanzas" class="tab-content" style="display:none;"></div>
+    <div id="panel-extras" class="tab-content" style="display:none;"></div>
 
     <div id="photo-viewer" class="photo-viewer">
         <div class="pv-nav">
@@ -221,7 +225,7 @@
     };
 
     function switchTab(tab) {
-        ['gantt', 'planos', 'prod', 'comp'].forEach(t => { 
+        ['gantt', 'planos', 'prod', 'comp', 'finanzas', 'extras'].forEach(t => { 
             document.getElementById(`tab-${t}`).classList.remove('active'); 
             document.getElementById(`panel-${t}`).style.display = 'none'; 
         });
@@ -265,6 +269,8 @@
             renderDisenos();
             renderProduccion();
             renderCompras();
+            renderFinanzas();
+            renderExtras();
 
             document.getElementById('global-loader').style.display = 'none';
         });
@@ -536,6 +542,174 @@
             });
         });
     }
+
+    // ==========================================
+    // RENDER 5: FINANZAS DEL SUPERVISOR
+    // ==========================================
+    let licSupervision = null;
+
+    function renderFinanzas() {
+        const cont = document.getElementById('panel-finanzas');
+
+        // Buscar licitación de supervisión de este proyecto para este supervisor
+        db.ref(`proyectos/${cid}/${pid}/licitaciones`).once('value', snap => {
+            licSupervision = null;
+            if (snap.exists()) {
+                snap.forEach(c => {
+                    const l = c.val();
+                    if (l.worker_id === wid && l.is_supervision) licSupervision = { key: c.key, ...l };
+                });
+            }
+
+            const montoContrato = licSupervision ? parseFloat(licSupervision.precio_propuesto || licSupervision.precio_final || 0) : 0;
+            const estadoLic = licSupervision ? (licSupervision.estado || 'enviado') : null;
+
+            // Cargar depósitos y gastos del supervisor
+            Promise.all([
+                db.ref(`supervisores/${wid}/proyectos/${pid}/depositos`).once('value'),
+                db.ref(`supervisores/${wid}/proyectos/${pid}/gastos`).once('value'),
+                db.ref(`supervisores/${wid}/proyectos/${pid}/extras`).once('value'),
+            ]).then(([snapDep, snapGas, snapExt]) => {
+                let depositos = []; let totalDep = 0;
+                if (snapDep.exists()) snapDep.forEach(c => { const d = c.val(); depositos.push({key:c.key,...d}); totalDep += parseFloat(d.monto||0); });
+
+                let gastos = []; let totalGas = 0;
+                if (snapGas.exists()) snapGas.forEach(c => { const g = c.val(); gastos.push({key:c.key,...g}); totalGas += parseFloat(g.monto||0); });
+
+                let extras = []; let totalExt = 0;
+                if (snapExt.exists()) snapExt.forEach(c => { const e = c.val(); extras.push({key:c.key,...e}); totalExt += parseFloat(e.monto||0); });
+
+                const totalContrato = montoContrato + totalExt;
+                const saldo = totalContrato - totalDep + totalGas;
+
+                const fM = n => n.toLocaleString('es-BO', {minimumFractionDigits:2, maximumFractionDigits:2});
+
+                cont.innerHTML = `
+                <!-- RESUMEN CONTRATO -->
+                <div style="background:linear-gradient(135deg,#5856d6,#af52de); border-radius:20px; padding:20px; color:white; margin-bottom:18px; box-shadow:0 8px 20px rgba(88,86,214,0.3);">
+                    <div style="font-size:11px; font-weight:800; opacity:0.8; text-transform:uppercase; margin-bottom:6px;">💼 Contrato de Supervisión</div>
+                    <div style="font-size:30px; font-weight:900;">${fM(montoContrato)} Bs</div>
+                    <div style="font-size:11px; font-weight:700; opacity:0.7; margin-top:4px;">${estadoLic ? estadoLic.toUpperCase() : 'SIN LICITACIÓN'} ${totalExt > 0 ? `+ ${fM(totalExt)} Bs extras` : ''}</div>
+                    <div style="display:flex; justify-content:space-between; margin-top:16px; padding-top:12px; border-top:1px solid rgba(255,255,255,0.2);">
+                        <div><div style="font-size:10px; opacity:0.7;">TOTAL CON EXTRAS</div><div style="font-size:18px; font-weight:900;">${fM(totalContrato)} Bs</div></div>
+                        <div style="text-align:right;"><div style="font-size:10px; opacity:0.7;">SALDO PENDIENTE</div><div style="font-size:18px; font-weight:900; color:${saldo>0?'#ffcc00':'#34c759'};">${fM(Math.abs(saldo))} Bs ${saldo<0?'(a favor)':''}</div></div>
+                    </div>
+                </div>
+
+                <!-- DEPÓSITOS RECIBIDOS -->
+                <div style="background:white; border-radius:16px; padding:16px; margin-bottom:14px; border:1px solid var(--border);">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+                        <div style="font-size:13px; font-weight:900; color:var(--green);">✅ Depósitos Recibidos</div>
+                        <div style="font-size:15px; font-weight:900; color:var(--green);">${fM(totalDep)} Bs</div>
+                    </div>
+                    ${depositos.length === 0 ? '<div style="font-size:12px;color:var(--gray);text-align:center;padding:10px;">Sin depósitos registrados</div>' :
+                        depositos.map(d => `<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px dashed var(--border);font-size:13px;">
+                            <span style="font-weight:700;">${d.descripcion||'Depósito'} <span style="font-size:11px;color:var(--gray);">${d.fecha||''}</span></span>
+                            <span style="font-weight:900;color:var(--green);">+${fM(parseFloat(d.monto||0))} Bs</span>
+                        </div>`).join('')}
+                    <button onclick="abrirModalDeposito()" style="margin-top:12px;width:100%;padding:10px;background:rgba(52,199,89,0.1);color:var(--green);border:1px dashed var(--green);border-radius:10px;font-weight:900;font-size:12px;cursor:pointer;">+ Registrar Depósito</button>
+                </div>
+
+                <!-- GASTOS CARGADOS -->
+                <div style="background:white; border-radius:16px; padding:16px; margin-bottom:14px; border:1px solid var(--border);">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+                        <div style="font-size:13px; font-weight:900; color:var(--red);">🧾 Gastos Cargados</div>
+                        <div style="font-size:15px; font-weight:900; color:var(--red);">${fM(totalGas)} Bs</div>
+                    </div>
+                    ${gastos.length === 0 ? '<div style="font-size:12px;color:var(--gray);text-align:center;padding:10px;">Sin gastos registrados</div>' :
+                        gastos.map(g => `<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px dashed var(--border);font-size:13px;">
+                            <span style="font-weight:700;">${g.descripcion||'Gasto'} <span style="font-size:11px;color:var(--gray);">${g.fecha||''}</span></span>
+                            <span style="font-weight:900;color:var(--red);">-${fM(parseFloat(g.monto||0))} Bs</span>
+                        </div>`).join('')}
+                    <button onclick="abrirModalGasto()" style="margin-top:12px;width:100%;padding:10px;background:rgba(255,59,48,0.08);color:var(--red);border:1px dashed var(--red);border-radius:10px;font-weight:900;font-size:12px;cursor:pointer;">+ Registrar Gasto</button>
+                </div>`;
+            });
+        });
+    }
+
+    // ==========================================
+    // RENDER 6: TRABAJOS EXTRAS DEL SUPERVISOR
+    // ==========================================
+    function renderExtras() {
+        const cont = document.getElementById('panel-extras');
+        db.ref(`supervisores/${wid}/proyectos/${pid}/extras`).on('value', snap => {
+            let extras = [];
+            let total = 0;
+            if (snap.exists()) snap.forEach(c => { const e = c.val(); extras.push({key:c.key,...e}); total += parseFloat(e.monto||0); });
+
+            const fM = n => n.toLocaleString('es-BO', {minimumFractionDigits:2, maximumFractionDigits:2});
+            let extrasHtml = extras.length === 0 ? '<div class="empty-msg">Sin extras registrados aún.</div>' :
+                extras.map(e => `
+                <div style="background:white;border-radius:14px;padding:14px;margin-bottom:10px;border:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;">
+                    <div>
+                        <div style="font-size:14px;font-weight:900;">${e.descripcion||'Extra'}</div>
+                        <div style="font-size:11px;color:var(--gray);margin-top:2px;">${e.fecha||''} ${e.aprobado ? '✅ Aprobado' : '⏳ Pendiente'}</div>
+                    </div>
+                    <div style="text-align:right;">
+                        <div style="font-size:16px;font-weight:900;color:var(--orange);">${fM(parseFloat(e.monto||0))} Bs</div>
+                        <button onclick="eliminarExtra('${e.key}')" style="background:none;border:none;color:var(--red);font-size:11px;cursor:pointer;font-weight:800;">Eliminar</button>
+                    </div>
+                </div>`).join('');
+
+            cont.innerHTML = `
+            <div style="background:linear-gradient(135deg,var(--orange),#ff6b00);border-radius:18px;padding:16px;color:white;margin-bottom:16px;">
+                <div style="font-size:11px;font-weight:800;opacity:0.8;text-transform:uppercase;">Total Extras de Supervisión</div>
+                <div style="font-size:28px;font-weight:900;">${fM(total)} Bs</div>
+            </div>
+            ${extrasHtml}
+            <button onclick="abrirModalExtra()" style="width:100%;padding:14px;background:rgba(255,149,0,0.1);color:var(--orange);border:2px dashed var(--orange);border-radius:14px;font-weight:900;font-size:14px;cursor:pointer;">+ Registrar Trabajo Extra</button>`;
+        });
+    }
+
+    // ==========================================
+    // MODALES: DEPÓSITO / GASTO / EXTRA
+    // ==========================================
+    function abrirModalDeposito() {
+        const monto = prompt("Monto del depósito recibido (Bs):");
+        if (!monto || isNaN(parseFloat(monto))) return;
+        const desc = prompt("Concepto (ej: Anticipo 50%, Pago avance, etc.):");
+        if (!desc) return;
+        const fecha = new Date().toLocaleDateString('es-BO');
+        db.ref(`supervisores/${wid}/proyectos/${pid}/depositos`).push({
+            monto: parseFloat(monto), descripcion: desc, fecha, timestamp: Date.now()
+        }).then(() => { renderFinanzas(); alert("✅ Depósito registrado."); });
+    }
+
+    function abrirModalGasto() {
+        const monto = prompt("Monto del gasto (Bs):");
+        if (!monto || isNaN(parseFloat(monto))) return;
+        const desc = prompt("Descripción del gasto:");
+        if (!desc) return;
+        const fecha = new Date().toLocaleDateString('es-BO');
+        db.ref(`supervisores/${wid}/proyectos/${pid}/gastos`).push({
+            monto: parseFloat(monto), descripcion: desc, fecha, timestamp: Date.now()
+        }).then(() => { renderFinanzas(); alert("✅ Gasto registrado."); });
+    }
+
+    function abrirModalExtra() {
+        const desc = prompt("Descripción del trabajo extra:");
+        if (!desc) return;
+        const monto = prompt("Monto cobrado por este extra (Bs):");
+        if (!monto || isNaN(parseFloat(monto))) return;
+        const fecha = new Date().toLocaleDateString('es-BO');
+        db.ref(`supervisores/${wid}/proyectos/${pid}/extras`).push({
+            descripcion: desc, monto: parseFloat(monto), fecha, aprobado: false, timestamp: Date.now()
+        }).then(() => {
+            // Notificar al hub
+            db.ref('notificaciones/hub').push({
+                title: '📋 Extra de Supervisión',
+                body: `Supervisor registró extra: ${desc} — ${parseFloat(monto).toFixed(2)} Bs`,
+                date: new Date().toISOString(), read: false, cid, pid, tipo: 'extra_supervision'
+            });
+            alert("✅ Extra registrado y enviado para aprobación.");
+        });
+    }
+
+    function eliminarExtra(key) {
+        if (!confirm("¿Eliminar este extra?")) return;
+        db.ref(`supervisores/${wid}/proyectos/${pid}/extras/${key}`).remove();
+    }
+
 
     // ==========================================
     // SISTEMA FOTOGRÁFICO Y VISOR
