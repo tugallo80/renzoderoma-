@@ -345,6 +345,7 @@
             <div class="photo-opt" onclick="openDesignGallery()"><i class="ph-bold ph-images" style="color:var(--orange)"></i> Galería Diseño (Proyecto)</div>
             <div class="photo-opt" onclick="triggerUpload()"><i class="ph-bold ph-upload" style="color:var(--blue)"></i> Subir desde Dispositivo</div>
             <div class="photo-opt" onclick="pasteImageClick()"><i class="ph-bold ph-clipboard" style="color:var(--green)"></i> Pegar Portapapeles (Ctrl+V)</div>
+            <div class="photo-opt" onclick="abrirMedicionPres()"><i class="ph-bold ph-ruler" style="color:var(--purple)"></i> 📐 Medir / Anotar</div>
             
             <div id="gallery-container" style="display:none; margin-top:10px; border-top:1px solid var(--border); padding-top:10px;">
                 <div style="font-size:10px; font-weight:bold; color:var(--gray); margin-bottom:5px;">SELECCIONA UNA IMAGEN O PLANO:</div>
@@ -2320,8 +2321,1604 @@ EJEMPLO VÁLIDO:
     <button class="m-act-btn purple" onclick="abrirModalIABudget()"><i class="ph-bold ph-magic-wand"></i><span>IA</span></button>
     <button class="m-act-btn orange" onclick="syncDatabasePrices()"><i class="ph-bold ph-arrows-clockwise"></i><span>Precios</span></button>
     <button class="m-act-btn" onclick="abrirModalPDF()"><i class="ph-bold ph-file-pdf"></i><span>PDF</span></button>
+    <button class="m-act-btn" style="color:var(--blue);" onclick="abrirModalRender3D()"><i class="ph-bold ph-cube"></i><span>Render</span></button>
 </div>
+
+<!-- ============================================================ -->
+<!-- MODAL RENDER 3D IA                                           -->
+<!-- ============================================================ -->
+<div id="mod-render3d" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.55);overflow-y:auto;">
+  <div style="background:#fff;border-radius:14px;max-width:560px;margin:24px auto;padding:24px 20px;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
+      <div>
+        <div style="font-size:1.1rem;font-weight:700;color:var(--blue);"><i class="ph-bold ph-cube"></i> Render 3D IA</div>
+        <div id="r3d-step-lbl" style="font-size:.8rem;color:#888;margin-top:2px;">Paso 1 — Describir objeto</div>
+      </div>
+      <button onclick="cerrarModalRender3D()" style="background:none;border:none;font-size:1.4rem;cursor:pointer;color:#888;">&times;</button>
+    </div>
+
+    <!-- PASO 1 -->
+    <div id="r3d-step1">
+      <label style="font-size:.85rem;font-weight:600;">Descripción del objeto *</label>
+      <textarea id="r3d-desc" rows="3" placeholder="Ej: Letrero de acero inoxidable con letras en relieve y retroiluminación LED..."
+        style="width:100%;box-sizing:border-box;border:1px solid #ddd;border-radius:8px;padding:8px;font-size:.9rem;margin-top:4px;resize:vertical;"></textarea>
+
+      <!-- Imagen de referencia -->
+      <div style="margin-top:12px;">
+        <label style="font-size:.85rem;font-weight:600;">Imagen de referencia (opcional)</label>
+        <div id="r3d-ref-drop" style="border:2px dashed #c5d0e6;border-radius:8px;padding:14px;text-align:center;cursor:pointer;margin-top:4px;position:relative;">
+          <input type="file" id="r3d-ref-input" accept="image/*" style="position:absolute;inset:0;opacity:0;cursor:pointer;" onchange="onR3dRefImagen(this)">
+          <div id="r3d-ref-preview" style="display:none;position:relative;">
+            <img id="r3d-ref-img" style="max-height:140px;border-radius:6px;cursor:pointer;display:block;" onclick="abrirMedicionRefRender(this.src)" title="Tocá para medir y anotar">
+            <div style="position:absolute;bottom:0;left:0;right:0;background:rgba(0,0,0,.45);color:#fff;font-size:.65rem;text-align:center;padding:3px 4px;border-radius:0 0 6px 6px;pointer-events:none;">
+              <i class="ph-bold ph-ruler"></i> Tocar para medir
+            </div>
+            <button onclick="limpiarR3dRef()" style="position:absolute;top:-8px;right:-8px;background:#e74c3c;color:#fff;border:none;border-radius:50%;width:22px;height:22px;cursor:pointer;font-size:.85rem;line-height:1;">&times;</button>
+          </div>
+          <div id="r3d-ref-placeholder"><i class="ph-bold ph-image" style="font-size:1.6rem;color:#aaa;"></i><br><span style="font-size:.8rem;color:#aaa;">Adjuntar imagen o pegar (Ctrl+V)</span></div>
+        </div>
+      </div>
+
+      <!-- Elementos dinámicos -->
+      <div style="margin-top:14px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+          <label style="font-size:.82rem;font-weight:700;">Elementos de la pieza</label>
+          <button onclick="agregarElementoR3D()"
+            style="background:var(--blue);color:#fff;border:none;border-radius:7px;padding:5px 11px;font-size:.8rem;font-weight:700;cursor:pointer;">
+            + Agregar elemento
+          </button>
+        </div>
+        <div id="r3d-elementos-list"></div>
+      </div>
+
+      <!-- Dimensiones dinámicas -->
+      <div style="margin-top:14px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+          <label style="font-size:.82rem;font-weight:600;">Dimensiones</label>
+          <div style="display:flex;gap:6px;align-items:center;">
+            <button id="r3d-unit-btn" onclick="toggleR3dUnit()"
+              style="background:#f0f0f0;color:#555;border:1px solid #ddd;border-radius:7px;padding:3px 10px;font-size:.78rem;cursor:pointer;font-weight:600;">
+              <span id="r3d-unit-lbl">m</span> ⇄ cm
+            </button>
+            <button onclick="agregarDimension3D()" style="background:var(--blue);color:#fff;border:none;border-radius:7px;padding:4px 10px;font-size:.8rem;cursor:pointer;">+ Agregar</button>
+          </div>
+        </div>
+        <div id="r3d-dims-list"></div>
+      </div>
+
+      <button onclick="generarRender3D()" style="margin-top:18px;width:100%;background:var(--blue);color:#fff;border:none;border-radius:9px;padding:12px;font-size:.95rem;font-weight:700;cursor:pointer;">
+        <i class="ph-bold ph-magic-wand"></i> Generar Render Axonométrico
+      </button>
+    </div>
+
+    <!-- PASO 2 -->
+    <div id="r3d-step2" style="display:none;text-align:center;">
+      <img id="r3d-preview-img" style="max-width:100%;border-radius:10px;border:1px solid #ddd;cursor:pointer;" onclick="abrirMedicionPreviewRender()" title="Tocá para medir y anotar">
+      <div style="font-size:.75rem;color:#888;margin-top:4px;text-align:center;">
+        <i class="ph-bold ph-ruler"></i> Tocá la imagen para medir y anotar
+      </div>
+      <div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap;">
+        <button onclick="aprobarRender3D()" style="flex:2;min-width:140px;background:var(--green);color:#fff;border:none;border-radius:9px;padding:11px;font-size:.9rem;font-weight:700;cursor:pointer;">
+          <i class="ph-bold ph-check-circle"></i> Aprobar y Cotizar
+        </button>
+        <button onclick="abrirEditorMarcas()" style="flex:1;min-width:110px;background:#5b6cf6;color:#fff;border:none;border-radius:9px;padding:11px;font-size:.9rem;cursor:pointer;">
+          <i class="ph-bold ph-paint-brush"></i> Marcar cambios
+        </button>
+        <button onclick="reGenerarRender3D()" style="flex:1;min-width:100px;background:#6c757d;color:#fff;border:none;border-radius:9px;padding:11px;font-size:.9rem;cursor:pointer;">
+          <i class="ph-bold ph-arrows-clockwise"></i> Re-generar
+        </button>
+        <button onclick="volverR3dStep1()" style="flex:1;min-width:100px;background:#f0f0f0;color:#333;border:none;border-radius:9px;padding:11px;font-size:.9rem;cursor:pointer;">
+          <i class="ph-bold ph-pencil"></i> Editar datos
+        </button>
+      </div>
+    </div>
+
+    <!-- PASO 3: Describir cambios por color -->
+    <div id="r3d-step3" style="display:none;">
+      <div style="font-size:.82rem;color:#555;margin-bottom:12px;">
+        Describí qué querés cambiar en cada zona que marcaste.
+      </div>
+      <!-- Vista previa de la imagen marcada -->
+      <div style="text-align:center;margin-bottom:14px;">
+        <img id="r3d-marked-thumb" style="max-width:100%;border-radius:8px;border:1px solid #ddd;max-height:200px;object-fit:contain;">
+        <div style="margin-top:6px;">
+          <button onclick="volverAMarcar()"
+            style="background:none;border:none;color:#5b6cf6;font-size:.78rem;cursor:pointer;text-decoration:underline;">
+            ← Volver a marcar
+          </button>
+        </div>
+      </div>
+      <!-- Descripciones por color (generadas dinámicamente) -->
+      <div id="r3d-color-descs" style="display:grid;gap:8px;margin-bottom:16px;"></div>
+      <div style="display:flex;gap:8px;">
+        <button onclick="volverR3dStep2()" style="flex:1;background:#f0f0f0;color:#333;border:none;border-radius:9px;padding:11px;font-size:.9rem;cursor:pointer;">
+          <i class="ph-bold ph-arrow-left"></i> Volver
+        </button>
+        <button onclick="reGenerarConMarcas()" style="flex:2;background:#5b6cf6;color:#fff;border:none;border-radius:9px;padding:11px;font-size:.9rem;font-weight:700;cursor:pointer;">
+          <i class="ph-bold ph-magic-wand"></i> Re-generar con cambios
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- OVERLAY PANTALLA COMPLETA: Marcador de zonas -->
+<div id="mod-r3d-mark" style="display:none;position:fixed;inset:0;z-index:10000;background:#111;flex-direction:column;">
+  <div style="background:#1c1c1e;flex-shrink:0;">
+    <!-- Fila 1: nav + LISTO -->
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;gap:8px;">
+      <button onclick="cancelarMarcas()"
+        style="background:rgba(255,255,255,.1);color:#fff;border:none;border-radius:10px;padding:7px 11px;font-size:.82rem;font-weight:700;cursor:pointer;flex-shrink:0;">
+        <i class="ph-bold ph-caret-left"></i> Cancelar
+      </button>
+      <span style="color:#fff;font-size:.85rem;font-weight:700;white-space:nowrap;flex:1;text-align:center;">✏️ Marcar zonas</span>
+      <button onclick="confirmarMarcas()"
+        style="background:#34c759;color:#fff;border:none;border-radius:10px;padding:9px 18px;font-size:.9rem;font-weight:800;cursor:pointer;flex-shrink:0;white-space:nowrap;">
+        Listo ✓
+      </button>
+    </div>
+    <!-- Fila 2: Colores + grosor + zoom + limpiar -->
+    <div style="display:flex;align-items:center;gap:7px;padding:8px 12px 10px;border-top:1px solid #2c2c2e;overflow-x:auto;">
+      <div style="display:flex;gap:5px;flex-shrink:0;">
+        <button class="r3d-cbtn" data-c="#e74c3c" onclick="setR3dColor('#e74c3c',this)"
+          style="background:#e74c3c;color:#fff;border:3px solid #fff;border-radius:8px;padding:4px 9px;font-size:.78rem;cursor:pointer;font-weight:700;">Rojo</button>
+        <button class="r3d-cbtn" data-c="#3498db" onclick="setR3dColor('#3498db',this)"
+          style="background:#3498db;color:#fff;border:3px solid transparent;border-radius:8px;padding:4px 9px;font-size:.78rem;cursor:pointer;font-weight:700;">Azul</button>
+        <button class="r3d-cbtn" data-c="#27ae60" onclick="setR3dColor('#27ae60',this)"
+          style="background:#27ae60;color:#fff;border:3px solid transparent;border-radius:8px;padding:4px 9px;font-size:.78rem;cursor:pointer;font-weight:700;">Verde</button>
+        <button class="r3d-cbtn" data-c="#f39c12" onclick="setR3dColor('#f39c12',this)"
+          style="background:#f39c12;color:#fff;border:3px solid transparent;border-radius:8px;padding:4px 9px;font-size:.78rem;cursor:pointer;font-weight:700;">Amarillo</button>
+        <button class="r3d-cbtn" data-c="#e67e22" onclick="setR3dColor('#e67e22',this)"
+          style="background:#e67e22;color:#fff;border:3px solid transparent;border-radius:8px;padding:4px 9px;font-size:.78rem;cursor:pointer;font-weight:700;">Naranja</button>
+        <button class="r3d-cbtn" data-c="#8e44ad" onclick="setR3dColor('#8e44ad',this)"
+          style="background:#8e44ad;color:#fff;border:3px solid transparent;border-radius:8px;padding:4px 9px;font-size:.78rem;cursor:pointer;font-weight:700;">Morado</button>
+      </div>
+      <div style="width:1px;height:22px;background:#444;flex-shrink:0;"></div>
+      <div style="display:flex;gap:4px;flex-shrink:0;align-items:center;">
+        <button id="r3d-th-S" onclick="setR3dThick('S',this)"
+          style="background:#555;color:#fff;border:2px solid #aaa;border-radius:7px;padding:4px 8px;cursor:pointer;font-size:.75rem;font-weight:700;">S</button>
+        <button id="r3d-th-M" onclick="setR3dThick('M',this)"
+          style="background:#3a3a3c;color:#fff;border:2px solid transparent;border-radius:7px;padding:4px 8px;cursor:pointer;font-size:.85rem;font-weight:700;">M</button>
+        <button id="r3d-th-L" onclick="setR3dThick('L',this)"
+          style="background:#3a3a3c;color:#fff;border:2px solid transparent;border-radius:7px;padding:4px 8px;cursor:pointer;font-size:1rem;font-weight:900;">L</button>
+      </div>
+      <div style="width:1px;height:22px;background:#444;flex-shrink:0;"></div>
+      <div style="display:flex;gap:4px;flex-shrink:0;">
+        <button onclick="r3dMarkZoom(0.8)" style="background:#3a3a3c;color:#fff;border:1px solid #555;border-radius:7px;padding:4px 8px;font-size:.8rem;cursor:pointer;">−</button>
+        <button onclick="r3dMarkZoom(1.25)" style="background:#3a3a3c;color:#fff;border:1px solid #555;border-radius:7px;padding:4px 8px;font-size:.8rem;cursor:pointer;">+</button>
+        <button onclick="undoMarca()" title="Deshacer último trazo"
+          style="background:#3a3a3c;color:#fff;border:1px solid #555;border-radius:7px;padding:4px 8px;font-size:.78rem;cursor:pointer;font-weight:700;">↩</button>
+        <button id="r3d-eraser-btn" onclick="toggleEraserMark(this)" title="Borrador"
+          style="background:#3a3a3c;color:#fff;border:1px solid #555;border-radius:7px;padding:4px 8px;font-size:.78rem;cursor:pointer;font-weight:700;">⌫</button>
+        <button onclick="limpiarCanvas3D()" style="background:#3a3a3c;color:#fff;border:1px solid #555;border-radius:7px;padding:4px 8px;font-size:.75rem;cursor:pointer;font-weight:600;">Limpiar</button>
+      </div>
+    </div>
+  </div>
+  <!-- Zona de canvas scrollable — inner div centra el canvas cuando es chico -->
+  <div id="r3d-mark-scroll" style="flex:1;overflow:auto;background:#000;">
+    <div style="min-width:100%;min-height:100%;display:flex;align-items:center;justify-content:center;">
+      <canvas id="r3d-canvas" style="display:block;touch-action:none;cursor:crosshair;"></canvas>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+    var _r3dDims      = [];
+    var _r3dElements  = [];   // [{nombre,mat,est,acab}]
+    var _r3dRefBase64 = null;
+    var _r3dRefMime   = 'image/jpeg';
+    var _r3dRenderDataUrl = null;
+
+    window.abrirModalRender3D = function() {
+        document.getElementById('r3d-desc').value = '';
+        _r3dDims = [];
+        _r3dElements = [{ nombre: '', mat: '', est: '', acab: '' }];
+        _r3dRefBase64 = null;
+        _r3dRenderDataUrl = null;
+        limpiarR3dRef();
+        renderDims3D();
+        renderElementosR3D();
+        document.getElementById('r3d-step1').style.display = 'block';
+        document.getElementById('r3d-step2').style.display = 'none';
+        document.getElementById('r3d-step3').style.display = 'none';
+        document.getElementById('r3d-step-lbl').textContent = 'Paso 1 — Describir objeto';
+        document.getElementById('mod-render3d').style.display = 'block';
+    };
+
+    window.cerrarModalRender3D = function() {
+        document.getElementById('mod-render3d').style.display = 'none';
+    };
+
+    window.volverR3dStep1 = function() {
+        document.getElementById('r3d-step2').style.display = 'none';
+        document.getElementById('r3d-step1').style.display = 'block';
+        document.getElementById('r3d-step-lbl').textContent = 'Paso 1 — Describir objeto';
+    };
+
+    window.onR3dRefImagen = function(input) {
+        const file = input.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            _r3dRefBase64 = e.target.result.split(',')[1];
+            _r3dRefMime   = file.type || 'image/jpeg';
+            document.getElementById('r3d-ref-img').src = e.target.result;
+            document.getElementById('r3d-ref-preview').style.display = 'block';
+            document.getElementById('r3d-ref-placeholder').style.display = 'none';
+        };
+        reader.readAsDataURL(file);
+    };
+
+    window.limpiarR3dRef = function() {
+        _r3dRefBase64 = null;
+        document.getElementById('r3d-ref-img').src = '';
+        document.getElementById('r3d-ref-preview').style.display = 'none';
+        document.getElementById('r3d-ref-placeholder').style.display = 'block';
+        document.getElementById('r3d-ref-input').value = '';
+    };
+
+    window.setR3dRefFromDataUrl = function(dataUrl) {
+        _r3dRefBase64 = dataUrl.split(',')[1];
+        _r3dRefMime   = 'image/png';
+        document.getElementById('r3d-ref-img').src = dataUrl;
+        document.getElementById('r3d-ref-preview').style.display = 'block';
+        document.getElementById('r3d-ref-placeholder').style.display = 'none';
+    };
+
+    window.setR3dRenderDataUrl = function(dataUrl) {
+        _r3dRenderDataUrl = dataUrl;
+        document.getElementById('r3d-preview-img').src = dataUrl;
+    };
+
+    // Paste image into reference drop zone
+    document.addEventListener('paste', function(e) {
+        if (document.getElementById('mod-render3d').style.display === 'none') return;
+        const items = e.clipboardData && e.clipboardData.items;
+        if (!items) return;
+        for (let i = 0; i < items.length; i++) {
+            if (items[i].type.startsWith('image/')) {
+                const file = items[i].getAsFile();
+                const reader = new FileReader();
+                reader.onload = function(ev) {
+                    _r3dRefBase64 = ev.target.result.split(',')[1];
+                    _r3dRefMime   = file.type || 'image/jpeg';
+                    document.getElementById('r3d-ref-img').src = ev.target.result;
+                    document.getElementById('r3d-ref-preview').style.display = 'block';
+                    document.getElementById('r3d-ref-placeholder').style.display = 'none';
+                };
+                reader.readAsDataURL(file);
+                break;
+            }
+        }
+    });
+
+    var _r3dUnit = 'm'; // 'm' o 'cm'
+
+    // Setter global — los oninput inline no pueden acceder a variables de closure
+    window._r3dSetDim = function(i, field, val) {
+        if (_r3dDims[i]) _r3dDims[i][field] = val;
+    };
+
+    window.toggleR3dUnit = function() {
+        const from = _r3dUnit, to = from === 'm' ? 'cm' : 'm';
+        const factor = to === 'cm' ? 100 : 0.01;
+        _r3dDims.forEach(d => {
+            if (d.base)   d.base   = String(Math.round(parseFloat(d.base)   * factor * 1000) / 1000);
+            if (d.altura) d.altura = String(Math.round(parseFloat(d.altura) * factor * 1000) / 1000);
+            if (d.prof)   d.prof   = String(Math.round(parseFloat(d.prof)   * factor * 1000) / 1000);
+        });
+        _r3dUnit = to;
+        document.getElementById('r3d-unit-lbl').textContent = to;
+        renderDims3D();
+    };
+
+    window.agregarDimension3D = function() {
+        _r3dDims.push({ nombre:'', base:'', altura:'', prof:'' });
+        renderDims3D();
+    };
+
+    window.borrarDimension3D = function(i) {
+        _r3dDims.splice(i, 1);
+        renderDims3D();
+    };
+
+    function renderDims3D() {
+        const cont = document.getElementById('r3d-dims-list');
+        const u = _r3dUnit;
+        if (!_r3dDims.length) {
+            cont.innerHTML = '<div style="font-size:.8rem;color:#aaa;text-align:center;padding:8px;">Sin dimensiones — presioná "+ Agregar"</div>';
+            return;
+        }
+        cont.innerHTML = _r3dDims.map((d, i) => `
+        <div style="border:1px solid #e8e8e8;border-radius:9px;padding:9px 10px;margin-bottom:7px;background:#fafafa;">
+          <div style="display:flex;gap:6px;align-items:center;margin-bottom:6px;">
+            <input placeholder="Nombre de la parte" value="${(d.nombre||'').replace(/"/g,'&quot;')}"
+              oninput="window._r3dSetDim(${i},'nombre',this.value)"
+              style="flex:1;min-width:0;border:1px solid #ddd;border-radius:6px;padding:6px 8px;font-size:.83rem;">
+            <button onclick="borrarDimension3D(${i})"
+              style="background:#e74c3c;color:#fff;border:none;border-radius:6px;width:28px;height:28px;cursor:pointer;font-size:.95rem;flex-shrink:0;">&times;</button>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:5px;">
+            <input type="number" step="0.01" placeholder="Ancho ${u}" value="${d.base||''}"
+              oninput="window._r3dSetDim(${i},'base',this.value)"
+              style="border:1px solid #ddd;border-radius:6px;padding:6px 7px;font-size:.82rem;min-width:0;">
+            <input type="number" step="0.01" placeholder="Alto ${u}" value="${d.altura||''}"
+              oninput="window._r3dSetDim(${i},'altura',this.value)"
+              style="border:1px solid #ddd;border-radius:6px;padding:6px 7px;font-size:.82rem;min-width:0;">
+            <input type="number" step="0.01" placeholder="Prof ${u}" value="${d.prof||''}"
+              oninput="window._r3dSetDim(${i},'prof',this.value)"
+              style="border:1px solid #ddd;border-radius:6px;padding:6px 7px;font-size:.82rem;min-width:0;">
+          </div>
+        </div>`).join('');
+    }
+
+    // ── Elementos dinámicos ────────────────────────────────────────
+    function _syncElementos() {
+        document.querySelectorAll('.r3d-elem-card').forEach(function(card, i) {
+            if (!_r3dElements[i]) return;
+            _r3dElements[i].nombre = card.querySelector('.r3d-en').value;
+            _r3dElements[i].mat    = card.querySelector('.r3d-em').value;
+            _r3dElements[i].est    = card.querySelector('.r3d-ee').value;
+            _r3dElements[i].acab   = card.querySelector('.r3d-ea').value;
+        });
+    }
+
+    function renderElementosR3D() {
+        const cont = document.getElementById('r3d-elementos-list');
+        if (!cont) return;
+        cont.innerHTML = _r3dElements.map(function(el, i) {
+            const canDel = _r3dElements.length > 1;
+            return `<div class="r3d-elem-card" style="border:1px solid #ddd;border-radius:9px;padding:10px;margin-bottom:8px;background:#fafafa;">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:7px;">
+    <span style="font-size:.8rem;font-weight:700;color:var(--blue);">Elemento ${i+1}</span>
+    ${canDel ? `<button onclick="eliminarElementoR3D(${i})" style="background:#e74c3c;color:#fff;border:none;border-radius:6px;width:26px;height:26px;cursor:pointer;font-size:.9rem;">&times;</button>` : ''}
+  </div>
+  <input class="r3d-en" placeholder="Nombre (ej: Panel de fondo, Producto a escala)" value="${(el.nombre||'').replace(/"/g,'&quot;')}"
+    style="width:100%;box-sizing:border-box;border:1px solid #ddd;border-radius:7px;padding:7px 9px;font-size:.85rem;margin-bottom:5px;font-weight:600;">
+  <input class="r3d-em" placeholder="Materiales (ej: Vinilo, acrílico, LEDs)" value="${(el.mat||'').replace(/"/g,'&quot;')}"
+    style="width:100%;box-sizing:border-box;border:1px solid #ddd;border-radius:7px;padding:6px 9px;font-size:.82rem;margin-bottom:5px;">
+  <input class="r3d-ee" placeholder="Estructura (ej: Perfil aluminio, base anclada)" value="${(el.est||'').replace(/"/g,'&quot;')}"
+    style="width:100%;box-sizing:border-box;border:1px solid #ddd;border-radius:7px;padding:6px 9px;font-size:.82rem;margin-bottom:5px;">
+  <input class="r3d-ea" placeholder="Acabado / branding (ej: Impresión UV, neon, pulido)" value="${(el.acab||'').replace(/"/g,'&quot;')}"
+    style="width:100%;box-sizing:border-box;border:1px solid #ddd;border-radius:7px;padding:6px 9px;font-size:.82rem;">
+</div>`;
+        }).join('');
+    }
+
+    window.agregarElementoR3D = function() {
+        _syncElementos();
+        _r3dElements.push({ nombre: '', mat: '', est: '', acab: '' });
+        renderElementosR3D();
+        // Scroll to new card
+        var list = document.getElementById('r3d-elementos-list');
+        if (list) list.lastElementChild && list.lastElementChild.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    };
+
+    window.eliminarElementoR3D = function(i) {
+        _syncElementos();
+        _r3dElements.splice(i, 1);
+        renderElementosR3D();
+    };
+
+    function _buildRenderPrompt() {
+        _syncElementos();
+        const desc = document.getElementById('r3d-desc').value.trim();
+        const toM  = _r3dUnit === 'cm' ? 0.01 : 1;
+        const fmt  = v => v ? (parseFloat(v) * toM).toFixed(2) : null;
+        const dims = _r3dDims.filter(d => d.nombre || d.base).map(d => {
+            const parts = [];
+            if (fmt(d.base))   parts.push(fmt(d.base) + 'm ancho');
+            if (fmt(d.altura)) parts.push(fmt(d.altura) + 'm alto');
+            if (fmt(d.prof))   parts.push(fmt(d.prof) + 'm prof');
+            return `${d.nombre||'Parte'}: ${parts.join(' × ')}`;
+        }).join('; ');
+
+        let prompt = `AXONOMETRÍA TÉCNICA PROFESIONAL — estilo CAD industrial.
+Fondo blanco liso. Perspectiva isométrica a 30°. Líneas de cotas en metros con flechas de acotación. Etiquetas de materiales con líneas de referencia. Sin sombras dramáticas. Colores neutros y realistas.
+IMPORTANTE: Dibujá SOLO lo que se describe aquí. No inventes vistas adicionales, dimensiones extra, ni elementos no solicitados. Si hay imagen de referencia, respetá exactamente sus proporciones y forma.
+
+Objeto: ${desc}`;
+
+        const elems = _r3dElements.filter(e => e.nombre || e.mat || e.est || e.acab);
+        if (elems.length > 1) {
+            prompt += '\n\nCOMPOSICIÓN DE ELEMENTOS:';
+            elems.forEach(function(el, i) {
+                prompt += `\n\nElemento ${i+1}${el.nombre ? ' — ' + el.nombre : ''}:`;
+                if (el.mat)  prompt += `\n  Materiales: ${el.mat}`;
+                if (el.est)  prompt += `\n  Estructura: ${el.est}`;
+                if (el.acab) prompt += `\n  Acabado/Branding: ${el.acab}`;
+            });
+        } else if (elems.length === 1) {
+            const el = elems[0];
+            if (el.mat)  prompt += `\nMateriales: ${el.mat}`;
+            if (el.est)  prompt += `\nEstructura: ${el.est}`;
+            if (el.acab) prompt += `\nAcabado: ${el.acab}`;
+        }
+
+        if (dims) prompt += `\nDimensiones: ${dims}`;
+        prompt += `\n\nMostrar: vista isométrica completa con todos los elementos etiquetados, cotas en metros, materiales indicados en español. No agregues vistas que no hayan sido solicitadas.`;
+        return prompt;
+    }
+
+    window.generarRender3D = async function() {
+        const desc = document.getElementById('r3d-desc').value.trim();
+        if (!desc) { alert('Ingresá una descripción primero.'); return; }
+
+        const btn = document.querySelector('#r3d-step1 button[onclick="generarRender3D()"]');
+        btn.disabled = true;
+        btn.innerHTML = '<i class="ph-bold ph-spinner"></i> Generando render...';
+
+        try {
+            const prompt = _buildRenderPrompt();
+            const token = firebase.auth().currentUser ? await firebase.auth().currentUser.getIdToken() : null;
+            const headers = { 'Content-Type': 'application/json' };
+            if (token) headers['Authorization'] = 'Bearer ' + token;
+
+            const body = { generateImage: true, prompt };
+            if (_r3dRefBase64) {
+                body.referenceImage = { data: _r3dRefBase64, mimeType: _r3dRefMime };
+            }
+
+            const resp = await fetch('/api/gemini', {
+                method: 'POST', headers,
+                body: JSON.stringify(body)
+            });
+            if (!resp.ok) { const t = await resp.text(); throw new Error(`HTTP ${resp.status}: ${t}`); }
+            const result = await resp.json();
+            const imgUrl = result.imageUrl;
+            if (!imgUrl) throw new Error('La IA no devolvió imagen');
+
+            _r3dRenderDataUrl = imgUrl;
+            document.getElementById('r3d-preview-img').src = imgUrl;
+            document.getElementById('r3d-step1').style.display = 'none';
+            document.getElementById('r3d-step2').style.display = 'block';
+            document.getElementById('r3d-step-lbl').textContent = 'Paso 2 — Aprobar render';
+
+        } catch(e) {
+            alert('Error al generar render: ' + e.message);
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="ph-bold ph-cube"></i> Generar Render Axonométrico';
+        }
+    };
+
+    window.reGenerarRender3D = function() {
+        document.getElementById('r3d-step2').style.display = 'none';
+        document.getElementById('r3d-step1').style.display = 'block';
+        document.getElementById('r3d-step-lbl').textContent = 'Paso 1 — Describir objeto';
+        generarRender3D();
+    };
+
+    // ── CANVAS EDITOR (pantalla completa) ─────────────────────────
+    var _cvs, _ctx, _drawing = false, _activeColor = '#e74c3c', _activeThick = 'S';
+    var _markMode   = 'draw'; // 'draw' | 'erase'
+    var _usedColors = [];
+    var _undoStack  = [];     // array of ImageData snapshots
+    var _origImg    = null;   // clean original render for eraser
+    var _markZoom    = 1;
+    var _markPinch0  = 0, _markPinchZ0 = 1;
+    var _markedDataUrl = null;  // saved after confirmarMarcas
+    var _colorNames  = { '#e74c3c':'Rojo','#3498db':'Azul','#27ae60':'Verde','#f39c12':'Amarillo','#e67e22':'Naranja','#8e44ad':'Morado' };
+
+    window.abrirEditorMarcas = function() {
+        document.getElementById('mod-r3d-mark').style.display = 'flex';
+        _usedColors = []; _undoStack = []; _markMode = 'draw';
+        var eb = document.getElementById('r3d-eraser-btn');
+        if (eb) { eb.style.background = '#3a3a3c'; eb.style.borderColor = '#555'; }
+        setR3dColor('#e74c3c', document.querySelector('.r3d-cbtn[data-c="#e74c3c"]'));
+        setR3dThick('S', document.getElementById('r3d-th-S'));
+        // Preload original image for eraser
+        _origImg = new Image();
+        _origImg.crossOrigin = 'anonymous';
+        _origImg.src = _r3dRenderDataUrl;
+        _initCanvas();
+    };
+
+    window.volverAMarcar = function() {
+        // Re-open full-screen editor keeping existing marks
+        document.getElementById('mod-r3d-mark').style.display = 'flex';
+        document.getElementById('r3d-step3').style.display = 'none';
+        document.getElementById('r3d-step-lbl').textContent = 'Paso 2 — Aprobar render';
+        // Restore canvas from saved data if available
+        if (_markedDataUrl) {
+            const img = new Image();
+            img.onload = function() { if (_ctx) _ctx.drawImage(img, 0, 0, _cvs.width, _cvs.height); };
+            img.src = _markedDataUrl;
+        }
+    };
+
+    window.cancelarMarcas = function() {
+        document.getElementById('mod-r3d-mark').style.display = 'none';
+    };
+
+    window.confirmarMarcas = function() {
+        if (!_cvs) return;
+        _markedDataUrl = _cvs.toDataURL('image/png');
+        document.getElementById('mod-r3d-mark').style.display = 'none';
+        // Show Step 3 description phase
+        document.getElementById('r3d-step2').style.display = 'none';
+        document.getElementById('r3d-step3').style.display = 'block';
+        document.getElementById('r3d-step-lbl').textContent = 'Paso 3 — Describir cambios';
+        // Thumbnail
+        document.getElementById('r3d-marked-thumb').src = _markedDataUrl;
+        // Rebuild color desc inputs (only for colors actually used)
+        const cont = document.getElementById('r3d-color-descs');
+        // Preserve existing values
+        const prev = {};
+        cont.querySelectorAll('input[id^="r3d-cdesc-"]').forEach(function(inp){ prev[inp.id] = inp.value; });
+        cont.innerHTML = '';
+        _usedColors.forEach(function(c) {
+            const name = _colorNames[c] || c;
+            const id   = 'r3d-cdesc-' + c.replace('#','');
+            const div  = document.createElement('div');
+            div.style.cssText = 'display:flex;align-items:center;gap:8px;';
+            div.innerHTML = '<span style="display:inline-block;width:20px;height:20px;border-radius:4px;background:' + c + ';flex-shrink:0;border:1px solid #ccc;"></span>' +
+              '<label style="font-size:.8rem;font-weight:700;color:#333;white-space:nowrap;">Zona ' + name + ':</label>' +
+              '<input id="' + id + '" type="text" placeholder="¿Qué querés cambiar en esta zona?"' +
+              ' style="flex:1;border:1px solid #ddd;border-radius:7px;padding:6px 9px;font-size:.82rem;">';
+            cont.appendChild(div);
+            if (prev[id]) document.getElementById(id).value = prev[id];
+        });
+    };
+
+    window.volverR3dStep2 = function() {
+        document.getElementById('r3d-step3').style.display = 'none';
+        document.getElementById('r3d-step2').style.display = 'block';
+        document.getElementById('r3d-step-lbl').textContent = 'Paso 2 — Aprobar render';
+    };
+
+    window.setR3dColor = function(color, btn) {
+        _activeColor = color;
+        document.querySelectorAll('.r3d-cbtn').forEach(function(b){ b.style.borderColor = 'transparent'; });
+        if (btn) btn.style.borderColor = '#fff';
+        // Exit eraser mode when a color is picked
+        if (_markMode === 'erase') {
+            _markMode = 'draw';
+            var eb = document.getElementById('r3d-eraser-btn');
+            if (eb) { eb.style.background = '#3a3a3c'; eb.style.borderColor = '#555'; }
+            if (_cvs) _cvs.style.cursor = 'crosshair';
+        }
+    };
+
+    window.setR3dThick = function(t, btn) {
+        _activeThick = t;
+        ['S','M','L'].forEach(function(k) {
+            var b = document.getElementById('r3d-th-' + k);
+            if (b) { b.style.background = k===t ? '#555' : '#3a3a3c'; b.style.borderColor = k===t ? '#aaa' : 'transparent'; }
+        });
+    };
+
+    window.r3dMarkZoom = function(factor) {
+        if (!_cvs) return;
+        var sc   = document.getElementById('r3d-mark-scroll');
+        var cssW = _cvs.width  * _markZoom;
+        var cssH = _cvs.height * _markZoom;
+        // When canvas fits in viewport: zoom from its center; when larger: zoom from viewport center
+        var cx = cssW >= sc.clientWidth  ? (sc.scrollLeft + sc.clientWidth  / 2) / cssW : 0.5;
+        var cy = cssH >= sc.clientHeight ? (sc.scrollTop  + sc.clientHeight / 2) / cssH : 0.5;
+        _markZoom = Math.max(0.1, Math.min(10, _markZoom * factor));
+        var newW = Math.round(_cvs.width  * _markZoom);
+        var newH = Math.round(_cvs.height * _markZoom);
+        _cvs.style.width  = newW + 'px';
+        _cvs.style.height = newH + 'px';
+        requestAnimationFrame(function(){
+            sc.scrollLeft = cx * newW - sc.clientWidth  / 2;
+            sc.scrollTop  = cy * newH - sc.clientHeight / 2;
+        });
+    };
+
+    window.limpiarCanvas3D = function() {
+        if (!_cvs || !_ctx) return;
+        const img = new Image();
+        img.onload = function() { _ctx.drawImage(img, 0, 0, _cvs.width, _cvs.height); };
+        img.src = _r3dRenderDataUrl;
+        _usedColors = []; _undoStack = [];
+    };
+
+    window.undoMarca = function() {
+        if (!_undoStack.length || !_ctx) return;
+        _ctx.putImageData(_undoStack.pop(), 0, 0);
+    };
+
+    window.toggleEraserMark = function(btn) {
+        _markMode = _markMode === 'erase' ? 'draw' : 'erase';
+        btn.style.background  = _markMode === 'erase' ? '#ff9500' : '#3a3a3c';
+        btn.style.borderColor = _markMode === 'erase' ? '#ff9500' : '#555';
+        if (_cvs) _cvs.style.cursor = _markMode === 'erase' ? 'cell' : 'crosshair';
+        // Deselect color buttons when erasing
+        if (_markMode === 'erase') {
+            document.querySelectorAll('.r3d-cbtn').forEach(function(b){ b.style.borderColor='transparent'; });
+        }
+    };
+
+    function _thickPxMark() {
+        var base = _cvs.width / 28;
+        return _activeThick === 'S' ? Math.max(4, base * 0.6) :
+               _activeThick === 'M' ? Math.max(8, base)       :
+                                      Math.max(18, base * 2.2);
+    }
+
+    function _initCanvas() {
+        _cvs = document.getElementById('r3d-canvas');
+        _ctx = _cvs.getContext('2d');
+        const img = new Image();
+        img.onload = function() {
+            _cvs.width  = img.naturalWidth  || 800;
+            _cvs.height = img.naturalHeight || 600;
+            // Fit to viewport initially
+            var sc = document.getElementById('r3d-mark-scroll');
+            var fw = sc.clientWidth  || window.innerWidth;
+            var fh = sc.clientHeight || window.innerHeight - 120;
+            _markZoom = Math.min(fw / _cvs.width, fh / _cvs.height, 1);
+            _cvs.style.width  = Math.round(_cvs.width  * _markZoom) + 'px';
+            _cvs.style.height = Math.round(_cvs.height * _markZoom) + 'px';
+            _ctx.drawImage(img, 0, 0);
+            _attachCanvasEvents();
+        };
+        img.crossOrigin = 'anonymous';
+        img.src = _markedDataUrl || _r3dRenderDataUrl;
+    }
+
+    function _attachCanvasEvents() {
+        const old = _cvs, neo = old.cloneNode(false);
+        old.parentNode.replaceChild(neo, old);
+        _cvs = neo; _ctx = neo.getContext('2d');
+        if (_markMode === 'erase') _cvs.style.cursor = 'cell';
+
+        // Re-draw
+        const img = new Image();
+        img.onload = function() { _ctx.drawImage(img, 0, 0, _cvs.width, _cvs.height); };
+        img.src = _markedDataUrl || _r3dRenderDataUrl;
+
+        function pos(e) {
+            const r = _cvs.getBoundingClientRect();
+            const sx = _cvs.width / r.width, sy = _cvs.height / r.height;
+            const src = e.touches ? e.touches[0] : e;
+            return { x: (src.clientX - r.left) * sx, y: (src.clientY - r.top) * sy };
+        }
+        function midpoint(e) {
+            return { x: (e.touches[0].clientX + e.touches[1].clientX) / 2,
+                     y: (e.touches[0].clientY + e.touches[1].clientY) / 2 };
+        }
+
+        var _prevMidX = 0, _prevMidY = 0;
+
+        function startDraw(e) {
+            if (e.touches && e.touches.length === 2) {
+                e.preventDefault();
+                _drawing = false;
+                _markPinch0 = _pinchDist(e); _markPinchZ0 = _markZoom;
+                var m = midpoint(e); _prevMidX = m.x; _prevMidY = m.y;
+                return;
+            }
+            e.preventDefault();
+            // Save undo snapshot before each stroke
+            if (_cvs.width && _cvs.height) {
+                if (_undoStack.length >= 15) _undoStack.shift();
+                _undoStack.push(_ctx.getImageData(0, 0, _cvs.width, _cvs.height));
+            }
+            _drawing = true;
+            const p = pos(e);
+            _ctx.beginPath(); _ctx.moveTo(p.x, p.y);
+            if (_markMode === 'draw') _registerColor(_activeColor);
+        }
+        function doDraw(e) {
+            if (e.touches && e.touches.length === 2) {
+                e.preventDefault();
+                // Pan: move scroll by midpoint delta
+                var sc = document.getElementById('r3d-mark-scroll');
+                var m  = midpoint(e);
+                sc.scrollLeft -= m.x - _prevMidX;
+                sc.scrollTop  -= m.y - _prevMidY;
+                _prevMidX = m.x; _prevMidY = m.y;
+                // Zoom: pinch
+                if (_markPinch0) {
+                    _markZoom = Math.max(0.1, Math.min(10, _markPinchZ0 * (_pinchDist(e) / _markPinch0)));
+                    _cvs.style.width  = Math.round(_cvs.width  * _markZoom) + 'px';
+                    _cvs.style.height = Math.round(_cvs.height * _markZoom) + 'px';
+                }
+                return;
+            }
+            if (!_drawing) return;
+            e.preventDefault();
+            const p = pos(e);
+            if (_markMode === 'erase' && _origImg) {
+                // Erase: restore original image pixels in a circle
+                var r = _thickPxMark() * 1.5;
+                _ctx.save();
+                _ctx.beginPath(); _ctx.arc(p.x, p.y, r, 0, Math.PI * 2); _ctx.clip();
+                _ctx.drawImage(_origImg, 0, 0, _cvs.width, _cvs.height);
+                _ctx.restore();
+            } else {
+                _ctx.lineWidth = _thickPxMark();
+                _ctx.lineCap = 'round'; _ctx.lineJoin = 'round';
+                _ctx.strokeStyle = _activeColor + 'cc';
+                _ctx.lineTo(p.x, p.y); _ctx.stroke();
+                _ctx.beginPath(); _ctx.moveTo(p.x, p.y);
+            }
+        }
+        function stopDraw(e) {
+            _drawing = false;
+            if (!e || !e.touches || e.touches.length === 0) _markPinch0 = 0;
+        }
+
+        neo.addEventListener('wheel', function(e) {
+            e.preventDefault();
+            r3dMarkZoom(e.deltaY < 0 ? 1.12 : 0.89);
+        }, { passive: false });
+
+        neo.addEventListener('mousedown',  startDraw);
+        neo.addEventListener('mousemove',  doDraw);
+        neo.addEventListener('mouseup',    stopDraw);
+        neo.addEventListener('mouseleave', stopDraw);
+        neo.addEventListener('touchstart', startDraw, { passive: false });
+        neo.addEventListener('touchmove',  doDraw,    { passive: false });
+        neo.addEventListener('touchend',   stopDraw);
+    }
+
+    function _pinchDist(e) {
+        var dx = e.touches[0].clientX - e.touches[1].clientX;
+        var dy = e.touches[0].clientY - e.touches[1].clientY;
+        return Math.sqrt(dx*dx + dy*dy);
+    }
+
+    function _registerColor(color) {
+        if (_usedColors.includes(color)) return;
+        _usedColors.push(color);
+    }
+
+    window.reGenerarConMarcas = async function() {
+        if (!_markedDataUrl) { alert('Primero marcá zonas con colores.'); return; }
+
+        const cambios = _usedColors.map(function(c) {
+            const name = _colorNames[c] || c;
+            const inp  = document.getElementById('r3d-cdesc-' + c.replace('#',''));
+            const val  = inp ? inp.value.trim() : '';
+            return val ? '- Zona marcada en ' + name.toUpperCase() + ': ' + val : null;
+        }).filter(Boolean);
+
+        if (!cambios.length) { alert('Describí al menos un cambio en los campos de color.'); return; }
+
+        const btn = document.querySelector('#r3d-step3 button[onclick="reGenerarConMarcas()"]');
+        btn.disabled = true;
+        btn.innerHTML = '<i class="ph-bold ph-spinner"></i> Generando...';
+
+        try {
+            const markedBase64 = _markedDataUrl.split(',')[1];
+            const basePrompt   = _buildRenderPrompt();
+            const fullPrompt   = basePrompt + `
+
+MODIFICACIONES SOLICITADAS — el usuario marcó zonas con colores sobre la imagen:
+${cambios.join('\n')}
+
+INSTRUCCIONES:
+1. La imagen adjunta muestra la axonometría actual con zonas coloreadas que indican qué cambiar.
+2. Aplicá EXACTAMENTE los cambios indicados solo en las zonas del color correspondiente.
+3. Mantené sin modificar todo lo que no fue marcado.
+4. Conservá el mismo estilo técnico: fondo blanco, perspectiva isométrica, cotas en metros, texto en español.
+5. NO inventes nuevas vistas, proporciones ni elementos no solicitados.`;
+
+            const token   = firebase.auth().currentUser ? await firebase.auth().currentUser.getIdToken() : null;
+            const headers = { 'Content-Type': 'application/json' };
+            if (token) headers['Authorization'] = 'Bearer ' + token;
+
+            const resp = await fetch('/api/gemini', {
+                method: 'POST', headers,
+                body: JSON.stringify({ generateImage: true, prompt: fullPrompt, referenceImage: { data: markedBase64, mimeType: 'image/png' } })
+            });
+            if (!resp.ok) { const t = await resp.text(); throw new Error(`HTTP ${resp.status}: ${t}`); }
+            const result = await resp.json();
+            if (!result.imageUrl) throw new Error('La IA no devolvió imagen');
+
+            _r3dRenderDataUrl = result.imageUrl;
+            _markedDataUrl    = null;
+            document.getElementById('r3d-preview-img').src = result.imageUrl;
+            document.getElementById('r3d-step3').style.display = 'none';
+            document.getElementById('r3d-step2').style.display = 'block';
+            document.getElementById('r3d-step-lbl').textContent = 'Paso 2 — Aprobar render';
+
+        } catch(e) {
+            alert('Error al re-generar: ' + e.message);
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="ph-bold ph-magic-wand"></i> Re-generar con cambios';
+        }
+    };
+    // ── FIN CANVAS EDITOR ──────────────────────────────────────────
+
+    window.aprobarRender3D = async function() {
+        if (!_r3dRenderDataUrl) return;
+        const btn = document.querySelector('#r3d-step2 button[onclick="aprobarRender3D()"]');
+        btn.disabled = true;
+        btn.innerHTML = '<i class="ph-bold ph-spinner"></i> Cotizando con IA...';
+
+        try {
+            _syncElementos();
+            const desc   = document.getElementById('r3d-desc').value.trim();
+            const dimStr = _r3dDims.filter(d => d.nombre || d.base).map(d =>
+                `${d.nombre}: ${d.base||'?'}m × ${d.altura||'?'}m × ${d.prof||'?'}m`).join('; ');
+            const elemsStr = _r3dElements.filter(e => e.nombre || e.mat || e.est || e.acab).map(function(el, i) {
+                let s = `Elemento ${i+1}${el.nombre ? ' — ' + el.nombre : ''}:`;
+                if (el.mat)  s += ` Materiales: ${el.mat}.`;
+                if (el.est)  s += ` Estructura: ${el.est}.`;
+                if (el.acab) s += ` Acabado: ${el.acab}.`;
+                return s;
+            }).join(' | ');
+
+            const sysPrompt = `Eres un cotizador de proyectos de señalética, mobiliario y publicidad en Bolivia.
+Devuelve EXACTAMENTE este JSON (sin texto extra, sin markdown):
+[{"desc":"NOMBRE TÉCNICO DEL ÍTEM","cant":1,"und":"glb","feat":"- Característica 1\\n- Característica 2\\n- Material: ...\\n- Dimensiones: ...","apu":{"mat":[{"d":"MATERIAL","u":"und","q":1,"p":0}],"mo":[{"d":"MANO DE OBRA","u":"hr","q":4,"p":25}],"eq":[],"sub":[]},"util":40,"ind":15}]
+Cada precio "p" en bolivianos. util = % utilidad, ind = % indirectos. Incluye todos los materiales y mano de obra necesaria. Si hay múltiples elementos cotizá el conjunto como un ítem.`;
+
+            const userPrompt = `Cotizar el siguiente ítem en Bolivia:
+Descripción general: ${desc}
+${elemsStr ? `Elementos: ${elemsStr}` : ''}
+${dimStr   ? `Dimensiones: ${dimStr}` : ''}
+
+Genera UN ítem de presupuesto detallado con APU completo (materiales con precios en Bs, mano de obra).`;
+
+            const token = firebase.auth().currentUser ? await firebase.auth().currentUser.getIdToken() : null;
+            const headers = { 'Content-Type': 'application/json' };
+            if (token) headers['Authorization'] = 'Bearer ' + token;
+
+            const resp = await fetch('/api/gemini', {
+                method: 'POST', headers,
+                body: JSON.stringify({
+                    systemInstruction: { parts: [{ text: sysPrompt }] },
+                    contents: [{ role: 'user', parts: [{ text: userPrompt }] }]
+                })
+            });
+            if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+            const respData = await resp.json();
+            let raw = respData?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+            raw = raw.replace(/```json|```/g, '').trim();
+            const s = raw.indexOf('['), e2 = raw.lastIndexOf(']');
+            if (s === -1) throw new Error('La IA no devolvió JSON');
+            const items = JSON.parse(raw.slice(s, e2 + 1));
+            if (!Array.isArray(items) || !items.length) throw new Error('Respuesta vacía');
+
+            const it = items[0];
+            const apuObj = typeof ApuUtils !== 'undefined'
+                ? ApuUtils.normalizeApu(it.apu, it)
+                : (it.apu || { mat:[], mo:[], eq:[], sub:[] });
+            const pu   = typeof ApuUtils !== 'undefined' ? ApuUtils.calcPuFromApu(apuObj) : 0;
+            const feat = Array.isArray(it.feat) ? it.feat.join('\n') : (it.feat || '');
+
+            const newItem = {
+                type: 'item',
+                desc: it.desc || desc,
+                cant: parseFloat(it.cant || 1),
+                und:  it.und || 'glb',
+                feat: feat.replace(/\\n/g, '\n').trim(),
+                pu:   Math.round(pu * 100) / 100,
+                apu:  apuObj,
+                img:  _r3dRenderDataUrl,
+                iaPrompt: JSON.stringify({ nombre: desc, render3d: true })
+            };
+
+            data.push(newItem);
+            saveDB(true);
+            render();
+            cerrarModalRender3D();
+            alert('✓ Ítem "' + newItem.desc + '" agregado con render axonométrico.');
+
+        } catch(e) {
+            alert('Error al cotizar: ' + e.message);
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="ph-bold ph-check-circle"></i> Aprobar y Cotizar con IA';
+        }
+    };
+})();
+</script>
 <script src="/paste-image.js"></script>
+
+<!-- ============================================================ -->
+<!-- MODAL MEDICIÓN / NOTAS (Presupuesto)                         -->
+<!-- ============================================================ -->
+<div id="mod-medicion-pres" style="display:none;position:fixed;inset:0;z-index:9200;background:#111;flex-direction:column;">
+
+  <!-- Barra superior: solo navegación -->
+  <div style="background:#1c1c1e;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:10px 12px;gap:8px;">
+    <button onclick="cerrarMedicionPres()"
+      style="background:rgba(255,255,255,.1);color:#fff;border:none;border-radius:10px;padding:7px 11px;font-size:.82rem;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:5px;flex-shrink:0;">
+      <i class="ph-bold ph-caret-left"></i> Salir
+    </button>
+    <span style="color:#fff;font-size:.85rem;font-weight:700;white-space:nowrap;">📐 Medir / Anotar</span>
+    <div style="display:flex;gap:5px;align-items:center;flex-shrink:0;">
+      <button onclick="pmedUndo()" title="Deshacer"
+        style="background:#3a3a3c;color:#fff;border:none;border-radius:8px;padding:6px 10px;font-size:.9rem;cursor:pointer;">
+        <i class="ph-bold ph-arrow-counter-clockwise"></i>
+      </button>
+      <button onclick="guardarMedicionPres()"
+        style="background:#34c759;color:#fff;border:none;border-radius:8px;padding:6px 13px;font-size:.8rem;font-weight:700;cursor:pointer;white-space:nowrap;">
+        <i class="ph-bold ph-cloud-arrow-up"></i> Guardar
+      </button>
+    </div>
+  </div>
+
+  <div id="pmed-scroll" style="flex:1;overflow:auto;background:#000;display:flex;align-items:flex-start;justify-content:flex-start;position:relative;">
+    <div id="pmed-empty-state" style="position:absolute;inset:0;overflow-y:auto;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;padding:24px 16px;text-align:center;color:#aaa;">
+      <i class="ph-bold ph-image" style="font-size:3rem;display:block;margin-bottom:12px;color:#555;"></i>
+      <div style="font-size:1rem;font-weight:700;color:#ddd;margin-bottom:16px;">Cargá una imagen para medir</div>
+      <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin-bottom:10px;">
+        <label for="pmed-file-input"
+          style="background:#007aff;color:#fff;border-radius:10px;padding:10px 18px;font-size:.88rem;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:6px;">
+          <i class="ph-bold ph-upload-simple"></i> Subir foto
+        </label>
+        <label for="pmed-cam-input"
+          style="background:#5856d6;color:#fff;border-radius:10px;padding:10px 18px;font-size:.88rem;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:6px;">
+          <i class="ph-bold ph-camera"></i> Tomar foto
+        </label>
+        <button onclick="pmedOpenDesignGallery()"
+          style="background:#ff9500;color:#fff;border:none;border-radius:10px;padding:10px 18px;font-size:.88rem;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:6px;">
+          <i class="ph-bold ph-images"></i> Galería Diseño
+        </button>
+      </div>
+      <div style="margin-bottom:14px;font-size:.78rem;color:#666;">o pegá una imagen con Ctrl+V</div>
+      <div id="pmed-gallery-panel" style="display:none;width:100%;max-width:500px;">
+        <div style="font-size:.75rem;font-weight:700;color:#888;margin-bottom:8px;text-transform:uppercase;">Seleccioná una imagen o plano:</div>
+        <div id="pmed-gallery-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(80px,1fr));gap:6px;"></div>
+      </div>
+    </div>
+
+    <input type="file" id="pmed-file-input" accept="image/*" style="display:none;" onchange="pmedCargarImagen(this)">
+    <input type="file" id="pmed-cam-input"  accept="image/*" capture="environment" style="display:none;" onchange="pmedCargarImagen(this)">
+    <canvas id="pmed-canvas" style="display:none;touch-action:none;cursor:crosshair;"></canvas>
+
+    <!-- Popup medida -->
+    <div id="pmed-label-popup" style="display:none;position:fixed;z-index:9300;background:#1c1c1e;border:1px solid #444;border-radius:12px;padding:10px 12px;box-shadow:0 8px 30px rgba(0,0,0,.7);min-width:210px;">
+      <div style="font-size:.75rem;color:#aaa;margin-bottom:6px;">Medida de esta línea:</div>
+      <div style="display:flex;gap:7px;align-items:center;">
+        <input id="pmed-label-input" type="number" step="0.01" placeholder="0.00"
+          style="flex:1;background:#2c2c2e;color:#fff;border:1px solid #555;border-radius:8px;padding:7px 10px;font-size:.95rem;font-weight:700;min-width:0;"
+          onkeydown="if(event.key==='Enter') pmedConfirmarMedida()">
+        <span id="pmed-label-unit" style="color:#aaa;font-size:.85rem;font-weight:700;white-space:nowrap;">m</span>
+        <button onclick="pmedConfirmarMedida()" style="background:#34c759;color:#fff;border:none;border-radius:8px;padding:7px 11px;cursor:pointer;font-size:.9rem;">✓</button>
+        <button onclick="pmedCancelarMedida()" style="background:#3a3a3c;color:#fff;border:none;border-radius:8px;padding:7px 9px;cursor:pointer;font-size:.9rem;">✗</button>
+      </div>
+    </div>
+
+    <!-- Popup nota -->
+    <div id="pmed-note-popup" style="display:none;position:fixed;z-index:9300;background:#1c1c1e;border:1px solid #444;border-radius:12px;padding:10px 12px;box-shadow:0 8px 30px rgba(0,0,0,.7);min-width:230px;max-width:300px;">
+      <div style="font-size:.75rem;color:#aaa;margin-bottom:6px;">Texto de la nota:</div>
+      <textarea id="pmed-note-input" rows="3"
+        style="width:100%;background:#2c2c2e;color:#fff;border:1px solid #555;border-radius:8px;padding:7px 10px;font-size:.88rem;resize:none;box-sizing:border-box;"
+        placeholder="Escribe la nota..."></textarea>
+      <div style="display:flex;gap:7px;margin-top:7px;justify-content:flex-end;">
+        <button onclick="pmedCancelarNota()" style="background:#3a3a3c;color:#fff;border:none;border-radius:8px;padding:6px 10px;cursor:pointer;font-size:.85rem;">✗ Cancelar</button>
+        <button onclick="pmedConfirmarNota()" style="background:#34c759;color:#fff;border:none;border-radius:8px;padding:6px 12px;cursor:pointer;font-size:.85rem;font-weight:700;">✓ OK</button>
+      </div>
+    </div>
+
+    <!-- Barra de selección -->
+    <div id="pmed-sel-bar" style="display:none;position:fixed;z-index:9300;background:#1c1c1e;border:1px solid #555;border-radius:12px;padding:8px 10px;box-shadow:0 6px 24px rgba(0,0,0,.8);gap:8px;align-items:center;">
+      <span style="color:#aaa;font-size:.75rem;white-space:nowrap;">Sel.</span>
+      <button onclick="pmedEditLabel()" style="background:#007aff;color:#fff;border:none;border-radius:8px;padding:5px 10px;font-size:.78rem;cursor:pointer;font-weight:700;">✎ Editar</button>
+      <button onclick="pmedDeleteSelected()" style="background:#ff3b30;color:#fff;border:none;border-radius:8px;padding:5px 10px;font-size:.78rem;cursor:pointer;font-weight:700;">✕ Borrar</button>
+      <button onclick="pmedDeselect()" style="background:#3a3a3c;color:#fff;border:none;border-radius:8px;padding:5px 8px;font-size:.8rem;cursor:pointer;">✕</button>
+    </div>
+  </div>
+
+  <!-- Barra inferior de herramientas (fija, scrollable) -->
+  <div style="background:#1c1c1e;flex-shrink:0;border-top:1px solid #2c2c2e;padding:8px 10px;overflow-x:auto;-webkit-overflow-scrolling:touch;display:flex;align-items:center;gap:7px;padding-bottom:max(8px,env(safe-area-inset-bottom));">
+    <!-- Colores -->
+    <div style="display:flex;gap:5px;flex-shrink:0;">
+      <button class="pmed-cbtn" data-c="#007aff" onclick="pmedSetColor('#007aff',this)"
+        style="width:26px;height:26px;border-radius:50%;background:#007aff;border:3px solid #fff;cursor:pointer;" title="Azul"></button>
+      <button class="pmed-cbtn" data-c="#ffcc00" onclick="pmedSetColor('#ffcc00',this)"
+        style="width:26px;height:26px;border-radius:50%;background:#ffcc00;border:3px solid transparent;cursor:pointer;" title="Amarillo"></button>
+      <button class="pmed-cbtn" data-c="#ffffff" onclick="pmedSetColor('#ffffff',this)"
+        style="width:26px;height:26px;border-radius:50%;background:#ffffff;border:3px solid transparent;cursor:pointer;" title="Blanco"></button>
+      <button class="pmed-cbtn" data-c="#000000" onclick="pmedSetColor('#000000',this)"
+        style="width:26px;height:26px;border-radius:50%;background:#000000;border:3px solid transparent;cursor:pointer;" title="Negro"></button>
+    </div>
+    <div style="width:1px;height:22px;background:#444;flex-shrink:0;"></div>
+    <!-- Grosor -->
+    <div style="display:flex;gap:4px;flex-shrink:0;align-items:center;">
+      <button id="pmed-th-S" onclick="pmedSetThick('S',this)"
+        style="background:#555;color:#fff;border:2px solid #777;border-radius:7px;padding:4px 9px;cursor:pointer;font-size:.75rem;font-weight:700;">━</button>
+      <button id="pmed-th-M" onclick="pmedSetThick('M',this)"
+        style="background:#3a3a3c;color:#fff;border:2px solid transparent;border-radius:7px;padding:4px 9px;cursor:pointer;font-size:.85rem;font-weight:700;">━</button>
+      <button id="pmed-th-L" onclick="pmedSetThick('L',this)"
+        style="background:#3a3a3c;color:#fff;border:2px solid transparent;border-radius:7px;padding:4px 9px;cursor:pointer;font-size:1rem;font-weight:900;">━</button>
+    </div>
+    <div style="width:1px;height:22px;background:#444;flex-shrink:0;"></div>
+    <!-- Modo Dibujar/Mover -->
+    <button id="pmed-mode-btn" onclick="pmedToggleMode()"
+      style="background:#007aff;color:#fff;border:none;border-radius:8px;padding:5px 11px;font-size:.78rem;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:5px;flex-shrink:0;white-space:nowrap;">
+      <i class="ph-bold ph-ruler" id="pmed-mode-icon"></i>
+      <span id="pmed-mode-lbl">Dibujar</span>
+    </button>
+    <div style="width:1px;height:22px;background:#444;flex-shrink:0;"></div>
+    <!-- Nota -->
+    <button id="pmed-note-btn" onclick="pmedToggleNote()"
+      style="background:#3a3a3c;color:#fff;border:none;border-radius:8px;padding:5px 11px;font-size:.78rem;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:5px;flex-shrink:0;white-space:nowrap;">
+      <i class="ph-bold ph-note-pencil"></i>
+      <span>Nota</span>
+    </button>
+    <div style="width:1px;height:22px;background:#444;flex-shrink:0;"></div>
+    <!-- Texto A−/A+ -->
+    <button onclick="pmedFontBy(0.8)"
+      style="background:#3a3a3c;color:#fff;border:none;border-radius:7px;padding:5px 7px;font-size:.72rem;cursor:pointer;font-weight:700;flex-shrink:0;">A−</button>
+    <button onclick="pmedFontBy(1.25)"
+      style="background:#3a3a3c;color:#fff;border:none;border-radius:7px;padding:5px 8px;font-size:.8rem;cursor:pointer;font-weight:700;flex-shrink:0;">A+</button>
+    <div style="width:1px;height:22px;background:#444;flex-shrink:0;"></div>
+    <!-- Unidad -->
+    <div style="display:flex;align-items:center;gap:4px;flex-shrink:0;cursor:pointer;" onclick="pmedToggleUnit()">
+      <span style="color:#aaa;font-size:.72rem;font-weight:600;flex-shrink:0;">m</span>
+      <div id="pmed-unit-toggle" style="position:relative;width:46px;height:27px;border-radius:14px;background:#555;transition:background .25s;flex-shrink:0;">
+        <div id="pmed-unit-thumb" style="position:absolute;top:3px;left:3px;width:21px;height:21px;border-radius:50%;background:#fff;box-shadow:0 1px 4px rgba(0,0,0,.5);transition:transform .25s;"></div>
+      </div>
+      <span style="color:#aaa;font-size:.72rem;font-weight:600;flex-shrink:0;">cm</span>
+    </div>
+    <span id="pmed-unit-lbl" style="display:none;">m</span>
+    <div style="width:1px;height:22px;background:#444;flex-shrink:0;"></div>
+    <!-- Zoom -->
+    <button onclick="pmedZoomBy(0.8)"
+      style="background:#3a3a3c;color:#fff;border:none;border-radius:7px;padding:5px 9px;font-size:.8rem;cursor:pointer;font-weight:900;flex-shrink:0;">−🔍</button>
+    <button onclick="pmedZoomBy(1.25)"
+      style="background:#3a3a3c;color:#fff;border:none;border-radius:7px;padding:5px 9px;font-size:.8rem;cursor:pointer;font-weight:900;flex-shrink:0;">+🔍</button>
+  </div>
+
+</div>
+
+<script>
+(function(){
+    var _lines = [], _unit = 'm', _color = '#007aff', _thick = 'S';
+    var _mode = 'draw';
+    var _img = null, _cvs, _ctx;
+    var _zoom = 1, _fontScale = 1;
+    var _drawing = false, _sx = 0, _sy = 0;
+    var _pending = null, _pendingNote = null;
+    var _selIdx = -1, _drag = null, _dragOx = 0, _dragOy = 0;
+    var _pinch0 = 0, _pinchZ0 = 1;
+    var _pinchCx = 0, _pinchCy = 0;
+    var _medReturnCallback = null;
+
+    window.abrirMedicionPres = function(urlToLoad, returnCallback) {
+        _medReturnCallback = returnCallback || null;
+        // Close photo modal and render modal if open
+        var ph = document.getElementById('mod-photo');
+        if (ph) ph.style.display = 'none';
+        var rd = document.getElementById('mod-render3d');
+        if (rd) rd.style.display = 'none';
+        // Show measurement panel
+        var m = document.getElementById('mod-medicion-pres');
+        if (!m) return;
+        m.style.display = 'flex';
+        // Reset gallery panel
+        var gp = document.getElementById('pmed-gallery-panel');
+        if (gp) gp.style.display = 'none';
+        // Init canvas
+        _cvs = document.getElementById('pmed-canvas');
+        if (!_cvs) return;
+        _ctx = _cvs.getContext('2d');
+        pmedSetColor('#007aff', document.querySelector('.pmed-cbtn[data-c="#007aff"]'));
+        pmedSetThick('S', document.getElementById('pmed-th-S'));
+        _attachEvents();
+        // Update save button label depending on mode
+        var saveBtn = document.querySelector('#mod-medicion-pres button[onclick="guardarMedicionPres()"]');
+        if (saveBtn) {
+            if (_medReturnCallback) {
+                saveBtn.innerHTML = '<i class="ph-bold ph-check"></i> Usar';
+                saveBtn.style.background = '#007aff';
+            } else {
+                saveBtn.innerHTML = '<i class="ph-bold ph-cloud-arrow-up"></i> Guardar';
+                saveBtn.style.background = '#34c759';
+            }
+        }
+        if (urlToLoad) _loadUrl(urlToLoad);
+    };
+
+    window.abrirMedicionRefRender = function(src) {
+        abrirMedicionPres(src, function(dataUrl) {
+            if (typeof setR3dRefFromDataUrl === 'function') setR3dRefFromDataUrl(dataUrl);
+            var rd = document.getElementById('mod-render3d');
+            if (rd) rd.style.display = 'flex';
+        });
+    };
+
+    window.abrirMedicionPreviewRender = function() {
+        var img = document.getElementById('r3d-preview-img');
+        var src = img ? img.src : '';
+        abrirMedicionPres(src, function(dataUrl) {
+            if (typeof setR3dRenderDataUrl === 'function') setR3dRenderDataUrl(dataUrl);
+            var rd = document.getElementById('mod-render3d');
+            if (rd) rd.style.display = 'flex';
+        });
+    };
+
+    window.cerrarMedicionPres = function() {
+        document.getElementById('mod-medicion-pres').style.display = 'none';
+        _hideSelBar();
+        document.getElementById('pmed-note-popup').style.display = 'none';
+        document.getElementById('pmed-label-popup').style.display = 'none';
+        _pendingNote = null; _pending = null;
+        _medReturnCallback = null;
+    };
+
+    document.addEventListener('paste', function(e) {
+        if (document.getElementById('mod-medicion-pres').style.display === 'none') return;
+        var items = e.clipboardData && e.clipboardData.items;
+        if (!items) return;
+        for (var i = 0; i < items.length; i++) {
+            if (items[i].type.startsWith('image/')) { _loadFile(items[i].getAsFile()); break; }
+        }
+    });
+
+    window.pmedCargarImagen = function(input) {
+        if (!input.files || !input.files[0]) return;
+        _loadFile(input.files[0]); input.value = '';
+    };
+
+    function _loadFile(file) {
+        var reader = new FileReader();
+        reader.onload = function(e) { _loadUrl(e.target.result); };
+        reader.readAsDataURL(file);
+    }
+
+    function _loadUrl(src) {
+        var img = new Image();
+        img.crossOrigin = 'anonymous';
+        img.onload = function() {
+            _img = img; _lines = []; _zoom = 1; _selIdx = -1;
+            _pendingNote = null; _pending = null; _hideSelBar();
+            _setupCanvas();
+            document.getElementById('pmed-empty-state').style.display = 'none';
+            _cvs.style.display = 'block';
+        };
+        img.onerror = function() {
+            // CORS fallback — draw via canvas proxy
+            var tmp = new Image();
+            tmp.onload = function() {
+                var c = document.createElement('canvas');
+                c.width = tmp.naturalWidth; c.height = tmp.naturalHeight;
+                c.getContext('2d').drawImage(tmp, 0, 0);
+                _loadUrl(c.toDataURL('image/png'));
+            };
+            tmp.src = src;
+        };
+        img.src = src;
+    }
+
+    window.pmedOpenDesignGallery = function() {
+        var gp = document.getElementById('pmed-gallery-panel');
+        var grid = document.getElementById('pmed-gallery-grid');
+        if (!gp || !grid) return;
+        gp.style.display = 'block';
+        grid.innerHTML = '<div style="color:#888;font-size:.8rem;padding:8px;">Cargando...</div>';
+        db.ref('proyectos/' + cid + '/' + pid + '/diseno').once('value', function(snap) {
+            var d = snap.val(); grid.innerHTML = '';
+            if (!d) { grid.innerHTML = '<div style="color:#666;font-size:.8rem;">Sin imágenes en Diseño.</div>'; return; }
+            var images = [];
+            if (d.renders) Object.values(d.renders).forEach(function(i){ if(i.url) images.push(i.url); });
+            if (d.fotos)   Object.values(d.fotos).forEach(function(i){ if(i.url) images.push(i.url); });
+            if (d.planos)  Object.values(d.planos).forEach(function(i){ if(i.url) images.push(i.url); });
+            if (!images.length) { grid.innerHTML = '<div style="color:#666;font-size:.8rem;">Sin imágenes.</div>'; return; }
+            images.forEach(function(url) {
+                var div = document.createElement('div');
+                div.style.cssText = 'position:relative;width:100%;padding-bottom:100%;border-radius:8px;overflow:hidden;cursor:pointer;background:#222;border:2px solid transparent;';
+                div.innerHTML = '<img src="'+url+'" crossorigin="anonymous" style="position:absolute;top:0;left:0;width:100%;height:100%;object-fit:cover;" loading="lazy">';
+                div.onmouseover = function(){ this.style.borderColor='#ff9500'; };
+                div.onmouseout  = function(){ this.style.borderColor='transparent'; };
+                div.onclick = function(){ _loadUrl(url); };
+                grid.appendChild(div);
+            });
+        });
+    };
+
+    function _setupCanvas() {
+        var sc = document.getElementById('pmed-scroll');
+        var maxW = sc.clientWidth || window.innerWidth;
+        var maxH = sc.clientHeight || window.innerHeight - 120;
+        var r = Math.min(maxW / _img.naturalWidth, maxH / _img.naturalHeight, 1);
+        _cvs.width = _img.naturalWidth; _cvs.height = _img.naturalHeight;
+        _zoom = r; _applyZoom(); _redraw();
+    }
+    function _applyZoom() {
+        _cvs.style.width  = Math.round(_img.naturalWidth  * _zoom) + 'px';
+        _cvs.style.height = Math.round(_img.naturalHeight * _zoom) + 'px';
+    }
+
+    window.pmedZoomBy = function(factor) {
+        if (!_img) return;
+        var sc = document.getElementById('pmed-scroll');
+        var cssW = _img.naturalWidth * _zoom, cssH = _img.naturalHeight * _zoom;
+        var cx = cssW >= sc.clientWidth  ? (sc.scrollLeft + sc.clientWidth  / 2) / cssW : 0.5;
+        var cy = cssH >= sc.clientHeight ? (sc.scrollTop  + sc.clientHeight / 2) / cssH : 0.5;
+        _zoom = Math.max(0.1, Math.min(10, _zoom * factor)); _applyZoom();
+        requestAnimationFrame(function() {
+            sc.scrollLeft = cx * _img.naturalWidth  * _zoom - sc.clientWidth  / 2;
+            sc.scrollTop  = cy * _img.naturalHeight * _zoom - sc.clientHeight / 2;
+        });
+    };
+
+    window.pmedFontBy = function(f) { _fontScale = Math.max(0.3, Math.min(5, _fontScale * f)); _redraw(); };
+
+    window.pmedSetColor = function(c, btn) {
+        _color = c;
+        document.querySelectorAll('.pmed-cbtn').forEach(function(b){ b.style.borderColor = 'transparent'; });
+        if (btn) btn.style.borderColor = '#fff';
+    };
+    window.pmedSetThick = function(t) {
+        _thick = t;
+        ['S','M','L'].forEach(function(k) {
+            var b = document.getElementById('pmed-th-' + k);
+            if (b) { b.style.background = k===t?'#555':'#3a3a3c'; b.style.borderColor = k===t?'#aaa':'transparent'; }
+        });
+    };
+
+    window.pmedToggleMode = function() {
+        _deactivateNote();
+        _mode = _mode === 'draw' ? 'pan' : 'draw';
+        var icon = document.getElementById('pmed-mode-icon');
+        var lbl  = document.getElementById('pmed-mode-lbl');
+        var btn  = document.getElementById('pmed-mode-btn');
+        if (_mode === 'draw') {
+            icon.className = 'ph-bold ph-ruler'; lbl.textContent = 'Dibujar';
+            btn.style.background = '#007aff'; _cvs.style.cursor = 'crosshair'; _cvs.style.touchAction = 'none';
+        } else {
+            icon.className = 'ph-bold ph-hand'; lbl.textContent = 'Mover';
+            btn.style.background = '#5856d6'; _cvs.style.cursor = 'grab'; _cvs.style.touchAction = 'pan-x pan-y';
+        }
+        _selIdx = -1; _drag = null; _hideSelBar();
+    };
+    window.pmedToggleNote = function() {
+        if (_mode === 'note') { _deactivateNote(); _mode = 'draw'; }
+        else {
+            _mode = 'note';
+            var nb = document.getElementById('pmed-note-btn');
+            if (nb) { nb.style.background = '#ff9500'; }
+            document.getElementById('pmed-mode-btn').style.background = '#3a3a3c';
+            if (_cvs) { _cvs.style.cursor = 'cell'; _cvs.style.touchAction = 'none'; }
+            _selIdx = -1; _drag = null; _hideSelBar();
+        }
+    };
+    function _deactivateNote() {
+        var nb = document.getElementById('pmed-note-btn');
+        if (nb) nb.style.background = '#3a3a3c';
+        document.getElementById('pmed-note-popup').style.display = 'none';
+        _pendingNote = null;
+    }
+
+    window.pmedToggleUnit = function() {
+        var to = _unit === 'm' ? 'cm' : 'm';
+        var f  = to === 'cm' ? 100 : 0.01;
+        _lines.forEach(function(l) {
+            if (l.type === 'note') return;
+            var n = parseFloat(l.label); if (!isNaN(n)) l.label = String(Math.round(n*f*10000)/10000); l.unit = to;
+        });
+        _unit = to;
+        document.getElementById('pmed-unit-lbl').textContent  = to;
+        document.getElementById('pmed-label-unit').textContent = to;
+        var tog = document.getElementById('pmed-unit-toggle');
+        var thumb = document.getElementById('pmed-unit-thumb');
+        if (tog) tog.style.background = to === 'cm' ? '#34c759' : '#555';
+        if (thumb) thumb.style.transform = to === 'cm' ? 'translateX(19px)' : 'translateX(0)';
+        _redraw();
+    };
+
+    function _distSeg(px, py, x1, y1, x2, y2) {
+        var dx=x2-x1, dy=y2-y1, len2=dx*dx+dy*dy;
+        var t=len2?Math.max(0,Math.min(1,((px-x1)*dx+(py-y1)*dy)/len2)):0;
+        var nx=x1+t*dx-px, ny=y1+t*dy-py; return Math.sqrt(nx*nx+ny*ny);
+    }
+    function _hitHandle(p, l) {
+        var hr = Math.max(24, _cvs.width/26);
+        if (l.type==='note') return Math.hypot(p.x-l.x1,p.y-l.y1)<hr?'start':null;
+        if (Math.hypot(p.x-l.x1,p.y-l.y1)<hr) return 'start';
+        if (Math.hypot(p.x-l.x2,p.y-l.y2)<hr) return 'end';
+        return null;
+    }
+    function _hitLine(p) {
+        var tol = Math.max(22, _cvs.width/32);
+        var fs  = Math.max(13, _cvs.width/35)*_fontScale;
+        for (var i=_lines.length-1; i>=0; i--) {
+            var l=_lines[i];
+            if (l.type==='note') {
+                var nfs=fs*0.82, pad=nfs*0.5;
+                var rows=(l.text||'').split('\n');
+                var bw=Math.max.apply(null,rows.map(function(r){ return r.length*nfs*0.55; }))+pad*2+nfs;
+                var bh=rows.length*nfs*1.3+pad*2;
+                if (p.x>=l.x2-bw/2&&p.x<=l.x2+bw/2&&p.y>=l.y2-bh/2&&p.y<=l.y2+bh/2) return i;
+                if (_distSeg(p.x,p.y,l.x1,l.y1,l.x2,l.y2)<tol) return i;
+            } else {
+                if (_distSeg(p.x,p.y,l.x1,l.y1,l.x2,l.y2)<tol) return i;
+            }
+        }
+        return -1;
+    }
+
+    var _eventsAttached = false;
+    function _attachEvents() {
+        if (_eventsAttached) return;
+        _eventsAttached = true;
+        if (_img) _setupCanvas();
+        _cvs.addEventListener('mousedown',  function(e){ _handleDown(_mPos(e)); });
+        _cvs.addEventListener('mousemove',  function(e){ _handleMove(_mPos(e)); });
+        _cvs.addEventListener('mouseup',    function(e){ _handleUp(_mPos(e)); });
+        _cvs.addEventListener('mouseleave', function(e){ if(_drawing||_drag) _handleUp(_mPos(e)); });
+        _cvs.addEventListener('wheel', function(e){ e.preventDefault(); pmedZoomBy(e.deltaY<0?1.12:0.89); }, {passive:false});
+        _cvs.addEventListener('touchstart', _onTouchStart, {passive:false});
+        _cvs.addEventListener('touchmove',  _onTouchMove,  {passive:false});
+        _cvs.addEventListener('touchend',   _onTouchEnd,   {passive:false});
+    }
+    function _mPos(e) { var r=_cvs.getBoundingClientRect(); return {x:(e.clientX-r.left)*(_cvs.width/r.width),y:(e.clientY-r.top)*(_cvs.height/r.height)}; }
+    function _tPos(t) { var r=_cvs.getBoundingClientRect(); return {x:(t.clientX-r.left)*(_cvs.width/r.width),y:(t.clientY-r.top)*(_cvs.height/r.height)}; }
+    function _pinchDist(e) { var dx=e.touches[0].clientX-e.touches[1].clientX,dy=e.touches[0].clientY-e.touches[1].clientY; return Math.sqrt(dx*dx+dy*dy); }
+
+    function _onTouchStart(e) {
+        if (e.touches.length===2) {
+            e.preventDefault();
+            _pinch0=_pinchDist(e); _pinchZ0=_zoom; _drawing=false; _drag=null;
+            if (_img) {
+                var sc=document.getElementById('pmed-scroll');
+                var scr=sc.getBoundingClientRect();
+                var midX=(e.touches[0].clientX+e.touches[1].clientX)/2;
+                var midY=(e.touches[0].clientY+e.touches[1].clientY)/2;
+                _pinchCx=(sc.scrollLeft+(midX-scr.left))/(_img.naturalWidth*_zoom);
+                _pinchCy=(sc.scrollTop+(midY-scr.top))/(_img.naturalHeight*_zoom);
+            }
+        } else if (e.touches.length===1 && _mode!=='pan') { e.preventDefault(); _handleDown(_tPos(e.touches[0])); }
+    }
+    function _onTouchMove(e) {
+        if (e.touches.length===2) {
+            e.preventDefault();
+            var sc=document.getElementById('pmed-scroll');
+            var scr=sc.getBoundingClientRect();
+            var midX=(e.touches[0].clientX+e.touches[1].clientX)/2;
+            var midY=(e.touches[0].clientY+e.touches[1].clientY)/2;
+            var midXRel=midX-scr.left, midYRel=midY-scr.top;
+            _zoom=Math.max(0.1,Math.min(10,_pinchZ0*(_pinchDist(e)/_pinch0))); _applyZoom();
+            requestAnimationFrame(function(){ sc.scrollLeft=_pinchCx*_img.naturalWidth*_zoom-midXRel; sc.scrollTop=_pinchCy*_img.naturalHeight*_zoom-midYRel; });
+        } else if (e.touches.length===1&&_mode==='draw') { e.preventDefault(); _handleMove(_tPos(e.touches[0])); }
+    }
+    function _onTouchEnd(e) {
+        if (e.touches.length===0&&_mode==='draw'&&e.changedTouches.length) { e.preventDefault(); _handleUp(_tPos(e.changedTouches[0])); }
+    }
+
+    function _handleDown(p) {
+        if (!_img) return;
+        if (_mode==='note') { if (_pendingNote) return; _noteStart(p); return; }
+        if (_pending) return;
+        if (_mode!=='draw') return;
+        if (_selIdx>=0) { var h=_hitHandle(p,_lines[_selIdx]); if (h) { _drag=h; return; } }
+        var idx=_hitLine(p);
+        if (idx>=0) { _selIdx=idx; _drag='move'; _dragOx=p.x; _dragOy=p.y; _redraw(); _showSelBar(); return; }
+        _selIdx=-1; _drag=null; _hideSelBar(); _drawing=true; _sx=p.x; _sy=p.y;
+    }
+    function _handleMove(p) {
+        if (_drag==='start') { _lines[_selIdx].x1=p.x; _lines[_selIdx].y1=p.y; _redraw(); return; }
+        if (_drag==='end')   { _lines[_selIdx].x2=p.x; _lines[_selIdx].y2=p.y; _redraw(); return; }
+        if (_drag==='move') {
+            var dx=p.x-_dragOx, dy=p.y-_dragOy;
+            _lines[_selIdx].x1+=dx; _lines[_selIdx].y1+=dy; _lines[_selIdx].x2+=dx; _lines[_selIdx].y2+=dy;
+            _dragOx=p.x; _dragOy=p.y; _redraw(); return;
+        }
+        if (_drawing) {
+            _redraw(); var ctx=_ctx, lw=_thickPx();
+            ctx.save(); ctx.strokeStyle=_color+'cc'; ctx.lineWidth=lw; ctx.lineCap='round';
+            ctx.setLineDash([lw*3,lw*2]);
+            ctx.beginPath(); ctx.moveTo(_sx,_sy); ctx.lineTo(p.x,p.y); ctx.stroke(); ctx.setLineDash([]);
+            ctx.fillStyle=_color+'cc';
+            ctx.beginPath(); ctx.arc(_sx,_sy,lw*1.8,0,Math.PI*2); ctx.fill();
+            ctx.beginPath(); ctx.arc(p.x,p.y,lw*1.8,0,Math.PI*2); ctx.fill(); ctx.restore();
+        }
+    }
+    function _handleUp(p) {
+        if (_drag) { _drag=null; _redraw(); _showSelBar(); return; }
+        if (!_drawing) return; _drawing=false;
+        var dx=p.x-_sx, dy=p.y-_sy;
+        if (Math.sqrt(dx*dx+dy*dy)<8) return;
+        _pending={x1:_sx,y1:_sy,x2:p.x,y2:p.y,label:'',unit:_unit,color:_color,thick:_thick};
+        _redraw(); _showMedPopup(p.x,p.y);
+    }
+    function _thickPx(t) { t=t||_thick; var b=_cvs.width/300; return t==='S'?Math.max(1.5,b):t==='M'?Math.max(3,b*2.5):Math.max(6,b*5); }
+
+    function _showMedPopup(cx, cy) {
+        var popup=document.getElementById('pmed-label-popup');
+        var cvsr=_cvs.getBoundingClientRect();
+        var vx=cvsr.left+cx*(cvsr.width/_cvs.width), vy=cvsr.top+cy*(cvsr.height/_cvs.height)+16;
+        var pw=220, ph=78;
+        vx=Math.min(Math.max(vx-pw/2,8),window.innerWidth-pw-8);
+        vy=Math.min(Math.max(vy,8),window.innerHeight-ph-8);
+        popup.style.left=vx+'px'; popup.style.top=vy+'px'; popup.style.display='block';
+        document.getElementById('pmed-label-unit').textContent=_unit;
+        var inp=document.getElementById('pmed-label-input'); inp.value='';
+        setTimeout(function(){ inp.focus(); },80);
+    }
+    window.pmedConfirmarMedida = function() {
+        if (!_pending) return;
+        _pending.label=document.getElementById('pmed-label-input').value.trim(); _pending.unit=_unit;
+        _lines.push(_pending); _pending=null;
+        document.getElementById('pmed-label-popup').style.display='none'; _redraw();
+    };
+    window.pmedCancelarMedida = function() {
+        _pending=null; document.getElementById('pmed-label-popup').style.display='none'; _redraw();
+    };
+    window.pmedUndo = function() {
+        if (_pendingNote) { pmedCancelarNota(); return; }
+        if (_pending) { pmedCancelarMedida(); return; }
+        if (_selIdx>=0) { pmedDeleteSelected(); return; }
+        _lines.pop(); _redraw();
+    };
+
+    // Nota
+    function _noteStart(p) {
+        var bx=Math.max(60,Math.min(_cvs.width-60,p.x+_cvs.width/6));
+        var by=Math.max(40,Math.min(_cvs.height-40,p.y-_cvs.height/8));
+        _pendingNote={x1:p.x,y1:p.y,x2:bx,y2:by};
+        _showNotePopup(bx,by);
+        document.getElementById('pmed-note-input').value='';
+        setTimeout(function(){ document.getElementById('pmed-note-input').focus(); },80);
+    }
+    function _showNotePopup(cx, cy) {
+        var popup=document.getElementById('pmed-note-popup');
+        var cvsr=_cvs.getBoundingClientRect();
+        var vx=cvsr.left+cx*(cvsr.width/_cvs.width), vy=cvsr.top+cy*(cvsr.height/_cvs.height)+12;
+        var pw=250, ph=140;
+        vx=Math.min(Math.max(vx-pw/2,8),window.innerWidth-pw-8);
+        vy=Math.min(Math.max(vy,8),window.innerHeight-ph-8);
+        popup.style.left=vx+'px'; popup.style.top=vy+'px'; popup.style.display='block';
+    }
+    window.pmedConfirmarNota = function() {
+        var text=(document.getElementById('pmed-note-input').value||'').trim();
+        if (!text) { pmedCancelarNota(); return; }
+        if (_pendingNote) {
+            _lines.push({type:'note',x1:_pendingNote.x1,y1:_pendingNote.y1,x2:_pendingNote.x2,y2:_pendingNote.y2,text:text,color:_color,thick:_thick});
+            _pendingNote=null;
+        } else if (_selIdx>=0&&_lines[_selIdx]&&_lines[_selIdx].type==='note') {
+            _lines[_selIdx].text=text; _selIdx=-1; _hideSelBar();
+        }
+        document.getElementById('pmed-note-popup').style.display='none'; _redraw();
+    };
+    window.pmedCancelarNota = function() {
+        _pendingNote=null; document.getElementById('pmed-note-popup').style.display='none'; _redraw();
+    };
+
+    // Sel bar
+    function _showSelBar() {
+        if (_selIdx<0) return;
+        var l=_lines[_selIdx], isNote=l&&l.type==='note';
+        var bar=document.getElementById('pmed-sel-bar');
+        bar.innerHTML='<span style="color:#aaa;font-size:.75rem;white-space:nowrap;">'+(isNote?'Nota sel.':'Línea sel.')+'</span>'+
+            '<button onclick="pmedEditLabel()" style="background:#007aff;color:#fff;border:none;border-radius:8px;padding:5px 10px;font-size:.78rem;cursor:pointer;font-weight:700;">'+(isNote?'✎ Texto':'✎ Etiqueta')+'</button>'+
+            '<button onclick="pmedDeleteSelected()" style="background:#ff3b30;color:#fff;border:none;border-radius:8px;padding:5px 10px;font-size:.78rem;cursor:pointer;font-weight:700;">✕ Borrar</button>'+
+            '<button onclick="pmedDeselect()" style="background:#3a3a3c;color:#fff;border:none;border-radius:8px;padding:5px 8px;font-size:.8rem;cursor:pointer;">✕</button>';
+        bar.style.display='flex'; bar.style.left='50%'; bar.style.top='70px'; bar.style.transform='translateX(-50%)';
+    }
+    function _hideSelBar() { var b=document.getElementById('pmed-sel-bar'); if(b) b.style.display='none'; }
+    window.pmedDeselect = function() { _selIdx=-1; _drag=null; _hideSelBar(); _redraw(); };
+    window.pmedDeleteSelected = function() { if(_selIdx<0) return; _lines.splice(_selIdx,1); _selIdx=-1; _drag=null; _hideSelBar(); _redraw(); };
+    window.pmedEditLabel = function() {
+        if (_selIdx<0) return;
+        var l=_lines[_selIdx];
+        if (l.type==='note') {
+            _pendingNote=null; _showNotePopup(l.x2,l.y2);
+            document.getElementById('pmed-note-input').value=l.text||'';
+            setTimeout(function(){ document.getElementById('pmed-note-input').focus(); },80); return;
+        }
+        var mx=(l.x1+l.x2)/2, my=(l.y1+l.y2)/2;
+        _pending=l; _lines.splice(_selIdx,1); _selIdx=-1; _hideSelBar();
+        _showMedPopup(mx,my); document.getElementById('pmed-label-input').value=l.label||'';
+    };
+
+    // Redraw
+    function _redraw() {
+        if (!_ctx||!_cvs.width) return;
+        var ctx=_ctx; ctx.clearRect(0,0,_cvs.width,_cvs.height);
+        if (_img) ctx.drawImage(_img,0,0,_cvs.width,_cvs.height);
+        var fs=Math.max(13,_cvs.width/35)*_fontScale;
+        _lines.forEach(function(l,i){ _drawLine(ctx,l,fs,i===_selIdx); });
+        if (_pending) {
+            ctx.save(); ctx.strokeStyle=(_pending.color||_color)+'88';
+            ctx.lineWidth=_thickPx(_pending.thick); ctx.setLineDash([8,5]); ctx.lineCap='round';
+            ctx.beginPath(); ctx.moveTo(_pending.x1,_pending.y1); ctx.lineTo(_pending.x2,_pending.y2); ctx.stroke(); ctx.restore();
+        }
+    }
+    function _drawLine(ctx, l, fs, sel) {
+        if (l.type==='note') { _drawNote(ctx,l,fs,sel); return; }
+        var lw=_thickPx(l.thick), r=lw*2, al=Math.max(lw*4,14);
+        var mx=(l.x1+l.x2)/2, my=(l.y1+l.y2)/2;
+        var ang=Math.atan2(l.y2-l.y1,l.x2-l.x1), col=l.color||'#00c8ff';
+        ctx.save();
+        ctx.strokeStyle=col; ctx.lineWidth=lw; ctx.lineCap='round';
+        if (sel) { ctx.shadowColor=col; ctx.shadowBlur=16; } else { ctx.shadowColor='rgba(0,0,0,.5)'; ctx.shadowBlur=4; }
+        ctx.beginPath(); ctx.moveTo(l.x1,l.y1); ctx.lineTo(l.x2,l.y2); ctx.stroke();
+        [[l.x1,l.y1,ang+Math.PI],[l.x2,l.y2,ang]].forEach(function(pt){
+            ctx.beginPath(); ctx.moveTo(pt[0],pt[1]);
+            ctx.lineTo(pt[0]-al*Math.cos(pt[2]-0.38),pt[1]-al*Math.sin(pt[2]-0.38));
+            ctx.moveTo(pt[0],pt[1]);
+            ctx.lineTo(pt[0]-al*Math.cos(pt[2]+0.38),pt[1]-al*Math.sin(pt[2]+0.38)); ctx.stroke();
+        });
+        ctx.shadowBlur=0;
+        if (sel) {
+            ctx.fillStyle=col; ctx.strokeStyle='#fff'; ctx.lineWidth=lw*0.7;
+            [{x:l.x1,y:l.y1},{x:l.x2,y:l.y2}].forEach(function(pt){ ctx.beginPath(); ctx.arc(pt.x,pt.y,r*2,0,Math.PI*2); ctx.fill(); ctx.stroke(); });
+        } else {
+            ctx.fillStyle=col;
+            ctx.beginPath(); ctx.arc(l.x1,l.y1,r,0,Math.PI*2); ctx.fill();
+            ctx.beginPath(); ctx.arc(l.x2,l.y2,r,0,Math.PI*2); ctx.fill();
+        }
+        if (l.label) {
+            var txt=l.label+' '+l.unit; ctx.font='bold '+fs+'px -apple-system,sans-serif';
+            var tw=ctx.measureText(txt).width, pad=fs*0.45, offset=fs*1.5+lw*2;
+            var da=ang; if (da>Math.PI/2) da-=Math.PI; if (da<-Math.PI/2) da+=Math.PI;
+            ctx.save(); ctx.translate(mx,my); ctx.rotate(da);
+            ctx.shadowBlur=8; ctx.shadowColor='rgba(0,0,0,.8)'; ctx.fillStyle='rgba(20,20,30,.88)';
+            _roundRect(ctx,-tw/2-pad,-offset-fs/2-pad,tw+pad*2,fs+pad*2,fs*0.3); ctx.fill();
+            ctx.shadowBlur=0; ctx.fillStyle='#fff'; ctx.textAlign='center'; ctx.textBaseline='middle';
+            ctx.fillText(txt,0,-offset); ctx.restore();
+        }
+        ctx.restore();
+    }
+    function _drawNote(ctx, l, fs, sel) {
+        var col=l.color||'#00c8ff', lw=_thickPx(l.thick);
+        var nfs=fs*0.82;
+        var rows=(l.text||'').split('\n');
+        ctx.font='bold '+nfs+'px -apple-system,sans-serif';
+        var maxTW=0; rows.forEach(function(r){ maxTW=Math.max(maxTW,ctx.measureText(r).width); });
+        var pad=nfs*0.55, lineH=nfs*1.35, bw=maxTW+pad*2, bh=rows.length*lineH+pad*2;
+        ctx.save();
+        if (sel) { ctx.shadowColor=col; ctx.shadowBlur=16; } else { ctx.shadowColor='rgba(0,0,0,.6)'; ctx.shadowBlur=4; }
+        ctx.strokeStyle=col; ctx.lineWidth=lw; ctx.lineCap='round';
+        ctx.beginPath(); ctx.moveTo(l.x2,l.y2); ctx.lineTo(l.x1,l.y1); ctx.stroke();
+        var ang=Math.atan2(l.y1-l.y2,l.x1-l.x2), al=Math.max(lw*4,16);
+        ctx.beginPath(); ctx.moveTo(l.x1,l.y1);
+        ctx.lineTo(l.x1-al*Math.cos(ang-0.38),l.y1-al*Math.sin(ang-0.38));
+        ctx.moveTo(l.x1,l.y1);
+        ctx.lineTo(l.x1-al*Math.cos(ang+0.38),l.y1-al*Math.sin(ang+0.38)); ctx.stroke();
+        ctx.shadowBlur=0;
+        var bx=l.x2-bw/2, by=l.y2-bh/2;
+        ctx.fillStyle='rgba(18,18,28,.5)'; _roundRect(ctx,bx,by,bw,bh,nfs*0.35); ctx.fill();
+        ctx.strokeStyle=col; ctx.lineWidth=sel?lw*1.6:Math.max(lw*0.9,1.5);
+        _roundRect(ctx,bx,by,bw,bh,nfs*0.35); ctx.stroke();
+        ctx.fillStyle='#fff'; ctx.textAlign='left'; ctx.textBaseline='top';
+        rows.forEach(function(r,i){ ctx.fillText(r,bx+pad,by+pad+i*lineH); });
+        ctx.fillStyle=col; ctx.beginPath(); ctx.arc(l.x1,l.y1,lw*(sel?3:2),0,Math.PI*2); ctx.fill();
+        if (sel) { ctx.strokeStyle='#fff'; ctx.lineWidth=lw*0.7; ctx.stroke(); }
+        ctx.restore();
+    }
+    function _roundRect(ctx,x,y,w,h,r) {
+        ctx.beginPath(); ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r);
+        ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath();
+    }
+
+    // Guardar → callback (render mode) or saveImageToItem (normal mode)
+    window.guardarMedicionPres = async function() {
+        if (!_img) return;
+        var dataUrl = _cvs.toDataURL('image/png');
+        // Reference/preview render mode: return annotated image, don't save to Firebase
+        if (_medReturnCallback) {
+            var cb = _medReturnCallback;
+            cerrarMedicionPres();
+            cb(dataUrl);
+            return;
+        }
+        var btn = document.querySelector('#mod-medicion-pres button[onclick="guardarMedicionPres()"]');
+        if (btn) { btn.disabled=true; btn.innerHTML='<i class="ph-bold ph-spinner"></i> Guardando...'; }
+        try {
+            var byteStr = atob(dataUrl.split(',')[1]);
+            var arr = new Uint8Array(byteStr.length);
+            for (var i=0; i<byteStr.length; i++) arr[i]=byteStr.charCodeAt(i);
+            var blob = new Blob([arr], {type:'image/png'});
+            var ts = Date.now();
+            var pidVal = (typeof pid !== 'undefined' ? pid : null) || 'gen';
+            var fname = 'presupuesto/medir_' + pidVal + '_' + ts + '.png';
+            var snap = await storage.ref(fname).put(blob, {contentType:'image/png'});
+            var url  = await snap.ref.getDownloadURL();
+            cerrarMedicionPres();
+            saveImageToItem(url);
+        } catch(e) {
+            alert('Error al guardar: ' + e.message);
+        } finally {
+            if (btn) { btn.disabled=false; btn.innerHTML='<i class="ph-bold ph-cloud-arrow-up"></i> Guardar'; }
+        }
+    };
+})();
+</script>
 </body>
 </html>
 
