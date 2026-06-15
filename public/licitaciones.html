@@ -1629,52 +1629,42 @@ LICITACIONES ACTUALES DEL PROYECTO:
         // Actualizar también supervisoresData si tesorería está abierta
     }
 
-</insert_before>
-
-<div id="mod-fin-sup" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.6);z-index:3000;align-items:flex-end;justify-content:center;backdrop-filter:blur(4px);">
-    <div style="background:var(--card);border-radius:24px 24px 0 0;padding:24px;width:100%;max-width:480px;max-height:90vh;overflow-y:auto;">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;">
-            <div style="font-size:16px;font-weight:900;color:var(--purple);">💼 Registrar Movimiento</div>
-            <button onclick="document.getElementById('mod-fin-sup').style.display='none'" style="background:var(--bg);border:none;width:32px;height:32px;border-radius:50%;cursor:pointer;font-size:18px;color:var(--gray);">×</button>
-        </div>
-
-        <label class="inp-lbl">Tipo</label>
-        <select id="sup-fin-tipo" class="inp-std" style="margin-bottom:14px;">
-            <option value="deposito">✅ Depósito recibido por supervisor</option>
-            <option value="gasto">🧾 Gasto cargado por supervisor</option>
-            <option value="extra">➕ Trabajo extra</option>
-        </select>
-
-        <div style="border:2px dashed var(--purple);border-radius:14px;padding:14px;text-align:center;margin-bottom:10px;cursor:pointer;background:rgba(88,86,214,0.04);"
-            onclick="document.getElementById('sup-fin-foto-input').click()">
-            <div style="font-size:24px;">📸</div>
-            <div style="font-size:12px;font-weight:800;color:var(--purple);">Foto del comprobante (opcional)</div>
-            <div style="font-size:10px;color:var(--gray);">Ctrl+V o tocá para subir</div>
-            <div id="sup-fin-foto-nombre" style="font-size:11px;color:var(--purple);font-weight:800;margin-top:4px;display:none;"></div>
-        </div>
-        <input type="file" id="sup-fin-foto-input" accept="image/*" style="display:none" onchange="onSupFinFotoCargada(this)">
-        <button id="sup-fin-btn-scan" onclick="escanearFinSup()" style="display:none;width:100%;padding:10px;background:rgba(88,86,214,0.12);border:1px solid var(--purple);color:var(--purple);border-radius:10px;font-size:12px;font-weight:800;cursor:pointer;margin-bottom:14px;">
-            <i class="ph-bold ph-magic-wand"></i> Leer con IA
-        </button>
-
-        <div style="height:1px;background:var(--border);margin-bottom:14px;"></div>
-
-        <label class="inp-lbl">Monto (Bs) *</label>
-        <input type="number" id="sup-fin-monto" class="inp-std" placeholder="0.00" min="0" step="0.01" style="margin-bottom:10px;">
-
-        <label class="inp-lbl">Concepto *</label>
-        <input type="text" id="sup-fin-concepto" class="inp-std" placeholder="Ej: Anticipo 50%, Materiales, Trabajo extra..." style="margin-bottom:10px;">
-
-        <label class="inp-lbl">Fecha</label>
-        <input type="date" id="sup-fin-fecha" class="inp-std" style="margin-bottom:18px;">
-
-        <button onclick="guardarFinSup()" style="width:100%;padding:14px;background:var(--purple);color:white;border:none;border-radius:14px;font-size:14px;font-weight:900;cursor:pointer;">
-            Guardar
-        </button>
-    </div>
-</div>
 
 </script>
 <script src="/paste-image.js"></script>
+
+    <!-- Modal Finanzas Supervisor -->
+    <div id="mod-fin-sup" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.6);z-index:3000;align-items:flex-end;justify-content:center;backdrop-filter:blur(4px);">
+        <div style="background:var(--card);border-radius:24px 24px 0 0;padding:24px;width:100%;max-width:480px;max-height:90vh;overflow-y:auto;">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;">
+                <div style="font-size:16px;font-weight:900;color:var(--purple);">💼 Registrar Movimiento</div>
+                <button onclick="document.getElementById('mod-fin-sup').style.display='none'" style="background:var(--bg);border:none;width:32px;height:32px;border-radius:50%;cursor:pointer;font-size:18px;color:var(--gray);">×</button>
+            </div>
+            <label class="inp-lbl">Tipo</label>
+            <select id="sup-fin-tipo" class="inp-std" style="margin-bottom:14px;">
+                <option value="deposito">✅ Depósito recibido por supervisor</option>
+                <option value="gasto">🧾 Gasto cargado por supervisor</option>
+                <option value="extra">➕ Trabajo extra</option>
+            </select>
+            <div style="border:2px dashed var(--purple);border-radius:14px;padding:14px;text-align:center;margin-bottom:10px;cursor:pointer;background:rgba(88,86,214,0.04);" onclick="document.getElementById('sup-fin-foto-input').click()">
+                <div style="font-size:24px;">📸</div>
+                <div style="font-size:12px;font-weight:800;color:var(--purple);">Foto del comprobante (opcional)</div>
+                <div style="font-size:10px;color:var(--gray);">Ctrl+V o tocá para subir</div>
+                <div id="sup-fin-foto-nombre" style="font-size:11px;color:var(--purple);font-weight:800;margin-top:4px;display:none;"></div>
+            </div>
+            <input type="file" id="sup-fin-foto-input" accept="image/*" style="display:none" onchange="onSupFinFotoCargada(this)">
+            <button id="sup-fin-btn-scan" onclick="escanearFinSup()" style="display:none;width:100%;padding:10px;background:rgba(88,86,214,0.12);border:1px solid var(--purple);color:var(--purple);border-radius:10px;font-size:12px;font-weight:800;cursor:pointer;margin-bottom:14px;">
+                <i class="ph-bold ph-magic-wand"></i> Leer con IA
+            </button>
+            <div style="height:1px;background:var(--border);margin-bottom:14px;"></div>
+            <label class="inp-lbl">Monto (Bs) *</label>
+            <input type="number" id="sup-fin-monto" class="inp-std" placeholder="0.00" min="0" step="0.01" style="margin-bottom:10px;">
+            <label class="inp-lbl">Concepto *</label>
+            <input type="text" id="sup-fin-concepto" class="inp-std" placeholder="Ej: Anticipo 50%, Materiales, Trabajo extra..." style="margin-bottom:10px;">
+            <label class="inp-lbl">Fecha</label>
+            <input type="date" id="sup-fin-fecha" class="inp-std" style="margin-bottom:18px;">
+            <button onclick="guardarFinSup()" style="width:100%;padding:14px;background:var(--purple);color:white;border:none;border-radius:14px;font-size:14px;font-weight:900;cursor:pointer;">Guardar</button>
+        </div>
+    </div>
 </body>
 </html>
