@@ -951,46 +951,16 @@
         if (!container) return;
         container.innerHTML = '<div class="empty-msg">Cargando...</div>';
 
-        // Recargar supervisores frescos si hace falta
-        if (!supervisoresData || Object.keys(supervisoresData).length === 0) {
-            const [supSnap, persSnap] = await Promise.all([
-                db.ref('supervisores').once('value'),
-                db.ref('personal').once('value')
-            ]);
-            const rawSup   = supSnap.val()  || {};
-            const personal = persSnap.val() || {};
-            supervisoresData = {};
-            Object.entries(rawSup).forEach(([wid, wdata]) => {
-                const p = personal[wid] || {};
-                supervisoresData[wid] = { nombre: p.nombre || p.name || wdata.nombre || wid, proyectos: wdata.proyectos || {} };
-            });
-        }
-
-        const filtroSup = (document.getElementById('filtro-supervisor') || {}).value || '';
-
-        // Poblar select supervisor
-        const sel = document.getElementById('filtro-supervisor');
-        if (sel) {
-            const prev = sel.value;
-            sel.innerHTML = '<option value="">Todos los supervisores</option>';
-            Object.entries(supervisoresData).sort((a,b) => a[1].nombre.localeCompare(b[1].nombre))
-                .forEach(([wid, d]) => { sel.innerHTML += `<option value="${wid}" ${wid===prev?'selected':''}>${d.nombre}</option>`; });
-        }
-
-        const entries = Object.entries(supervisoresData)
-            .filter(([wid]) => !filtroSup || wid === filtroSup)
-            .sort((a,b) => a[1].nombre.localeCompare(b[1].nombre));
-
-        if (entries.length === 0) {
-            container.innerHTML = '<div class="empty-msg">No hay supervisores registrados.</div>';
-            return;
-        }
-
-        // Para cada supervisor, necesitamos los nombres de los proyectos
         const fM = n => parseFloat(n||0).toLocaleString('es-BO',{minimumFractionDigits:2,maximumFractionDigits:2});
-
-        // Cargar datos frescos de proyectos para obtener nombres
         const pData = proyectosData || {};
+
+        // ── Recolectar licitaciones de supervisión con su worker_id ──
+        // Fuente: proyectos/{cid}/{pid}/licitaciones donde is_supervision=true
+        // Los pagos viven en: proyectos/{cid}/{pid}/licitaciones/{licId}/pagos (mismos que Compras → Abonar)
+        // Los extras viven en: supervisores/{wid}/proyectos/{pid}/extras (agregados desde licitaciones.html)
+
+        const supMap = {}; // wid → { nombre, lics: [{ cid, pid, licId, licKey, nombre_proyecto, monto_contrato, pagos[], extras[] }] }
+
         // Mapa pid → nombre proyecto
         const pidNombre = {};
         Object.values(pData).forEach(cliente => {
@@ -998,125 +968,146 @@
             Object.entries(cliente).forEach(([pid, proy]) => { if (proy && proy.nombre) pidNombre[pid] = proy.nombre; });
         });
 
-        // Para cada supervisor, también buscar licitación de supervisión para obtener monto contrato
-        // licitaciones en proyectos/{cid}/{pid}/licitaciones con is_supervision=true && worker_id===wid
-        const supLicitaciones = {}; // wid → [{ pid, monto, nombre_proyecto, estado }]
+        // Cargar personal para nombres
+        let personalSnap = {};
+        try { personalSnap = (await db.ref('personal').once('value')).val() || {}; } catch(e) {}
+
+        // Recorrer licitaciones de supervisión
         Object.entries(pData).forEach(([cid, cliente]) => {
             if (!cliente || typeof cliente !== 'object') return;
             Object.entries(cliente).forEach(([pid, proy]) => {
                 if (!proy || !proy.licitaciones) return;
-                Object.values(proy.licitaciones).forEach(lic => {
+                Object.entries(proy.licitaciones).forEach(([licId, lic]) => {
                     if (!lic || !lic.is_supervision) return;
                     const wid = lic.worker_id || lic.wid || '';
                     if (!wid) return;
-                    if (!supLicitaciones[wid]) supLicitaciones[wid] = [];
-                    supLicitaciones[wid].push({
-                        pid,
+                    if (!supMap[wid]) {
+                        const persona = personalSnap[wid] || {};
+                        supMap[wid] = { nombre: persona.nombre || persona.name || wid, lics: [] };
+                    }
+                    // Agregar pagos (de compras/Abonar)
+                    const pagos = Object.values(lic.pagos || {}).map(p => ({
+                        descripcion: p.nota || p.descripcion || 'Abono',
+                        monto: parseFloat(p.monto||0),
+                        fecha: p.fecha || ''
+                    }));
+                    supMap[wid].lics.push({
+                        cid, pid, licId,
                         nombre_proyecto: proy.nombre || pid,
                         monto_contrato: parseFloat(lic.precio_propuesto || lic.precio_final || 0),
-                        estado: lic.estado || 'enviado'
+                        pagos,
+                        extras: [] // se carga abajo
                     });
                 });
             });
         });
 
+        // Cargar extras desde supervisores/{wid}/proyectos/{pid}/extras para cada supervisor encontrado
+        await Promise.all(Object.keys(supMap).map(async wid => {
+            try {
+                const extSnap = await db.ref(`supervisores/${wid}/proyectos`).once('value');
+                const extData = extSnap.val() || {};
+                // Asignar extras al lic correspondiente
+                supMap[wid].lics.forEach(lic => {
+                    const extsNode = (extData[lic.pid] || {}).extras || {};
+                    lic.extras = Object.values(extsNode).map(e => ({
+                        descripcion: e.descripcion || 'Extra',
+                        monto: parseFloat(e.monto||0),
+                        fecha: e.fecha || ''
+                    }));
+                });
+            } catch(e) {}
+        }));
+
+        // Poblar select supervisor
+        const filtroSup = (document.getElementById('filtro-supervisor') || {}).value || '';
+        const sel = document.getElementById('filtro-supervisor');
+        if (sel) {
+            const prev = sel.value;
+            sel.innerHTML = '<option value="">Todos los supervisores</option>';
+            Object.entries(supMap).sort((a,b) => a[1].nombre.localeCompare(b[1].nombre))
+                .forEach(([wid, d]) => { sel.innerHTML += `<option value="${wid}" ${wid===prev?'selected':''}>${d.nombre}</option>`; });
+        }
+
+        const entries = Object.entries(supMap)
+            .filter(([wid]) => !filtroSup || wid === filtroSup)
+            .sort((a,b) => a[1].nombre.localeCompare(b[1].nombre));
+
+        if (entries.length === 0) {
+            container.innerHTML = '<div class="empty-msg">No hay supervisores con licitaciones de supervisión registradas.</div>';
+            return;
+        }
+
         container.innerHTML = '';
-        let grandTotal = 0, grandDep = 0, grandGas = 0, grandExt = 0;
 
         for (const [wid, supData] of entries) {
             const nombre = supData.nombre;
-            const proyectosSupNode = supData.proyectos || {};
-            const lics = supLicitaciones[wid] || [];
+            const lics   = supData.lics;
 
-            // Construir resumen por proyecto
+            // Construir proyResumen agrupando por pid
             const proyResumen = {};
-            lics.forEach(l => {
-                if (!proyResumen[l.pid]) proyResumen[l.pid] = { nombre: l.nombre_proyecto, monto_contrato: 0, depositos: [], gastos: [], extras: [], totalDep: 0, totalGas: 0, totalExt: 0 };
-                proyResumen[l.pid].monto_contrato += l.monto_contrato;
+            lics.forEach(lic => {
+                if (!proyResumen[lic.pid]) proyResumen[lic.pid] = {
+                    nombre: lic.nombre_proyecto,
+                    monto_contrato: 0,
+                    pagos: [],
+                    extras: [],
+                    totalPagado: 0,
+                    totalExt: 0
+                };
+                proyResumen[lic.pid].monto_contrato += lic.monto_contrato;
+                proyResumen[lic.pid].pagos.push(...lic.pagos);
+                proyResumen[lic.pid].extras.push(...lic.extras);
+                proyResumen[lic.pid].totalPagado += lic.pagos.reduce((s,p) => s + p.monto, 0);
+                proyResumen[lic.pid].totalExt    += lic.extras.reduce((s,e) => s + e.monto, 0);
             });
 
-            // Leer depósitos, gastos, extras de Firebase para cada pid
-            const pids = [...new Set([...Object.keys(proyectosSupNode), ...lics.map(l => l.pid)])];
-            for (const pid of pids) {
-                if (!proyResumen[pid]) proyResumen[pid] = { nombre: pidNombre[pid] || pid, monto_contrato: 0, depositos: [], gastos: [], extras: [], totalDep: 0, totalGas: 0, totalExt: 0 };
-                const node = proyectosSupNode[pid] || {};
-                // Depósitos
-                Object.entries(node.depositos || {}).forEach(([k, d]) => {
-                    proyResumen[pid].depositos.push(d);
-                    proyResumen[pid].totalDep += parseFloat(d.monto||0);
-                });
-                // Gastos
-                Object.entries(node.gastos || {}).forEach(([k, g]) => {
-                    proyResumen[pid].gastos.push(g);
-                    proyResumen[pid].totalGas += parseFloat(g.monto||0);
-                });
-                // Extras
-                Object.entries(node.extras || {}).forEach(([k, e]) => {
-                    proyResumen[pid].extras.push(e);
-                    proyResumen[pid].totalExt += parseFloat(e.monto||0);
-                });
-            }
-
             // Totales del supervisor
-            let totalContrato = 0, totalDep = 0, totalGas = 0, totalExt = 0;
+            let totalContrato = 0, totalPagado = 0, totalExt = 0;
             Object.values(proyResumen).forEach(p => {
                 totalContrato += p.monto_contrato;
-                totalDep      += p.totalDep;
-                totalGas      += p.totalGas;
+                totalPagado   += p.totalPagado;
                 totalExt      += p.totalExt;
             });
             const totalContMasExt = totalContrato + totalExt;
-            // Saldo: lo que se le debe = (Contrato + Extras + Gastos cargo) - Depósitos recibidos
-            const saldo = totalContMasExt + totalGas - totalDep;
+            const saldo = totalContMasExt - totalPagado;
             const sc    = saldo > 0 ? 'var(--orange)' : 'var(--green)';
-
-            grandTotal += totalContrato; grandDep += totalDep; grandGas += totalGas; grandExt += totalExt;
 
             // Generar HTML de proyectos
             const proyHtml = Object.entries(proyResumen).map(([pid, proy]) => {
-                const saldoProy = proy.monto_contrato + proy.totalExt + proy.totalGas - proy.totalDep;
+                const saldoProy = proy.monto_contrato + proy.totalExt - proy.totalPagado;
                 return `
                 <div style="background:var(--bg);border-radius:10px;padding:12px;margin-bottom:8px;">
                     <div style="font-weight:900;font-size:13px;margin-bottom:8px;display:flex;align-items:center;gap:6px;">
                         <i class="ph-fill ph-folder" style="color:var(--blue);"></i> ${proy.nombre}
                     </div>
-                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:11px;margin-bottom:8px;">
-                        <div><span style="color:var(--gray);">Contrato</span><br><strong style="color:var(--blue);">${fM(proy.monto_contrato)} Bs</strong></div>
-                        <div><span style="color:var(--gray);">Extras</span><br><strong style="color:var(--purple);">${fM(proy.totalExt)} Bs</strong></div>
-                        <div><span style="color:var(--gray);">Depósitos recibidos</span><br><strong style="color:var(--green);">-${fM(proy.totalDep)} Bs</strong></div>
-                        <div><span style="color:var(--gray);">Gastos cargados</span><br><strong style="color:var(--red);">+${fM(proy.totalGas)} Bs</strong></div>
+                    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;font-size:11px;margin-bottom:8px;">
+                        <div><span style="color:var(--gray);">Contrato${proy.totalExt>0?'+Ext':''}</span><br><strong style="color:var(--blue);">${fM(proy.monto_contrato+proy.totalExt)} Bs</strong></div>
+                        <div><span style="color:var(--gray);">Pagado (Compras)</span><br><strong style="color:var(--green);">${fM(proy.totalPagado)} Bs</strong></div>
+                        <div><span style="color:var(--gray);">Saldo</span><br><strong style="color:${saldoProy>0?'var(--orange)':'var(--green)'};">${fM(saldoProy)} Bs</strong></div>
                     </div>
-                    ${proy.depositos.length > 0 ? `
+                    ${proy.pagos.length > 0 ? `
                     <div style="font-size:11px;margin-bottom:6px;">
-                        <div style="font-weight:800;color:var(--green);margin-bottom:3px;">✅ Depósitos</div>
-                        ${proy.depositos.map(d=>`<div style="display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px dashed var(--border);font-size:10px;"><span>${d.descripcion||'Depósito'} · ${d.fecha||''}</span><span style="color:var(--green);font-weight:900;">+${fM(d.monto)} Bs</span></div>`).join('')}
-                    </div>` : ''}
-                    ${proy.gastos.length > 0 ? `
-                    <div style="font-size:11px;margin-bottom:6px;">
-                        <div style="font-weight:800;color:var(--red);margin-bottom:3px;">🧾 Gastos cargo</div>
-                        ${proy.gastos.map(g=>`<div style="display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px dashed var(--border);font-size:10px;"><span>${g.descripcion||'Gasto'} · ${g.fecha||''}</span><span style="color:var(--red);font-weight:900;">+${fM(g.monto)} Bs</span></div>`).join('')}
-                    </div>` : ''}
+                        <div style="font-weight:800;color:var(--green);margin-bottom:3px;">✅ Pagos registrados</div>
+                        ${proy.pagos.map(p=>`<div style="display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px dashed var(--border);font-size:10px;"><span>${p.descripcion} · ${p.fecha}</span><span style="color:var(--green);font-weight:900;">+${fM(p.monto)} Bs</span></div>`).join('')}
+                    </div>` : '<div style="font-size:10px;color:var(--gray);margin-bottom:6px;">Sin pagos · Usar <b>Compras → Abonar</b></div>'}
                     ${proy.extras.length > 0 ? `
                     <div style="font-size:11px;margin-bottom:6px;">
                         <div style="font-weight:800;color:var(--purple);margin-bottom:3px;">➕ Extras</div>
-                        ${proy.extras.map(e=>`<div style="display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px dashed var(--border);font-size:10px;"><span>${e.descripcion||'Extra'} · ${e.fecha||''}</span><span style="color:var(--purple);font-weight:900;">+${fM(e.monto)} Bs</span></div>`).join('')}
+                        ${proy.extras.map(e=>`<div style="display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px dashed var(--border);font-size:10px;"><span>${e.descripcion} · ${e.fecha}</span><span style="color:var(--purple);font-weight:900;">+${fM(e.monto)} Bs</span></div>`).join('')}
                     </div>` : ''}
-                    <div style="display:flex;justify-content:space-between;margin-top:8px;padding-top:6px;border-top:2px solid var(--border);">
-                        <span style="font-size:12px;font-weight:800;">Saldo del proyecto</span>
-                        <span style="font-weight:900;font-size:13px;color:${saldoProy>0?'var(--orange)':'var(--green)'};">${fM(saldoProy)} Bs</span>
-                    </div>
                 </div>`;
             }).join('');
 
-            const supDataForExport = { nombre, proyResumen, totalContrato, totalDep, totalGas, totalExt };
-            const supJSON = JSON.stringify(supDataForExport).replace(/'/g, "\'").replace(/"/g, '&quot;');
+            const supDataForExport = { nombre, proyResumen, totalContrato, totalPagado, totalExt };
+            const supJSON = JSON.stringify(supDataForExport).replace(/'/g, "\\'").replace(/"/g, '&quot;');
 
             container.innerHTML += `
             <div class="generic-card" style="border-left:4px solid var(--purple);">
                 <div class="card-header">
                     <div>
                         <div class="c-title"><i class="ph-fill ph-user-gear" style="color:var(--purple);"></i> ${nombre}</div>
-                        <div class="c-sub">${pids.length} proyecto(s)</div>
+                        <div class="c-sub">${Object.keys(proyResumen).length} proyecto(s)</div>
                     </div>
                     <div style="text-align:right;">
                         <div style="font-size:10px;color:var(--gray);">Saldo pendiente</div>
@@ -1124,10 +1115,10 @@
                     </div>
                 </div>
                 <div class="bal-grid" style="margin-bottom:12px;">
-                    <div><div class="b-lbl">Contrato</div><div class="b-val" style="color:var(--blue);">${fM(totalContrato)} Bs</div></div>
+                    <div><div class="b-lbl">Contrato total</div><div class="b-val" style="color:var(--blue);">${fM(totalContrato)} Bs</div></div>
                     <div><div class="b-lbl">Extras</div><div class="b-val" style="color:var(--purple);">${fM(totalExt)} Bs</div></div>
-                    <div><div class="b-lbl">Depósitos</div><div class="b-val" style="color:var(--green);">${fM(totalDep)} Bs</div></div>
-                    <div><div class="b-lbl">Gastos cargo</div><div class="b-val" style="color:var(--red);">${fM(totalGas)} Bs</div></div>
+                    <div><div class="b-lbl">Pagado</div><div class="b-val" style="color:var(--green);">${fM(totalPagado)} Bs</div></div>
+                    <div><div class="b-lbl">Saldo</div><div class="b-val" style="color:${sc};">${fM(saldo)} Bs</div></div>
                 </div>
                 <div style="margin-bottom:12px;">${proyHtml}</div>
                 <button class="btn-action btn-outline" style="font-size:11px;width:100%;border-color:var(--purple);color:var(--purple);"
@@ -1157,13 +1148,12 @@
 
             // Resumen global
             const totalContMasExt = (data.totalContrato||0) + (data.totalExt||0);
-            const saldo = totalContMasExt + (data.totalGas||0) - (data.totalDep||0);
+            const saldo = totalContMasExt - (data.totalPagado||0);
             const rows = [
                 ['Monto Contrato', fM(data.totalContrato) + ' Bs'],
                 ['Extras aprobados', fM(data.totalExt) + ' Bs'],
                 ['Total a cobrar', fM(totalContMasExt) + ' Bs'],
-                ['Depósitos recibidos', '-' + fM(data.totalDep) + ' Bs'],
-                ['Gastos cargados', '+' + fM(data.totalGas) + ' Bs'],
+                ['Pagado (Compras/Abonar)', '-' + fM(data.totalPagado) + ' Bs'],
                 ['SALDO PENDIENTE', fM(saldo) + ' Bs'],
             ];
             doc.autoTable({
@@ -1171,7 +1161,7 @@
                 body: rows, theme: 'striped',
                 styles: { fontSize: 10, cellPadding: 3 },
                 headStyles: { fillColor: [88,86,214] },
-                didParseCell: d => { if(d.row.index === 5) { d.cell.styles.fontStyle='bold'; d.cell.styles.textColor = saldo>0 ? [255,149,0] : [52,199,89]; } }
+                didParseCell: d => { if(d.row.index === 4) { d.cell.styles.fontStyle='bold'; d.cell.styles.textColor = saldo>0 ? [255,149,0] : [52,199,89]; } }
             });
             y = doc.lastAutoTable.finalY + 12;
 
@@ -1183,9 +1173,8 @@
                 doc.setTextColor(0); doc.setFont(undefined,'normal'); doc.setFontSize(9);
 
                 const detRows = [];
-                proy.depositos.forEach(d => detRows.push(['✅ Depósito', d.descripcion||'Depósito', d.fecha||'', '-'+fM(d.monto)+' Bs']));
-                proy.gastos.forEach(g   => detRows.push(['🧾 Gasto cargo', g.descripcion||'Gasto', g.fecha||'', '+'+fM(g.monto)+' Bs']));
-                proy.extras.forEach(e   => detRows.push(['➕ Extra', e.descripcion||'Extra', e.fecha||'', '+'+fM(e.monto)+' Bs']));
+                (proy.pagos||[]).forEach(p  => detRows.push(['✅ Pago (Compras)', p.descripcion||'Abono', p.fecha||'', '-'+fM(p.monto)+' Bs']));
+                (proy.extras||[]).forEach(e => detRows.push(['➕ Extra', e.descripcion||'Extra', e.fecha||'', '+'+fM(e.monto)+' Bs']));
 
                 if (detRows.length > 0) {
                     doc.autoTable({
@@ -1197,7 +1186,7 @@
                     });
                     y = doc.lastAutoTable.finalY + 6;
                 }
-                const saldoProy = proy.monto_contrato + proy.totalExt + proy.totalGas - proy.totalDep;
+                const saldoProy = (proy.monto_contrato||0) + (proy.totalExt||0) - (proy.totalPagado||0);
                 doc.setFont(undefined,'bold');
                 doc.text('Saldo proyecto: ' + fM(saldoProy) + ' Bs', 14, y); y += 10;
             });
@@ -3045,4 +3034,4 @@
     </script>
 <script src="/paste-image.js"></script>
 </body>
-</html>
+</html>                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  

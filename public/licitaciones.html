@@ -1223,7 +1223,7 @@
                     card += '<div id="' + supCardId + '" style="margin-top:10px; background:rgba(88,86,214,0.06); border:1px dashed var(--purple); border-radius:12px; padding:12px;">'
                           + '<div style="font-size:11px; font-weight:900; color:var(--purple); margin-bottom:8px; display:flex; justify-content:space-between; align-items:center;">'
                           + '<span>💼 Balance Supervisión</span>'
-                          + '<button onclick="abrirFinSupModal(\''+widSup+'\',\''+pid+'\',\''+cid+'\',\''+key+'\')" style="font-size:10px;background:var(--purple);color:white;border:none;border-radius:6px;padding:3px 8px;cursor:pointer;">+ Depósito / Gasto / Extra</button>'
+                          + '<button onclick="abrirFinSupModal(\''+widSup+'\',\''+pid+'\',\''+cid+'\',\''+key+'\')" style="font-size:10px;background:var(--purple);color:white;border:none;border-radius:6px;padding:3px 8px;cursor:pointer;">➕ Agregar Extra</button>'
                           + '</div>'
                           + '<div id="' + supCardId + '-body" style="font-size:11px;color:var(--gray);">Cargando...</div>'
                           + '</div>';
@@ -1498,50 +1498,63 @@ LICITACIONES ACTUALES DEL PROYECTO:
         const el = document.getElementById(elId);
         if (!el) return;
         try {
-            const [snapDep, snapGas, snapExt] = await Promise.all([
-                db.ref(`supervisores/${wid}/proyectos/${pid}/depositos`).once('value'),
-                db.ref(`supervisores/${wid}/proyectos/${pid}/gastos`).once('value'),
+            // Leer pagos de la licitación (mismos que compras/abonar)
+            const [snapPagos, snapExt] = await Promise.all([
+                db.ref(`proyectos/${cid}/${pid}/licitaciones/${licKey}/pagos`).once('value'),
                 db.ref(`supervisores/${wid}/proyectos/${pid}/extras`).once('value'),
             ]);
-            let totalDep = 0, totalGas = 0, totalExt = 0;
-            const deps = [], gass = [], exts = [];
-            if (snapDep.exists()) snapDep.forEach(c => { const d = {...c.val(), _key: c.key}; deps.push(d); totalDep += parseFloat(d.monto||0); });
-            if (snapGas.exists()) snapGas.forEach(c => { const g = {...c.val(), _key: c.key}; gass.push(g); totalGas += parseFloat(g.monto||0); });
-            if (snapExt.exists()) snapExt.forEach(c => { const e = {...c.val(), _key: c.key}; exts.push(e); totalExt += parseFloat(e.monto||0); });
+
+            let totalPagado = 0;
+            const pagos = [];
+            if (snapPagos.exists()) snapPagos.forEach(c => {
+                const p = {...c.val(), _key: c.key};
+                pagos.push(p);
+                totalPagado += parseFloat(p.monto||0);
+            });
+
+            let totalExt = 0;
+            const exts = [];
+            if (snapExt.exists()) snapExt.forEach(c => {
+                const e = {...c.val(), _key: c.key};
+                exts.push(e);
+                totalExt += parseFloat(e.monto||0);
+            });
 
             const totalContrato = montoContrato + totalExt;
-            const saldo = totalContrato + totalGas - totalDep;
+            const saldo = totalContrato - totalPagado;
             const fM = n => parseFloat(n||0).toLocaleString('es-BO',{minimumFractionDigits:2,maximumFractionDigits:2});
 
             el.innerHTML = `
-            <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:6px;margin-bottom:8px;text-align:center;">
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:8px;text-align:center;">
                 <div style="background:rgba(0,122,255,0.08);border-radius:8px;padding:6px;">
-                    <div style="font-size:9px;color:var(--gray);font-weight:800;">CONTRATO</div>
-                    <div style="font-size:12px;font-weight:900;color:var(--blue);">${fM(montoContrato)}</div>
-                </div>
-                <div style="background:rgba(175,82,222,0.08);border-radius:8px;padding:6px;">
-                    <div style="font-size:9px;color:var(--gray);font-weight:800;">EXTRAS</div>
-                    <div style="font-size:12px;font-weight:900;color:var(--purple);">${fM(totalExt)}</div>
+                    <div style="font-size:9px;color:var(--gray);font-weight:800;">CONTRATO${totalExt>0?' + EXTRAS':''}</div>
+                    <div style="font-size:12px;font-weight:900;color:var(--blue);">${fM(totalContrato)} Bs</div>
                 </div>
                 <div style="background:rgba(52,199,89,0.08);border-radius:8px;padding:6px;">
-                    <div style="font-size:9px;color:var(--gray);font-weight:800;">DEPÓSITOS</div>
-                    <div style="font-size:12px;font-weight:900;color:var(--green);">-${fM(totalDep)}</div>
+                    <div style="font-size:9px;color:var(--gray);font-weight:800;">PAGADO</div>
+                    <div style="font-size:12px;font-weight:900;color:var(--green);">${fM(totalPagado)} Bs</div>
                 </div>
                 <div style="background:rgba(255,149,0,0.08);border-radius:8px;padding:6px;">
                     <div style="font-size:9px;color:var(--gray);font-weight:800;">SALDO</div>
-                    <div style="font-size:12px;font-weight:900;color:${saldo>0?'var(--orange)':'var(--green)'};">${fM(saldo)}</div>
+                    <div style="font-size:12px;font-weight:900;color:${saldo>0?'var(--orange)':'var(--green)'};">${fM(saldo)} Bs</div>
                 </div>
             </div>
-            ${deps.length ? `<div style="font-size:10px;color:var(--green);font-weight:800;margin-bottom:4px;">✅ ${deps.length} depósito(s) · ${fM(totalDep)} Bs</div>
-            ${deps.map((d,i) => `<div style="display:flex;justify-content:space-between;align-items:center;font-size:10px;padding:3px 0;border-bottom:1px dashed var(--border);">
-                <span style="color:var(--gray);">${d.descripcion||'Depósito'} · ${d.fecha||''}</span>
-                <span style="display:flex;gap:4px;align-items:center;">
-                    <span style="font-weight:900;color:var(--green);">+${fM(d.monto)} Bs</span>
-                    ${d.fotoUrl ? `<a href="${d.fotoUrl}" target="_blank" style="color:var(--blue);font-size:12px;" title="Ver foto">📎</a>` : `<button onclick="abrirAdjuntarFotoSup('${wid}','${pid}','depositos','${d._key}','${licKey}','${cid}',${montoContrato})" style="font-size:9px;background:none;border:1px dashed var(--gray);border-radius:4px;padding:1px 5px;cursor:pointer;color:var(--gray);">+foto</button>`}
-                </span>
-            </div>`).join('')}` : ''}
-            ${gass.length ? `<div style="font-size:10px;color:var(--red);font-weight:800;">🧾 ${gass.length} gasto(s) · ${fM(totalGas)} Bs</div>` : ''}
-            ${exts.length ? `<div style="font-size:10px;color:var(--purple);font-weight:800;">➕ ${exts.length} extra(s) · ${fM(totalExt)} Bs</div>` : ''}
+            ${pagos.length ? `
+            <div style="margin-bottom:6px;">
+                <div style="font-size:10px;font-weight:800;color:var(--green);margin-bottom:3px;">✅ Pagos registrados en Compras</div>
+                ${pagos.map(p => `<div style="display:flex;justify-content:space-between;align-items:center;font-size:10px;padding:3px 0;border-bottom:1px dashed var(--border);">
+                    <span style="color:var(--gray);">${p.nota||'Abono'} · ${p.fecha||''}</span>
+                    <span style="font-weight:900;color:var(--green);">+${fM(p.monto)} Bs</span>
+                </div>`).join('')}
+            </div>` : '<div style="font-size:10px;color:var(--gray);margin-bottom:6px;">Sin pagos aún · Registrá en <b>Compras → Abonar</b></div>'}
+            ${exts.length ? `
+            <div>
+                <div style="font-size:10px;font-weight:800;color:var(--purple);margin-bottom:3px;">➕ Extras aprobados</div>
+                ${exts.map(e => `<div style="display:flex;justify-content:space-between;font-size:10px;padding:3px 0;border-bottom:1px dashed var(--border);">
+                    <span style="color:var(--gray);">${e.descripcion||'Extra'} · ${e.fecha||''}</span>
+                    <span style="font-weight:900;color:var(--purple);">+${fM(e.monto)} Bs</span>
+                </div>`).join('')}
+            </div>` : ''}
             `;
         } catch(e) {
             if (el) el.innerHTML = '<span style="color:var(--gray);">Sin datos aún</span>';
@@ -1632,7 +1645,7 @@ LICITACIONES ACTUALES DEL PROYECTO:
         const btn = document.querySelector('#mod-fin-sup button[onclick="guardarFinSup()"]');
         if (btn) { btn.disabled = true; btn.textContent = 'Guardando...'; }
         try {
-            const nodo = tipo === 'extra' ? 'extras' : tipo === 'gasto' ? 'gastos' : 'depositos';
+            const nodo = 'extras';
             const newRef = db.ref(`supervisores/${wid}/proyectos/${pid}/${nodo}`).push();
             const fotoUrl = _supFotoB64 ? await subirFotoSupLic(_supFotoB64, _supFotoMime, wid, nodo, newRef.key) : null;
             const payload = { monto, descripcion: desc, fecha, timestamp: Date.now(), ...(fotoUrl ? { fotoUrl } : {}) };
@@ -1675,15 +1688,14 @@ LICITACIONES ACTUALES DEL PROYECTO:
     <div id="mod-fin-sup" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.6);z-index:3000;align-items:flex-end;justify-content:center;backdrop-filter:blur(4px);">
         <div style="background:var(--card);border-radius:24px 24px 0 0;padding:24px;width:100%;max-width:480px;max-height:90vh;overflow-y:auto;">
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;">
-                <div style="font-size:16px;font-weight:900;color:var(--purple);">💼 Registrar Movimiento</div>
+                <div style="font-size:16px;font-weight:900;color:var(--purple);">➕ Registrar Trabajo Extra</div>
                 <button onclick="document.getElementById('mod-fin-sup').style.display='none'" style="background:var(--bg);border:none;width:32px;height:32px;border-radius:50%;cursor:pointer;font-size:18px;color:var(--gray);">×</button>
             </div>
-            <label class="inp-lbl">Tipo</label>
-            <select id="sup-fin-tipo" class="inp-std" style="margin-bottom:14px;">
-                <option value="deposito">✅ Depósito recibido por supervisor</option>
-                <option value="gasto">🧾 Gasto cargado por supervisor</option>
-                <option value="extra">➕ Trabajo extra</option>
-            </select>
+            <div style="background:rgba(175,82,222,0.08);border:1px solid var(--purple);border-radius:10px;padding:10px;margin-bottom:14px;font-size:12px;color:var(--purple);font-weight:800;">
+                ➕ Trabajo extra fuera del contrato<br>
+                <span style="font-size:10px;color:var(--gray);font-weight:400;">Los pagos/abonos se registran en <b>Compras → Abonar</b></span>
+            </div>
+            <input type="hidden" id="sup-fin-tipo" value="extra">
             <div style="border:2px dashed var(--purple);border-radius:14px;padding:14px;text-align:center;margin-bottom:10px;cursor:pointer;background:rgba(88,86,214,0.04);" onclick="document.getElementById('sup-fin-foto-input').click()">
                 <div style="font-size:24px;">📸</div>
                 <div style="font-size:12px;font-weight:800;color:var(--purple);">Foto del comprobante (opcional)</div>
@@ -1702,7 +1714,4 @@ LICITACIONES ACTUALES DEL PROYECTO:
             <label class="inp-lbl">Fecha</label>
             <input type="date" id="sup-fin-fecha" class="inp-std" style="margin-bottom:18px;">
             <button onclick="guardarFinSup()" style="width:100%;padding:14px;background:var(--purple);color:white;border:none;border-radius:14px;font-size:14px;font-weight:900;cursor:pointer;">Guardar</button>
-        </div>
-    </div>
-</body>
-</html>
+        </
