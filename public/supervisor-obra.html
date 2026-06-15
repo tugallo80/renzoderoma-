@@ -603,9 +603,14 @@
                         <div style="font-size:15px; font-weight:900; color:var(--green);">${fM(totalDep)} Bs</div>
                     </div>
                     ${depositos.length === 0 ? '<div style="font-size:12px;color:var(--gray);text-align:center;padding:10px;">Sin depósitos registrados</div>' :
-                        depositos.map(d => `<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px dashed var(--border);font-size:13px;">
-                            <span style="font-weight:700;">${d.descripcion||'Depósito'} <span style="font-size:11px;color:var(--gray);">${d.fecha||''}</span></span>
-                            <span style="font-weight:900;color:var(--green);">+${fM(parseFloat(d.monto||0))} Bs</span>
+                        depositos.map(d => `<div style="padding:8px 0;border-bottom:1px dashed var(--border);font-size:13px;">
+                            <div style="display:flex;justify-content:space-between;align-items:center;">
+                                <span style="font-weight:700;">${d.descripcion||'Depósito'} <span style="font-size:11px;color:var(--gray);">${d.fecha||''}</span></span>
+                                <span style="font-weight:900;color:var(--green);">+${fM(parseFloat(d.monto||0))} Bs</span>
+                            </div>
+                            <div style="display:flex;gap:6px;margin-top:4px;">
+                                ${d.fotoUrl ? `<a href="${d.fotoUrl}" target="_blank" style="font-size:10px;color:var(--blue);font-weight:800;text-decoration:none;">📎 Ver comprobante</a>` : `<button onclick="abrirAdjuntarFoto('depositos','${d.key}')" style="font-size:10px;background:none;border:1px dashed var(--gray);border-radius:6px;padding:2px 8px;cursor:pointer;color:var(--gray);">📎 Adjuntar foto</button>`}
+                            </div>
                         </div>`).join('')}
                     <button onclick="abrirModalDeposito()" style="margin-top:12px;width:100%;padding:10px;background:rgba(52,199,89,0.1);color:var(--green);border:1px dashed var(--green);border-radius:10px;font-weight:900;font-size:12px;cursor:pointer;">+ Registrar Depósito</button>
                 </div>
@@ -617,9 +622,14 @@
                         <div style="font-size:15px; font-weight:900; color:var(--red);">${fM(totalGas)} Bs</div>
                     </div>
                     ${gastos.length === 0 ? '<div style="font-size:12px;color:var(--gray);text-align:center;padding:10px;">Sin gastos registrados</div>' :
-                        gastos.map(g => `<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px dashed var(--border);font-size:13px;">
-                            <span style="font-weight:700;">${g.descripcion||'Gasto'} <span style="font-size:11px;color:var(--gray);">${g.fecha||''}</span></span>
-                            <span style="font-weight:900;color:var(--red);">-${fM(parseFloat(g.monto||0))} Bs</span>
+                        gastos.map(g => `<div style="padding:8px 0;border-bottom:1px dashed var(--border);font-size:13px;">
+                            <div style="display:flex;justify-content:space-between;align-items:center;">
+                                <span style="font-weight:700;">${g.descripcion||'Gasto'} <span style="font-size:11px;color:var(--gray);">${g.fecha||''}</span></span>
+                                <span style="font-weight:900;color:var(--red);">-${fM(parseFloat(g.monto||0))} Bs</span>
+                            </div>
+                            <div style="display:flex;gap:6px;margin-top:4px;">
+                                ${g.fotoUrl ? `<a href="${g.fotoUrl}" target="_blank" style="font-size:10px;color:var(--blue);font-weight:800;text-decoration:none;">📎 Ver comprobante</a>` : `<button onclick="abrirAdjuntarFoto('gastos','${g.key}')" style="font-size:10px;background:none;border:1px dashed var(--gray);border-radius:6px;padding:2px 8px;cursor:pointer;color:var(--gray);">📎 Adjuntar foto</button>`}
+                            </div>
                         </div>`).join('')}
                     <button onclick="abrirModalGasto()" style="margin-top:12px;width:100%;padding:10px;background:rgba(255,59,48,0.08);color:var(--red);border:1px dashed var(--red);border-radius:10px;font-weight:900;font-size:12px;cursor:pointer;">+ Registrar Gasto</button>
                 </div>`;
@@ -773,33 +783,66 @@ Si no encontrás un campo, usá null. Devuelve SOLO el JSON.' }
         }
     }
 
-    function guardarDeposito() {
+    async function subirFotoComprobante(b64, mime, nodo, key) {
+        if (!b64) return null;
+        try {
+            const blob = await (await fetch(b64)).blob();
+            const ref  = storage.ref(`supervisores/${wid}/${nodo}/${key}_${Date.now()}.jpg`);
+            await ref.put(blob, { contentType: mime });
+            return await ref.getDownloadURL();
+        } catch(e) { console.warn('No se pudo subir foto:', e); return null; }
+    }
+
+    async function guardarDeposito() {
         const monto = parseFloat(document.getElementById('dep-monto').value);
         const desc  = document.getElementById('dep-concepto').value.trim();
         const fecha = document.getElementById('dep-fecha').value;
         if (!monto || isNaN(monto)) return alert('Ingresá un monto válido.');
         if (!desc) return alert('Ingresá el concepto.');
-        db.ref(`supervisores/${wid}/proyectos/${pid}/depositos`).push({
-            monto, descripcion: desc, fecha: fecha || new Date().toLocaleDateString('es-BO'), timestamp: Date.now()
-        }).then(() => {
-            document.getElementById('mod-deposito-sup').style.display = 'none';
-            renderFinanzas();
-        });
+        const btn = document.querySelector('#mod-deposito-sup button[onclick="guardarDeposito()"]');
+        if (btn) { btn.disabled = true; btn.textContent = 'Guardando...'; }
+        const newRef = db.ref(`supervisores/${wid}/proyectos/${pid}/depositos`).push();
+        const fotoUrl = _depFotoB64 ? await subirFotoComprobante(_depFotoB64, _depFotoMime, 'depositos', newRef.key) : null;
+        await newRef.set({ monto, descripcion: desc, fecha: fecha || new Date().toLocaleDateString('es-BO'), timestamp: Date.now(), ...(fotoUrl ? { fotoUrl } : {}) });
+        document.getElementById('mod-deposito-sup').style.display = 'none';
+        renderFinanzas();
     }
 
-    function guardarGasto() {
+    async function guardarGasto() {
         const monto = parseFloat(document.getElementById('gas-monto').value);
         const desc  = document.getElementById('gas-concepto').value.trim();
         const fecha = document.getElementById('gas-fecha').value;
         if (!monto || isNaN(monto)) return alert('Ingresá un monto válido.');
         if (!desc) return alert('Ingresá la descripción.');
-        db.ref(`supervisores/${wid}/proyectos/${pid}/gastos`).push({
-            monto, descripcion: desc, fecha: fecha || new Date().toLocaleDateString('es-BO'), timestamp: Date.now()
-        }).then(() => {
-            document.getElementById('mod-gasto-sup').style.display = 'none';
-            renderFinanzas();
-        });
+        const btn = document.querySelector('#mod-gasto-sup button[onclick="guardarGasto()"]');
+        if (btn) { btn.disabled = true; btn.textContent = 'Guardando...'; }
+        const newRef = db.ref(`supervisores/${wid}/proyectos/${pid}/gastos`).push();
+        const fotoUrl = _gasFotoB64 ? await subirFotoComprobante(_gasFotoB64, _gasFotoMime, 'gastos', newRef.key) : null;
+        await newRef.set({ monto, descripcion: desc, fecha: fecha || new Date().toLocaleDateString('es-BO'), timestamp: Date.now(), ...(fotoUrl ? { fotoUrl } : {}) });
+        document.getElementById('mod-gasto-sup').style.display = 'none';
+        renderFinanzas();
     }
+
+    // Adjuntar foto a movimiento existente
+    let _adjCtx = {}; // { nodo, key }
+    function abrirAdjuntarFoto(nodo, key) {
+        _adjCtx = { nodo, key };
+        document.getElementById('adj-foto-input').click();
+    }
+    document.addEventListener('DOMContentLoaded', () => {
+        const inp = document.createElement('input');
+        inp.type = 'file'; inp.id = 'adj-foto-input'; inp.accept = 'image/*'; inp.style.display = 'none';
+        inp.onchange = async function() {
+            const file = inp.files[0]; if (!file) return;
+            const b64 = await new Promise(r => { const fr = new FileReader(); fr.onload = e => r(e.target.result); fr.readAsDataURL(file); });
+            const ref = storage.ref(`supervisores/${wid}/${_adjCtx.nodo}/${_adjCtx.key}_adj_${Date.now()}.jpg`);
+            await ref.put(await (await fetch(b64)).blob(), { contentType: file.type });
+            const url = await ref.getDownloadURL();
+            await db.ref(`supervisores/${wid}/proyectos/${pid}/${_adjCtx.nodo}/${_adjCtx.key}/fotoUrl`).set(url);
+            renderFinanzas();
+        };
+        document.body.appendChild(inp);
+    });
 
     function abrirModalExtra() {
         const desc = prompt("Descripción del trabajo extra:");

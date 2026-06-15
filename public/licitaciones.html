@@ -1505,9 +1505,9 @@ LICITACIONES ACTUALES DEL PROYECTO:
             ]);
             let totalDep = 0, totalGas = 0, totalExt = 0;
             const deps = [], gass = [], exts = [];
-            if (snapDep.exists()) snapDep.forEach(c => { const d = c.val(); deps.push(d); totalDep += parseFloat(d.monto||0); });
-            if (snapGas.exists()) snapGas.forEach(c => { const g = c.val(); gass.push(g); totalGas += parseFloat(g.monto||0); });
-            if (snapExt.exists()) snapExt.forEach(c => { const e = c.val(); exts.push(e); totalExt += parseFloat(e.monto||0); });
+            if (snapDep.exists()) snapDep.forEach(c => { const d = {...c.val(), _key: c.key}; deps.push(d); totalDep += parseFloat(d.monto||0); });
+            if (snapGas.exists()) snapGas.forEach(c => { const g = {...c.val(), _key: c.key}; gass.push(g); totalGas += parseFloat(g.monto||0); });
+            if (snapExt.exists()) snapExt.forEach(c => { const e = {...c.val(), _key: c.key}; exts.push(e); totalExt += parseFloat(e.monto||0); });
 
             const totalContrato = montoContrato + totalExt;
             const saldo = totalContrato + totalGas - totalDep;
@@ -1532,7 +1532,14 @@ LICITACIONES ACTUALES DEL PROYECTO:
                     <div style="font-size:12px;font-weight:900;color:${saldo>0?'var(--orange)':'var(--green)'};">${fM(saldo)}</div>
                 </div>
             </div>
-            ${deps.length ? `<div style="font-size:10px;color:var(--green);font-weight:800;">✅ ${deps.length} depósito(s) · ${fM(totalDep)} Bs</div>` : ''}
+            ${deps.length ? `<div style="font-size:10px;color:var(--green);font-weight:800;margin-bottom:4px;">✅ ${deps.length} depósito(s) · ${fM(totalDep)} Bs</div>
+            ${deps.map((d,i) => `<div style="display:flex;justify-content:space-between;align-items:center;font-size:10px;padding:3px 0;border-bottom:1px dashed var(--border);">
+                <span style="color:var(--gray);">${d.descripcion||'Depósito'} · ${d.fecha||''}</span>
+                <span style="display:flex;gap:4px;align-items:center;">
+                    <span style="font-weight:900;color:var(--green);">+${fM(d.monto)} Bs</span>
+                    ${d.fotoUrl ? `<a href="${d.fotoUrl}" target="_blank" style="color:var(--blue);font-size:12px;" title="Ver foto">📎</a>` : `<button onclick="abrirAdjuntarFotoSup('${wid}','${pid}','depositos','${d._key}','${licKey}','${cid}',${montoContrato})" style="font-size:9px;background:none;border:1px dashed var(--gray);border-radius:4px;padding:1px 5px;cursor:pointer;color:var(--gray);">+foto</button>`}
+                </span>
+            </div>`).join('')}` : ''}
             ${gass.length ? `<div style="font-size:10px;color:var(--red);font-weight:800;">🧾 ${gass.length} gasto(s) · ${fM(totalGas)} Bs</div>` : ''}
             ${exts.length ? `<div style="font-size:10px;color:var(--purple);font-weight:800;">➕ ${exts.length} extra(s) · ${fM(totalExt)} Bs</div>` : ''}
             `;
@@ -1604,6 +1611,16 @@ LICITACIONES ACTUALES DEL PROYECTO:
         finally { btn.disabled = false; }
     }
 
+    async function subirFotoSupLic(b64, mime, wid, nodo, key) {
+        if (!b64) return null;
+        try {
+            const blob = await (await fetch(b64)).blob();
+            const ref  = firebase.storage().ref(`supervisores/${wid}/${nodo}/${key}_${Date.now()}.jpg`);
+            await ref.put(blob, { contentType: mime });
+            return await ref.getDownloadURL();
+        } catch(e) { console.warn('No se pudo subir foto sup:', e); return null; }
+    }
+
     async function guardarFinSup() {
         const { wid, pid, cid, licKey } = _supFinCtx;
         const tipo    = document.getElementById('sup-fin-tipo').value;
@@ -1612,21 +1629,42 @@ LICITACIONES ACTUALES DEL PROYECTO:
         const fecha   = document.getElementById('sup-fin-fecha').value;
         if (!monto || isNaN(monto)) return alert('Ingresá un monto válido.');
         if (!desc) return alert('Ingresá el concepto.');
+        const btn = document.querySelector('#mod-fin-sup button[onclick="guardarFinSup()"]');
+        if (btn) { btn.disabled = true; btn.textContent = 'Guardando...'; }
+        try {
+            const nodo = tipo === 'extra' ? 'extras' : tipo === 'gasto' ? 'gastos' : 'depositos';
+            const newRef = db.ref(`supervisores/${wid}/proyectos/${pid}/${nodo}`).push();
+            const fotoUrl = _supFotoB64 ? await subirFotoSupLic(_supFotoB64, _supFotoMime, wid, nodo, newRef.key) : null;
+            const payload = { monto, descripcion: desc, fecha, timestamp: Date.now(), ...(fotoUrl ? { fotoUrl } : {}) };
+            if (tipo === 'extra') payload.aprobado = true;
+            await newRef.set(payload);
+            const licSnap = await db.ref(`proyectos/${cid}/${pid}/licitaciones/${licKey}`).once('value');
+            const lic = licSnap.val() || {};
+            const montoContrato = parseFloat(lic.precio_propuesto || lic.precio_final || 0);
+            await cargarBalanceSup(wid, pid, cid, licKey, 'sup-fin-' + licKey + '-body', montoContrato);
+            document.getElementById('mod-fin-sup').style.display = 'none';
+        } finally {
+            if (btn) { btn.disabled = false; btn.textContent = 'Guardar'; }
+        }
+    }
 
-        const nodo = tipo === 'extra' ? 'extras' : tipo === 'gasto' ? 'gastos' : 'depositos';
-        const payload = { monto, descripcion: desc, fecha, timestamp: Date.now() };
-        if (tipo === 'extra') payload.aprobado = true;
-
-        await db.ref(`supervisores/${wid}/proyectos/${pid}/${nodo}`).push(payload);
-
-        // Recargar balance en la card
-        const licSnap = await db.ref(`proyectos/${cid}/${pid}/licitaciones/${licKey}`).once('value');
-        const lic = licSnap.val() || {};
-        const montoContrato = parseFloat(lic.precio_propuesto || lic.precio_final || 0);
-        await cargarBalanceSup(wid, pid, cid, licKey, `sup-fin-${licKey}-body`, montoContrato);
-
-        document.getElementById('mod-fin-sup').style.display = 'none';
-        // Actualizar también supervisoresData si tesorería está abierta
+    // Adjuntar foto a movimiento existente desde licitaciones
+    let _adjSupCtx = {};
+    function abrirAdjuntarFotoSup(wid, pid, nodo, key, licKey, cid, montoContrato) {
+        _adjSupCtx = { wid, pid, nodo, key, licKey, cid, montoContrato };
+        let inp = document.getElementById('adj-sup-foto-input');
+        if (!inp) { inp = document.createElement('input'); inp.type='file'; inp.id='adj-sup-foto-input'; inp.accept='image/*'; inp.style.display='none'; document.body.appendChild(inp);
+            inp.onchange = async function() {
+                const file = inp.files[0]; if (!file) return;
+                const b64 = await new Promise(r => { const fr = new FileReader(); fr.onload = e => r(e.target.result); fr.readAsDataURL(file); });
+                const url = await subirFotoSupLic(b64, file.type, _adjSupCtx.wid, _adjSupCtx.nodo, _adjSupCtx.key);
+                if (url) {
+                    await db.ref(`supervisores/${_adjSupCtx.wid}/proyectos/${_adjSupCtx.pid}/${_adjSupCtx.nodo}/${_adjSupCtx.key}/fotoUrl`).set(url);
+                    await cargarBalanceSup(_adjSupCtx.wid, _adjSupCtx.pid, _adjSupCtx.cid, _adjSupCtx.licKey, 'sup-fin-' + _adjSupCtx.licKey + '-body', _adjSupCtx.montoContrato);
+                }
+            };
+        }
+        inp.click();
     }
 
 
