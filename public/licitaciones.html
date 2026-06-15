@@ -1125,7 +1125,7 @@
         document.getElementById('mod-new-lic').style.display = 'none'; editingLicId = null;
 
         if(worker.telefono && (!isInternal || isSupervision)) { 
-            const fileName = isSupervision ? 'supervisor-dashboard.html' : (isGraphic ? 'proveedor-grafico.html' : 'contratista/index.html');
+            const fileName = isSupervision ? 'supervisor-index.html' : (isGraphic ? 'proveedor-grafico.html' : 'contratista/index.html');
             const basePath = generateCleanBaseLink(); const linkApp = `${basePath}${fileName}?wid=${workerId}&lic=${finalLicKey}`; let msg = '';
             if(payload.estado === 'aprobado' || payload.estado === 'adjudicado') { msg = encodeURIComponent(`Hola ${worker.nombre},\n\nSe han actualizado las tareas de tu contrato en el proyecto *${pName}*.\n\n👉 Revisa los cambios en tu portal:\n${linkApp}`); } 
             else { msg = encodeURIComponent(`Hola ${worker.nombre},\n\nTienes una solicitud de trabajo/supervisión para el proyecto *${pName}*.\n\n👉 Entra a cotizarla/aceptarla aquí:\n${linkApp}`); }
@@ -1214,6 +1214,22 @@
                     </div>
                     <div class="lic-body">${itemStr || '<span style="color:var(--gray);font-size:11px;">Sin ítems</span>'}</div>
                     <div class="lic-total">${totalStr}</div>`;
+
+                // ── Panel finanzas supervisor (solo en licitaciones de supervisión) ──
+                if (isSup && lic.worker_id) {
+                    const widSup = lic.worker_id;
+                    const supCardId = 'sup-fin-' + key;
+                    card += `
+                    <div id="${supCardId}" style="margin-top:10px; background:rgba(88,86,214,0.06); border:1px dashed var(--purple); border-radius:12px; padding:12px;">
+                        <div style="font-size:11px; font-weight:900; color:var(--purple); margin-bottom:8px; display:flex; justify-content:space-between; align-items:center;">
+                            <span>💼 Balance Supervisión</span>
+                            <button onclick="abrirFinSupModal('${widSup}','${pid}','${cid}','${key}')" style="font-size:10px;background:var(--purple);color:white;border:none;border-radius:6px;padding:3px 8px;cursor:pointer;">+ Depósito / Gasto / Extra</button>
+                        </div>
+                        <div id="${supCardId}-body" style="font-size:11px;color:var(--gray);">Cargando...</div>
+                    </div>`;
+                    // Cargar datos async después de renderizar
+                    setTimeout(() => cargarBalanceSup('${widSup}', '${pid}', '${cid}', '${key}', '${supCardId}-body', ${parseFloat(lic.precio_propuesto||lic.precio_final||0)}), 100);
+                }
 
                 let estado = lic.estado || 'pendiente';
                 if(estado==='enviado'||estado==='espera_cotizacion'||estado==='pendiente') {
@@ -1470,6 +1486,193 @@ LICITACIONES ACTUALES DEL PROYECTO:
             if (btnCalc) { btnCalc.disabled = false; btnCalc.innerHTML = '<i class="ph-bold ph-calculator"></i> Calcular'; }
         }
     };
+
+
+    // ══════════════════════════════════════════════════════
+    // FINANZAS SUPERVISOR — desde licitaciones (admin view)
+    // ══════════════════════════════════════════════════════
+    let _supFinCtx = {}; // { wid, pid, cid, licKey }
+    let _supFotoB64 = null, _supFotoMime = 'image/jpeg';
+
+    async function cargarBalanceSup(wid, pid, cid, licKey, elId, montoContrato) {
+        const el = document.getElementById(elId);
+        if (!el) return;
+        try {
+            const [snapDep, snapGas, snapExt] = await Promise.all([
+                db.ref(`supervisores/${wid}/proyectos/${pid}/depositos`).once('value'),
+                db.ref(`supervisores/${wid}/proyectos/${pid}/gastos`).once('value'),
+                db.ref(`supervisores/${wid}/proyectos/${pid}/extras`).once('value'),
+            ]);
+            let totalDep = 0, totalGas = 0, totalExt = 0;
+            const deps = [], gass = [], exts = [];
+            if (snapDep.exists()) snapDep.forEach(c => { const d = c.val(); deps.push(d); totalDep += parseFloat(d.monto||0); });
+            if (snapGas.exists()) snapGas.forEach(c => { const g = c.val(); gass.push(g); totalGas += parseFloat(g.monto||0); });
+            if (snapExt.exists()) snapExt.forEach(c => { const e = c.val(); exts.push(e); totalExt += parseFloat(e.monto||0); });
+
+            const totalContrato = montoContrato + totalExt;
+            const saldo = totalContrato + totalGas - totalDep;
+            const fM = n => parseFloat(n||0).toLocaleString('es-BO',{minimumFractionDigits:2,maximumFractionDigits:2});
+
+            el.innerHTML = `
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:6px;margin-bottom:8px;text-align:center;">
+                <div style="background:rgba(0,122,255,0.08);border-radius:8px;padding:6px;">
+                    <div style="font-size:9px;color:var(--gray);font-weight:800;">CONTRATO</div>
+                    <div style="font-size:12px;font-weight:900;color:var(--blue);">${fM(montoContrato)}</div>
+                </div>
+                <div style="background:rgba(175,82,222,0.08);border-radius:8px;padding:6px;">
+                    <div style="font-size:9px;color:var(--gray);font-weight:800;">EXTRAS</div>
+                    <div style="font-size:12px;font-weight:900;color:var(--purple);">${fM(totalExt)}</div>
+                </div>
+                <div style="background:rgba(52,199,89,0.08);border-radius:8px;padding:6px;">
+                    <div style="font-size:9px;color:var(--gray);font-weight:800;">DEPÓSITOS</div>
+                    <div style="font-size:12px;font-weight:900;color:var(--green);">-${fM(totalDep)}</div>
+                </div>
+                <div style="background:rgba(255,149,0,0.08);border-radius:8px;padding:6px;">
+                    <div style="font-size:9px;color:var(--gray);font-weight:800;">SALDO</div>
+                    <div style="font-size:12px;font-weight:900;color:${saldo>0?'var(--orange)':'var(--green)'};">${fM(saldo)}</div>
+                </div>
+            </div>
+            ${deps.length ? `<div style="font-size:10px;color:var(--green);font-weight:800;">✅ ${deps.length} depósito(s) · ${fM(totalDep)} Bs</div>` : ''}
+            ${gass.length ? `<div style="font-size:10px;color:var(--red);font-weight:800;">🧾 ${gass.length} gasto(s) · ${fM(totalGas)} Bs</div>` : ''}
+            ${exts.length ? `<div style="font-size:10px;color:var(--purple);font-weight:800;">➕ ${exts.length} extra(s) · ${fM(totalExt)} Bs</div>` : ''}
+            `;
+        } catch(e) {
+            if (el) el.innerHTML = '<span style="color:var(--gray);">Sin datos aún</span>';
+        }
+    }
+
+    function abrirFinSupModal(wid, pid, cid, licKey) {
+        _supFinCtx = { wid, pid, cid, licKey };
+        _supFotoB64 = null; _supFotoMime = 'image/jpeg';
+        // reset campos
+        ['sup-fin-monto','sup-fin-concepto'].forEach(id => { const el = document.getElementById(id); if(el) el.value = ''; });
+        const fechaEl = document.getElementById('sup-fin-fecha');
+        if (fechaEl) fechaEl.value = new Date().toISOString().substring(0,10);
+        const tipoEl = document.getElementById('sup-fin-tipo');
+        if (tipoEl) tipoEl.value = 'deposito';
+        document.getElementById('sup-fin-foto-nombre').style.display = 'none';
+        document.getElementById('sup-fin-btn-scan').style.display = 'none';
+        document.getElementById('mod-fin-sup').style.display = 'flex';
+    }
+
+    function onSupFinFotoCargada(input) {
+        const file = input.files[0]; if (!file) return;
+        const reader = new FileReader();
+        reader.onload = e => {
+            _supFotoB64 = e.target.result;
+            _supFotoMime = file.type || 'image/jpeg';
+            document.getElementById('sup-fin-foto-nombre').textContent = '📎 ' + file.name;
+            document.getElementById('sup-fin-foto-nombre').style.display = 'block';
+            document.getElementById('sup-fin-btn-scan').style.display = 'block';
+        };
+        reader.readAsDataURL(file);
+    }
+
+    async function escanearFinSup() {
+        if (!_supFotoB64) return alert('Primero cargá una foto del comprobante.');
+        const btn = document.getElementById('sup-fin-btn-scan');
+        btn.disabled = true; btn.innerHTML = '<i class="ph-bold ph-spinner"></i> Analizando...';
+        try {
+            const token = await firebase.auth().currentUser.getIdToken();
+            const resp = await fetch('/api/gemini', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+                body: JSON.stringify({
+                    model: 'gemini-2.5-flash',
+                    systemInstruction: 'Extractor de comprobantes. Devuelve SOLO JSON válido.',
+                    contents: [{ role: 'user', parts: [
+                        { inlineData: { mimeType: _supFotoMime, data: _supFotoB64.split(',')[1] } },
+                        { text: 'Extrae: monto (número), fecha (YYYY-MM-DD), concepto (texto). Devuelve SOLO JSON con esas 3 claves. null si no encontrás.' }
+                    ]}]
+                })
+            });
+            const data = await resp.json();
+            const texto = data.candidates?.[0]?.content?.parts?.[0]?.text || data.text || '';
+            const match = texto.match(/\{[\s\S]*\}/);
+            if (match) {
+                const d = JSON.parse(match[0]);
+                if (d.monto)    document.getElementById('sup-fin-monto').value   = d.monto;
+                if (d.fecha)    document.getElementById('sup-fin-fecha').value   = d.fecha;
+                if (d.concepto) document.getElementById('sup-fin-concepto').value = d.concepto;
+                btn.innerHTML = '✅ Completado por IA';
+                btn.style.background = 'rgba(52,199,89,0.15)'; btn.style.color = 'var(--green)'; btn.style.borderColor = 'var(--green)';
+            } else {
+                alert('No se pudo extraer. Intentá con imagen más nítida.');
+                btn.innerHTML = '<i class="ph-bold ph-magic-wand"></i> Leer con IA';
+            }
+        } catch(e) { alert('Error: ' + e.message); btn.innerHTML = '<i class="ph-bold ph-magic-wand"></i> Leer con IA'; }
+        finally { btn.disabled = false; }
+    }
+
+    async function guardarFinSup() {
+        const { wid, pid, cid, licKey } = _supFinCtx;
+        const tipo    = document.getElementById('sup-fin-tipo').value;
+        const monto   = parseFloat(document.getElementById('sup-fin-monto').value);
+        const desc    = document.getElementById('sup-fin-concepto').value.trim();
+        const fecha   = document.getElementById('sup-fin-fecha').value;
+        if (!monto || isNaN(monto)) return alert('Ingresá un monto válido.');
+        if (!desc) return alert('Ingresá el concepto.');
+
+        const nodo = tipo === 'extra' ? 'extras' : tipo === 'gasto' ? 'gastos' : 'depositos';
+        const payload = { monto, descripcion: desc, fecha, timestamp: Date.now() };
+        if (tipo === 'extra') payload.aprobado = true;
+
+        await db.ref(`supervisores/${wid}/proyectos/${pid}/${nodo}`).push(payload);
+
+        // Recargar balance en la card
+        const licSnap = await db.ref(`proyectos/${cid}/${pid}/licitaciones/${licKey}`).once('value');
+        const lic = licSnap.val() || {};
+        const montoContrato = parseFloat(lic.precio_propuesto || lic.precio_final || 0);
+        await cargarBalanceSup(wid, pid, cid, licKey, `sup-fin-${licKey}-body`, montoContrato);
+
+        document.getElementById('mod-fin-sup').style.display = 'none';
+        // Actualizar también supervisoresData si tesorería está abierta
+    }
+
+</insert_before>
+
+<div id="mod-fin-sup" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.6);z-index:3000;align-items:flex-end;justify-content:center;backdrop-filter:blur(4px);">
+    <div style="background:var(--card);border-radius:24px 24px 0 0;padding:24px;width:100%;max-width:480px;max-height:90vh;overflow-y:auto;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;">
+            <div style="font-size:16px;font-weight:900;color:var(--purple);">💼 Registrar Movimiento</div>
+            <button onclick="document.getElementById('mod-fin-sup').style.display='none'" style="background:var(--bg);border:none;width:32px;height:32px;border-radius:50%;cursor:pointer;font-size:18px;color:var(--gray);">×</button>
+        </div>
+
+        <label class="inp-lbl">Tipo</label>
+        <select id="sup-fin-tipo" class="inp-std" style="margin-bottom:14px;">
+            <option value="deposito">✅ Depósito recibido por supervisor</option>
+            <option value="gasto">🧾 Gasto cargado por supervisor</option>
+            <option value="extra">➕ Trabajo extra</option>
+        </select>
+
+        <div style="border:2px dashed var(--purple);border-radius:14px;padding:14px;text-align:center;margin-bottom:10px;cursor:pointer;background:rgba(88,86,214,0.04);"
+            onclick="document.getElementById('sup-fin-foto-input').click()">
+            <div style="font-size:24px;">📸</div>
+            <div style="font-size:12px;font-weight:800;color:var(--purple);">Foto del comprobante (opcional)</div>
+            <div style="font-size:10px;color:var(--gray);">Ctrl+V o tocá para subir</div>
+            <div id="sup-fin-foto-nombre" style="font-size:11px;color:var(--purple);font-weight:800;margin-top:4px;display:none;"></div>
+        </div>
+        <input type="file" id="sup-fin-foto-input" accept="image/*" style="display:none" onchange="onSupFinFotoCargada(this)">
+        <button id="sup-fin-btn-scan" onclick="escanearFinSup()" style="display:none;width:100%;padding:10px;background:rgba(88,86,214,0.12);border:1px solid var(--purple);color:var(--purple);border-radius:10px;font-size:12px;font-weight:800;cursor:pointer;margin-bottom:14px;">
+            <i class="ph-bold ph-magic-wand"></i> Leer con IA
+        </button>
+
+        <div style="height:1px;background:var(--border);margin-bottom:14px;"></div>
+
+        <label class="inp-lbl">Monto (Bs) *</label>
+        <input type="number" id="sup-fin-monto" class="inp-std" placeholder="0.00" min="0" step="0.01" style="margin-bottom:10px;">
+
+        <label class="inp-lbl">Concepto *</label>
+        <input type="text" id="sup-fin-concepto" class="inp-std" placeholder="Ej: Anticipo 50%, Materiales, Trabajo extra..." style="margin-bottom:10px;">
+
+        <label class="inp-lbl">Fecha</label>
+        <input type="date" id="sup-fin-fecha" class="inp-std" style="margin-bottom:18px;">
+
+        <button onclick="guardarFinSup()" style="width:100%;padding:14px;background:var(--purple);color:white;border:none;border-radius:14px;font-size:14px;font-weight:900;cursor:pointer;">
+            Guardar
+        </button>
+    </div>
+</div>
 
 </script>
 <script src="/paste-image.js"></script>
