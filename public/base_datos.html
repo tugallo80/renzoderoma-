@@ -272,15 +272,20 @@
         document.getElementById('global-loader').style.display = 'none';
     }
 
-    // Escuchar cambios en tiempo real SOLO en los nodos livianos
-    db.ref('personal').on('value', snap => { dbData.pers = snap.val() || {}; if(currentTab === 'pers') renderCurrentTab(); });
-    db.ref('base_datos/proveedores').on('value', snap => { dbData.prov = snap.val() || {}; actualizarComboProveedores(); if(currentTab === 'prov') renderCurrentTab(); });
-    db.ref('base_datos/materiales').on('value', snap => { dbData.mat = snap.val() || {}; if(currentTab === 'mat') renderCurrentTab(); });
-    db.ref('base_datos/mano_obra').on('value', snap => { dbData.mo = snap.val() || {}; if(currentTab === 'mo') renderCurrentTab(); });
-    db.ref('base_datos/otros').on('value', snap => { dbData.eq = snap.val() || {}; if(currentTab === 'eq') renderCurrentTab(); });
-    db.ref('base_datos/inventario').on('value', snap => { dbData.inv = snap.val() || {}; if(currentTab === 'inv') renderCurrentTab(); });
-    
-    cargarDatosIniciales();
+    // Esperar auth antes de registrar listeners y cargar datos
+    // (las reglas de /personal requieren auth.token.email != null)
+    window.rubikAuthReady.then(function() {
+        db.ref('personal').on('value', snap => { dbData.pers = snap.val() || {}; if(currentTab === 'pers') renderCurrentTab(); });
+        db.ref('base_datos/proveedores').on('value', snap => { dbData.prov = snap.val() || {}; actualizarComboProveedores(); if(currentTab === 'prov') renderCurrentTab(); });
+        db.ref('base_datos/materiales').on('value', snap => { dbData.mat = snap.val() || {}; if(currentTab === 'mat') renderCurrentTab(); });
+        db.ref('base_datos/mano_obra').on('value', snap => { dbData.mo = snap.val() || {}; if(currentTab === 'mo') renderCurrentTab(); });
+        db.ref('base_datos/otros').on('value', snap => { dbData.eq = snap.val() || {}; if(currentTab === 'eq') renderCurrentTab(); });
+        db.ref('base_datos/inventario').on('value', snap => { dbData.inv = snap.val() || {}; if(currentTab === 'inv') renderCurrentTab(); });
+        cargarDatosIniciales();
+    }).catch(function() {
+        // auth-guard ya redirige a login si no hay sesión
+        document.getElementById('global-loader').style.display = 'none';
+    });
 
     function actualizarComboProveedores() {
         const sel = document.getElementById('g-prov');
