@@ -664,26 +664,141 @@
     // ==========================================
     // MODALES: DEPÓSITO / GASTO / EXTRA
     // ==========================================
+    // ── Variables temporales para fotos de comprobante ──
+    let _depFotoB64 = null, _depFotoMime = 'image/jpeg';
+    let _gasFotoB64 = null, _gasFotoMime = 'image/jpeg';
+
     function abrirModalDeposito() {
-        const monto = prompt("Monto del depósito recibido (Bs):");
-        if (!monto || isNaN(parseFloat(monto))) return;
-        const desc = prompt("Concepto (ej: Anticipo 50%, Pago avance, etc.):");
-        if (!desc) return;
-        const fecha = new Date().toLocaleDateString('es-BO');
-        db.ref(`supervisores/${wid}/proyectos/${pid}/depositos`).push({
-            monto: parseFloat(monto), descripcion: desc, fecha, timestamp: Date.now()
-        }).then(() => { renderFinanzas(); alert("✅ Depósito registrado."); });
+        // Reset modal
+        _depFotoB64 = null;
+        document.getElementById('dep-monto').value = '';
+        document.getElementById('dep-concepto').value = '';
+        document.getElementById('dep-fecha').value = new Date().toISOString().substring(0,10);
+        document.getElementById('dep-foto-nombre').style.display = 'none';
+        document.getElementById('dep-btn-scan').style.display = 'none';
+        document.getElementById('dep-scan-zone').style.borderColor = 'var(--green)';
+        document.getElementById('mod-deposito-sup').style.display = 'flex';
     }
 
     function abrirModalGasto() {
-        const monto = prompt("Monto del gasto (Bs):");
-        if (!monto || isNaN(parseFloat(monto))) return;
-        const desc = prompt("Descripción del gasto:");
-        if (!desc) return;
-        const fecha = new Date().toLocaleDateString('es-BO');
+        // Reset modal
+        _gasFotoB64 = null;
+        document.getElementById('gas-monto').value = '';
+        document.getElementById('gas-concepto').value = '';
+        document.getElementById('gas-fecha').value = new Date().toISOString().substring(0,10);
+        document.getElementById('gas-foto-nombre').style.display = 'none';
+        document.getElementById('gas-btn-scan').style.display = 'none';
+        document.getElementById('gas-scan-zone').style.borderColor = 'var(--red)';
+        document.getElementById('mod-gasto-sup').style.display = 'flex';
+    }
+
+    function onDepFotoCargada(input) {
+        const file = input.files[0]; if (!file) return;
+        const reader = new FileReader();
+        reader.onload = e => {
+            _depFotoB64 = e.target.result;
+            _depFotoMime = file.type || 'image/jpeg';
+            document.getElementById('dep-foto-nombre').textContent = '📎 ' + file.name;
+            document.getElementById('dep-foto-nombre').style.display = 'block';
+            document.getElementById('dep-btn-scan').style.display = 'block';
+            document.getElementById('dep-scan-zone').style.borderColor = 'var(--green)';
+            document.getElementById('dep-scan-zone').style.background = 'rgba(52,199,89,0.1)';
+        };
+        reader.readAsDataURL(file);
+    }
+
+    function onGasFotoCargada(input) {
+        const file = input.files[0]; if (!file) return;
+        const reader = new FileReader();
+        reader.onload = e => {
+            _gasFotoB64 = e.target.result;
+            _gasFotoMime = file.type || 'image/jpeg';
+            document.getElementById('gas-foto-nombre').textContent = '📎 ' + file.name;
+            document.getElementById('gas-foto-nombre').style.display = 'block';
+            document.getElementById('gas-btn-scan').style.display = 'block';
+            document.getElementById('gas-scan-zone').style.background = 'rgba(255,59,48,0.08)';
+        };
+        reader.readAsDataURL(file);
+    }
+
+    async function escanearComprobanteSup(tipo) {
+        const b64   = tipo === 'dep' ? _depFotoB64   : _gasFotoB64;
+        const mime  = tipo === 'dep' ? _depFotoMime  : _gasFotoMime;
+        const btnId = tipo === 'dep' ? 'dep-btn-scan' : 'gas-btn-scan';
+        if (!b64) return alert('Primero cargá una foto del comprobante.');
+        const btn = document.getElementById(btnId);
+        btn.disabled = true; btn.innerHTML = '<i class="ph-bold ph-spinner"></i> Analizando...';
+        try {
+            const token = await firebase.auth().currentUser.getIdToken();
+            const resp = await fetch('/api/gemini', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+                body: JSON.stringify({
+                    model: 'gemini-2.5-flash',
+                    systemInstruction: 'Eres un extractor de datos de comprobantes de pago, recibos y facturas. Devuelve SOLO JSON válido, sin markdown ni explicaciones.',
+                    contents: [{
+                        role: 'user',
+                        parts: [
+                            { inlineData: { mimeType: mime, data: b64.split(',')[1] } },
+                            { text: 'Extrae de este comprobante/recibo/factura los siguientes campos y devuelve SOLO un JSON con estas claves exactas:
+- monto: importe total en número (sin símbolo de moneda, solo dígitos)
+- fecha: fecha en formato YYYY-MM-DD
+- concepto: descripción, referencia o motivo del pago
+Si no encontrás un campo, usá null. Devuelve SOLO el JSON.' }
+                        ]
+                    }]
+                })
+            });
+            const data = await resp.json();
+            let texto = data.candidates?.[0]?.content?.parts?.[0]?.text || data.text || '';
+            const match = texto.match(/\{[\s\S]*\}/);
+            if (match) {
+                const d = JSON.parse(match[0]);
+                if (d.monto)    document.getElementById(tipo + '-monto').value   = d.monto;
+                if (d.fecha)    document.getElementById(tipo + '-fecha').value   = d.fecha;
+                if (d.concepto) document.getElementById(tipo + '-concepto').value = d.concepto;
+                btn.innerHTML = '✅ IA completó los campos';
+                btn.style.background = 'rgba(52,199,89,0.2)';
+                btn.style.borderColor = 'var(--green)';
+                btn.style.color = 'var(--green)';
+            } else {
+                alert('No se pudieron extraer datos. Intentá con imagen más nítida.');
+                btn.innerHTML = '<i class="ph-bold ph-magic-wand"></i> Leer con IA';
+            }
+        } catch(e) {
+            alert('Error al escanear: ' + e.message);
+            btn.innerHTML = '<i class="ph-bold ph-magic-wand"></i> Leer con IA';
+        } finally {
+            btn.disabled = false;
+        }
+    }
+
+    function guardarDeposito() {
+        const monto = parseFloat(document.getElementById('dep-monto').value);
+        const desc  = document.getElementById('dep-concepto').value.trim();
+        const fecha = document.getElementById('dep-fecha').value;
+        if (!monto || isNaN(monto)) return alert('Ingresá un monto válido.');
+        if (!desc) return alert('Ingresá el concepto.');
+        db.ref(`supervisores/${wid}/proyectos/${pid}/depositos`).push({
+            monto, descripcion: desc, fecha: fecha || new Date().toLocaleDateString('es-BO'), timestamp: Date.now()
+        }).then(() => {
+            document.getElementById('mod-deposito-sup').style.display = 'none';
+            renderFinanzas();
+        });
+    }
+
+    function guardarGasto() {
+        const monto = parseFloat(document.getElementById('gas-monto').value);
+        const desc  = document.getElementById('gas-concepto').value.trim();
+        const fecha = document.getElementById('gas-fecha').value;
+        if (!monto || isNaN(monto)) return alert('Ingresá un monto válido.');
+        if (!desc) return alert('Ingresá la descripción.');
         db.ref(`supervisores/${wid}/proyectos/${pid}/gastos`).push({
-            monto: parseFloat(monto), descripcion: desc, fecha, timestamp: Date.now()
-        }).then(() => { renderFinanzas(); alert("✅ Gasto registrado."); });
+            monto, descripcion: desc, fecha: fecha || new Date().toLocaleDateString('es-BO'), timestamp: Date.now()
+        }).then(() => {
+            document.getElementById('mod-gasto-sup').style.display = 'none';
+            renderFinanzas();
+        });
     }
 
     function abrirModalExtra() {
@@ -991,5 +1106,88 @@ REGLAS:
 </script>
     <script src="/js/viewmode.js?v=1"></script>
 <script src="/paste-image.js"></script>
+
+    <!-- ══════════════════════════════════════════════ -->
+    <!-- MODAL: Registrar Depósito                      -->
+    <!-- ══════════════════════════════════════════════ -->
+    <div id="mod-deposito-sup" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.6);z-index:3000;align-items:flex-end;justify-content:center;backdrop-filter:blur(4px);">
+        <div style="background:var(--card);border-radius:24px 24px 0 0;padding:24px;width:100%;max-width:480px;max-height:90vh;overflow-y:auto;">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;">
+                <div style="font-size:16px;font-weight:900;color:var(--green);">✅ Registrar Depósito</div>
+                <button onclick="document.getElementById('mod-deposito-sup').style.display='none'" style="background:var(--bg);border:none;width:32px;height:32px;border-radius:50%;cursor:pointer;font-size:18px;color:var(--gray);">×</button>
+            </div>
+
+            <!-- Zona foto/escaneo -->
+            <div id="dep-scan-zone" style="border:2px dashed var(--green);border-radius:14px;padding:16px;text-align:center;margin-bottom:14px;cursor:pointer;background:rgba(52,199,89,0.05);"
+                onclick="document.getElementById('dep-foto-input').click()">
+                <div style="font-size:28px;margin-bottom:4px;">📸</div>
+                <div style="font-size:13px;font-weight:800;color:var(--green);">Foto del comprobante</div>
+                <div style="font-size:11px;color:var(--gray);margin-top:2px;">Tocá para subir o pegar con Ctrl+V</div>
+                <div id="dep-foto-nombre" style="font-size:11px;color:var(--green);font-weight:800;margin-top:6px;display:none;"></div>
+            </div>
+            <input type="file" id="dep-foto-input" accept="image/*" style="display:none" onchange="onDepFotoCargada(this)">
+
+            <button id="dep-btn-scan" onclick="escanearComprobanteSup('dep')" style="display:none;width:100%;padding:10px;background:rgba(52,199,89,0.15);border:1px solid var(--green);color:var(--green);border-radius:10px;font-size:12px;font-weight:800;cursor:pointer;margin-bottom:14px;">
+                <i class="ph-bold ph-magic-wand"></i> Leer con IA
+            </button>
+
+            <div style="height:1px;background:var(--border);margin-bottom:14px;"></div>
+
+            <label class="inp-lbl">Monto (Bs) *</label>
+            <input type="number" id="dep-monto" class="inp-std" placeholder="0.00" min="0" step="0.01" style="margin-bottom:10px;">
+
+            <label class="inp-lbl">Concepto *</label>
+            <input type="text" id="dep-concepto" class="inp-std" placeholder="Ej: Anticipo 50%, Pago avance..." style="margin-bottom:10px;">
+
+            <label class="inp-lbl">Fecha</label>
+            <input type="date" id="dep-fecha" class="inp-std" style="margin-bottom:18px;">
+
+            <button onclick="guardarDeposito()" style="width:100%;padding:14px;background:var(--green);color:white;border:none;border-radius:14px;font-size:14px;font-weight:900;cursor:pointer;">
+                ✅ Guardar Depósito
+            </button>
+        </div>
+    </div>
+
+    <!-- ══════════════════════════════════════════════ -->
+    <!-- MODAL: Registrar Gasto                         -->
+    <!-- ══════════════════════════════════════════════ -->
+    <div id="mod-gasto-sup" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.6);z-index:3000;align-items:flex-end;justify-content:center;backdrop-filter:blur(4px);">
+        <div style="background:var(--card);border-radius:24px 24px 0 0;padding:24px;width:100%;max-width:480px;max-height:90vh;overflow-y:auto;">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;">
+                <div style="font-size:16px;font-weight:900;color:var(--red);">🧾 Registrar Gasto</div>
+                <button onclick="document.getElementById('mod-gasto-sup').style.display='none'" style="background:var(--bg);border:none;width:32px;height:32px;border-radius:50%;cursor:pointer;font-size:18px;color:var(--gray);">×</button>
+            </div>
+
+            <!-- Zona foto/escaneo -->
+            <div id="gas-scan-zone" style="border:2px dashed var(--red);border-radius:14px;padding:16px;text-align:center;margin-bottom:14px;cursor:pointer;background:rgba(255,59,48,0.05);"
+                onclick="document.getElementById('gas-foto-input').click()">
+                <div style="font-size:28px;margin-bottom:4px;">📸</div>
+                <div style="font-size:13px;font-weight:800;color:var(--red);">Foto de la factura / recibo</div>
+                <div style="font-size:11px;color:var(--gray);margin-top:2px;">Tocá para subir o pegar con Ctrl+V</div>
+                <div id="gas-foto-nombre" style="font-size:11px;color:var(--red);font-weight:800;margin-top:6px;display:none;"></div>
+            </div>
+            <input type="file" id="gas-foto-input" accept="image/*" style="display:none" onchange="onGasFotoCargada(this)">
+
+            <button id="gas-btn-scan" onclick="escanearComprobanteSup('gas')" style="display:none;width:100%;padding:10px;background:rgba(255,59,48,0.1);border:1px solid var(--red);color:var(--red);border-radius:10px;font-size:12px;font-weight:800;cursor:pointer;margin-bottom:14px;">
+                <i class="ph-bold ph-magic-wand"></i> Leer con IA
+            </button>
+
+            <div style="height:1px;background:var(--border);margin-bottom:14px;"></div>
+
+            <label class="inp-lbl">Monto (Bs) *</label>
+            <input type="number" id="gas-monto" class="inp-std" placeholder="0.00" min="0" step="0.01" style="margin-bottom:10px;">
+
+            <label class="inp-lbl">Descripción *</label>
+            <input type="text" id="gas-concepto" class="inp-std" placeholder="Ej: Materiales ferretería, Transporte..." style="margin-bottom:10px;">
+
+            <label class="inp-lbl">Fecha</label>
+            <input type="date" id="gas-fecha" class="inp-std" style="margin-bottom:18px;">
+
+            <button onclick="guardarGasto()" style="width:100%;padding:14px;background:var(--red);color:white;border:none;border-radius:14px;font-size:14px;font-weight:900;cursor:pointer;">
+                🧾 Guardar Gasto
+            </button>
+        </div>
+    </div>
+
 </body>
 </html>
