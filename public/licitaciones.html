@@ -1219,16 +1219,16 @@
                 if (isSup && lic.worker_id) {
                     const widSup = lic.worker_id;
                     const supCardId = 'sup-fin-' + key;
-                    card += `
-                    <div id="${supCardId}" style="margin-top:10px; background:rgba(88,86,214,0.06); border:1px dashed var(--purple); border-radius:12px; padding:12px;">
-                        <div style="font-size:11px; font-weight:900; color:var(--purple); margin-bottom:8px; display:flex; justify-content:space-between; align-items:center;">
-                            <span>💼 Balance Supervisión</span>
-                            <button onclick="abrirFinSupModal('${widSup}','${pid}','${cid}','${key}')" style="font-size:10px;background:var(--purple);color:white;border:none;border-radius:6px;padding:3px 8px;cursor:pointer;">+ Depósito / Gasto / Extra</button>
-                        </div>
-                        <div id="${supCardId}-body" style="font-size:11px;color:var(--gray);">Cargando...</div>
-                    </div>`;
-                    // Cargar datos async después de renderizar
-                    setTimeout(() => cargarBalanceSup('${widSup}', '${pid}', '${cid}', '${key}', '${supCardId}-body', ${parseFloat(lic.precio_propuesto||lic.precio_final||0)}), 100);
+                    const montoLic = parseFloat(lic.precio_propuesto||lic.precio_final||0);
+                    card += '<div id="' + supCardId + '" style="margin-top:10px; background:rgba(88,86,214,0.06); border:1px dashed var(--purple); border-radius:12px; padding:12px;">'
+                          + '<div style="font-size:11px; font-weight:900; color:var(--purple); margin-bottom:8px; display:flex; justify-content:space-between; align-items:center;">'
+                          + '<span>💼 Balance Supervisión</span>'
+                          + '<button onclick="abrirFinSupModal(\''+widSup+'\',\''+pid+'\',\''+cid+'\',\''+key+'\')" style="font-size:10px;background:var(--purple);color:white;border:none;border-radius:6px;padding:3px 8px;cursor:pointer;">+ Depósito / Gasto / Extra</button>'
+                          + '</div>'
+                          + '<div id="' + supCardId + '-body" style="font-size:11px;color:var(--gray);">Cargando...</div>'
+                          + '</div>';
+                    // Cargar balance async
+                    (function(w,p,c,k,eid,m){ setTimeout(() => cargarBalanceSup(w,p,c,k,eid,m), 120); })(widSup, pid, cid, key, supCardId+'-body', montoLic);
                 }
 
                 let estado = lic.estado || 'pendiente';
