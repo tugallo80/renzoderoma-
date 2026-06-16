@@ -2748,7 +2748,14 @@ Objeto: ${desc}`;
 
         const btn = document.querySelector('#r3d-step1 button[onclick="generarRender3D()"]');
         btn.disabled = true;
-        btn.innerHTML = '<i class="ph-bold ph-spinner"></i> Generando render...';
+
+        // Contador animado para que el usuario sepa que está procesando
+        let _secs = 0;
+        const _timerInterval = setInterval(() => {
+            _secs++;
+            btn.innerHTML = `⏳ Generando render IA... ${_secs}s`;
+        }, 1000);
+        btn.innerHTML = '⏳ Generando render IA... 0s';
 
         try {
             const prompt = _buildRenderPrompt();
@@ -2761,14 +2768,25 @@ Objeto: ${desc}`;
                 body.referenceImage = { data: _r3dRefBase64, mimeType: _r3dRefMime };
             }
 
-            const resp = await fetch('/api/gemini', {
-                method: 'POST', headers,
-                body: JSON.stringify(body)
-            });
+            // AbortController: timeout de 180 segundos
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 180000);
+
+            let resp;
+            try {
+                resp = await fetch('/api/gemini', {
+                    method: 'POST', headers,
+                    body: JSON.stringify(body),
+                    signal: controller.signal
+                });
+            } finally {
+                clearTimeout(timeoutId);
+            }
+
             if (!resp.ok) { const t = await resp.text(); throw new Error(`HTTP ${resp.status}: ${t}`); }
             const result = await resp.json();
             const imgUrl = result.imageUrl;
-            if (!imgUrl) throw new Error('La IA no devolvió imagen');
+            if (!imgUrl) throw new Error(result.error || 'La IA no devolvió imagen. Detalle: ' + (result.detalle || ''));
 
             _r3dRenderDataUrl = imgUrl;
             document.getElementById('r3d-preview-img').src = imgUrl;
@@ -2777,8 +2795,10 @@ Objeto: ${desc}`;
             document.getElementById('r3d-step-lbl').textContent = 'Paso 2 — Aprobar render';
 
         } catch(e) {
-            alert('Error al generar render: ' + e.message);
+            const msg = e.name === 'AbortError' ? 'Tiempo de espera agotado (180s). Intentá de nuevo.' : e.message;
+            alert('Error al generar render: ' + msg);
         } finally {
+            clearInterval(_timerInterval);
             btn.disabled = false;
             btn.innerHTML = '<i class="ph-bold ph-cube"></i> Generar Render Axonométrico';
         }
