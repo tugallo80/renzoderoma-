@@ -68,12 +68,16 @@
     if(!wid) { alert("ID de Supervisor no detectado."); window.location.href="../login.html"; }
     else { localStorage.setItem('rubik_sup_id', wid); }
 
-    db.ref('personal/' + wid).once('value', snap => {
+    // Intentar cargar nombre del supervisor (no bloquea si falla por permisos)
+    db.ref('personal/' + wid).once('value').then(snap => {
         if(snap.exists()) {
             const name = snap.val().nombre || "Supervisor";
             document.getElementById('txt-welcome').innerText = "Hola, " + name.split(' ')[0];
         }
-        (function arrancarCarga() {
+    }).catch(() => { /* sin permiso para leer personal — no importa, seguimos */ });
+
+    // Arrancar carga de proyectos independientemente del nombre
+    (function arrancarCarga() {
         var auth = firebase.auth();
         if (auth.currentUser) { cargarProyectos(); return; }
         var unsub = auth.onAuthStateChanged(function(user) {
@@ -81,8 +85,11 @@
             if (user) { cargarProyectos(); }
             else { window.location.href = 'login.html'; }
         });
+        // Timeout de seguridad: si auth tarda >6s, igual intentamos cargar
+        setTimeout(function() {
+            if (document.getElementById('loader').style.display !== 'none') cargarProyectos();
+        }, 6000);
     })();
-    });
 
     function cargarProyectos() {
         const cont = document.getElementById('list-projects');
