@@ -2742,6 +2742,41 @@ Objeto: ${desc}`;
         return prompt;
     }
 
+    // Helper: fetch en Web Worker para no bloquear el main thread durante generación de imagen
+    function _fetchInWorker(url, options) {
+        return new Promise((resolve, reject) => {
+            const workerCode = `
+                self.onmessage = async function(e) {
+                    try {
+                        const resp = await fetch(e.data.url, e.data.options);
+                        const text = await resp.text();
+                        self.postMessage({ ok: resp.ok, status: resp.status, text });
+                    } catch(err) {
+                        self.postMessage({ error: err.message });
+                    }
+                };
+            `;
+            const blob = new Blob([workerCode], { type: 'application/javascript' });
+            const worker = new Worker(URL.createObjectURL(blob));
+            const timeoutId = setTimeout(() => {
+                worker.terminate();
+                reject(new Error('Tiempo de espera agotado (180s). Intentá de nuevo.'));
+            }, 180000);
+            worker.onmessage = (e) => {
+                clearTimeout(timeoutId);
+                worker.terminate();
+                if (e.data.error) { reject(new Error(e.data.error)); return; }
+                resolve(e.data);
+            };
+            worker.onerror = (err) => {
+                clearTimeout(timeoutId);
+                worker.terminate();
+                reject(new Error(err.message));
+            };
+            worker.postMessage({ url, options });
+        });
+    }
+
     window.generarRender3D = async function() {
         const desc = document.getElementById('r3d-desc').value.trim();
         if (!desc) { alert('Ingresá una descripción primero.'); return; }
@@ -2749,7 +2784,7 @@ Objeto: ${desc}`;
         const btn = document.querySelector('#r3d-step1 button[onclick="generarRender3D()"]');
         btn.disabled = true;
 
-        // Contador animado para que el usuario sepa que está procesando
+        // Contador animado — corre en main thread sin bloquearse
         let _secs = 0;
         const _timerInterval = setInterval(() => {
             _secs++;
@@ -2768,23 +2803,15 @@ Objeto: ${desc}`;
                 body.referenceImage = { data: _r3dRefBase64, mimeType: _r3dRefMime };
             }
 
-            // AbortController: timeout de 180 segundos
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 180000);
+            // Usamos Web Worker para que el fetch no congele el browser
+            const workerResp = await _fetchInWorker('/api/gemini', {
+                method: 'POST',
+                headers,
+                body: JSON.stringify(body)
+            });
 
-            let resp;
-            try {
-                resp = await fetch('/api/gemini', {
-                    method: 'POST', headers,
-                    body: JSON.stringify(body),
-                    signal: controller.signal
-                });
-            } finally {
-                clearTimeout(timeoutId);
-            }
-
-            if (!resp.ok) { const t = await resp.text(); throw new Error(`HTTP ${resp.status}: ${t}`); }
-            const result = await resp.json();
+            if (!workerResp.ok) throw new Error(`HTTP ${workerResp.status}: ${workerResp.text}`);
+            const result = JSON.parse(workerResp.text);
             const imgUrl = result.imageUrl;
             if (!imgUrl) throw new Error(result.error || 'La IA no devolvió imagen. Detalle: ' + (result.detalle || ''));
 
@@ -2795,8 +2822,7 @@ Objeto: ${desc}`;
             document.getElementById('r3d-step-lbl').textContent = 'Paso 2 — Aprobar render';
 
         } catch(e) {
-            const msg = e.name === 'AbortError' ? 'Tiempo de espera agotado (180s). Intentá de nuevo.' : e.message;
-            alert('Error al generar render: ' + msg);
+            alert('Error al generar render: ' + e.message);
         } finally {
             clearInterval(_timerInterval);
             btn.disabled = false;
@@ -3919,7 +3945,7 @@ Genera UN ítem de presupuesto detallado con APU completo (materiales con precio
             return;
         }
         var btn = document.querySelector('#mod-medicion-pres button[onclick="guardarMedicionPres()"]');
-        if (btn) { btn.disabled=true; btn.innerHTML='<i class="ph-bold ph-spinner"></i> Guardando...'; }
+                if (btn) { btn.disabled=true; btn.innerHTML='<i class="ph-bold ph-spinner"></i> Guardando...'; }
         try {
             var byteStr = atob(dataUrl.split(',')[1]);
             var arr = new Uint8Array(byteStr.length);
@@ -3942,4 +3968,3 @@ Genera UN ítem de presupuesto detallado con APU completo (materiales con precio
 </script>
 </body>
 </html>
-
