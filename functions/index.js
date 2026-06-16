@@ -107,15 +107,15 @@ exports.geminiProxy = onRequest(GEMINI_PROXY_OPTS, async (req, res) => {
         if (body.generateImage) {
             const imgPrompt = body.prompt || body.text || "imagen profesional corporativa";
             const imgModels = [
+                "gemini-3.1-flash-image",
+                "gemini-2.5-flash-image",
                 "gemini-2.0-flash-preview-image-generation",
-                "gemini-2.0-flash-exp",
-                "gemini-2.0-flash-exp-image-generation",
             ];
             const errors = [];
             for (const imgModel of imgModels) {
                 try {
                     const restRes = await fetch(
-                        `https://generativelanguage.googleapis.com/v1beta/models/${imgModel}:generateContent?key=${geminiKey}`,
+                        `https://generativelanguage.googleapis.com/v1/models/${imgModel}:generateContent?key=${geminiKey}`,
                         {
                             method: "POST",
                             headers: { "Content-Type": "application/json" },

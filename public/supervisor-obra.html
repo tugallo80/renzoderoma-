@@ -819,26 +819,65 @@
         renderFinanzas();
     }
 
-    // Adjuntar foto a movimiento existente
-    let _adjCtx = {}; // { nodo, key }
+    // Adjuntar foto a movimiento existente — bottom-sheet con paste/drag/cámara
+    let _adjCtx = {};
+    let _adjB64 = null, _adjMime = 'image/jpeg';
+
     function abrirAdjuntarFoto(nodo, key) {
         _adjCtx = { nodo, key };
-        document.getElementById('adj-foto-input').click();
+        _adjB64 = null;
+        document.getElementById('adj-preview').style.display = 'none';
+        document.getElementById('adj-preview').src = '';
+        document.getElementById('adj-nombre').textContent = '';
+        document.getElementById('adj-btn-guardar').disabled = true;
+        document.getElementById('mod-adj-foto').style.display = 'flex';
     }
+
+    function _adjSetFoto(b64, mime, nombre) {
+        _adjB64 = b64; _adjMime = mime || 'image/jpeg';
+        const prev = document.getElementById('adj-preview');
+        prev.src = b64; prev.style.display = 'block';
+        document.getElementById('adj-nombre').textContent = nombre || 'imagen.jpg';
+        document.getElementById('adj-btn-guardar').disabled = false;
+    }
+
     document.addEventListener('DOMContentLoaded', () => {
         const inp = document.createElement('input');
-        inp.type = 'file'; inp.id = 'adj-foto-input'; inp.accept = 'image/*'; inp.style.display = 'none';
-        inp.onchange = async function() {
+        inp.type = 'file'; inp.id = 'adj-foto-input'; inp.accept = 'image/*'; inp.capture = 'environment'; inp.style.display = 'none';
+        inp.onchange = function() {
             const file = inp.files[0]; if (!file) return;
-            const b64 = await new Promise(r => { const fr = new FileReader(); fr.onload = e => r(e.target.result); fr.readAsDataURL(file); });
-            const ref = storage.ref(`supervisores/${wid}/${_adjCtx.nodo}/${_adjCtx.key}_adj_${Date.now()}.jpg`);
-            await ref.put(await (await fetch(b64)).blob(), { contentType: file.type });
-            const url = await ref.getDownloadURL();
-            await db.ref(`supervisores/${wid}/proyectos/${pid}/${_adjCtx.nodo}/${_adjCtx.key}/fotoUrl`).set(url);
-            renderFinanzas();
+            const fr = new FileReader(); fr.onload = e => _adjSetFoto(e.target.result, file.type, file.name); fr.readAsDataURL(file);
         };
         document.body.appendChild(inp);
+
+        document.addEventListener('paste', e => {
+            if (document.getElementById('mod-adj-foto').style.display === 'none') return;
+            const items = e.clipboardData ? e.clipboardData.items : [];
+            for (let i = 0; i < items.length; i++) {
+                if (items[i].type.startsWith('image/')) {
+                    const file = items[i].getAsFile();
+                    const fr = new FileReader(); fr.onload = ev => _adjSetFoto(ev.target.result, file.type, 'pegado.jpg'); fr.readAsDataURL(file);
+                    break;
+                }
+            }
+        });
     });
+
+    async function guardarAdjFoto() {
+        if (!_adjB64) return;
+        const btn = document.getElementById('adj-btn-guardar');
+        btn.disabled = true; btn.textContent = 'Subiendo...';
+        try {
+            const blob = await (await fetch(_adjB64)).blob();
+            const ref = storage.ref('supervisores/' + wid + '/' + _adjCtx.nodo + '/' + _adjCtx.key + '_adj_' + Date.now() + '.jpg');
+            await ref.put(blob, { contentType: _adjMime });
+            const url = await ref.getDownloadURL();
+            await db.ref('supervisores/' + wid + '/proyectos/' + pid + '/' + _adjCtx.nodo + '/' + _adjCtx.key + '/fotoUrl').set(url);
+            document.getElementById('mod-adj-foto').style.display = 'none';
+            renderFinanzas();
+        } catch(e) { alert('Error subiendo foto: ' + e.message); }
+        finally { btn.disabled = false; btn.textContent = 'Guardar foto'; }
+    }
 
     function abrirModalExtra() {
         const desc = prompt("Descripción del trabajo extra:");
@@ -1225,6 +1264,27 @@ REGLAS:
             <button onclick="guardarGasto()" style="width:100%;padding:14px;background:var(--red);color:white;border:none;border-radius:14px;font-size:14px;font-weight:900;cursor:pointer;">
                 🧾 Guardar Gasto
             </button>
+        </div>
+    </div>
+
+
+    <!-- Modal adjuntar foto -->
+    <div id="mod-adj-foto" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.6);z-index:4000;align-items:flex-end;justify-content:center;backdrop-filter:blur(4px);">
+        <div style="background:var(--card);border-radius:24px 24px 0 0;padding:24px;width:100%;max-width:480px;">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;">
+                <div style="font-size:16px;font-weight:900;color:var(--blue);">📎 Adjuntar comprobante</div>
+                <button onclick="document.getElementById('mod-adj-foto').style.display='none'" style="background:var(--bg);border:none;width:32px;height:32px;border-radius:50%;cursor:pointer;font-size:18px;color:var(--gray);">×</button>
+            </div>
+            <!-- Zona drop/paste/cámara -->
+            <div onclick="document.getElementById('adj-foto-input').click()" style="border:2px dashed var(--blue);border-radius:14px;padding:20px;text-align:center;cursor:pointer;background:rgba(0,122,255,0.04);margin-bottom:12px;">
+                <div style="font-size:32px;">📸</div>
+                <div style="font-size:13px;font-weight:800;color:var(--blue);">Tocar para subir o tomar foto</div>
+                <div style="font-size:11px;color:var(--gray);margin-top:4px;">También podés pegar con <b>Ctrl+V</b></div>
+            </div>
+            <img id="adj-preview" style="display:none;width:100%;border-radius:10px;margin-bottom:10px;max-height:200px;object-fit:contain;" src="">
+            <div id="adj-nombre" style="font-size:11px;color:var(--gray);text-align:center;margin-bottom:12px;"></div>
+            <button id="adj-btn-guardar" onclick="guardarAdjFoto()" disabled style="width:100%;padding:14px;background:var(--blue);color:white;border:none;border-radius:14px;font-size:14px;font-weight:900;cursor:pointer;opacity:0.5;">Guardar foto</button>
+            <style>#adj-btn-guardar:not([disabled]){opacity:1;}</style>
         </div>
     </div>
 
