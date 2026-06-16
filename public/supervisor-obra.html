@@ -608,8 +608,9 @@
                                 <span style="font-weight:700;">${d.descripcion||'Depósito'} <span style="font-size:11px;color:var(--gray);">${d.fecha||''}</span></span>
                                 <span style="font-weight:900;color:var(--green);">+${fM(parseFloat(d.monto||0))} Bs</span>
                             </div>
-                            <div style="display:flex;gap:6px;margin-top:4px;">
+                            <div style="display:flex;gap:6px;margin-top:4px;align-items:center;">
                                 ${d.fotoUrl ? `<a href="${d.fotoUrl}" target="_blank" style="font-size:10px;color:var(--blue);font-weight:800;text-decoration:none;">📎 Ver comprobante</a>` : `<button onclick="abrirAdjuntarFoto('depositos','${d.key}')" style="font-size:10px;background:none;border:1px dashed var(--gray);border-radius:6px;padding:2px 8px;cursor:pointer;color:var(--gray);">📎 Adjuntar foto</button>`}
+                                <button onclick='abrirModalDeposito("${d.key}", ${JSON.stringify({monto:d.monto,descripcion:d.descripcion,fecha:d.fecha,fotoUrl:d.fotoUrl||null})})' style="font-size:10px;background:none;border:1px solid var(--blue);border-radius:6px;padding:2px 8px;cursor:pointer;color:var(--blue);">✏️ Editar</button>
                             </div>
                         </div>`).join('')}
                     <button onclick="abrirModalDeposito()" style="margin-top:12px;width:100%;padding:10px;background:rgba(52,199,89,0.1);color:var(--green);border:1px dashed var(--green);border-radius:10px;font-weight:900;font-size:12px;cursor:pointer;">+ Registrar Depósito</button>
@@ -627,8 +628,9 @@
                                 <span style="font-weight:700;">${g.descripcion||'Gasto'} <span style="font-size:11px;color:var(--gray);">${g.fecha||''}</span></span>
                                 <span style="font-weight:900;color:var(--red);">-${fM(parseFloat(g.monto||0))} Bs</span>
                             </div>
-                            <div style="display:flex;gap:6px;margin-top:4px;">
+                            <div style="display:flex;gap:6px;margin-top:4px;align-items:center;">
                                 ${g.fotoUrl ? `<a href="${g.fotoUrl}" target="_blank" style="font-size:10px;color:var(--blue);font-weight:800;text-decoration:none;">📎 Ver comprobante</a>` : `<button onclick="abrirAdjuntarFoto('gastos','${g.key}')" style="font-size:10px;background:none;border:1px dashed var(--gray);border-radius:6px;padding:2px 8px;cursor:pointer;color:var(--gray);">📎 Adjuntar foto</button>`}
+                                <button onclick='abrirModalGasto("${g.key}", ${JSON.stringify({monto:g.monto,descripcion:g.descripcion,fecha:g.fecha,fotoUrl:g.fotoUrl||null})})' style="font-size:10px;background:none;border:1px solid var(--orange);border-radius:6px;padding:2px 8px;cursor:pointer;color:var(--orange);">✏️ Editar</button>
                             </div>
                         </div>`).join('')}
                     <button onclick="abrirModalGasto()" style="margin-top:12px;width:100%;padding:10px;background:rgba(255,59,48,0.08);color:var(--red);border:1px dashed var(--red);border-radius:10px;font-weight:900;font-size:12px;cursor:pointer;">+ Registrar Gasto</button>
@@ -678,27 +680,60 @@
     let _depFotoB64 = null, _depFotoMime = 'image/jpeg';
     let _gasFotoB64 = null, _gasFotoMime = 'image/jpeg';
 
-    function abrirModalDeposito() {
-        // Reset modal
+    let _depEditKey = null; // null = nuevo, string = editar
+    let _gasEditKey = null;
+
+    function abrirModalDeposito(editKey, data) {
+        _depEditKey = editKey || null;
         _depFotoB64 = null;
-        document.getElementById('dep-monto').value = '';
-        document.getElementById('dep-concepto').value = '';
-        document.getElementById('dep-fecha').value = new Date().toISOString().substring(0,10);
+        document.getElementById('dep-monto').value = data ? data.monto : '';
+        document.getElementById('dep-concepto').value = data ? (data.descripcion || '') : '';
+        document.getElementById('dep-fecha').value = data ? (data.fecha || new Date().toISOString().substring(0,10)) : new Date().toISOString().substring(0,10);
         document.getElementById('dep-foto-nombre').style.display = 'none';
         document.getElementById('dep-btn-scan').style.display = 'none';
         document.getElementById('dep-scan-zone').style.borderColor = 'var(--green)';
+        document.getElementById('dep-scan-zone').style.background = '';
+        // Título y botón según modo
+        const titulo = document.getElementById('dep-modal-titulo');
+        const btnGuardar = document.getElementById('dep-btn-guardar');
+        if (_depEditKey) {
+            titulo.textContent = '✏️ Editar Depósito';
+            btnGuardar.textContent = '💾 Guardar Cambios';
+            // Mostrar foto actual si existe
+            if (data && data.fotoUrl) {
+                document.getElementById('dep-foto-nombre').textContent = '📎 Ver foto actual';
+                document.getElementById('dep-foto-nombre').style.display = 'block';
+            }
+        } else {
+            titulo.textContent = '✅ Registrar Depósito';
+            btnGuardar.textContent = '✅ Guardar Depósito';
+        }
         document.getElementById('mod-deposito-sup').style.display = 'flex';
     }
 
-    function abrirModalGasto() {
-        // Reset modal
+    function abrirModalGasto(editKey, data) {
+        _gasEditKey = editKey || null;
         _gasFotoB64 = null;
-        document.getElementById('gas-monto').value = '';
-        document.getElementById('gas-concepto').value = '';
-        document.getElementById('gas-fecha').value = new Date().toISOString().substring(0,10);
+        document.getElementById('gas-monto').value = data ? data.monto : '';
+        document.getElementById('gas-concepto').value = data ? (data.descripcion || '') : '';
+        document.getElementById('gas-fecha').value = data ? (data.fecha || new Date().toISOString().substring(0,10)) : new Date().toISOString().substring(0,10);
         document.getElementById('gas-foto-nombre').style.display = 'none';
         document.getElementById('gas-btn-scan').style.display = 'none';
         document.getElementById('gas-scan-zone').style.borderColor = 'var(--red)';
+        document.getElementById('gas-scan-zone').style.background = '';
+        const titulo = document.getElementById('gas-modal-titulo');
+        const btnGuardar = document.getElementById('gas-btn-guardar');
+        if (_gasEditKey) {
+            titulo.textContent = '✏️ Editar Gasto';
+            btnGuardar.textContent = '💾 Guardar Cambios';
+            if (data && data.fotoUrl) {
+                document.getElementById('gas-foto-nombre').textContent = '📎 Ver foto actual';
+                document.getElementById('gas-foto-nombre').style.display = 'block';
+            }
+        } else {
+            titulo.textContent = '🧾 Registrar Gasto';
+            btnGuardar.textContent = '🧾 Guardar Gasto';
+        }
         document.getElementById('mod-gasto-sup').style.display = 'flex';
     }
 
@@ -795,11 +830,22 @@
         const fecha = document.getElementById('dep-fecha').value;
         if (!monto || isNaN(monto)) return alert('Ingresá un monto válido.');
         if (!desc) return alert('Ingresá el concepto.');
-        const btn = document.querySelector('#mod-deposito-sup button[onclick="guardarDeposito()"]');
+        const btn = document.getElementById('dep-btn-guardar');
         if (btn) { btn.disabled = true; btn.textContent = 'Guardando...'; }
-        const newRef = db.ref(`supervisores/${wid}/proyectos/${pid}/depositos`).push();
-        const fotoUrl = _depFotoB64 ? await subirFotoComprobante(_depFotoB64, _depFotoMime, 'depositos', newRef.key) : null;
-        await newRef.set({ monto, descripcion: desc, fecha: fecha || new Date().toLocaleDateString('es-BO'), timestamp: Date.now(), ...(fotoUrl ? { fotoUrl } : {}) });
+        if (_depEditKey) {
+            // MODO EDICIÓN — actualizar registro existente
+            const updates = { monto, descripcion: desc, fecha: fecha || new Date().toLocaleDateString('es-BO') };
+            if (_depFotoB64) {
+                const fotoUrl = await subirFotoComprobante(_depFotoB64, _depFotoMime, 'depositos', _depEditKey);
+                if (fotoUrl) updates.fotoUrl = fotoUrl;
+            }
+            await db.ref(`supervisores/${wid}/proyectos/${pid}/depositos/${_depEditKey}`).update(updates);
+        } else {
+            // MODO NUEVO
+            const newRef = db.ref(`supervisores/${wid}/proyectos/${pid}/depositos`).push();
+            const fotoUrl = _depFotoB64 ? await subirFotoComprobante(_depFotoB64, _depFotoMime, 'depositos', newRef.key) : null;
+            await newRef.set({ monto, descripcion: desc, fecha: fecha || new Date().toLocaleDateString('es-BO'), timestamp: Date.now(), ...(fotoUrl ? { fotoUrl } : {}) });
+        }
         document.getElementById('mod-deposito-sup').style.display = 'none';
         renderFinanzas();
     }
@@ -810,11 +856,22 @@
         const fecha = document.getElementById('gas-fecha').value;
         if (!monto || isNaN(monto)) return alert('Ingresá un monto válido.');
         if (!desc) return alert('Ingresá la descripción.');
-        const btn = document.querySelector('#mod-gasto-sup button[onclick="guardarGasto()"]');
+        const btn = document.getElementById('gas-btn-guardar');
         if (btn) { btn.disabled = true; btn.textContent = 'Guardando...'; }
-        const newRef = db.ref(`supervisores/${wid}/proyectos/${pid}/gastos`).push();
-        const fotoUrl = _gasFotoB64 ? await subirFotoComprobante(_gasFotoB64, _gasFotoMime, 'gastos', newRef.key) : null;
-        await newRef.set({ monto, descripcion: desc, fecha: fecha || new Date().toLocaleDateString('es-BO'), timestamp: Date.now(), ...(fotoUrl ? { fotoUrl } : {}) });
+        if (_gasEditKey) {
+            // MODO EDICIÓN
+            const updates = { monto, descripcion: desc, fecha: fecha || new Date().toLocaleDateString('es-BO') };
+            if (_gasFotoB64) {
+                const fotoUrl = await subirFotoComprobante(_gasFotoB64, _gasFotoMime, 'gastos', _gasEditKey);
+                if (fotoUrl) updates.fotoUrl = fotoUrl;
+            }
+            await db.ref(`supervisores/${wid}/proyectos/${pid}/gastos/${_gasEditKey}`).update(updates);
+        } else {
+            // MODO NUEVO
+            const newRef = db.ref(`supervisores/${wid}/proyectos/${pid}/gastos`).push();
+            const fotoUrl = _gasFotoB64 ? await subirFotoComprobante(_gasFotoB64, _gasFotoMime, 'gastos', newRef.key) : null;
+            await newRef.set({ monto, descripcion: desc, fecha: fecha || new Date().toLocaleDateString('es-BO'), timestamp: Date.now(), ...(fotoUrl ? { fotoUrl } : {}) });
+        }
         document.getElementById('mod-gasto-sup').style.display = 'none';
         renderFinanzas();
     }
@@ -1261,7 +1318,7 @@ REGLAS:
             <label class="inp-lbl">Fecha</label>
             <input type="date" id="gas-fecha" class="inp-std" style="margin-bottom:18px;">
 
-            <button onclick="guardarGasto()" style="width:100%;padding:14px;background:var(--red);color:white;border:none;border-radius:14px;font-size:14px;font-weight:900;cursor:pointer;">
+            <button id="gas-btn-guardar" onclick="guardarGasto()" style="width:100%;padding:14px;background:var(--red);color:white;border:none;border-radius:14px;font-size:14px;font-weight:900;cursor:pointer;">
                 🧾 Guardar Gasto
             </button>
         </div>
