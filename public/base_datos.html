@@ -10,6 +10,20 @@
     <script src="https://www.gstatic.com/firebasejs/9.1.3/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.1.3/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.1.3/firebase-database-compat.js"></script>
+    <script>
+        // initializeApp ANTES de firecache/auth-guard/módulos
+        if (!firebase.apps.length) {
+            firebase.initializeApp({
+                apiKey: "AIzaSyDXYlofy31cDP14xVAVxWo_7TqXdSgsIjA",
+                authDomain: "rubik-bolivia.firebaseapp.com",
+                databaseURL: "https://rubik-bolivia-default-rtdb.firebaseio.com",
+                projectId: "rubik-bolivia",
+                storageBucket: "rubik-bolivia.firebasestorage.app",
+                messagingSenderId: "4153087958",
+                appId: "1:4153087958:web:cf2dd16106580ed6437677"
+            });
+        }
+    </script>
     <script src="/js/firecache.js?v=1"></script>
     <script src="/js/auth-guard.js?v=1"></script>
     
