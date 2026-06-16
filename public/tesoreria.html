@@ -1002,15 +1002,29 @@
             });
         });
 
-        // Cargar extras desde supervisores/{wid}/proyectos/{pid}/extras para cada supervisor encontrado
+        // Cargar desde supervisores/{wid}/proyectos/{pid}: depositos, gastos, extras
+        // depositos = lo que el supervisor recibió (registrado desde su app)
+        // gastos    = gastos que el supervisor pagó con su plata (recibos de compra en obra)
+        // extras    = trabajo extra fuera del contrato
         await Promise.all(Object.keys(supMap).map(async wid => {
             try {
-                const extSnap = await db.ref(`supervisores/${wid}/proyectos`).once('value');
-                const extData = extSnap.val() || {};
-                // Asignar extras al lic correspondiente
+                const supSnap = await db.ref(`supervisores/${wid}/proyectos`).once('value');
+                const supData = supSnap.val() || {};
                 supMap[wid].lics.forEach(lic => {
-                    const extsNode = (extData[lic.pid] || {}).extras || {};
-                    lic.extras = Object.values(extsNode).map(e => ({
+                    const node = supData[lic.pid] || {};
+                    lic.depositos = Object.values(node.depositos || {}).map(d => ({
+                        descripcion: d.descripcion || 'Depósito',
+                        monto: parseFloat(d.monto||0),
+                        fecha: d.fecha || '',
+                        fotoUrl: d.fotoUrl || null
+                    }));
+                    lic.gastos = Object.values(node.gastos || {}).map(g => ({
+                        descripcion: g.descripcion || 'Gasto',
+                        monto: parseFloat(g.monto||0),
+                        fecha: g.fecha || '',
+                        fotoUrl: g.fotoUrl || null
+                    }));
+                    lic.extras = Object.values(node.extras || {}).map(e => ({
                         descripcion: e.descripcion || 'Extra',
                         monto: parseFloat(e.monto||0),
                         fecha: e.fecha || ''
@@ -1045,61 +1059,94 @@
             const lics   = supData.lics;
 
             // Construir proyResumen agrupando por pid
+            // FUENTES:
+            //   pagos     → proyectos/{cid}/{pid}/licitaciones/{licId}/pagos  (Compras → Abonar, admin)
+            //   depositos → supervisores/{wid}/proyectos/{pid}/depositos       (supervisor registra en su app)
+            //   gastos    → supervisores/{wid}/proyectos/{pid}/gastos          (recibos de compras en obra)
+            //   extras    → supervisores/{wid}/proyectos/{pid}/extras          (trabajo extra)
+            //
+            // BALANCE: (Contrato + Extras) - (Depósitos recibidos por admin + Depósitos por supervisor) + Gastos
             const proyResumen = {};
             lics.forEach(lic => {
                 if (!proyResumen[lic.pid]) proyResumen[lic.pid] = {
                     nombre: lic.nombre_proyecto,
                     monto_contrato: 0,
-                    pagos: [],
+                    pagos: [],      // abonos desde compras/admin
+                    depositos: [],  // recibos que el supervisor registró (pagos recibidos)
+                    gastos: [],     // gastos que el supervisor pagó (recibos de obra)
                     extras: [],
-                    totalPagado: 0,
+                    totalPagado: 0, // pagos de compras
+                    totalDep: 0,    // depósitos registrados por supervisor
+                    totalGas: 0,    // gastos registrados por supervisor
                     totalExt: 0
                 };
-                proyResumen[lic.pid].monto_contrato += lic.monto_contrato;
-                proyResumen[lic.pid].pagos.push(...lic.pagos);
-                proyResumen[lic.pid].extras.push(...lic.extras);
-                proyResumen[lic.pid].totalPagado += lic.pagos.reduce((s,p) => s + p.monto, 0);
-                proyResumen[lic.pid].totalExt    += lic.extras.reduce((s,e) => s + e.monto, 0);
+                const r = proyResumen[lic.pid];
+                r.monto_contrato += lic.monto_contrato;
+                r.pagos.push(...(lic.pagos||[]));
+                r.depositos.push(...(lic.depositos||[]));
+                r.gastos.push(...(lic.gastos||[]));
+                r.extras.push(...(lic.extras||[]));
+                r.totalPagado += (lic.pagos||[]).reduce((s,p) => s + p.monto, 0);
+                r.totalDep    += (lic.depositos||[]).reduce((s,d) => s + d.monto, 0);
+                r.totalGas    += (lic.gastos||[]).reduce((s,g) => s + g.monto, 0);
+                r.totalExt    += (lic.extras||[]).reduce((s,e) => s + e.monto, 0);
             });
 
             // Totales del supervisor
-            let totalContrato = 0, totalPagado = 0, totalExt = 0;
+            let totalContrato = 0, totalPagado = 0, totalDep = 0, totalGas = 0, totalExt = 0;
             Object.values(proyResumen).forEach(p => {
                 totalContrato += p.monto_contrato;
                 totalPagado   += p.totalPagado;
+                totalDep      += p.totalDep;
+                totalGas      += p.totalGas;
                 totalExt      += p.totalExt;
             });
             const totalContMasExt = totalContrato + totalExt;
-            const saldo = totalContMasExt - totalPagado;
+            // Saldo = lo que se le debe al supervisor
+            // (Contrato+Extras) - Pagos admin - Depósitos supervisor + Gastos supervisor
+            const saldo = totalContMasExt - totalPagado - totalDep + totalGas;
             const sc    = saldo > 0 ? 'var(--orange)' : 'var(--green)';
 
             // Generar HTML de proyectos
             const proyHtml = Object.entries(proyResumen).map(([pid, proy]) => {
-                const saldoProy = proy.monto_contrato + proy.totalExt - proy.totalPagado;
+                const saldoProy = proy.monto_contrato + proy.totalExt - proy.totalPagado - proy.totalDep + proy.totalGas;
                 return `
                 <div style="background:var(--bg);border-radius:10px;padding:12px;margin-bottom:8px;">
                     <div style="font-weight:900;font-size:13px;margin-bottom:8px;display:flex;align-items:center;gap:6px;">
                         <i class="ph-fill ph-folder" style="color:var(--blue);"></i> ${proy.nombre}
                     </div>
-                    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;font-size:11px;margin-bottom:8px;">
-                        <div><span style="color:var(--gray);">Contrato${proy.totalExt>0?'+Ext':''}</span><br><strong style="color:var(--blue);">${fM(proy.monto_contrato+proy.totalExt)} Bs</strong></div>
-                        <div><span style="color:var(--gray);">Pagado (Compras)</span><br><strong style="color:var(--green);">${fM(proy.totalPagado)} Bs</strong></div>
-                        <div><span style="color:var(--gray);">Saldo</span><br><strong style="color:${saldoProy>0?'var(--orange)':'var(--green)'};">${fM(saldoProy)} Bs</strong></div>
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:11px;margin-bottom:8px;">
+                        <div><span style="color:var(--gray);">Contrato${proy.totalExt>0?' + Extras':''}</span><br><strong style="color:var(--blue);">${fM(proy.monto_contrato+proy.totalExt)} Bs</strong></div>
+                        <div><span style="color:var(--gray);">Saldo pendiente</span><br><strong style="color:${saldoProy>0?'var(--orange)':'var(--green)'};">${fM(saldoProy)} Bs</strong></div>
+                        ${proy.totalPagado>0?`<div><span style="color:var(--gray);">Abonado (Compras)</span><br><strong style="color:var(--green);">-${fM(proy.totalPagado)} Bs</strong></div>`:''}
+                        ${proy.totalDep>0?`<div><span style="color:var(--gray);">Depósitos (Sup)</span><br><strong style="color:var(--green);">-${fM(proy.totalDep)} Bs</strong></div>`:''}
+                        ${proy.totalGas>0?`<div><span style="color:var(--gray);">Gastos obra (Sup)</span><br><strong style="color:var(--red);">+${fM(proy.totalGas)} Bs</strong></div>`:''}
                     </div>
-                    ${proy.pagos.length > 0 ? `
+                    ${proy.pagos.length>0?`
                     <div style="font-size:11px;margin-bottom:6px;">
-                        <div style="font-weight:800;color:var(--green);margin-bottom:3px;">✅ Pagos registrados</div>
-                        ${proy.pagos.map(p=>`<div style="display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px dashed var(--border);font-size:10px;"><span>${p.descripcion} · ${p.fecha}</span><span style="color:var(--green);font-weight:900;">+${fM(p.monto)} Bs</span></div>`).join('')}
-                    </div>` : '<div style="font-size:10px;color:var(--gray);margin-bottom:6px;">Sin pagos · Usar <b>Compras → Abonar</b></div>'}
-                    ${proy.extras.length > 0 ? `
+                        <div style="font-weight:800;color:var(--green);margin-bottom:3px;">✅ Abonos (Compras/Admin)</div>
+                        ${proy.pagos.map(p=>`<div style="display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px dashed var(--border);font-size:10px;"><span>${p.descripcion} · ${p.fecha}</span><span style="color:var(--green);font-weight:900;">-${fM(p.monto)} Bs</span></div>`).join('')}
+                    </div>`:''}
+                    ${proy.depositos.length>0?`
+                    <div style="font-size:11px;margin-bottom:6px;">
+                        <div style="font-weight:800;color:var(--green);margin-bottom:3px;">💵 Depósitos (Supervisor)</div>
+                        ${proy.depositos.map(d=>`<div style="display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px dashed var(--border);font-size:10px;"><span>${d.descripcion} · ${d.fecha}</span><span style="color:var(--green);font-weight:900;">-${fM(d.monto)} Bs${d.fotoUrl?` <a href="${d.fotoUrl}" target="_blank" style="color:var(--blue);">📎</a>`:''}</span></div>`).join('')}
+                    </div>`:''}
+                    ${proy.gastos.length>0?`
+                    <div style="font-size:11px;margin-bottom:6px;">
+                        <div style="font-weight:800;color:var(--red);margin-bottom:3px;">🧾 Gastos obra (Supervisor)</div>
+                        ${proy.gastos.map(g=>`<div style="display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px dashed var(--border);font-size:10px;"><span>${g.descripcion} · ${g.fecha}</span><span style="color:var(--red);font-weight:900;">+${fM(g.monto)} Bs${g.fotoUrl?` <a href="${g.fotoUrl}" target="_blank" style="color:var(--blue);">📎</a>`:''}</span></div>`).join('')}
+                    </div>`:''}
+                    ${proy.extras.length>0?`
                     <div style="font-size:11px;margin-bottom:6px;">
                         <div style="font-weight:800;color:var(--purple);margin-bottom:3px;">➕ Extras</div>
                         ${proy.extras.map(e=>`<div style="display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px dashed var(--border);font-size:10px;"><span>${e.descripcion} · ${e.fecha}</span><span style="color:var(--purple);font-weight:900;">+${fM(e.monto)} Bs</span></div>`).join('')}
-                    </div>` : ''}
+                    </div>`:''}
+                    ${proy.pagos.length===0&&proy.depositos.length===0?'<div style="font-size:10px;color:var(--gray);">Sin pagos aún · Registrá en <b>Finanzas</b> (app supervisor) o <b>Compras → Abonar</b></div>':''}
                 </div>`;
             }).join('');
 
-            const supDataForExport = { nombre, proyResumen, totalContrato, totalPagado, totalExt };
+            const supDataForExport = { nombre, proyResumen, totalContrato, totalPagado, totalDep, totalGas, totalExt };
             const supJSON = JSON.stringify(supDataForExport).replace(/'/g, "\\'").replace(/"/g, '&quot;');
 
             container.innerHTML += `
@@ -1115,9 +1162,11 @@
                     </div>
                 </div>
                 <div class="bal-grid" style="margin-bottom:12px;">
-                    <div><div class="b-lbl">Contrato total</div><div class="b-val" style="color:var(--blue);">${fM(totalContrato)} Bs</div></div>
+                    <div><div class="b-lbl">Contrato</div><div class="b-val" style="color:var(--blue);">${fM(totalContrato)} Bs</div></div>
                     <div><div class="b-lbl">Extras</div><div class="b-val" style="color:var(--purple);">${fM(totalExt)} Bs</div></div>
-                    <div><div class="b-lbl">Pagado</div><div class="b-val" style="color:var(--green);">${fM(totalPagado)} Bs</div></div>
+                    <div><div class="b-lbl">Abonado (Admin)</div><div class="b-val" style="color:var(--green);">${fM(totalPagado)} Bs</div></div>
+                    <div><div class="b-lbl">Dep. Supervisor</div><div class="b-val" style="color:var(--green);">${fM(totalDep)} Bs</div></div>
+                    ${totalGas>0?`<div><div class="b-lbl">Gastos obra</div><div class="b-val" style="color:var(--red);">${fM(totalGas)} Bs</div></div>`:''}
                     <div><div class="b-lbl">Saldo</div><div class="b-val" style="color:${sc};">${fM(saldo)} Bs</div></div>
                 </div>
                 <div style="margin-bottom:12px;">${proyHtml}</div>
@@ -1148,12 +1197,14 @@
 
             // Resumen global
             const totalContMasExt = (data.totalContrato||0) + (data.totalExt||0);
-            const saldo = totalContMasExt - (data.totalPagado||0);
+            const saldo = totalContMasExt - (data.totalPagado||0) - (data.totalDep||0) + (data.totalGas||0);
             const rows = [
                 ['Monto Contrato', fM(data.totalContrato) + ' Bs'],
                 ['Extras aprobados', fM(data.totalExt) + ' Bs'],
                 ['Total a cobrar', fM(totalContMasExt) + ' Bs'],
-                ['Pagado (Compras/Abonar)', '-' + fM(data.totalPagado) + ' Bs'],
+                ['Abonado (Admin/Compras)', '-' + fM(data.totalPagado) + ' Bs'],
+                ['Depósitos (Supervisor)', '-' + fM(data.totalDep||0) + ' Bs'],
+                ['Gastos obra (Supervisor)', '+' + fM(data.totalGas||0) + ' Bs'],
                 ['SALDO PENDIENTE', fM(saldo) + ' Bs'],
             ];
             doc.autoTable({
@@ -1161,7 +1212,7 @@
                 body: rows, theme: 'striped',
                 styles: { fontSize: 10, cellPadding: 3 },
                 headStyles: { fillColor: [88,86,214] },
-                didParseCell: d => { if(d.row.index === 4) { d.cell.styles.fontStyle='bold'; d.cell.styles.textColor = saldo>0 ? [255,149,0] : [52,199,89]; } }
+                didParseCell: d => { if(d.row.index === 6) { d.cell.styles.fontStyle='bold'; d.cell.styles.textColor = saldo>0 ? [255,149,0] : [52,199,89]; } }
             });
             y = doc.lastAutoTable.finalY + 12;
 
@@ -1173,8 +1224,10 @@
                 doc.setTextColor(0); doc.setFont(undefined,'normal'); doc.setFontSize(9);
 
                 const detRows = [];
-                (proy.pagos||[]).forEach(p  => detRows.push(['✅ Pago (Compras)', p.descripcion||'Abono', p.fecha||'', '-'+fM(p.monto)+' Bs']));
-                (proy.extras||[]).forEach(e => detRows.push(['➕ Extra', e.descripcion||'Extra', e.fecha||'', '+'+fM(e.monto)+' Bs']));
+                (proy.pagos||[]).forEach(p     => detRows.push(['✅ Abono (Admin)', p.descripcion||'Abono', p.fecha||'', '-'+fM(p.monto)+' Bs']));
+                (proy.depositos||[]).forEach(d => detRows.push(['💵 Depósito (Sup)', d.descripcion||'Depósito', d.fecha||'', '-'+fM(d.monto)+' Bs']));
+                (proy.gastos||[]).forEach(g    => detRows.push(['🧾 Gasto obra (Sup)', g.descripcion||'Gasto', g.fecha||'', '+'+fM(g.monto)+' Bs']));
+                (proy.extras||[]).forEach(e    => detRows.push(['➕ Extra', e.descripcion||'Extra', e.fecha||'', '+'+fM(e.monto)+' Bs']));
 
                 if (detRows.length > 0) {
                     doc.autoTable({
@@ -1186,7 +1239,7 @@
                     });
                     y = doc.lastAutoTable.finalY + 6;
                 }
-                const saldoProy = (proy.monto_contrato||0) + (proy.totalExt||0) - (proy.totalPagado||0);
+                const saldoProy = (proy.monto_contrato||0) + (proy.totalExt||0) - (proy.totalPagado||0) - (proy.totalDep||0) + (proy.totalGas||0);
                 doc.setFont(undefined,'bold');
                 doc.text('Saldo proyecto: ' + fM(saldoProy) + ' Bs', 14, y); y += 10;
             });
@@ -3034,4 +3087,4 @@
     </script>
 <script src="/paste-image.js"></script>
 </body>
-</html>                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  
+</html>

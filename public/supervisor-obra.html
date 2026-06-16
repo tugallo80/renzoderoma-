@@ -750,11 +750,7 @@
                         role: 'user',
                         parts: [
                             { inlineData: { mimeType: mime, data: b64.split(',')[1] } },
-                            { text: 'Extrae de este comprobante/recibo/factura los siguientes campos y devuelve SOLO un JSON con estas claves exactas:
-- monto: importe total en número (sin símbolo de moneda, solo dígitos)
-- fecha: fecha en formato YYYY-MM-DD
-- concepto: descripción, referencia o motivo del pago
-Si no encontrás un campo, usá null. Devuelve SOLO el JSON.' }
+                            { text: 'Extrae de este comprobante/recibo/factura los siguientes campos y devuelve SOLO un JSON con estas claves exactas: monto (importe total en número sin símbolo), fecha (YYYY-MM-DD), concepto (descripción o motivo). Si no encontrás un campo usá null. Devuelve SOLO el JSON.' }
                         ]
                     }]
                 })
