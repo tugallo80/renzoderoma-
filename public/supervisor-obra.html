@@ -911,23 +911,51 @@
     }
 
     document.addEventListener('DOMContentLoaded', () => {
+        // Inputs para mod-adj-foto: galería y cámara separados
         const inp = document.createElement('input');
-        inp.type = 'file'; inp.id = 'adj-foto-input'; inp.accept = 'image/*'; inp.capture = 'environment'; inp.style.display = 'none';
+        inp.type = 'file'; inp.id = 'adj-foto-input'; inp.accept = 'image/*'; inp.style.display = 'none';
         inp.onchange = function() {
             const file = inp.files[0]; if (!file) return;
             const fr = new FileReader(); fr.onload = e => _adjSetFoto(e.target.result, file.type, file.name); fr.readAsDataURL(file);
         };
         document.body.appendChild(inp);
 
+        const cam = document.createElement('input');
+        cam.type = 'file'; cam.id = 'adj-cam-input'; cam.accept = 'image/*'; cam.capture = 'environment'; cam.style.display = 'none';
+        cam.onchange = function() {
+            const file = cam.files[0]; if (!file) return;
+            const fr = new FileReader(); fr.onload = e => _adjSetFoto(e.target.result, file.type, file.name); fr.readAsDataURL(file);
+        };
+        document.body.appendChild(cam);
+
         document.addEventListener('paste', e => {
-            if (document.getElementById('mod-adj-foto').style.display === 'none') return;
             const items = e.clipboardData ? e.clipboardData.items : [];
+            let imgFile = null;
             for (let i = 0; i < items.length; i++) {
-                if (items[i].type.startsWith('image/')) {
-                    const file = items[i].getAsFile();
-                    const fr = new FileReader(); fr.onload = ev => _adjSetFoto(ev.target.result, file.type, 'pegado.jpg'); fr.readAsDataURL(file);
-                    break;
-                }
+                if (items[i].type.startsWith('image/')) { imgFile = items[i].getAsFile(); break; }
+            }
+            if (!imgFile) return;
+
+            if (document.getElementById('mod-adj-foto').style.display !== 'none') {
+                const fr = new FileReader(); fr.onload = ev => _adjSetFoto(ev.target.result, imgFile.type, 'pegado.jpg'); fr.readAsDataURL(imgFile);
+            } else if (document.getElementById('mod-deposito-sup').style.display !== 'none') {
+                const fr = new FileReader();
+                fr.onload = ev => {
+                    _depFotoB64 = ev.target.result; _depFotoMime = imgFile.type || 'image/jpeg';
+                    document.getElementById('dep-foto-nombre').textContent = '📎 pegado.jpg';
+                    document.getElementById('dep-foto-nombre').style.display = 'block';
+                    document.getElementById('dep-btn-scan').style.display = 'block';
+                };
+                fr.readAsDataURL(imgFile);
+            } else if (document.getElementById('mod-gasto-sup').style.display !== 'none') {
+                const fr = new FileReader();
+                fr.onload = ev => {
+                    _gasFotoB64 = ev.target.result; _gasFotoMime = imgFile.type || 'image/jpeg';
+                    document.getElementById('gas-foto-nombre').textContent = '📎 pegado.jpg';
+                    document.getElementById('gas-foto-nombre').style.display = 'block';
+                    document.getElementById('gas-btn-scan').style.display = 'block';
+                };
+                fr.readAsDataURL(imgFile);
             }
         });
     });
@@ -1265,14 +1293,17 @@ REGLAS:
             </div>
 
             <!-- Zona foto/escaneo -->
-            <div id="dep-scan-zone" style="border:2px dashed var(--green);border-radius:14px;padding:16px;text-align:center;margin-bottom:14px;cursor:pointer;background:rgba(52,199,89,0.05);"
-                onclick="document.getElementById('dep-foto-input').click()">
-                <div style="font-size:28px;margin-bottom:4px;">📸</div>
-                <div style="font-size:13px;font-weight:800;color:var(--green);">Foto del comprobante</div>
-                <div style="font-size:11px;color:var(--gray);margin-top:2px;">Tocá para subir o pegar con Ctrl+V</div>
+            <div id="dep-scan-zone" style="border:2px dashed var(--green);border-radius:14px;padding:14px;text-align:center;margin-bottom:14px;background:rgba(52,199,89,0.05);">
+                <div style="font-size:22px;margin-bottom:8px;">📸</div>
+                <div style="display:flex;gap:8px;justify-content:center;">
+                    <button type="button" onclick="document.getElementById('dep-foto-input').click()" style="flex:1;padding:10px 8px;background:rgba(52,199,89,0.15);border:1px solid var(--green);border-radius:10px;color:var(--green);font-size:12px;font-weight:800;cursor:pointer;">🖼️ Galería</button>
+                    <button type="button" onclick="document.getElementById('dep-cam-input').click()" style="flex:1;padding:10px 8px;background:rgba(52,199,89,0.15);border:1px solid var(--green);border-radius:10px;color:var(--green);font-size:12px;font-weight:800;cursor:pointer;">📷 Cámara</button>
+                </div>
+                <div style="font-size:11px;color:var(--gray);margin-top:8px;">o pegá con Ctrl+V</div>
                 <div id="dep-foto-nombre" style="font-size:11px;color:var(--green);font-weight:800;margin-top:6px;display:none;"></div>
             </div>
             <input type="file" id="dep-foto-input" accept="image/*" style="display:none" onchange="onDepFotoCargada(this)">
+            <input type="file" id="dep-cam-input" accept="image/*" capture="environment" style="display:none" onchange="onDepFotoCargada(this)">
 
             <button id="dep-btn-scan" onclick="escanearComprobanteSup('dep')" style="display:none;width:100%;padding:10px;background:rgba(52,199,89,0.15);border:1px solid var(--green);color:var(--green);border-radius:10px;font-size:12px;font-weight:800;cursor:pointer;margin-bottom:14px;">
                 <i class="ph-bold ph-magic-wand"></i> Leer con IA
@@ -1306,14 +1337,17 @@ REGLAS:
             </div>
 
             <!-- Zona foto/escaneo -->
-            <div id="gas-scan-zone" style="border:2px dashed var(--red);border-radius:14px;padding:16px;text-align:center;margin-bottom:14px;cursor:pointer;background:rgba(255,59,48,0.05);"
-                onclick="document.getElementById('gas-foto-input').click()">
-                <div style="font-size:28px;margin-bottom:4px;">📸</div>
-                <div style="font-size:13px;font-weight:800;color:var(--red);">Foto de la factura / recibo</div>
-                <div style="font-size:11px;color:var(--gray);margin-top:2px;">Tocá para subir o pegar con Ctrl+V</div>
+            <div id="gas-scan-zone" style="border:2px dashed var(--red);border-radius:14px;padding:14px;text-align:center;margin-bottom:14px;background:rgba(255,59,48,0.05);">
+                <div style="font-size:22px;margin-bottom:8px;">🧾</div>
+                <div style="display:flex;gap:8px;justify-content:center;">
+                    <button type="button" onclick="document.getElementById('gas-foto-input').click()" style="flex:1;padding:10px 8px;background:rgba(255,59,48,0.1);border:1px solid var(--red);border-radius:10px;color:var(--red);font-size:12px;font-weight:800;cursor:pointer;">🖼️ Galería</button>
+                    <button type="button" onclick="document.getElementById('gas-cam-input').click()" style="flex:1;padding:10px 8px;background:rgba(255,59,48,0.1);border:1px solid var(--red);border-radius:10px;color:var(--red);font-size:12px;font-weight:800;cursor:pointer;">📷 Cámara</button>
+                </div>
+                <div style="font-size:11px;color:var(--gray);margin-top:8px;">o pegá con Ctrl+V</div>
                 <div id="gas-foto-nombre" style="font-size:11px;color:var(--red);font-weight:800;margin-top:6px;display:none;"></div>
             </div>
             <input type="file" id="gas-foto-input" accept="image/*" style="display:none" onchange="onGasFotoCargada(this)">
+            <input type="file" id="gas-cam-input" accept="image/*" capture="environment" style="display:none" onchange="onGasFotoCargada(this)">
 
             <button id="gas-btn-scan" onclick="escanearComprobanteSup('gas')" style="display:none;width:100%;padding:10px;background:rgba(255,59,48,0.1);border:1px solid var(--red);color:var(--red);border-radius:10px;font-size:12px;font-weight:800;cursor:pointer;margin-bottom:14px;">
                 <i class="ph-bold ph-magic-wand"></i> Leer con IA
@@ -1345,10 +1379,13 @@ REGLAS:
                 <button onclick="document.getElementById('mod-adj-foto').style.display='none'" style="background:var(--bg);border:none;width:32px;height:32px;border-radius:50%;cursor:pointer;font-size:18px;color:var(--gray);">×</button>
             </div>
             <!-- Zona drop/paste/cámara -->
-            <div onclick="document.getElementById('adj-foto-input').click()" style="border:2px dashed var(--blue);border-radius:14px;padding:20px;text-align:center;cursor:pointer;background:rgba(0,122,255,0.04);margin-bottom:12px;">
-                <div style="font-size:32px;">📸</div>
-                <div style="font-size:13px;font-weight:800;color:var(--blue);">Tocar para subir o tomar foto</div>
-                <div style="font-size:11px;color:var(--gray);margin-top:4px;">También podés pegar con <b>Ctrl+V</b></div>
+            <div style="border:2px dashed var(--blue);border-radius:14px;padding:16px;text-align:center;background:rgba(0,122,255,0.04);margin-bottom:12px;">
+                <div style="font-size:22px;margin-bottom:8px;">📎</div>
+                <div style="display:flex;gap:8px;justify-content:center;">
+                    <button type="button" onclick="document.getElementById('adj-foto-input').click()" style="flex:1;padding:10px 8px;background:rgba(0,122,255,0.12);border:1px solid var(--blue);border-radius:10px;color:var(--blue);font-size:12px;font-weight:800;cursor:pointer;">🖼️ Galería</button>
+                    <button type="button" onclick="document.getElementById('adj-cam-input').click()" style="flex:1;padding:10px 8px;background:rgba(0,122,255,0.12);border:1px solid var(--blue);border-radius:10px;color:var(--blue);font-size:12px;font-weight:800;cursor:pointer;">📷 Cámara</button>
+                </div>
+                <div style="font-size:11px;color:var(--gray);margin-top:8px;">o pegá con <b>Ctrl+V</b></div>
             </div>
             <img id="adj-preview" style="display:none;width:100%;border-radius:10px;margin-bottom:10px;max-height:200px;object-fit:contain;" src="">
             <div id="adj-nombre" style="font-size:11px;color:var(--gray);text-align:center;margin-bottom:12px;"></div>
