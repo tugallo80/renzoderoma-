@@ -2804,7 +2804,7 @@ Objeto: ${desc}`;
             }
 
             // Usamos Web Worker para que el fetch no congele el browser
-            const workerResp = await _fetchInWorker('/api/gemini', {
+            const workerResp = await _fetchInWorker(location.origin + '/api/gemini', {
                 method: 'POST',
                 headers,
                 body: JSON.stringify(body)

@@ -832,22 +832,28 @@
         if (!desc) return alert('Ingresá el concepto.');
         const btn = document.getElementById('dep-btn-guardar');
         if (btn) { btn.disabled = true; btn.textContent = 'Guardando...'; }
-        if (_depEditKey) {
-            // MODO EDICIÓN — actualizar registro existente
-            const updates = { monto, descripcion: desc, fecha: fecha || new Date().toLocaleDateString('es-BO') };
-            if (_depFotoB64) {
-                const fotoUrl = await subirFotoComprobante(_depFotoB64, _depFotoMime, 'depositos', _depEditKey);
-                if (fotoUrl) updates.fotoUrl = fotoUrl;
+        try {
+            if (_depEditKey) {
+                // MODO EDICIÓN — actualizar registro existente
+                const updates = { monto, descripcion: desc, fecha: fecha || new Date().toLocaleDateString('es-BO') };
+                if (_depFotoB64) {
+                    const fotoUrl = await subirFotoComprobante(_depFotoB64, _depFotoMime, 'depositos', _depEditKey);
+                    if (fotoUrl) updates.fotoUrl = fotoUrl;
+                }
+                await db.ref(`supervisores/${wid}/proyectos/${pid}/depositos/${_depEditKey}`).update(updates);
+            } else {
+                // MODO NUEVO
+                const newRef = db.ref(`supervisores/${wid}/proyectos/${pid}/depositos`).push();
+                const fotoUrl = _depFotoB64 ? await subirFotoComprobante(_depFotoB64, _depFotoMime, 'depositos', newRef.key) : null;
+                await newRef.set({ monto, descripcion: desc, fecha: fecha || new Date().toLocaleDateString('es-BO'), timestamp: Date.now(), ...(fotoUrl ? { fotoUrl } : {}) });
             }
-            await db.ref(`supervisores/${wid}/proyectos/${pid}/depositos/${_depEditKey}`).update(updates);
-        } else {
-            // MODO NUEVO
-            const newRef = db.ref(`supervisores/${wid}/proyectos/${pid}/depositos`).push();
-            const fotoUrl = _depFotoB64 ? await subirFotoComprobante(_depFotoB64, _depFotoMime, 'depositos', newRef.key) : null;
-            await newRef.set({ monto, descripcion: desc, fecha: fecha || new Date().toLocaleDateString('es-BO'), timestamp: Date.now(), ...(fotoUrl ? { fotoUrl } : {}) });
+            document.getElementById('mod-deposito-sup').style.display = 'none';
+            renderFinanzas();
+        } catch(e) {
+            alert('Error al guardar: ' + e.message);
+        } finally {
+            if (btn) { btn.disabled = false; btn.textContent = 'Guardar Depósito'; }
         }
-        document.getElementById('mod-deposito-sup').style.display = 'none';
-        renderFinanzas();
     }
 
     async function guardarGasto() {
@@ -858,22 +864,28 @@
         if (!desc) return alert('Ingresá la descripción.');
         const btn = document.getElementById('gas-btn-guardar');
         if (btn) { btn.disabled = true; btn.textContent = 'Guardando...'; }
-        if (_gasEditKey) {
-            // MODO EDICIÓN
-            const updates = { monto, descripcion: desc, fecha: fecha || new Date().toLocaleDateString('es-BO') };
-            if (_gasFotoB64) {
-                const fotoUrl = await subirFotoComprobante(_gasFotoB64, _gasFotoMime, 'gastos', _gasEditKey);
-                if (fotoUrl) updates.fotoUrl = fotoUrl;
+        try {
+            if (_gasEditKey) {
+                // MODO EDICIÓN
+                const updates = { monto, descripcion: desc, fecha: fecha || new Date().toLocaleDateString('es-BO') };
+                if (_gasFotoB64) {
+                    const fotoUrl = await subirFotoComprobante(_gasFotoB64, _gasFotoMime, 'gastos', _gasEditKey);
+                    if (fotoUrl) updates.fotoUrl = fotoUrl;
+                }
+                await db.ref(`supervisores/${wid}/proyectos/${pid}/gastos/${_gasEditKey}`).update(updates);
+            } else {
+                // MODO NUEVO
+                const newRef = db.ref(`supervisores/${wid}/proyectos/${pid}/gastos`).push();
+                const fotoUrl = _gasFotoB64 ? await subirFotoComprobante(_gasFotoB64, _gasFotoMime, 'gastos', newRef.key) : null;
+                await newRef.set({ monto, descripcion: desc, fecha: fecha || new Date().toLocaleDateString('es-BO'), timestamp: Date.now(), ...(fotoUrl ? { fotoUrl } : {}) });
             }
-            await db.ref(`supervisores/${wid}/proyectos/${pid}/gastos/${_gasEditKey}`).update(updates);
-        } else {
-            // MODO NUEVO
-            const newRef = db.ref(`supervisores/${wid}/proyectos/${pid}/gastos`).push();
-            const fotoUrl = _gasFotoB64 ? await subirFotoComprobante(_gasFotoB64, _gasFotoMime, 'gastos', newRef.key) : null;
-            await newRef.set({ monto, descripcion: desc, fecha: fecha || new Date().toLocaleDateString('es-BO'), timestamp: Date.now(), ...(fotoUrl ? { fotoUrl } : {}) });
+            document.getElementById('mod-gasto-sup').style.display = 'none';
+            renderFinanzas();
+        } catch(e) {
+            alert('Error al guardar: ' + e.message);
+        } finally {
+            if (btn) { btn.disabled = false; btn.textContent = 'Guardar Gasto'; }
         }
-        document.getElementById('mod-gasto-sup').style.display = 'none';
-        renderFinanzas();
     }
 
     // Adjuntar foto a movimiento existente — bottom-sheet con paste/drag/cámara

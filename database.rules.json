@@ -118,6 +118,16 @@
       ".write": "auth != null && auth.token.email != null"
     },
 
+    // ─── SUPERVISORES ─────────────────────────────────────────────
+    // Depósitos y gastos registrados por supervisores desde la app.
+    // Cualquier usuario autenticado puede leer/escribir su propio nodo (wid).
+    "supervisores": {
+      "$wid": {
+        ".read":  "auth != null",
+        ".write": "auth != null"
+      }
+    },
+
     // ─── DENEGACIÓN POR DEFECTO ────────────────────────────────────
     // Cualquier ruta no listada arriba: solo hub.
     "$other": {
