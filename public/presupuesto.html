@@ -519,6 +519,13 @@
             }
         } else { document.getElementById('h-date').valueAsDate = new Date(); }
         document.getElementById('global-loader').style.display = 'none';
+    }).catch(err => {
+        console.warn('[presupuesto] timeout o error cargando datos:', err);
+        document.getElementById('global-loader').style.display = 'none';
+        const msg = document.createElement('div');
+        msg.style.cssText = 'position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:#e74c3c;color:#fff;border-radius:12px;padding:10px 18px;font-size:.85rem;font-weight:600;z-index:9999;';
+        msg.innerHTML = 'Sin conexión — los ítems no se cargaron. <button onclick="location.reload()" style="background:#fff;color:#e74c3c;border:none;border-radius:8px;padding:4px 10px;margin-left:8px;cursor:pointer;font-weight:700;">Reintentar</button>';
+        document.body.appendChild(msg);
     });
     } // fin cargarPresupuesto
 

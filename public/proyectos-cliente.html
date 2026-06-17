@@ -209,10 +209,15 @@
     }
 
     function _cargarProyectos() {
+    const grid = document.getElementById('project-grid');
+    // Mostrar skeleton solo si el grid está vacío (primera carga sin caché)
+    if (!grid.children.length) {
+        grid.innerHTML = `<div style="grid-column:span 4;text-align:center;color:var(--gray);padding:40px;font-size:.85rem;">Cargando proyectos...</div>`;
+    }
 
     // CARGA DE PROYECTOS CON MOTOR DE ORDENAMIENTO
     db.ref(`proyectos/${cid}`).once('value', snap => {
-        const grid = document.getElementById('project-grid'); grid.innerHTML = "";
+        grid.innerHTML = "";
         globalProjectsArr = [];
         if(!snap.exists()) { grid.innerHTML = `<div style="grid-column:span 4; text-align:center; color:var(--gray); padding:40px;">Este cliente no tiene proyectos.</div>`; return; }
 
@@ -259,6 +264,14 @@
                 <div class="app-name">${p.nombre}${oculto ? ' 🚫' : ''}</div>
             </div>`;
         });
+    }, err => {
+        // Error o timeout — mostrar botón de reintento
+        if (grid.children.length <= 1) {
+            grid.innerHTML = `<div style="grid-column:span 4;text-align:center;padding:40px;">
+              <div style="color:var(--gray);font-size:.85rem;margin-bottom:12px;">Sin conexión o timeout — tocá para reintentar</div>
+              <button onclick="_cargarProyectos()" style="background:var(--blue);color:#fff;border:none;border-radius:10px;padding:10px 22px;font-size:.9rem;cursor:pointer;">Reintentar</button>
+            </div>`;
+        }
     });
     } // fin _cargarProyectos
 
