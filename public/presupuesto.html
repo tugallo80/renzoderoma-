@@ -2751,7 +2751,7 @@ EJEMPLO VÁLIDO:
             _anotCanvas.setPointerCapture(e.pointerId);
             _anotSaveHistory();
             _anotDrawing = true;
-            _anotCtx.globalAlpha = 0.35;
+            _anotCtx.globalAlpha = 0.55;
             _anotCtx.strokeStyle = _anotColor;
             _anotCtx.lineWidth   = _anotSize;
             _anotCtx.lineCap     = 'round';
@@ -2805,19 +2805,9 @@ EJEMPLO VÁLIDO:
     };
 
     window.usarAnotacion = function() {
-        // Composite the annotation onto the reference: draw base at full opacity then overlay annotation
-        const offscreen = document.createElement('canvas');
-        offscreen.width  = _anotCanvas.width;
-        offscreen.height = _anotCanvas.height;
-        const octx = offscreen.getContext('2d');
-        // Base image
-        octx.drawImage(_anotBaseImg, 0, 0, offscreen.width, offscreen.height);
-        // Annotation layer at 50% (readable by AI but not overpowering)
-        octx.globalAlpha = 0.5;
-        octx.drawImage(_anotCanvas, 0, 0);
-        octx.globalAlpha = 1;
-
-        const dataUrl = offscreen.toDataURL('image/jpeg', 0.92);
+        // Export the canvas directly — base image + semi-transparent strokes as drawn.
+        // Re-compositing would reduce stroke visibility further; export as-is.
+        const dataUrl = _anotCanvas.toDataURL('image/jpeg', 0.93);
         _r3dRefBase64 = dataUrl.split(',')[1];
         _r3dRefMime   = 'image/jpeg';
         _r3dRefAnnotated = true;
@@ -2950,45 +2940,65 @@ EJEMPLO VÁLIDO:
 
         const hasRef = !!_r3dRefBase64;
         const hasVol = !!_r3dVolBase64;
+        const elems  = _r3dElements.filter(e => e.nombre || e.mat || e.est || e.acab);
+        const hasEst = elems.some(e => e.est && e.est.trim());
 
+        // ── Image instructions ─────────────────────────────────────────────
         let imgGuide = '';
         if (hasRef && hasVol) {
-            imgGuide = `INSTRUCCIÓN DE IMÁGENES:
-IMAGEN 1 — REFERENCIA DEL CLIENTE: usá esta imagen para el estilo, branding, colores y forma general.${_r3dRefAnnotated ? ' La zona resaltada indica el elemento específico a renderizar.' : ''}
-IMAGEN 2 — VOLUMETRÍA / PLANO CON MEDIDAS: usá esta imagen para las dimensiones y proporciones exactas. Las medidas del plano prevalecen sobre cualquier otra indicación dimensional.`;
+            imgGuide = `INSTRUCCIÓN DE IMÁGENES (son 2 imágenes adjuntas):
+IMAGEN 1 — REFERENCIA DEL CLIENTE: aplicá su branding, colores, tipografía y estilo visual en TODAS las caras visibles del objeto.${_r3dRefAnnotated ? '\n  ⚠️ ZONA MARCADA: los trazos de color semitransparente en la referencia indican el ELEMENTO ESPECÍFICO a renderizar. Enfocate exclusivamente en ese componente marcado, ignorando el resto de la imagen.' : ''}
+IMAGEN 2 — VOLUMETRÍA / PLANO CON MEDIDAS: las dimensiones y proporciones del plano son las REALES. Prevalecen sobre cualquier otra indicación dimensional.`;
         } else if (hasRef) {
-            imgGuide = `INSTRUCCIÓN DE IMAGEN:
-REFERENCIA DEL CLIENTE: respetá exactamente el estilo, colores, proporciones y forma que aparecen en la imagen.${_r3dRefAnnotated ? ' Concentrá el render en la zona resaltada/marcada de la imagen — esa es la parte que quiero renderizar.' : ''}`;
+            if (_r3dRefAnnotated) {
+                imgGuide = `INSTRUCCIÓN DE IMAGEN:
+REFERENCIA CON ZONA MARCADA: La imagen adjunta tiene trazos de color semitransparente que delimitan la ZONA/ELEMENTO ESPECÍFICO a renderizar.
+⚠️ REGLA CRÍTICA: renderizá ÚNICAMENTE el objeto o componente que está dentro de la zona marcada. Tomá su forma, proporciones y estilo de esa zona. El resto de la imagen es contexto — no lo copies.
+Aplicá el branding/colores de la referencia en todas las caras del objeto renderizado.`;
+            } else {
+                imgGuide = `INSTRUCCIÓN DE IMAGEN:
+REFERENCIA DEL CLIENTE: respetá exactamente el branding, colores, tipografía y proporciones. Aplicá el estilo visual en TODAS las caras visibles del objeto (frente, laterales, techo, fondo).`;
+            }
         } else if (hasVol) {
             imgGuide = `INSTRUCCIÓN DE IMAGEN:
-VOLUMETRÍA / PLANO CON MEDIDAS: respetá estrictamente las dimensiones y proporciones indicadas en el plano. Las cotas del plano son las medidas reales del objeto.`;
+VOLUMETRÍA / PLANO CON MEDIDAS: respetá estrictamente las dimensiones del plano — son las medidas reales del objeto. Proporciones del plano prevalecen sobre el texto.`;
         }
 
+        // ── Base prompt ────────────────────────────────────────────────────
         let prompt = `AXONOMETRÍA TÉCNICA PROFESIONAL — estilo CAD industrial.
 Fondo blanco liso. Perspectiva isométrica a 30°. Líneas de cotas en metros con flechas de acotación. Etiquetas de materiales con líneas de referencia. Sin sombras dramáticas. Colores neutros y realistas.
+REGLA GLOBAL DE RECUBRIMIENTO: si el acabado menciona lona, vinilo, tela, banner, PVC u otro recubrimiento de superficie, aplicarlo en TODAS las caras visibles del objeto (frente, laterales, techo, parte trasera) — no solo en la cara frontal.
 IMPORTANTE: Dibujá SOLO lo que se describe aquí. No inventes vistas adicionales, dimensiones extra, ni elementos no solicitados.`;
 
         if (imgGuide) prompt += `\n\n${imgGuide}`;
         prompt += `\n\nObjeto: ${desc}`;
 
-        const elems = _r3dElements.filter(e => e.nombre || e.mat || e.est || e.acab);
+        // ── Elements ───────────────────────────────────────────────────────
         if (elems.length > 1) {
             prompt += '\n\nCOMPOSICIÓN DE ELEMENTOS:';
             elems.forEach(function(el, i) {
                 prompt += `\n\nElemento ${i+1}${el.nombre ? ' — ' + el.nombre : ''}:`;
                 if (el.mat)  prompt += `\n  Materiales: ${el.mat}`;
-                if (el.est)  prompt += `\n  Estructura: ${el.est}`;
+                if (el.est)  prompt += `\n  Estructura/Armado: ${el.est}`;
                 if (el.acab) prompt += `\n  Acabado/Branding: ${el.acab}`;
             });
         } else if (elems.length === 1) {
             const el = elems[0];
             if (el.mat)  prompt += `\nMateriales: ${el.mat}`;
-            if (el.est)  prompt += `\nEstructura: ${el.est}`;
+            if (el.est)  prompt += `\nEstructura/Armado: ${el.est}`;
             if (el.acab) prompt += `\nAcabado: ${el.acab}`;
         }
 
         if (dims) prompt += `\nDimensiones: ${dims}`;
-        prompt += `\n\nMostrar: vista isométrica completa con todos los elementos etiquetados, cotas en metros, materiales indicados en español. No agregues vistas que no hayan sido solicitadas.`;
+
+        // ── Structural cutaway (only when estructura fields are filled) ────
+        const estructuraTexto = elems.filter(e => e.est).map(e => e.est).join('; ');
+        if (hasEst) {
+            prompt += `\n\nDETALLE DE ARMADO (incluir obligatoriamente):
+En la esquina inferior derecha del render, dibujá un recuadro independiente rotulado "Detalle constructivo" que muestre una vista de CORTE O EXPLOSIÓN del borde/esquina del objeto. Usá líneas punteadas para los perfiles internos y relleno translúcido/semitransparente en las partes estructurales para que se vea el armado sin tapar la vista principal. El detalle debe mostrar: ${estructuraTexto}.`;
+        }
+
+        prompt += `\n\nMostrar: vista isométrica completa con todos los elementos etiquetados, cotas en metros, materiales indicados en español.${hasEst ? ' El recuadro de detalle constructivo es OBLIGATORIO.' : ''} No agregues vistas adicionales que no hayan sido solicitadas.`;
         return prompt;
     }
 
