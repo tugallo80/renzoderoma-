@@ -1224,18 +1224,23 @@
                 doc.setTextColor(0); doc.setFont(undefined,'normal'); doc.setFontSize(9);
 
                 const detRows = [];
-                (proy.pagos||[]).forEach(p     => detRows.push(['Abono Admin',   p.descripcion||'Abono',   p.fecha||'', '-'+fM(p.monto)+' Bs']));
-                (proy.depositos||[]).forEach(d => detRows.push(['Deposito Sup',  d.descripcion||'Deposito', d.fecha||'', '-'+fM(d.monto)+' Bs']));
-                (proy.gastos||[]).forEach(g    => detRows.push(['Gasto obra',    g.descripcion||'Gasto',    g.fecha||'', '+'+fM(g.monto)+' Bs']));
-                (proy.extras||[]).forEach(e    => detRows.push(['Extra',         e.descripcion||'Extra',    e.fecha||'', '+'+fM(e.monto)+' Bs']));
+                (proy.pagos||[]).forEach(p     => detRows.push(['Abono Admin',    p.descripcion||'Abono',    p.fecha||'', '-'+fM(p.monto)+' Bs', 'pago']));
+                (proy.depositos||[]).forEach(d => detRows.push(['Deposito Sup',   d.descripcion||'Deposito', d.fecha||'', '-'+fM(d.monto)+' Bs', 'dep']));
+                (proy.extras||[]).forEach(e    => detRows.push(['Cobro extra',    e.descripcion||'Extra',    e.fecha||'', '+'+fM(e.monto)+' Bs', 'extra']));
+                (proy.gastos||[]).forEach(g    => detRows.push(['Gasto obra',     g.descripcion||'Gasto',    g.fecha||'', '+'+fM(g.monto)+' Bs', 'gasto']));
 
                 if (detRows.length > 0) {
                     doc.autoTable({
                         startY: y, head:[['Tipo','Descripcion','Fecha','Monto']],
-                        body: detRows, theme:'striped',
+                        body: detRows.map(function(r){ return r.slice(0,4); }), theme:'striped',
                         styles: { fontSize:8, cellPadding:2 },
                         headStyles: { fillColor:[100,100,100] },
-                        margin: { left:14, right:14 }
+                        margin: { left:14, right:14 },
+                        didParseCell: function(d) {
+                            if (d.section !== 'body') return;
+                            const tag = detRows[d.row.index] && detRows[d.row.index][4];
+                            if (tag === 'extra') { d.cell.styles.textColor = [175, 82, 222]; d.cell.styles.fontStyle = 'bold'; }
+                        }
                     });
                     y = doc.lastAutoTable.finalY + 6;
                 }
