@@ -2346,17 +2346,32 @@ EJEMPLO VÁLIDO:
 
       <!-- Imagen de referencia -->
       <div style="margin-top:12px;">
-        <label style="font-size:.85rem;font-weight:600;">Imagen de referencia (opcional)</label>
+        <label style="font-size:.85rem;font-weight:600;">Referencia del cliente (opcional)</label>
         <div id="r3d-ref-drop" style="border:2px dashed #c5d0e6;border-radius:8px;padding:14px;text-align:center;cursor:pointer;margin-top:4px;position:relative;">
           <input type="file" id="r3d-ref-input" accept="image/*" style="position:absolute;inset:0;opacity:0;cursor:pointer;" onchange="onR3dRefImagen(this)">
           <div id="r3d-ref-preview" style="display:none;position:relative;">
-            <img id="r3d-ref-img" style="max-height:140px;border-radius:6px;cursor:pointer;display:block;" onclick="abrirMedicionRefRender(this.src)" title="Tocá para medir y anotar">
-            <div style="position:absolute;bottom:0;left:0;right:0;background:rgba(0,0,0,.45);color:#fff;font-size:.65rem;text-align:center;padding:3px 4px;border-radius:0 0 6px 6px;pointer-events:none;">
-              <i class="ph-bold ph-ruler"></i> Tocar para medir
+            <img id="r3d-ref-img" style="max-height:130px;border-radius:6px;display:block;margin:0 auto;">
+            <div style="display:flex;gap:6px;margin-top:6px;">
+              <button onclick="abrirAnotacionReferencia(event)" style="flex:1;padding:5px;background:rgba(255,220,0,0.18);border:1px solid #e6c800;color:#8a7600;border-radius:7px;font-size:.75rem;font-weight:700;cursor:pointer;"><i class="ph-bold ph-highlighter"></i> Marcar zona</button>
+              <button onclick="abrirMedicionRefRender(document.getElementById('r3d-ref-img').src)" style="flex:1;padding:5px;background:rgba(0,122,255,0.08);border:1px solid #c5d0e6;color:#007aff;border-radius:7px;font-size:.75rem;font-weight:700;cursor:pointer;"><i class="ph-bold ph-ruler"></i> Medir/anotar</button>
             </div>
             <button onclick="limpiarR3dRef()" style="position:absolute;top:-8px;right:-8px;background:#e74c3c;color:#fff;border:none;border-radius:50%;width:22px;height:22px;cursor:pointer;font-size:.85rem;line-height:1;">&times;</button>
           </div>
-          <div id="r3d-ref-placeholder"><i class="ph-bold ph-image" style="font-size:1.6rem;color:#aaa;"></i><br><span style="font-size:.8rem;color:#aaa;">Adjuntar imagen o pegar (Ctrl+V)</span></div>
+          <div id="r3d-ref-placeholder"><i class="ph-bold ph-image" style="font-size:1.6rem;color:#aaa;"></i><br><span style="font-size:.8rem;color:#aaa;">Referencia del cliente (estilo/branding)</span></div>
+        </div>
+      </div>
+
+      <!-- Volumetría con medidas (opcional) -->
+      <div style="margin-top:8px;">
+        <label style="font-size:.85rem;font-weight:600;">Volumetría / Plano con medidas (opcional)</label>
+        <div id="r3d-vol-drop" style="border:2px dashed #c5d0e6;border-radius:8px;padding:12px;text-align:center;cursor:pointer;margin-top:4px;position:relative;">
+          <input type="file" id="r3d-vol-input" accept="image/*" style="position:absolute;inset:0;opacity:0;cursor:pointer;" onchange="onR3dVolImagen(this)">
+          <div id="r3d-vol-preview" style="display:none;position:relative;">
+            <img id="r3d-vol-img" style="max-height:110px;border-radius:6px;display:block;margin:0 auto;">
+            <div style="font-size:.7rem;color:#888;text-align:center;margin-top:4px;">Plano con dimensiones exactas</div>
+            <button onclick="limpiarR3dVol()" style="position:absolute;top:-8px;right:-8px;background:#e74c3c;color:#fff;border:none;border-radius:50%;width:22px;height:22px;cursor:pointer;font-size:.85rem;line-height:1;">&times;</button>
+          </div>
+          <div id="r3d-vol-placeholder"><i class="ph-bold ph-ruler" style="font-size:1.5rem;color:#aaa;"></i><br><span style="font-size:.8rem;color:#aaa;">Plano o volumetría con medidas</span></div>
         </div>
       </div>
 
@@ -2443,6 +2458,53 @@ EJEMPLO VÁLIDO:
   </div>
 </div>
 
+<!-- OVERLAY PANTALLA COMPLETA: Anotación de referencia (Marcar zona) -->
+<div id="mod-r3d-anotacion" style="display:none;position:fixed;inset:0;z-index:10001;background:#111;flex-direction:column;">
+  <div style="background:#1c1c1e;flex-shrink:0;">
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;gap:8px;">
+      <button onclick="cancelarAnotacion()"
+        style="background:rgba(255,255,255,.1);color:#fff;border:none;border-radius:10px;padding:7px 11px;font-size:.82rem;font-weight:700;cursor:pointer;flex-shrink:0;">
+        <i class="ph-bold ph-caret-left"></i> Cancelar
+      </button>
+      <span style="color:#fff;font-size:.85rem;font-weight:700;white-space:nowrap;flex:1;text-align:center;">Marcar zona para la IA</span>
+      <button onclick="usarAnotacion()"
+        style="background:#ffd60a;color:#1a1200;border:none;border-radius:10px;padding:9px 18px;font-size:.9rem;font-weight:800;cursor:pointer;flex-shrink:0;white-space:nowrap;">
+        Usar ✓
+      </button>
+    </div>
+    <div style="display:flex;align-items:center;gap:8px;padding:8px 12px 10px;border-top:1px solid #2c2c2e;overflow-x:auto;">
+      <div style="display:flex;gap:5px;flex-shrink:0;">
+        <button class="anot-cbtn" data-c="#ffd60a" onclick="setAnotColor('#ffd60a',this)"
+          style="background:#ffd60a;color:#1a1200;border:3px solid #fff;border-radius:8px;padding:4px 9px;font-size:.78rem;cursor:pointer;font-weight:700;">Amarillo</button>
+        <button class="anot-cbtn" data-c="#ff3b30" onclick="setAnotColor('#ff3b30',this)"
+          style="background:#ff3b30;color:#fff;border:3px solid transparent;border-radius:8px;padding:4px 9px;font-size:.78rem;cursor:pointer;font-weight:700;">Rojo</button>
+        <button class="anot-cbtn" data-c="#30d158" onclick="setAnotColor('#30d158',this)"
+          style="background:#30d158;color:#1a1200;border:3px solid transparent;border-radius:8px;padding:4px 9px;font-size:.78rem;cursor:pointer;font-weight:700;">Verde</button>
+        <button class="anot-cbtn" data-c="#0a84ff" onclick="setAnotColor('#0a84ff',this)"
+          style="background:#0a84ff;color:#fff;border:3px solid transparent;border-radius:8px;padding:4px 9px;font-size:.78rem;cursor:pointer;font-weight:700;">Azul</button>
+      </div>
+      <div style="display:flex;align-items:center;gap:6px;margin-left:auto;flex-shrink:0;">
+        <label style="color:#aaa;font-size:.75rem;">Grosor</label>
+        <input id="anot-size-slider" type="range" min="8" max="60" value="24"
+          oninput="setAnotSize(+this.value)"
+          style="width:70px;accent-color:#ffd60a;">
+        <button onclick="deshacerAnotacion()"
+          style="background:rgba(255,255,255,.12);color:#fff;border:none;border-radius:8px;padding:5px 10px;font-size:.78rem;cursor:pointer;">↩ Deshacer</button>
+        <button onclick="limpiarAnotacion()"
+          style="background:rgba(255,255,255,.12);color:#fff;border:none;border-radius:8px;padding:5px 10px;font-size:.78rem;cursor:pointer;">Limpiar</button>
+      </div>
+    </div>
+    <div style="padding:4px 12px 8px;color:#888;font-size:.72rem;">
+      Dibujá con tu dedo o el mouse sobre la zona que querés renderizar. La marca será semi-transparente para que la IA entienda el contorno.
+    </div>
+  </div>
+  <div style="flex:1;overflow:hidden;position:relative;display:flex;align-items:center;justify-content:center;background:#111;">
+    <canvas id="anot-canvas"
+      style="max-width:100%;max-height:100%;touch-action:none;cursor:crosshair;">
+    </canvas>
+  </div>
+</div>
+
 <!-- OVERLAY PANTALLA COMPLETA: Marcador de zonas -->
 <div id="mod-r3d-mark" style="display:none;position:fixed;inset:0;z-index:10000;background:#111;flex-direction:column;">
   <div style="background:#1c1c1e;flex-shrink:0;">
@@ -2509,6 +2571,9 @@ EJEMPLO VÁLIDO:
     var _r3dElements  = [];   // [{nombre,mat,est,acab}]
     var _r3dRefBase64 = null;
     var _r3dRefMime   = 'image/jpeg';
+    var _r3dRefAnnotated = false; // true when ref has freehand annotations
+    var _r3dVolBase64 = null;
+    var _r3dVolMime   = 'image/jpeg';
     var _r3dRenderDataUrl = null;
 
     window.abrirModalRender3D = function() {
@@ -2516,8 +2581,11 @@ EJEMPLO VÁLIDO:
         _r3dDims = [];
         _r3dElements = [{ nombre: '', mat: '', est: '', acab: '' }];
         _r3dRefBase64 = null;
+        _r3dRefAnnotated = false;
+        _r3dVolBase64 = null;
         _r3dRenderDataUrl = null;
         limpiarR3dRef();
+        limpiarR3dVol();
         renderDims3D();
         renderElementosR3D();
         document.getElementById('r3d-step1').style.display = 'block';
@@ -2553,10 +2621,37 @@ EJEMPLO VÁLIDO:
 
     window.limpiarR3dRef = function() {
         _r3dRefBase64 = null;
+        _r3dRefAnnotated = false;
         document.getElementById('r3d-ref-img').src = '';
         document.getElementById('r3d-ref-preview').style.display = 'none';
         document.getElementById('r3d-ref-placeholder').style.display = 'block';
         document.getElementById('r3d-ref-input').value = '';
+    };
+
+    window.onR3dVolImagen = function(input) {
+        const file = input.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            _r3dVolBase64 = e.target.result.split(',')[1];
+            _r3dVolMime   = file.type || 'image/jpeg';
+            document.getElementById('r3d-vol-img').src = e.target.result;
+            document.getElementById('r3d-vol-preview').style.display = 'block';
+            document.getElementById('r3d-vol-placeholder').style.display = 'none';
+        };
+        reader.readAsDataURL(file);
+    };
+
+    window.limpiarR3dVol = function() {
+        _r3dVolBase64 = null;
+        const img = document.getElementById('r3d-vol-img');
+        if (img) img.src = '';
+        const prev = document.getElementById('r3d-vol-preview');
+        if (prev) prev.style.display = 'none';
+        const ph = document.getElementById('r3d-vol-placeholder');
+        if (ph) ph.style.display = 'block';
+        const inp = document.getElementById('r3d-vol-input');
+        if (inp) inp.value = '';
     };
 
     window.setR3dRefFromDataUrl = function(dataUrl) {
@@ -2593,6 +2688,144 @@ EJEMPLO VÁLIDO:
             }
         }
     });
+
+    // ──────────────────────────────────────────────────────────────
+    //  ANOTACIÓN DE REFERENCIA — canvas de trazado libre (highlighter)
+    // ──────────────────────────────────────────────────────────────
+    var _anotCanvas = null;
+    var _anotCtx    = null;
+    var _anotDrawing = false;
+    var _anotColor  = '#ffd60a';
+    var _anotSize   = 24;
+    var _anotHistory = []; // array of ImageData snapshots for undo
+    var _anotBaseImg = null; // HTMLImageElement of the reference
+
+    window.abrirAnotacionReferencia = function(e) {
+        if (e) { e.stopPropagation(); e.preventDefault(); }
+        const refImg = document.getElementById('r3d-ref-img');
+        if (!refImg || !refImg.src || refImg.src === window.location.href) {
+            alert('Primero cargá una imagen de referencia.');
+            return;
+        }
+        const modal = document.getElementById('mod-r3d-anotacion');
+        modal.style.display = 'flex';
+
+        _anotBaseImg = new Image();
+        _anotBaseImg.crossOrigin = 'anonymous';
+        _anotBaseImg.onload = function() {
+            _anotCanvas = document.getElementById('anot-canvas');
+            const container = _anotCanvas.parentElement;
+            const maxW = container.clientWidth;
+            const maxH = container.clientHeight;
+            const scale = Math.min(maxW / _anotBaseImg.naturalWidth, maxH / _anotBaseImg.naturalHeight, 1);
+            _anotCanvas.width  = Math.round(_anotBaseImg.naturalWidth  * scale);
+            _anotCanvas.height = Math.round(_anotBaseImg.naturalHeight * scale);
+            _anotCtx = _anotCanvas.getContext('2d');
+            _anotCtx.drawImage(_anotBaseImg, 0, 0, _anotCanvas.width, _anotCanvas.height);
+            _anotHistory = [];
+            _anotSaveHistory();
+            _anotBindEvents();
+        };
+        _anotBaseImg.src = refImg.src;
+    };
+
+    function _anotPos(e) {
+        const r = _anotCanvas.getBoundingClientRect();
+        const scaleX = _anotCanvas.width  / r.width;
+        const scaleY = _anotCanvas.height / r.height;
+        const touch = e.touches ? e.touches[0] : e;
+        return {
+            x: (touch.clientX - r.left) * scaleX,
+            y: (touch.clientY - r.top)  * scaleY
+        };
+    }
+
+    function _anotSaveHistory() {
+        if (_anotHistory.length > 30) _anotHistory.shift();
+        _anotHistory.push(_anotCtx.getImageData(0, 0, _anotCanvas.width, _anotCanvas.height));
+    }
+
+    function _anotBindEvents() {
+        _anotCanvas.onpointerdown = function(e) {
+            e.preventDefault();
+            _anotCanvas.setPointerCapture(e.pointerId);
+            _anotSaveHistory();
+            _anotDrawing = true;
+            _anotCtx.globalAlpha = 0.35;
+            _anotCtx.strokeStyle = _anotColor;
+            _anotCtx.lineWidth   = _anotSize;
+            _anotCtx.lineCap     = 'round';
+            _anotCtx.lineJoin    = 'round';
+            _anotCtx.beginPath();
+            const p = _anotPos(e);
+            _anotCtx.moveTo(p.x, p.y);
+        };
+        _anotCanvas.onpointermove = function(e) {
+            if (!_anotDrawing) return;
+            e.preventDefault();
+            const p = _anotPos(e);
+            _anotCtx.lineTo(p.x, p.y);
+            _anotCtx.stroke();
+            _anotCtx.beginPath();
+            _anotCtx.moveTo(p.x, p.y);
+        };
+        _anotCanvas.onpointerup = _anotCanvas.onpointercancel = function(e) {
+            if (!_anotDrawing) return;
+            _anotDrawing = false;
+            _anotCtx.globalAlpha = 1;
+        };
+    }
+
+    window.setAnotColor = function(color, btn) {
+        _anotColor = color;
+        document.querySelectorAll('.anot-cbtn').forEach(b => b.style.borderColor = 'transparent');
+        if (btn) btn.style.borderColor = '#fff';
+    };
+
+    window.setAnotSize = function(size) {
+        _anotSize = size;
+    };
+
+    window.deshacerAnotacion = function() {
+        if (_anotHistory.length > 1) {
+            _anotHistory.pop();
+            _anotCtx.putImageData(_anotHistory[_anotHistory.length - 1], 0, 0);
+        }
+    };
+
+    window.limpiarAnotacion = function() {
+        _anotCtx.clearRect(0, 0, _anotCanvas.width, _anotCanvas.height);
+        _anotCtx.drawImage(_anotBaseImg, 0, 0, _anotCanvas.width, _anotCanvas.height);
+        _anotHistory = [];
+        _anotSaveHistory();
+    };
+
+    window.cancelarAnotacion = function() {
+        document.getElementById('mod-r3d-anotacion').style.display = 'none';
+    };
+
+    window.usarAnotacion = function() {
+        // Composite the annotation onto the reference: draw base at full opacity then overlay annotation
+        const offscreen = document.createElement('canvas');
+        offscreen.width  = _anotCanvas.width;
+        offscreen.height = _anotCanvas.height;
+        const octx = offscreen.getContext('2d');
+        // Base image
+        octx.drawImage(_anotBaseImg, 0, 0, offscreen.width, offscreen.height);
+        // Annotation layer at 50% (readable by AI but not overpowering)
+        octx.globalAlpha = 0.5;
+        octx.drawImage(_anotCanvas, 0, 0);
+        octx.globalAlpha = 1;
+
+        const dataUrl = offscreen.toDataURL('image/jpeg', 0.92);
+        _r3dRefBase64 = dataUrl.split(',')[1];
+        _r3dRefMime   = 'image/jpeg';
+        _r3dRefAnnotated = true;
+        document.getElementById('r3d-ref-img').src = dataUrl;
+        document.getElementById('r3d-ref-preview').style.display = 'block';
+        document.getElementById('r3d-ref-placeholder').style.display = 'none';
+        document.getElementById('mod-r3d-anotacion').style.display = 'none';
+    };
 
     var _r3dUnit = 'm'; // 'm' o 'cm'
 
@@ -2715,11 +2948,28 @@ EJEMPLO VÁLIDO:
             return `${d.nombre||'Parte'}: ${parts.join(' × ')}`;
         }).join('; ');
 
+        const hasRef = !!_r3dRefBase64;
+        const hasVol = !!_r3dVolBase64;
+
+        let imgGuide = '';
+        if (hasRef && hasVol) {
+            imgGuide = `INSTRUCCIÓN DE IMÁGENES:
+IMAGEN 1 — REFERENCIA DEL CLIENTE: usá esta imagen para el estilo, branding, colores y forma general.${_r3dRefAnnotated ? ' La zona resaltada indica el elemento específico a renderizar.' : ''}
+IMAGEN 2 — VOLUMETRÍA / PLANO CON MEDIDAS: usá esta imagen para las dimensiones y proporciones exactas. Las medidas del plano prevalecen sobre cualquier otra indicación dimensional.`;
+        } else if (hasRef) {
+            imgGuide = `INSTRUCCIÓN DE IMAGEN:
+REFERENCIA DEL CLIENTE: respetá exactamente el estilo, colores, proporciones y forma que aparecen en la imagen.${_r3dRefAnnotated ? ' Concentrá el render en la zona resaltada/marcada de la imagen — esa es la parte que quiero renderizar.' : ''}`;
+        } else if (hasVol) {
+            imgGuide = `INSTRUCCIÓN DE IMAGEN:
+VOLUMETRÍA / PLANO CON MEDIDAS: respetá estrictamente las dimensiones y proporciones indicadas en el plano. Las cotas del plano son las medidas reales del objeto.`;
+        }
+
         let prompt = `AXONOMETRÍA TÉCNICA PROFESIONAL — estilo CAD industrial.
 Fondo blanco liso. Perspectiva isométrica a 30°. Líneas de cotas en metros con flechas de acotación. Etiquetas de materiales con líneas de referencia. Sin sombras dramáticas. Colores neutros y realistas.
-IMPORTANTE: Dibujá SOLO lo que se describe aquí. No inventes vistas adicionales, dimensiones extra, ni elementos no solicitados. Si hay imagen de referencia, respetá exactamente sus proporciones y forma.
+IMPORTANTE: Dibujá SOLO lo que se describe aquí. No inventes vistas adicionales, dimensiones extra, ni elementos no solicitados.`;
 
-Objeto: ${desc}`;
+        if (imgGuide) prompt += `\n\n${imgGuide}`;
+        prompt += `\n\nObjeto: ${desc}`;
 
         const elems = _r3dElements.filter(e => e.nombre || e.mat || e.est || e.acab);
         if (elems.length > 1) {
@@ -2801,6 +3051,9 @@ Objeto: ${desc}`;
             const body = { generateImage: true, prompt };
             if (_r3dRefBase64) {
                 body.referenceImage = { data: _r3dRefBase64, mimeType: _r3dRefMime };
+            }
+            if (_r3dVolBase64) {
+                body.volumetryImage = { data: _r3dVolBase64, mimeType: _r3dVolMime };
             }
 
             // Usamos Web Worker para que el fetch no congele el browser
