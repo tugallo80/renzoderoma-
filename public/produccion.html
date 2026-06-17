@@ -4117,6 +4117,37 @@ window.actualizarPreciosBDProd = async function() {
                 sinPrecio++;
                 resLines.push(`🔍 ${mat.
     </script>
+    <!-- Barra de acciones mobile (fija en la parte inferior) -->
+    <div id="mobile-action-bar">
+        <button class="m-act-btn admin-only orange" onclick="abrirModalExport()">
+            <i class="ph-bold ph-file-pdf"></i>Exportar
+        </button>
+        <button class="m-act-btn admin-only purple" onclick="abrirIAScanGlobal()">
+            <i class="ph-bold ph-scan"></i>IA Scan
+        </button>
+        <button class="m-act-btn admin-only" onclick="generarProcesoConIA()" style="color:var(--orange);">
+            <i class="ph-bold ph-magic-wand"></i>Proceso IA
+        </button>
+        <button class="m-act-btn admin-only purple" onclick="abrirSelectorFichaIA()">
+            <i class="ph-bold ph-file-doc"></i>Ficha IA
+        </button>
+        <button class="m-act-btn admin-only green" onclick="actualizarPreciosBDProd()">
+            <i class="ph-bold ph-database"></i>Precios
+        </button>
+    </div>
+    <script>
+    (function() {
+        function checkMobile() {
+            if (window.innerWidth <= 640) {
+                document.body.setAttribute('data-view', 'mobile');
+            } else {
+                document.body.removeAttribute('data-view');
+            }
+        }
+        checkMobile();
+        window.addEventListener('resize', checkMobile);
+    })();
+    </script>
 <script src="/paste-image.js"></script>
 </body>
 </html>
