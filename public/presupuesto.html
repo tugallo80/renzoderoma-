@@ -2467,10 +2467,18 @@ EJEMPLO VÁLIDO:
         <i class="ph-bold ph-caret-left"></i> Cancelar
       </button>
       <span style="color:#fff;font-size:.85rem;font-weight:700;white-space:nowrap;flex:1;text-align:center;">Marcar zona para la IA</span>
-      <button onclick="usarAnotacion()"
-        style="background:#ffd60a;color:#1a1200;border:none;border-radius:10px;padding:9px 18px;font-size:.9rem;font-weight:800;cursor:pointer;flex-shrink:0;white-space:nowrap;">
-        Usar ✓
-      </button>
+      <div style="display:flex;gap:6px;flex-shrink:0;">
+        <button onclick="recortarAnotacion()"
+          style="background:#ffd60a;color:#1a1200;border:none;border-radius:10px;padding:9px 14px;font-size:.82rem;font-weight:800;cursor:pointer;white-space:nowrap;"
+          title="Recorta la imagen al área marcada — la IA solo ve ese elemento">
+          ✂️ Recortar
+        </button>
+        <button onclick="usarConMarca()"
+          style="background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.3);border-radius:10px;padding:9px 14px;font-size:.82rem;font-weight:700;cursor:pointer;white-space:nowrap;"
+          title="Envía la imagen completa con la zona resaltada">
+          🖌️ Con marca
+        </button>
+      </div>
     </div>
     <div style="display:flex;align-items:center;gap:8px;padding:8px 12px 10px;border-top:1px solid #2c2c2e;overflow-x:auto;">
       <div style="display:flex;gap:5px;flex-shrink:0;">
@@ -2495,7 +2503,7 @@ EJEMPLO VÁLIDO:
       </div>
     </div>
     <div style="padding:4px 12px 8px;color:#888;font-size:.72rem;">
-      Dibujá con tu dedo o el mouse sobre la zona que querés renderizar. La marca será semi-transparente para que la IA entienda el contorno.
+      Dibujá sobre la zona que querés renderizar. <b style="color:#ffd60a;">✂️ Recortar</b> → envía solo esa parte (la IA no ve nada más). <b style="color:#aaa;">🖌️ Con marca</b> → envía la imagen completa con el resaltado.
     </div>
   </div>
   <div style="flex:1;overflow:hidden;position:relative;display:flex;align-items:center;justify-content:center;background:#111;">
@@ -2571,7 +2579,8 @@ EJEMPLO VÁLIDO:
     var _r3dElements  = [];   // [{nombre,mat,est,acab}]
     var _r3dRefBase64 = null;
     var _r3dRefMime   = 'image/jpeg';
-    var _r3dRefAnnotated = false; // true when ref has freehand annotations
+    var _r3dRefAnnotated = false; // true when ref has freehand highlight marks
+    var _r3dRefCropped   = false; // true when ref was auto-cropped to marked zone
     var _r3dVolBase64 = null;
     var _r3dVolMime   = 'image/jpeg';
     var _r3dRenderDataUrl = null;
@@ -2582,6 +2591,7 @@ EJEMPLO VÁLIDO:
         _r3dElements = [{ nombre: '', mat: '', est: '', acab: '' }];
         _r3dRefBase64 = null;
         _r3dRefAnnotated = false;
+        _r3dRefCropped   = false;
         _r3dVolBase64 = null;
         _r3dRenderDataUrl = null;
         limpiarR3dRef();
@@ -2622,6 +2632,7 @@ EJEMPLO VÁLIDO:
     window.limpiarR3dRef = function() {
         _r3dRefBase64 = null;
         _r3dRefAnnotated = false;
+        _r3dRefCropped   = false;
         document.getElementById('r3d-ref-img').src = '';
         document.getElementById('r3d-ref-preview').style.display = 'none';
         document.getElementById('r3d-ref-placeholder').style.display = 'block';
@@ -2690,15 +2701,19 @@ EJEMPLO VÁLIDO:
     });
 
     // ──────────────────────────────────────────────────────────────
-    //  ANOTACIÓN DE REFERENCIA — canvas de trazado libre (highlighter)
+    //  ANOTACIÓN DE REFERENCIA — dos canvas: display + overlay
+    //  El overlay almacena solo los trazos (full opacity).
+    //  El display muestra base + overlay al 50% — sin acumulación.
     // ──────────────────────────────────────────────────────────────
-    var _anotCanvas = null;
-    var _anotCtx    = null;
+    var _anotCanvas  = null; // canvas visible (preview)
+    var _anotCtx     = null;
+    var _anotOverlay = null; // canvas oculto — solo trazos, opacidad 100%
+    var _anotOvCtx   = null;
     var _anotDrawing = false;
-    var _anotColor  = '#ffd60a';
-    var _anotSize   = 24;
-    var _anotHistory = []; // array of ImageData snapshots for undo
-    var _anotBaseImg = null; // HTMLImageElement of the reference
+    var _anotColor   = '#ffd60a';
+    var _anotSize    = 24;
+    var _anotHistory = []; // ImageData snapshots del overlay para undo
+    var _anotBaseImg = null;
 
     window.abrirAnotacionReferencia = function(e) {
         if (e) { e.stopPropagation(); e.preventDefault(); }
@@ -2707,72 +2722,95 @@ EJEMPLO VÁLIDO:
             alert('Primero cargá una imagen de referencia.');
             return;
         }
-        const modal = document.getElementById('mod-r3d-anotacion');
-        modal.style.display = 'flex';
+        document.getElementById('mod-r3d-anotacion').style.display = 'flex';
 
         _anotBaseImg = new Image();
         _anotBaseImg.crossOrigin = 'anonymous';
         _anotBaseImg.onload = function() {
-            _anotCanvas = document.getElementById('anot-canvas');
+            _anotCanvas  = document.getElementById('anot-canvas');
             const container = _anotCanvas.parentElement;
             const maxW = container.clientWidth;
             const maxH = container.clientHeight;
             const scale = Math.min(maxW / _anotBaseImg.naturalWidth, maxH / _anotBaseImg.naturalHeight, 1);
-            _anotCanvas.width  = Math.round(_anotBaseImg.naturalWidth  * scale);
-            _anotCanvas.height = Math.round(_anotBaseImg.naturalHeight * scale);
+            const W = Math.round(_anotBaseImg.naturalWidth  * scale);
+            const H = Math.round(_anotBaseImg.naturalHeight * scale);
+
+            _anotCanvas.width  = W;
+            _anotCanvas.height = H;
             _anotCtx = _anotCanvas.getContext('2d');
-            _anotCtx.drawImage(_anotBaseImg, 0, 0, _anotCanvas.width, _anotCanvas.height);
+
+            // Overlay canvas (hidden — strokes only)
+            _anotOverlay = document.createElement('canvas');
+            _anotOverlay.width  = W;
+            _anotOverlay.height = H;
+            _anotOvCtx = _anotOverlay.getContext('2d');
+
             _anotHistory = [];
             _anotSaveHistory();
+            _anotRefreshDisplay();
             _anotBindEvents();
         };
         _anotBaseImg.src = refImg.src;
     };
 
+    function _anotRefreshDisplay() {
+        // Draw base image, then overlay at 50% — no accumulation
+        _anotCtx.clearRect(0, 0, _anotCanvas.width, _anotCanvas.height);
+        _anotCtx.globalAlpha = 1;
+        _anotCtx.drawImage(_anotBaseImg, 0, 0, _anotCanvas.width, _anotCanvas.height);
+        _anotCtx.globalAlpha = 0.5;
+        _anotCtx.drawImage(_anotOverlay, 0, 0);
+        _anotCtx.globalAlpha = 1;
+    }
+
     function _anotPos(e) {
         const r = _anotCanvas.getBoundingClientRect();
         const scaleX = _anotCanvas.width  / r.width;
         const scaleY = _anotCanvas.height / r.height;
-        const touch = e.touches ? e.touches[0] : e;
-        return {
-            x: (touch.clientX - r.left) * scaleX,
-            y: (touch.clientY - r.top)  * scaleY
-        };
+        const src = e.touches ? e.touches[0] : e;
+        return { x: (src.clientX - r.left) * scaleX, y: (src.clientY - r.top) * scaleY };
     }
 
     function _anotSaveHistory() {
-        if (_anotHistory.length > 30) _anotHistory.shift();
-        _anotHistory.push(_anotCtx.getImageData(0, 0, _anotCanvas.width, _anotCanvas.height));
+        if (_anotHistory.length > 40) _anotHistory.shift();
+        // Snapshot only the overlay
+        _anotHistory.push(_anotOvCtx
+            ? _anotOvCtx.getImageData(0, 0, _anotOverlay.width, _anotOverlay.height)
+            : null);
     }
 
     function _anotBindEvents() {
+        var lastP = null;
         _anotCanvas.onpointerdown = function(e) {
             e.preventDefault();
             _anotCanvas.setPointerCapture(e.pointerId);
             _anotSaveHistory();
             _anotDrawing = true;
-            _anotCtx.globalAlpha = 0.55;
-            _anotCtx.strokeStyle = _anotColor;
-            _anotCtx.lineWidth   = _anotSize;
-            _anotCtx.lineCap     = 'round';
-            _anotCtx.lineJoin    = 'round';
-            _anotCtx.beginPath();
-            const p = _anotPos(e);
-            _anotCtx.moveTo(p.x, p.y);
+            lastP = _anotPos(e);
+            _anotOvCtx.strokeStyle = _anotColor;
+            _anotOvCtx.lineWidth   = _anotSize;
+            _anotOvCtx.lineCap     = 'round';
+            _anotOvCtx.lineJoin    = 'round';
+            _anotOvCtx.globalAlpha = 1;
+            _anotOvCtx.beginPath();
+            _anotOvCtx.moveTo(lastP.x, lastP.y);
         };
         _anotCanvas.onpointermove = function(e) {
             if (!_anotDrawing) return;
             e.preventDefault();
             const p = _anotPos(e);
-            _anotCtx.lineTo(p.x, p.y);
-            _anotCtx.stroke();
-            _anotCtx.beginPath();
-            _anotCtx.moveTo(p.x, p.y);
+            _anotOvCtx.lineTo(p.x, p.y);
+            _anotOvCtx.stroke();
+            _anotOvCtx.beginPath();
+            _anotOvCtx.moveTo(p.x, p.y);
+            lastP = p;
+            _anotRefreshDisplay();
         };
-        _anotCanvas.onpointerup = _anotCanvas.onpointercancel = function(e) {
+        _anotCanvas.onpointerup = _anotCanvas.onpointercancel = function() {
             if (!_anotDrawing) return;
             _anotDrawing = false;
-            _anotCtx.globalAlpha = 1;
+            _anotOvCtx.closePath();
+            _anotRefreshDisplay();
         };
     }
 
@@ -2782,32 +2820,91 @@ EJEMPLO VÁLIDO:
         if (btn) btn.style.borderColor = '#fff';
     };
 
-    window.setAnotSize = function(size) {
-        _anotSize = size;
-    };
+    window.setAnotSize = function(size) { _anotSize = size; };
 
     window.deshacerAnotacion = function() {
         if (_anotHistory.length > 1) {
             _anotHistory.pop();
-            _anotCtx.putImageData(_anotHistory[_anotHistory.length - 1], 0, 0);
+            const snap = _anotHistory[_anotHistory.length - 1];
+            _anotOvCtx.clearRect(0, 0, _anotOverlay.width, _anotOverlay.height);
+            if (snap) _anotOvCtx.putImageData(snap, 0, 0);
+            _anotRefreshDisplay();
         }
     };
 
     window.limpiarAnotacion = function() {
-        _anotCtx.clearRect(0, 0, _anotCanvas.width, _anotCanvas.height);
-        _anotCtx.drawImage(_anotBaseImg, 0, 0, _anotCanvas.width, _anotCanvas.height);
+        _anotOvCtx.clearRect(0, 0, _anotOverlay.width, _anotOverlay.height);
         _anotHistory = [];
         _anotSaveHistory();
+        _anotRefreshDisplay();
     };
 
     window.cancelarAnotacion = function() {
         document.getElementById('mod-r3d-anotacion').style.display = 'none';
     };
 
-    window.usarAnotacion = function() {
-        // Export the canvas directly — base image + semi-transparent strokes as drawn.
-        // Re-compositing would reduce stroke visibility further; export as-is.
-        const dataUrl = _anotCanvas.toDataURL('image/jpeg', 0.93);
+    // Recortar: detecta bounding box de los trazos y envía solo ese recorte
+    window.recortarAnotacion = function() {
+        const data = _anotOvCtx.getImageData(0, 0, _anotOverlay.width, _anotOverlay.height);
+        const px = data.data;
+        let minX = _anotOverlay.width, minY = _anotOverlay.height, maxX = 0, maxY = 0;
+        let found = false;
+        for (let y = 0; y < _anotOverlay.height; y++) {
+            for (let x = 0; x < _anotOverlay.width; x++) {
+                const a = px[(y * _anotOverlay.width + x) * 4 + 3];
+                if (a > 20) {
+                    if (x < minX) minX = x; if (x > maxX) maxX = x;
+                    if (y < minY) minY = y; if (y > maxY) maxY = y;
+                    found = true;
+                }
+            }
+        }
+        if (!found) { alert('Dibujá primero la zona que querés recortar.'); return; }
+
+        // Add 8% padding
+        const pad = Math.round(Math.max(_anotOverlay.width, _anotOverlay.height) * 0.08);
+        minX = Math.max(0, minX - pad);
+        minY = Math.max(0, minY - pad);
+        maxX = Math.min(_anotOverlay.width  - 1, maxX + pad);
+        maxY = Math.min(_anotOverlay.height - 1, maxY + pad);
+        const cropW = maxX - minX;
+        const cropH = maxY - minY;
+
+        const crop = document.createElement('canvas');
+        crop.width  = cropW;
+        crop.height = cropH;
+        const cCtx = crop.getContext('2d');
+        cCtx.drawImage(_anotBaseImg,
+            Math.round(minX / (_anotCanvas.width  / _anotBaseImg.naturalWidth)),
+            Math.round(minY / (_anotCanvas.height / _anotBaseImg.naturalHeight)),
+            Math.round(cropW / (_anotCanvas.width  / _anotBaseImg.naturalWidth)),
+            Math.round(cropH / (_anotCanvas.height / _anotBaseImg.naturalHeight)),
+            0, 0, cropW, cropH
+        );
+
+        const dataUrl = crop.toDataURL('image/jpeg', 0.95);
+        _r3dRefBase64 = dataUrl.split(',')[1];
+        _r3dRefMime   = 'image/jpeg';
+        _r3dRefAnnotated = false;
+        _r3dRefCropped   = true; // image is ONLY the element — no annotation marks needed
+        document.getElementById('r3d-ref-img').src = dataUrl;
+        document.getElementById('r3d-ref-preview').style.display = 'block';
+        document.getElementById('r3d-ref-placeholder').style.display = 'none';
+        document.getElementById('mod-r3d-anotacion').style.display = 'none';
+    };
+
+    // Con marca: envía imagen completa con el overlay al 50% visible
+    window.usarConMarca = function() {
+        const out = document.createElement('canvas');
+        out.width  = _anotCanvas.width;
+        out.height = _anotCanvas.height;
+        const oCtx = out.getContext('2d');
+        oCtx.drawImage(_anotBaseImg, 0, 0, out.width, out.height);
+        oCtx.globalAlpha = 0.5;
+        oCtx.drawImage(_anotOverlay, 0, 0);
+        oCtx.globalAlpha = 1;
+
+        const dataUrl = out.toDataURL('image/jpeg', 0.93);
         _r3dRefBase64 = dataUrl.split(',')[1];
         _r3dRefMime   = 'image/jpeg';
         _r3dRefAnnotated = true;
@@ -2946,14 +3043,20 @@ EJEMPLO VÁLIDO:
         // ── Image instructions ─────────────────────────────────────────────
         let imgGuide = '';
         if (hasRef && hasVol) {
+            let refNote = '';
+            if (_r3dRefCropped)   refNote = '\n  ⚠️ Esta imagen es un RECORTE del elemento específico a renderizar. Reproducilo tal cual aparece.';
+            else if (_r3dRefAnnotated) refNote = '\n  ⚠️ ZONA MARCADA: los trazos de color semitransparente indican el ELEMENTO ESPECÍFICO a renderizar. Ignorá el resto de la imagen.';
             imgGuide = `INSTRUCCIÓN DE IMÁGENES (son 2 imágenes adjuntas):
-IMAGEN 1 — REFERENCIA DEL CLIENTE: aplicá su branding, colores, tipografía y estilo visual en TODAS las caras visibles del objeto.${_r3dRefAnnotated ? '\n  ⚠️ ZONA MARCADA: los trazos de color semitransparente en la referencia indican el ELEMENTO ESPECÍFICO a renderizar. Enfocate exclusivamente en ese componente marcado, ignorando el resto de la imagen.' : ''}
+IMAGEN 1 — REFERENCIA DEL CLIENTE: aplicá su branding, colores, tipografía y estilo visual en TODAS las caras visibles del objeto.${refNote}
 IMAGEN 2 — VOLUMETRÍA / PLANO CON MEDIDAS: las dimensiones y proporciones del plano son las REALES. Prevalecen sobre cualquier otra indicación dimensional.`;
         } else if (hasRef) {
-            if (_r3dRefAnnotated) {
+            if (_r3dRefCropped) {
+                imgGuide = `INSTRUCCIÓN DE IMAGEN:
+REFERENCIA RECORTADA: La imagen adjunta contiene ÚNICAMENTE el elemento/componente a renderizar. Reproducí ese objeto en 3D respetando su forma, proporciones, branding y colores exactos. Aplicá el estilo visual en todas las caras visibles.`;
+            } else if (_r3dRefAnnotated) {
                 imgGuide = `INSTRUCCIÓN DE IMAGEN:
 REFERENCIA CON ZONA MARCADA: La imagen adjunta tiene trazos de color semitransparente que delimitan la ZONA/ELEMENTO ESPECÍFICO a renderizar.
-⚠️ REGLA CRÍTICA: renderizá ÚNICAMENTE el objeto o componente que está dentro de la zona marcada. Tomá su forma, proporciones y estilo de esa zona. El resto de la imagen es contexto — no lo copies.
+⚠️ REGLA CRÍTICA: renderizá ÚNICAMENTE el objeto dentro de la zona marcada. Tomá su forma, proporciones y estilo de esa zona. El resto de la imagen es contexto — no lo copies.
 Aplicá el branding/colores de la referencia en todas las caras del objeto renderizado.`;
             } else {
                 imgGuide = `INSTRUCCIÓN DE IMAGEN:
