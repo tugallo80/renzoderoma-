@@ -1171,7 +1171,7 @@
                 </div>
                 <div style="margin-bottom:12px;">${proyHtml}</div>
                 <button class="btn-action btn-outline" style="font-size:11px;width:100%;border-color:var(--purple);color:var(--purple);"
-                    onclick='exportarPlanillaSupPDF(${JSON.stringify(nombre)}, ${JSON.stringify(supDataForExport)})'>
+                    onclick='exportarPlanillaSupPDF(${JSON.stringify(nombre)}, ${JSON.stringify(supDataForExport)}).catch(e => alert("Error PDF: " + e.message))'>
                     <i class="ph-bold ph-file-pdf"></i> Exportar PDF Supervisor
                 </button>
             </div>`;
@@ -1179,7 +1179,7 @@
     }
 
     // ── Export PDF Planilla Supervisor ──────────────────────────────────────
-    function exportarPlanillaSupPDF(nombre, data) {
+    async function exportarPlanillaSupPDF(nombre, data) {
         try {
             const { jsPDF } = window.jspdf;
             const doc = new jsPDF();
@@ -1203,7 +1203,7 @@
                 ['Extras aprobados', fM(data.totalExt) + ' Bs'],
                 ['Total a cobrar', fM(totalContMasExt) + ' Bs'],
                 ['Abonado (Admin/Compras)', '-' + fM(data.totalPagado) + ' Bs'],
-                ['Depósitos (Supervisor)', '-' + fM(data.totalDep||0) + ' Bs'],
+                ['Depositos (Supervisor)', '-' + fM(data.totalDep||0) + ' Bs'],
                 ['Gastos obra (Supervisor)', '+' + fM(data.totalGas||0) + ' Bs'],
                 ['SALDO PENDIENTE', fM(saldo) + ' Bs'],
             ];
@@ -1216,7 +1216,7 @@
             });
             y = doc.lastAutoTable.finalY + 12;
 
-            // Detalle por proyecto
+            // Detalle por proyecto — sin emojis (jsPDF no los soporta)
             Object.entries(data.proyResumen || {}).forEach(([pid, proy]) => {
                 if (y > 250) { doc.addPage(); y = 15; }
                 doc.setFontSize(11); doc.setFont(undefined,'bold'); doc.setTextColor(0,122,255);
@@ -1224,14 +1224,14 @@
                 doc.setTextColor(0); doc.setFont(undefined,'normal'); doc.setFontSize(9);
 
                 const detRows = [];
-                (proy.pagos||[]).forEach(p     => detRows.push(['✅ Abono (Admin)', p.descripcion||'Abono', p.fecha||'', '-'+fM(p.monto)+' Bs']));
-                (proy.depositos||[]).forEach(d => detRows.push(['💵 Depósito (Sup)', d.descripcion||'Depósito', d.fecha||'', '-'+fM(d.monto)+' Bs']));
-                (proy.gastos||[]).forEach(g    => detRows.push(['🧾 Gasto obra (Sup)', g.descripcion||'Gasto', g.fecha||'', '+'+fM(g.monto)+' Bs']));
-                (proy.extras||[]).forEach(e    => detRows.push(['➕ Extra', e.descripcion||'Extra', e.fecha||'', '+'+fM(e.monto)+' Bs']));
+                (proy.pagos||[]).forEach(p     => detRows.push(['Abono Admin',   p.descripcion||'Abono',   p.fecha||'', '-'+fM(p.monto)+' Bs']));
+                (proy.depositos||[]).forEach(d => detRows.push(['Deposito Sup',  d.descripcion||'Deposito', d.fecha||'', '-'+fM(d.monto)+' Bs']));
+                (proy.gastos||[]).forEach(g    => detRows.push(['Gasto obra',    g.descripcion||'Gasto',    g.fecha||'', '+'+fM(g.monto)+' Bs']));
+                (proy.extras||[]).forEach(e    => detRows.push(['Extra',         e.descripcion||'Extra',    e.fecha||'', '+'+fM(e.monto)+' Bs']));
 
                 if (detRows.length > 0) {
                     doc.autoTable({
-                        startY: y, head:[['Tipo','Descripción','Fecha','Monto']],
+                        startY: y, head:[['Tipo','Descripcion','Fecha','Monto']],
                         body: detRows, theme:'striped',
                         styles: { fontSize:8, cellPadding:2 },
                         headStyles: { fillColor:[100,100,100] },
@@ -1243,6 +1243,47 @@
                 doc.setFont(undefined,'bold');
                 doc.text('Saldo proyecto: ' + fM(saldoProy) + ' Bs', 14, y); y += 10;
             });
+
+            // Anexo: comprobantes fotográficos
+            const allFotos = [];
+            Object.entries(data.proyResumen || {}).forEach(([pid, proy]) => {
+                (proy.depositos||[]).forEach(d => { if (d.fotoUrl) allFotos.push({ tipo: 'Deposito', desc: d.descripcion||'', fecha: d.fecha||'', url: d.fotoUrl }); });
+                (proy.gastos||[]).forEach(g    => { if (g.fotoUrl) allFotos.push({ tipo: 'Gasto',    desc: g.descripcion||'', fecha: g.fecha||'', url: g.fotoUrl }); });
+            });
+
+            if (allFotos.length > 0) {
+                doc.addPage(); y = 28;
+                doc.setFillColor(88, 86, 214);
+                doc.roundedRect(10, 8, 190, 14, 3, 3, 'F');
+                doc.setTextColor(255,255,255); doc.setFontSize(11); doc.setFont(undefined,'bold');
+                doc.text('Anexo: Comprobantes fotograficos (' + allFotos.length + ')', 15, 17);
+                doc.setTextColor(0);
+
+                for (const foto of allFotos) {
+                    try {
+                        const resp = await fetch(foto.url);
+                        const blob = await resp.blob();
+                        const b64 = await new Promise(res => { const fr = new FileReader(); fr.onload = e => res(e.target.result); fr.readAsDataURL(blob); });
+
+                        if (y > 220) { doc.addPage(); y = 15; }
+
+                        doc.setFontSize(9); doc.setFont(undefined,'bold'); doc.setTextColor(0);
+                        doc.text(foto.tipo + ': ' + foto.desc + (foto.fecha ? '  (' + foto.fecha + ')' : ''), 14, y); y += 5;
+
+                        const img = new Image();
+                        await new Promise(res => { img.onload = res; img.src = b64; });
+                        const maxW = 182, maxH = 95;
+                        const ratio = img.width > 0 ? img.height / img.width : 1;
+                        let w = maxW, h = maxW * ratio;
+                        if (h > maxH) { h = maxH; w = maxH / ratio; }
+                        doc.addImage(b64, 'JPEG', 14, y, w, h);
+                        y += h + 10;
+                    } catch(imgErr) {
+                        doc.setFontSize(8); doc.setFont(undefined,'italic'); doc.setTextColor(150);
+                        doc.text('No se pudo cargar comprobante: ' + foto.desc, 14, y); y += 7;
+                    }
+                }
+            }
 
             doc.setTextColor(150); doc.setFontSize(7); doc.setFont(undefined,'normal');
             doc.text('Rubik OS - rubikbolivia.com', 14, 288);
