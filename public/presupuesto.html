@@ -2364,7 +2364,7 @@ EJEMPLO VÁLIDO:
             </div>
             <button onclick="limpiarR3dRef()" style="position:absolute;top:-8px;right:-8px;background:#e74c3c;color:#fff;border:none;border-radius:50%;width:22px;height:22px;cursor:pointer;font-size:.85rem;line-height:1;">&times;</button>
           </div>
-          <div id="r3d-ref-placeholder"><i class="ph-bold ph-image" style="font-size:1.6rem;color:#aaa;"></i><br><span style="font-size:.8rem;color:#aaa;">Referencia del cliente (estilo/branding)</span></div>
+          <div id="r3d-ref-placeholder"><i class="ph-bold ph-image" style="font-size:1.6rem;color:#aaa;"></i><br><span style="font-size:.8rem;color:#aaa;">Referencia del cliente (estilo/branding)</span><br><button onclick="pasteR3dRef(event)" style="position:relative;z-index:2;margin-top:6px;padding:3px 11px;background:rgba(0,0,0,0.05);border:1px solid #ccc;border-radius:6px;font-size:.73rem;cursor:pointer;color:#666;"><i class="ph-bold ph-clipboard"></i> Pegar imagen</button></div>
         </div>
       </div>
 
@@ -2378,7 +2378,7 @@ EJEMPLO VÁLIDO:
             <div style="font-size:.7rem;color:#888;text-align:center;margin-top:4px;">Plano con dimensiones exactas</div>
             <button onclick="limpiarR3dVol()" style="position:absolute;top:-8px;right:-8px;background:#e74c3c;color:#fff;border:none;border-radius:50%;width:22px;height:22px;cursor:pointer;font-size:.85rem;line-height:1;">&times;</button>
           </div>
-          <div id="r3d-vol-placeholder"><i class="ph-bold ph-ruler" style="font-size:1.5rem;color:#aaa;"></i><br><span style="font-size:.8rem;color:#aaa;">Plano o volumetría con medidas</span></div>
+          <div id="r3d-vol-placeholder"><i class="ph-bold ph-ruler" style="font-size:1.5rem;color:#aaa;"></i><br><span style="font-size:.8rem;color:#aaa;">Plano o volumetría con medidas</span><br><button onclick="pasteR3dVol(event)" style="position:relative;z-index:2;margin-top:6px;padding:3px 11px;background:rgba(0,0,0,0.05);border:1px solid #ccc;border-radius:6px;font-size:.73rem;cursor:pointer;color:#666;"><i class="ph-bold ph-clipboard"></i> Pegar imagen</button></div>
         </div>
       </div>
 
@@ -2688,27 +2688,48 @@ EJEMPLO VÁLIDO:
         document.getElementById('r3d-preview-img').src = dataUrl;
     };
 
-    // Paste image into reference drop zone
-    document.addEventListener('paste', function(e) {
-        if (document.getElementById('mod-render3d').style.display === 'none') return;
-        const items = e.clipboardData && e.clipboardData.items;
-        if (!items) return;
-        for (let i = 0; i < items.length; i++) {
-            if (items[i].type.startsWith('image/')) {
-                const file = items[i].getAsFile();
-                const reader = new FileReader();
-                reader.onload = function(ev) {
-                    _r3dRefBase64 = ev.target.result.split(',')[1];
-                    _r3dRefMime   = file.type || 'image/jpeg';
-                    document.getElementById('r3d-ref-img').src = ev.target.result;
-                    document.getElementById('r3d-ref-preview').style.display = 'block';
-                    document.getElementById('r3d-ref-placeholder').style.display = 'none';
-                };
-                reader.readAsDataURL(file);
-                break;
+    // ── Paste helpers — un botón por slot, sin conflicto entre ranuras ──
+    async function _clipboardImage() {
+        try {
+            const items = await navigator.clipboard.read();
+            for (const item of items) {
+                const imgType = item.types.find(function(t){ return t.startsWith('image/'); });
+                if (imgType) {
+                    const blob = await item.getType(imgType);
+                    return await new Promise(function(resolve) {
+                        const reader = new FileReader();
+                        reader.onload = function(ev) { resolve({ dataUrl: ev.target.result, mime: blob.type || 'image/png' }); };
+                        reader.readAsDataURL(blob);
+                    });
+                }
             }
-        }
-    });
+        } catch(e) {}
+        return null;
+    }
+
+    window.pasteR3dRef = async function(e) {
+        e.preventDefault(); e.stopPropagation();
+        const r = await _clipboardImage();
+        if (!r) return alert('No hay imagen en el portapapeles.\nCopiá la imagen primero (Ctrl+C sobre ella).');
+        _r3dRefBase64 = r.dataUrl.split(',')[1];
+        _r3dRefMime   = r.mime;
+        _r3dRefAnnotated = false;
+        _r3dRefCropped   = false;
+        document.getElementById('r3d-ref-img').src = r.dataUrl;
+        document.getElementById('r3d-ref-preview').style.display = 'block';
+        document.getElementById('r3d-ref-placeholder').style.display = 'none';
+    };
+
+    window.pasteR3dVol = async function(e) {
+        e.preventDefault(); e.stopPropagation();
+        const r = await _clipboardImage();
+        if (!r) return alert('No hay imagen en el portapapeles.\nCopiá la imagen primero (Ctrl+C sobre ella).');
+        _r3dVolBase64 = r.dataUrl.split(',')[1];
+        _r3dVolMime   = r.mime;
+        document.getElementById('r3d-vol-img').src = r.dataUrl;
+        document.getElementById('r3d-vol-preview').style.display = 'block';
+        document.getElementById('r3d-vol-placeholder').style.display = 'none';
+    };
 
     // ──────────────────────────────────────────────────────────────
     //  ANOTACIÓN DE REFERENCIA — dos canvas: display + overlay
@@ -3150,7 +3171,8 @@ REFERENCIA CON ZONAS COLOREADAS POR ELEMENTO: La imagen tiene trazos semitranspa
             } else if (_r3dRefAnnotated) {
                 imgGuide = `INSTRUCCIÓN DE IMAGEN:
 REFERENCIA CON ZONA MARCADA: Los trazos de color en la imagen delimitan el ELEMENTO ESPECÍFICO a renderizar.
-⚠️ REGLA CRÍTICA: renderizá ÚNICAMENTE el objeto dentro de la zona marcada. El resto de la imagen es contexto — no lo copies.
+⚠️ REGLA CRÍTICA 1: renderizá ÚNICAMENTE el objeto dentro de la zona marcada. El resto de la imagen es contexto — no lo copies.
+⚠️ REGLA CRÍTICA 2: los trazos son SOLO delimitadores de zona — NO definen el color real del material. Usá los colores, texturas y branding descritos en texto.
 Aplicá el branding/colores de la referencia en todas las caras del objeto.`;
             } else {
                 imgGuide = `INSTRUCCIÓN DE IMAGEN:
@@ -3174,10 +3196,11 @@ IMPORTANTE: Dibujá SOLO lo que se describe aquí. No inventes vistas adicionale
         if (hasColorMap) {
             const colorNameMap = { '#ffd60a':'AMARILLA','#ff3b30':'ROJA','#30d158':'VERDE','#0a84ff':'AZUL' };
             prompt += '\n\nMAPEO DE COLORES EN LA IMAGEN DE REFERENCIA:';
+            prompt += '\n⚠️ REGLA CRÍTICA: los trazos de color son SOLO etiquetas para identificar zonas. NO representan el color real del material ni del acabado. El color, textura y branding de cada elemento vienen ÚNICAMENTE del texto descriptivo. Renderizá con los materiales y acabados descritos, ignorando completamente el tono del trazo.';
             coloredElems.forEach(function(el) {
                 const cn = colorNameMap[el.color] || el.color;
                 const label = el.nombre || ('Elemento ' + (elems.indexOf(el) + 1));
-                prompt += `\n- Zona ${cn} → ${label}`;
+                prompt += `\n- Zona marcada en ${cn} → ${label}`;
             });
             if (uncoloredElems.length) {
                 uncoloredElems.forEach(function(el) {
@@ -3185,7 +3208,7 @@ IMPORTANTE: Dibujá SOLO lo que se describe aquí. No inventes vistas adicionale
                     prompt += `\n- Sin zona marcada → ${label} (armalo según descripción, medidas y estilo general de la referencia)`;
                 });
             }
-            prompt += '\nPara cada zona coloreada, renderizá ÚNICAMENTE el componente correspondiente con sus materiales y acabados específicos.';
+            prompt += '\nPara cada zona coloreada, renderizá ÚNICAMENTE el componente correspondiente con sus materiales y acabados descritos en texto.';
         }
 
         // ── Elements ───────────────────────────────────────────────────────
