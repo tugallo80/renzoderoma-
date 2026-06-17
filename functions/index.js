@@ -142,11 +142,7 @@ exports.geminiProxy = onRequest(GEMINI_PROXY_OPTS, async (req, res) => {
             // ── 2. Gemini generateContent con responseModalities IMAGE ────────
             const geminiModels = [...new Set([
                 ...dynamicImageModels,
-                "gemini-2.0-flash-exp-image-generation",
-                "gemini-2.0-flash-image-generation",
-                "gemini-2.5-flash-exp-image-generation",
                 "gemini-2.5-flash-image-generation",
-                "gemini-2.5-pro-exp-image-generation",
                 "gemini-2.5-pro-image-generation",
             ])];
             for (const m of geminiModels) {
@@ -220,6 +216,15 @@ exports.geminiProxy = onRequest(GEMINI_PROXY_OPTS, async (req, res) => {
             }
 
             console.error("imagen-gen ALL FAILED:", errors.join(" | "));
+            // Si todos son 429 de créditos agotados, devolver mensaje claro
+            const creditsMsg = "prepayment credits are depleted";
+            const allCredits = errors.length > 0 && errors.every(e => e.includes("429") && e.includes(creditsMsg));
+            if (allCredits) {
+                return res.status(402).json({
+                    error: "Créditos de Google AI agotados",
+                    detalle: "Recargá créditos en aistudio.google.com/billing para continuar generando renders.",
+                });
+            }
             return res.status(500).json({ error: "Ningún modelo de imagen disponible.", detalle: errors.join(" | ") });
         }
 

@@ -3288,7 +3288,18 @@ En la esquina inferior derecha del render, dibujá un recuadro independiente rot
                 body: JSON.stringify(body)
             });
 
-            if (!workerResp.ok) throw new Error(`HTTP ${workerResp.status}: ${workerResp.text}`);
+            if (!workerResp.ok) {
+                let errMsg;
+                try {
+                    const errData = JSON.parse(workerResp.text);
+                    if (workerResp.status === 402 || (errData.error && errData.error.includes('Créditos'))) {
+                        errMsg = '⚠️ ' + errData.error + '\n\n' + (errData.detalle || '');
+                    } else {
+                        errMsg = errData.error || errData.detalle || workerResp.text;
+                    }
+                } catch(_) { errMsg = `HTTP ${workerResp.status}`; }
+                throw new Error(errMsg);
+            }
             const result = JSON.parse(workerResp.text);
             const imgUrl = result.imageUrl;
             if (!imgUrl) throw new Error(result.error || 'La IA no devolvió imagen. Detalle: ' + (result.detalle || ''));
