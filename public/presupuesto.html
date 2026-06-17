@@ -2505,6 +2505,9 @@ EJEMPLO VÁLIDO:
     <div style="padding:4px 12px 8px;color:#888;font-size:.72rem;">
       Dibujá sobre la zona que querés renderizar. <b style="color:#ffd60a;">✂️ Recortar</b> → envía solo esa parte (la IA no ve nada más). <b style="color:#aaa;">🖌️ Con marca</b> → envía la imagen completa con el resaltado.
     </div>
+    <div id="anot-legend" style="display:none;padding:6px 12px 8px;border-top:1px solid #2c2c2e;">
+      <!-- element-color legend populated dynamically -->
+    </div>
   </div>
   <div style="flex:1;overflow:hidden;position:relative;display:flex;align-items:center;justify-content:center;background:#111;">
     <canvas id="anot-canvas"
@@ -2576,7 +2579,7 @@ EJEMPLO VÁLIDO:
 <script>
 (function(){
     var _r3dDims      = [];
-    var _r3dElements  = [];   // [{nombre,mat,est,acab}]
+    var _r3dElements  = [];   // [{nombre,mat,est,acab,color}]
     var _r3dRefBase64 = null;
     var _r3dRefMime   = 'image/jpeg';
     var _r3dRefAnnotated = false; // true when ref has freehand highlight marks
@@ -2588,7 +2591,7 @@ EJEMPLO VÁLIDO:
     window.abrirModalRender3D = function() {
         document.getElementById('r3d-desc').value = '';
         _r3dDims = [];
-        _r3dElements = [{ nombre: '', mat: '', est: '', acab: '' }];
+        _r3dElements = [{ nombre: '', mat: '', est: '', acab: '', color: null }];
         _r3dRefBase64 = null;
         _r3dRefAnnotated = false;
         _r3dRefCropped   = false;
@@ -2723,6 +2726,7 @@ EJEMPLO VÁLIDO:
             return;
         }
         document.getElementById('mod-r3d-anotacion').style.display = 'flex';
+        _anotBuildLegend();
 
         _anotBaseImg = new Image();
         _anotBaseImg.crossOrigin = 'anonymous';
@@ -2752,6 +2756,36 @@ EJEMPLO VÁLIDO:
         };
         _anotBaseImg.src = refImg.src;
     };
+
+    function _anotBuildLegend() {
+        _syncElementos();
+        const legend = document.getElementById('anot-legend');
+        if (!legend) return;
+        const colored = _r3dElements.filter(e => e.color);
+        const uncolored = _r3dElements.filter(e => !e.color && (e.nombre || e.mat));
+        if (!colored.length && _r3dElements.length <= 1) {
+            legend.style.display = 'none';
+            return;
+        }
+        let html = '<div style="font-size:.72rem;color:#aaa;margin-bottom:4px;">Colores asignados por elemento:</div>';
+        html += '<div style="display:flex;flex-wrap:wrap;gap:6px;">';
+        colored.forEach(function(el, _) {
+            const name = el.nombre || ('Elemento ' + (_r3dElements.indexOf(el) + 1));
+            html += `<span style="display:flex;align-items:center;gap:4px;background:rgba(255,255,255,.07);border-radius:6px;padding:3px 7px;">
+              <span style="width:11px;height:11px;border-radius:50%;background:${el.color};flex-shrink:0;display:inline-block;"></span>
+              <span style="color:#ddd;font-size:.72rem;">${name}</span>
+            </span>`;
+        });
+        if (uncolored.length) {
+            html += `<span style="display:flex;align-items:center;gap:4px;background:rgba(255,255,255,.07);border-radius:6px;padding:3px 7px;">
+              <span style="width:11px;height:11px;border-radius:50%;background:#555;flex-shrink:0;display:inline-block;border:1px solid #888;"></span>
+              <span style="color:#aaa;font-size:.72rem;">${uncolored.map(e => e.nombre || ('Elem. ' + (_r3dElements.indexOf(e)+1))).join(', ')} → sin zona (usa descripción)</span>
+            </span>`;
+        }
+        html += '</div>';
+        legend.innerHTML = html;
+        legend.style.display = 'block';
+    }
 
     function _anotRefreshDisplay() {
         // Draw base image, then overlay at 50% — no accumulation
@@ -2975,6 +3009,13 @@ EJEMPLO VÁLIDO:
     }
 
     // ── Elementos dinámicos ────────────────────────────────────────
+    var _ANOT_COLORS = [
+        { hex: '#ffd60a', name: 'Amarillo' },
+        { hex: '#ff3b30', name: 'Rojo'     },
+        { hex: '#30d158', name: 'Verde'    },
+        { hex: '#0a84ff', name: 'Azul'     },
+    ];
+
     function _syncElementos() {
         document.querySelectorAll('.r3d-elem-card').forEach(function(card, i) {
             if (!_r3dElements[i]) return;
@@ -2982,19 +3023,56 @@ EJEMPLO VÁLIDO:
             _r3dElements[i].mat    = card.querySelector('.r3d-em').value;
             _r3dElements[i].est    = card.querySelector('.r3d-ee').value;
             _r3dElements[i].acab   = card.querySelector('.r3d-ea').value;
+            // color is stored directly via _r3dSetElemColor — no DOM read needed
         });
     }
+
+    window._r3dSetElemColor = function(i, color) {
+        _syncElementos();
+        if (_r3dElements[i]) _r3dElements[i].color = color;
+        renderElementosR3D();
+    };
 
     function renderElementosR3D() {
         const cont = document.getElementById('r3d-elementos-list');
         if (!cont) return;
+        const hasMulti = _r3dElements.length > 1;
         cont.innerHTML = _r3dElements.map(function(el, i) {
             const canDel = _r3dElements.length > 1;
-            return `<div class="r3d-elem-card" style="border:1px solid #ddd;border-radius:9px;padding:10px;margin-bottom:8px;background:#fafafa;">
-  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:7px;">
-    <span style="font-size:.8rem;font-weight:700;color:var(--blue);">Elemento ${i+1}</span>
+            const c = el.color;
+            const colorName = c ? (_ANOT_COLORS.find(x => x.hex === c)||{name:''}).name : '';
+            const borderColor = c || '#ddd';
+            const swatches = _ANOT_COLORS.map(function(ac) {
+                const sel = c === ac.hex;
+                return `<button onclick="_r3dSetElemColor(${i},'${ac.hex}')" title="${ac.name}"
+                  style="width:22px;height:22px;border-radius:50%;background:${ac.hex};
+                         border:2px solid ${sel ? '#333' : 'transparent'};
+                         box-shadow:${sel ? '0 0 0 1px #333' : 'none'};
+                         cursor:pointer;flex-shrink:0;font-size:10px;font-weight:900;color:${ac.hex==='#ffd60a'?'#7a5f00':'#fff'};">
+                  ${sel ? '✓' : ''}
+                </button>`;
+            }).join('');
+            const noneSelected = !c;
+            return `<div class="r3d-elem-card" style="border:2px solid ${borderColor};border-radius:9px;padding:10px;margin-bottom:8px;background:#fafafa;">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+    <div style="display:flex;align-items:center;gap:6px;">
+      ${c ? `<span style="display:inline-block;width:13px;height:13px;border-radius:50%;background:${c};flex-shrink:0;"></span>` : ''}
+      <span style="font-size:.8rem;font-weight:700;color:var(--blue);">Elemento ${i+1}${colorName ? ' <span style="color:'+c+';font-weight:600;">('+colorName+')</span>' : ''}</span>
+    </div>
     ${canDel ? `<button onclick="eliminarElementoR3D(${i})" style="background:#e74c3c;color:#fff;border:none;border-radius:6px;width:26px;height:26px;cursor:pointer;font-size:.9rem;">&times;</button>` : ''}
   </div>
+  ${hasMulti ? `<div style="display:flex;align-items:center;gap:5px;margin-bottom:8px;">
+    <span style="font-size:.72rem;color:#888;flex-shrink:0;">Zona en imagen:</span>
+    ${swatches}
+    <button onclick="_r3dSetElemColor(${i},null)" title="Sin zona — armar con descripción y medidas"
+      style="width:22px;height:22px;border-radius:50%;background:#e0e0e0;
+             border:2px solid ${noneSelected?'#333':'transparent'};
+             box-shadow:${noneSelected?'0 0 0 1px #333':'none'};
+             cursor:pointer;font-size:11px;color:#666;font-weight:800;">
+      ${noneSelected ? '✓' : '–'}
+    </button>
+    <span style="font-size:.68rem;color:#aaa;">${c ? '' : '(sin zona — usar descripción)'}</span>
+  </div>` : ''}
   <input class="r3d-en" placeholder="Nombre (ej: Panel de fondo, Producto a escala)" value="${(el.nombre||'').replace(/"/g,'&quot;')}"
     style="width:100%;box-sizing:border-box;border:1px solid #ddd;border-radius:7px;padding:7px 9px;font-size:.85rem;margin-bottom:5px;font-weight:600;">
   <input class="r3d-em" placeholder="Materiales (ej: Vinilo, acrílico, LEDs)" value="${(el.mat||'').replace(/"/g,'&quot;')}"
@@ -3009,7 +3087,7 @@ EJEMPLO VÁLIDO:
 
     window.agregarElementoR3D = function() {
         _syncElementos();
-        _r3dElements.push({ nombre: '', mat: '', est: '', acab: '' });
+        _r3dElements.push({ nombre: '', mat: '', est: '', acab: '', color: null });
         renderElementosR3D();
         // Scroll to new card
         var list = document.getElementById('r3d-elementos-list');
@@ -3040,41 +3118,68 @@ EJEMPLO VÁLIDO:
         const elems  = _r3dElements.filter(e => e.nombre || e.mat || e.est || e.acab);
         const hasEst = elems.some(e => e.est && e.est.trim());
 
+        // ── Color → element mapping (when multi-element with colors) ──────
+        const coloredElems   = elems.filter(e => e.color);
+        const uncoloredElems = elems.filter(e => !e.color);
+        const hasColorMap    = coloredElems.length > 0 && hasRef && _r3dRefAnnotated;
+
         // ── Image instructions ─────────────────────────────────────────────
         let imgGuide = '';
         if (hasRef && hasVol) {
             let refNote = '';
             if (_r3dRefCropped)   refNote = '\n  ⚠️ Esta imagen es un RECORTE del elemento específico a renderizar. Reproducilo tal cual aparece.';
-            else if (_r3dRefAnnotated) refNote = '\n  ⚠️ ZONA MARCADA: los trazos de color semitransparente indican el ELEMENTO ESPECÍFICO a renderizar. Ignorá el resto de la imagen.';
+            else if (hasColorMap) refNote = '\n  ⚠️ ZONAS COLOREADAS: cada color de trazo en la imagen corresponde a un elemento distinto (ver MAPEO DE COLORES más abajo).';
+            else if (_r3dRefAnnotated) refNote = '\n  ⚠️ ZONA MARCADA: los trazos semitransparentes indican el ELEMENTO ESPECÍFICO a renderizar. Ignorá el resto.';
             imgGuide = `INSTRUCCIÓN DE IMÁGENES (son 2 imágenes adjuntas):
-IMAGEN 1 — REFERENCIA DEL CLIENTE: aplicá su branding, colores, tipografía y estilo visual en TODAS las caras visibles del objeto.${refNote}
-IMAGEN 2 — VOLUMETRÍA / PLANO CON MEDIDAS: las dimensiones y proporciones del plano son las REALES. Prevalecen sobre cualquier otra indicación dimensional.`;
+IMAGEN 1 — REFERENCIA DEL CLIENTE: aplicá su branding, colores, tipografía y estilo visual en TODAS las caras visibles.${refNote}
+IMAGEN 2 — VOLUMETRÍA / PLANO CON MEDIDAS: las dimensiones del plano son las REALES y prevalecen sobre cualquier otra indicación.`;
         } else if (hasRef) {
             if (_r3dRefCropped) {
                 imgGuide = `INSTRUCCIÓN DE IMAGEN:
-REFERENCIA RECORTADA: La imagen adjunta contiene ÚNICAMENTE el elemento/componente a renderizar. Reproducí ese objeto en 3D respetando su forma, proporciones, branding y colores exactos. Aplicá el estilo visual en todas las caras visibles.`;
+REFERENCIA RECORTADA: La imagen adjunta contiene ÚNICAMENTE el elemento/componente a renderizar. Reproducilo en 3D respetando su forma, proporciones, branding y colores exactos en todas las caras visibles.`;
+            } else if (hasColorMap) {
+                imgGuide = `INSTRUCCIÓN DE IMAGEN:
+REFERENCIA CON ZONAS COLOREADAS POR ELEMENTO: La imagen tiene trazos semitransparentes de distintos colores. Cada color identifica un componente diferente del conjunto (ver MAPEO DE COLORES más abajo). Respetá el branding y estilo visual de la referencia en todos los elementos.`;
             } else if (_r3dRefAnnotated) {
                 imgGuide = `INSTRUCCIÓN DE IMAGEN:
-REFERENCIA CON ZONA MARCADA: La imagen adjunta tiene trazos de color semitransparente que delimitan la ZONA/ELEMENTO ESPECÍFICO a renderizar.
-⚠️ REGLA CRÍTICA: renderizá ÚNICAMENTE el objeto dentro de la zona marcada. Tomá su forma, proporciones y estilo de esa zona. El resto de la imagen es contexto — no lo copies.
-Aplicá el branding/colores de la referencia en todas las caras del objeto renderizado.`;
+REFERENCIA CON ZONA MARCADA: Los trazos de color en la imagen delimitan el ELEMENTO ESPECÍFICO a renderizar.
+⚠️ REGLA CRÍTICA: renderizá ÚNICAMENTE el objeto dentro de la zona marcada. El resto de la imagen es contexto — no lo copies.
+Aplicá el branding/colores de la referencia en todas las caras del objeto.`;
             } else {
                 imgGuide = `INSTRUCCIÓN DE IMAGEN:
-REFERENCIA DEL CLIENTE: respetá exactamente el branding, colores, tipografía y proporciones. Aplicá el estilo visual en TODAS las caras visibles del objeto (frente, laterales, techo, fondo).`;
+REFERENCIA DEL CLIENTE: respetá exactamente el branding, colores, tipografía y proporciones. Aplicalo en TODAS las caras visibles del objeto (frente, laterales, techo, fondo).`;
             }
         } else if (hasVol) {
             imgGuide = `INSTRUCCIÓN DE IMAGEN:
-VOLUMETRÍA / PLANO CON MEDIDAS: respetá estrictamente las dimensiones del plano — son las medidas reales del objeto. Proporciones del plano prevalecen sobre el texto.`;
+VOLUMETRÍA / PLANO CON MEDIDAS: respetá las dimensiones del plano — son las medidas reales del objeto y prevalecen sobre el texto.`;
         }
 
         // ── Base prompt ────────────────────────────────────────────────────
         let prompt = `AXONOMETRÍA TÉCNICA PROFESIONAL — estilo CAD industrial.
 Fondo blanco liso. Perspectiva isométrica a 30°. Líneas de cotas en metros con flechas de acotación. Etiquetas de materiales con líneas de referencia. Sin sombras dramáticas. Colores neutros y realistas.
-REGLA GLOBAL DE RECUBRIMIENTO: si el acabado menciona lona, vinilo, tela, banner, PVC u otro recubrimiento de superficie, aplicarlo en TODAS las caras visibles del objeto (frente, laterales, techo, parte trasera) — no solo en la cara frontal.
+REGLA GLOBAL DE RECUBRIMIENTO: si el acabado menciona lona, vinilo, tela, banner, PVC u otro recubrimiento, aplicarlo en TODAS las caras visibles (frente, laterales, techo, fondo) — no solo la cara frontal.
 IMPORTANTE: Dibujá SOLO lo que se describe aquí. No inventes vistas adicionales, dimensiones extra, ni elementos no solicitados.`;
 
         if (imgGuide) prompt += `\n\n${imgGuide}`;
         prompt += `\n\nObjeto: ${desc}`;
+
+        // ── Color map block (before element details) ───────────────────────
+        if (hasColorMap) {
+            const colorNameMap = { '#ffd60a':'AMARILLA','#ff3b30':'ROJA','#30d158':'VERDE','#0a84ff':'AZUL' };
+            prompt += '\n\nMAPEO DE COLORES EN LA IMAGEN DE REFERENCIA:';
+            coloredElems.forEach(function(el) {
+                const cn = colorNameMap[el.color] || el.color;
+                const label = el.nombre || ('Elemento ' + (elems.indexOf(el) + 1));
+                prompt += `\n- Zona ${cn} → ${label}`;
+            });
+            if (uncoloredElems.length) {
+                uncoloredElems.forEach(function(el) {
+                    const label = el.nombre || ('Elemento ' + (elems.indexOf(el) + 1));
+                    prompt += `\n- Sin zona marcada → ${label} (armalo según descripción, medidas y estilo general de la referencia)`;
+                });
+            }
+            prompt += '\nPara cada zona coloreada, renderizá ÚNICAMENTE el componente correspondiente con sus materiales y acabados específicos.';
+        }
 
         // ── Elements ───────────────────────────────────────────────────────
         if (elems.length > 1) {
