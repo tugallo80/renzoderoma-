@@ -125,7 +125,15 @@
             return originalOn.apply(this, newArgs);
         };
 
-        // ── .once('value') — Firebase-first; caché solo si hay timeout ────
+        // ── .once('value') — stale-while-revalidate ────────────────────────
+        //
+        // Callback style: render cache instantly, then call again with fresh data.
+        //   Page renders twice but always ends up correct. Safe for any page
+        //   whose render function clears and rebuilds (like _cargarProyectos).
+        //
+        // Promise style (.once().then(...)): Firebase-first with 15s timeout.
+        //   Promise can only resolve once so we can't stale-while-revalidate.
+        //   Cache is only used as fallback when Firebase times out.
         proto.once = function (eventType, callback, onError) {
             if (eventType !== 'value') {
                 return originalOnce.apply(this, arguments);
@@ -135,35 +143,47 @@
             const storageKey = CACHE_PREFIX + path;
             const self = this;
 
-            // Firebase fetch — siempre actualiza la caché cuando llega
+            // Always fetch from Firebase — updates cache when it arrives
             const firebasePromise = originalOnce.call(self, 'value').then(function (snap) {
                 writeCache(storageKey, snap.val());
                 return snap;
             });
 
-            // Timeout: si Firebase no responde en tiempo, usamos caché como fallback
+            if (typeof callback === 'function') {
+                // ── Callback style: stale-while-revalidate ──────────────────
+                const cached = readCache(storageKey);
+                if (cached !== undefined) {
+                    // Render immediately with cached data
+                    setTimeout(function () {
+                        try { callback(makeSnapshot(cached, null)); } catch (e) {}
+                    }, 0);
+                }
+                // Render again when Firebase responds (fresh data overwrites stale)
+                firebasePromise
+                    .then(function (snap) { try { callback(snap); } catch (e) {} })
+                    .catch(function (err) {
+                        if (cached === undefined && typeof onError === 'function') {
+                            onError(err); // No cache and Firebase failed — surface the error
+                        }
+                        // If cache was shown, silently ignore Firebase error
+                    });
+                return firebasePromise;
+            }
+
+            // ── Promise style: Firebase-first, 15s timeout then cache ───────
             const timeoutPromise = new Promise(function (resolve, reject) {
                 setTimeout(function () {
                     const cached = readCache(storageKey);
                     if (cached !== undefined) {
-                        console.warn('[firecache] timeout en ' + path + ' — usando caché local');
+                        console.warn('[firecache] timeout — usando caché para:', path);
                         resolve(makeSnapshot(cached, null));
                     } else {
                         reject(new Error('[firecache] timeout y sin caché para: ' + path));
                     }
-                }, ONCE_TIMEOUT);
+                }, 15000);
             });
 
-            // Gana quien responda primero: Firebase (datos frescos) o timeout (caché)
-            const resultPromise = Promise.race([firebasePromise, timeoutPromise]);
-
-            if (typeof callback === 'function') {
-                resultPromise
-                    .then(function (snap) { callback(snap); })
-                    .catch(function (err) { if (typeof onError === 'function') onError(err); });
-            }
-
-            return resultPromise;
+            return Promise.race([firebasePromise, timeoutPromise]);
         };
     }
 
