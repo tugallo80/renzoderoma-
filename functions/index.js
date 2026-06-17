@@ -106,30 +106,41 @@ exports.geminiProxy = onRequest(GEMINI_PROXY_OPTS, async (req, res) => {
         // ── Generación de imagen — manejo temprano, NO usa el modelo de texto ──
         if (body.generateImage) {
             const imgPrompt = body.prompt || body.text || "imagen profesional corporativa";
-            const imgModels = [
-                "gemini-3.1-flash-image",
-                "gemini-2.5-flash-image",
-                "gemini-2.0-flash-preview-image-generation",
-            ];
             const errors = [];
+
+            // Parts: referencia visual (si hay) + texto del prompt
+            const userParts = [];
+            if (body.referenceImage?.data) {
+                userParts.push({ inlineData: { data: body.referenceImage.data, mimeType: body.referenceImage.mimeType || "image/jpeg" } });
+            }
+            userParts.push({ text: imgPrompt });
+
+            // 1. Modelos Gemini con generación nativa de imagen (requieren v1beta)
+            const imgModels = [
+                "gemini-2.0-flash-exp-image-generation",
+                "gemini-2.0-flash-image-generation",
+                "gemini-2.5-flash-exp-image-generation",
+                "gemini-2.5-flash-image-generation",
+                "gemini-2.5-pro-exp-image-generation",
+            ];
             for (const imgModel of imgModels) {
                 try {
                     const restRes = await fetch(
-                        `https://generativelanguage.googleapis.com/v1/models/${imgModel}:generateContent?key=${geminiKey}`,
+                        `https://generativelanguage.googleapis.com/v1beta/models/${imgModel}:generateContent?key=${geminiKey}`,
                         {
                             method: "POST",
                             headers: { "Content-Type": "application/json" },
                             body: JSON.stringify({
-                                contents: [{ role: "user", parts: [{ text: imgPrompt }] }],
+                                contents: [{ role: "user", parts: userParts }],
                                 generationConfig: { responseModalities: ["TEXT", "IMAGE"] },
                             }),
                         }
                     );
                     const restData = await restRes.json();
                     if (!restRes.ok) {
-                        const detail = restData?.error?.message || JSON.stringify(restData).slice(0, 200);
+                        const detail = restData?.error?.message || JSON.stringify(restData).slice(0, 150);
                         errors.push(`${imgModel} → ${restRes.status}: ${detail}`);
-                        console.warn(`imagen-gen: ${imgModel} error ${restRes.status}: ${detail}`);
+                        console.warn(`imagen-gen: ${imgModel} error ${restRes.status}`);
                         continue;
                     }
                     const imgParts = restData?.candidates?.[0]?.content?.parts || [];
@@ -142,13 +153,41 @@ exports.geminiProxy = onRequest(GEMINI_PROXY_OPTS, async (req, res) => {
                     }
                     const finishReason = restData?.candidates?.[0]?.finishReason || "sin imagen";
                     errors.push(`${imgModel} → no produjo imagen (${finishReason})`);
-                    console.warn(`imagen-gen: ${imgModel} no produjo imagen. finishReason=${finishReason}`);
+                    console.warn(`imagen-gen: ${imgModel} sin imagen. finishReason=${finishReason}`);
                 } catch(imgErr) {
                     errors.push(`${imgModel} → excepcion: ${imgErr.message}`);
                     console.error(`imagen-gen: ${imgModel} excepcion:`, imgErr.message);
-                    continue;
                 }
             }
+
+            // 2. Fallback: Imagen 3 vía endpoint predict (formato distinto)
+            for (const imgModel of ["imagen-3.0-generate-002", "imagen-3.0-fast-generate-001"]) {
+                try {
+                    const imagenRes = await fetch(
+                        `https://generativelanguage.googleapis.com/v1beta/models/${imgModel}:predict?key=${geminiKey}`,
+                        {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({
+                                instances: [{ prompt: imgPrompt }],
+                                parameters: { sampleCount: 1, aspectRatio: "1:1" }
+                            })
+                        }
+                    );
+                    const imagenData = await imagenRes.json();
+                    if (imagenRes.ok) {
+                        const pred = imagenData?.predictions?.[0];
+                        if (pred?.bytesBase64Encoded) {
+                            const mime = pred.mimeType || "image/png";
+                            return res.status(200).json({ imageUrl: `data:${mime};base64,${pred.bytesBase64Encoded}` });
+                        }
+                    }
+                    errors.push(`${imgModel} → ${imagenRes.status}: ${imagenData?.error?.message || JSON.stringify(imagenData).slice(0, 150)}`);
+                } catch(e) {
+                    errors.push(`${imgModel} → excepcion: ${e.message}`);
+                }
+            }
+
             return res.status(500).json({ error: "Ningún modelo de imagen disponible.", detalle: errors.join(" | ") });
         }
 
