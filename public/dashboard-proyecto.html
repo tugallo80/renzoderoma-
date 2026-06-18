@@ -139,13 +139,18 @@
             <div>
                 <div style="font-size:12px; font-weight:700; color:var(--gray); margin-bottom:8px;">Fijar Monto de Cierre Manual:</div>
                 <div class="flex-row"><input type="number" step="any" id="inp-cierre" class="inp-std" style="margin:0;" placeholder="Monto Bs..."><button class="btn-action" style="margin:0; width:120px;" onclick="fijarCierre()">Fijar</button></div>
-                
-                <div style="font-size:12px; font-weight:700; color:var(--gray); margin-bottom:8px; margin-top:20px;">Enlace de Factura Electrónica:</div>
-                <div class="flex-row"><input type="text" id="inp-factura" class="inp-std" style="margin:0;" placeholder="URL del PDF..."><button class="btn-action btn-success" style="margin:0; width:120px;" onclick="guardarFactura()">Enviar</button></div>
+
+                <div style="font-size:12px; font-weight:700; color:var(--gray); margin-bottom:8px; margin-top:20px;">Facturas Emitidas al Cliente:</div>
+                <div class="flex-row" style="gap:6px;">
+                    <input type="text" id="inp-factura" class="inp-std" style="margin:0;flex:1;" placeholder="URL del PDF (opcional)...">
+                    <button class="btn-action btn-success" style="margin:0;padding:10px 12px;" onclick="abrirScanDoc('factura')"><i class="ph-bold ph-scan"></i> Escanear IA</button>
+                    <button class="btn-action" style="margin:0;width:80px;" onclick="guardarFactura()">Guardar</button>
+                </div>
+                <div id="lista-facturas-emitidas" style="margin-top:10px; font-size:12px;"></div>
             </div>
 
             <div style="border-left: 1px solid var(--border); padding-left: 20px;">
-                <h3 style="margin-top:0; color:var(--green); font-size:14px;"><i class="ph-bold ph-money"></i> Registrar Anticipo / Pago</h3>
+                <h3 style="margin-top:0; color:var(--green); font-size:14px;display:flex;align-items:center;justify-content:space-between;"><span><i class="ph-bold ph-money"></i> Registrar Anticipo / Pago</span><button onclick="abrirScanDoc('pago')" style="background:linear-gradient(135deg,#5856d6,#af52de);color:#fff;border:none;border-radius:8px;padding:5px 10px;font-size:11px;font-weight:800;cursor:pointer;"><i class="ph-bold ph-scan"></i> Escanear boucher</button></h3>
                 <div style="display:flex; gap:10px; margin-bottom:10px;">
                     <input type="number" id="pago-monto" class="inp-std" placeholder="Monto Bs" style="flex:1; margin:0; padding:10px;">
                     <input type="date" id="pago-fecha" class="inp-std" style="flex:1; margin:0; padding:10px;">
@@ -156,6 +161,29 @@
                 </div>
                 <div id="lista-pagos-admin" style="margin-top:15px; max-height:150px; overflow-y:auto; font-size:12px; border-top:1px dashed var(--border); padding-top:10px;"></div>
             </div>
+        </div>
+    </div>
+
+    <!-- Modal escaneo IA (anticipos y facturas) -->
+    <div id="mod-scan-doc" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:5000;align-items:flex-end;justify-content:center;backdrop-filter:blur(6px);">
+        <div style="background:var(--card);border-radius:20px 20px 0 0;padding:20px;width:100%;max-width:500px;max-height:90vh;overflow-y:auto;box-sizing:border-box;">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+                <div style="font-weight:900;font-size:16px;" id="scan-modal-title">Escanear documento</div>
+                <button onclick="cerrarScanDoc()" style="background:none;border:none;font-size:22px;cursor:pointer;color:var(--gray);">&times;</button>
+            </div>
+            <!-- Área de imagen -->
+            <div id="scan-img-area" style="border:2px dashed var(--border);border-radius:12px;padding:20px;text-align:center;min-height:120px;position:relative;cursor:pointer;" onclick="document.getElementById('scan-file-input').click()">
+                <input type="file" id="scan-file-input" accept="image/*,application/pdf" style="display:none;" onchange="onScanFileChange(this)">
+                <div id="scan-img-placeholder"><i class="ph-bold ph-image-square" style="font-size:2rem;color:#aaa;"></i><br><span style="font-size:.8rem;color:#aaa;">Tocá para cargar imagen o PDF</span></div>
+                <img id="scan-img-preview" style="max-width:100%;max-height:220px;border-radius:8px;display:none;">
+            </div>
+            <div style="display:flex;gap:8px;margin-top:10px;">
+                <button onclick="scanPegarPortapapeles()" style="flex:1;padding:9px;background:rgba(0,0,0,0.05);border:1px solid var(--border);border-radius:8px;font-size:.8rem;font-weight:700;cursor:pointer;"><i class="ph-bold ph-clipboard"></i> Pegar imagen</button>
+                <button id="btn-scan-ia" onclick="ejecutarScanIA()" style="flex:2;padding:9px;background:linear-gradient(135deg,#5856d6,#af52de);color:#fff;border:none;border-radius:8px;font-size:.8rem;font-weight:800;cursor:pointer;"><i class="ph-bold ph-magic-wand"></i> Escanear con IA</button>
+            </div>
+            <!-- Resultado extraído -->
+            <div id="scan-resultado" style="display:none;margin-top:14px;background:rgba(52,199,89,0.08);border:1px solid rgba(52,199,89,0.3);border-radius:10px;padding:12px;font-size:.85rem;"></div>
+            <button id="btn-scan-confirmar" onclick="confirmarScanDoc()" style="display:none;margin-top:12px;width:100%;padding:12px;background:var(--green);color:#fff;border:none;border-radius:10px;font-weight:800;font-size:.9rem;cursor:pointer;"><i class="ph-bold ph-check-circle"></i> Confirmar y guardar</button>
         </div>
     </div>
 
@@ -284,6 +312,7 @@
             if(fac) document.getElementById('inp-factura').value = fac;
             if(montoCierre) document.getElementById('inp-cierre').value = parseFloat(montoCierre).toFixed(2);
             escucharPagosAdmin();
+            escucharFacturasEmitidas();
         });
     } // fin cargarDashboard
 
@@ -381,7 +410,7 @@
                     const p = child.val();
                     totalPagado += parseFloat(p.monto || 0);
                     cont.innerHTML += `<div style="display:flex; justify-content:space-between; border-bottom:1px solid var(--border); padding:8px 0; color:var(--text);">
-                        <span><b style="color:var(--gray); margin-right:5px;">${p.fecha}</b> ${p.nota}</span>
+                        <span><b style="color:var(--gray); margin-right:5px;">${p.fecha}</b> ${p.nota}${p.comprobante_url ? ` <a href="${p.comprobante_url}" target="_blank" style="color:var(--blue);font-size:10px;">📎ver</a>` : ''}</span>
                         <b style="color:var(--green);">+${parseFloat(p.monto || 0).toLocaleString('es-BO', {minimumFractionDigits: 2})} Bs</b>
                     </div>`;
                 });
@@ -391,6 +420,208 @@
             }
         });
     }
+
+    function escucharFacturasEmitidas() {
+        db.ref(`proyectos/${cid}/${pid}/facturas_emitidas`).on('value', snap => {
+            const cont = document.getElementById('lista-facturas-emitidas');
+            if(!cont) return;
+            cont.innerHTML = '';
+            if(snap.exists()){
+                snap.forEach(child => {
+                    const f = child.val();
+                    const key = child.key;
+                    cont.innerHTML += `<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px dashed var(--border);font-size:11px;">
+                        <div><b style="color:var(--blue);">F-${f.nro_factura||'S/N'}</b> &nbsp;${f.fecha||''}&nbsp;
+                        ${f.razon_social ? `<span style="color:var(--gray);">${f.razon_social}</span>` : ''}
+                        ${f.url ? `<a href="${f.url}" target="_blank" style="color:var(--blue);">📎</a>` : ''}</div>
+                        <div style="display:flex;align-items:center;gap:6px;">
+                            <b style="color:var(--green);">${parseFloat(f.monto||0).toLocaleString('es-BO',{minimumFractionDigits:2})} Bs</b>
+                            <button onclick="eliminarFactura('${key}')" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:14px;padding:0;">&times;</button>
+                        </div>
+                    </div>`;
+                });
+            } else {
+                cont.innerHTML = '<div style="color:var(--gray);font-size:11px;">Sin facturas registradas.</div>';
+            }
+        });
+    }
+
+    window.eliminarFactura = function(key) {
+        if(confirm('¿Eliminar esta factura?')) db.ref(`proyectos/${cid}/${pid}/facturas_emitidas/${key}`).remove();
+    };
+
+    // ── Escaneo IA de documentos (bouchers y facturas) ─────────────────
+    var _scanMode = 'pago'; // 'pago' | 'factura'
+    var _scanImgB64 = null;
+    var _scanMime = 'image/jpeg';
+    var _scanResultado = null;
+
+    window.abrirScanDoc = function(mode) {
+        _scanMode = mode;
+        _scanImgB64 = null;
+        _scanResultado = null;
+        document.getElementById('scan-img-preview').style.display = 'none';
+        document.getElementById('scan-img-preview').src = '';
+        document.getElementById('scan-img-placeholder').style.display = 'block';
+        document.getElementById('scan-resultado').style.display = 'none';
+        document.getElementById('btn-scan-confirmar').style.display = 'none';
+        document.getElementById('scan-file-input').value = '';
+        document.getElementById('scan-modal-title').textContent = mode === 'factura' ? 'Escanear Factura Emitida' : 'Escanear Comprobante de Pago';
+        document.getElementById('mod-scan-doc').style.display = 'flex';
+    };
+
+    window.cerrarScanDoc = function() {
+        document.getElementById('mod-scan-doc').style.display = 'none';
+    };
+
+    window.onScanFileChange = function(input) {
+        const file = input.files[0];
+        if(!file) return;
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            _scanImgB64 = e.target.result.split(',')[1];
+            _scanMime = file.type || 'image/jpeg';
+            if(file.type.startsWith('image/')) {
+                document.getElementById('scan-img-preview').src = e.target.result;
+                document.getElementById('scan-img-preview').style.display = 'block';
+                document.getElementById('scan-img-placeholder').style.display = 'none';
+            } else {
+                document.getElementById('scan-img-placeholder').innerHTML = '<i class="ph-bold ph-file-pdf" style="font-size:2rem;color:var(--red);"></i><br><span style="font-size:.8rem;">PDF cargado</span>';
+            }
+        };
+        reader.readAsDataURL(file);
+    };
+
+    window.scanPegarPortapapeles = async function() {
+        try {
+            const items = await navigator.clipboard.read();
+            for(const item of items) {
+                const t = item.types.find(x => x.startsWith('image/'));
+                if(t) {
+                    const blob = await item.getType(t);
+                    const reader = new FileReader();
+                    reader.onload = e => {
+                        _scanImgB64 = e.target.result.split(',')[1];
+                        _scanMime = blob.type || 'image/png';
+                        document.getElementById('scan-img-preview').src = e.target.result;
+                        document.getElementById('scan-img-preview').style.display = 'block';
+                        document.getElementById('scan-img-placeholder').style.display = 'none';
+                    };
+                    reader.readAsDataURL(blob);
+                    return;
+                }
+            }
+            alert('No hay imagen en el portapapeles.');
+        } catch(e) { alert('No hay imagen en el portapapeles.'); }
+    };
+
+    window.ejecutarScanIA = async function() {
+        if(!_scanImgB64) return alert('Cargá o pegá una imagen primero.');
+        const btn = document.getElementById('btn-scan-ia');
+        btn.disabled = true; btn.textContent = 'Escaneando...';
+        try {
+            const token = firebase.auth().currentUser ? await firebase.auth().currentUser.getIdToken() : null;
+            const headers = { 'Content-Type': 'application/json' };
+            if(token) headers['Authorization'] = 'Bearer ' + token;
+
+            const promptText = _scanMode === 'factura'
+                ? 'Extrae de esta factura boliviana EMITIDA. Devolvé SOLO JSON con estas claves: nro_factura (número de factura), nit_cliente (NIT del cliente, solo números), razon_social (nombre del cliente), cuf (código CUF alfanumérico largo, si existe), fecha (YYYY-MM-DD), monto (total en número sin símbolo). Si no encontrás un campo usá null.'
+                : 'Extrae de este comprobante/boucher de pago. Devolvé SOLO JSON con estas claves: monto (importe total en número), fecha (YYYY-MM-DD), concepto (método y descripción del pago, ej: QR Banco Unión). Si no encontrás un campo usá null.';
+
+            const resp = await fetch('/api/gemini', {
+                method: 'POST', headers,
+                body: JSON.stringify({
+                    model: 'gemini-2.5-flash',
+                    systemInstruction: { parts: [{ text: 'Eres un extractor de datos de documentos bolivianos. Devuelve SOLO JSON válido, sin markdown ni explicaciones.' }] },
+                    contents: [{ role: 'user', parts: [
+                        { inlineData: { data: _scanImgB64, mimeType: _scanMime } },
+                        { text: promptText }
+                    ]}]
+                })
+            });
+            if(!resp.ok) throw new Error('HTTP ' + resp.status);
+            const data = await resp.json();
+            let raw = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+            raw = raw.replace(/```json|```/g, '').trim();
+            const s = raw.indexOf('{'), e2 = raw.lastIndexOf('}');
+            if(s === -1) throw new Error('No se encontró JSON');
+            _scanResultado = JSON.parse(raw.slice(s, e2+1));
+
+            const res = document.getElementById('scan-resultado');
+            if(_scanMode === 'factura') {
+                res.innerHTML = `<b>Factura extraída:</b><br>
+                    N° ${_scanResultado.nro_factura||'S/N'} &nbsp;|&nbsp; Fecha: ${_scanResultado.fecha||'—'}<br>
+                    Cliente: ${_scanResultado.razon_social||'—'} &nbsp;(NIT: ${_scanResultado.nit_cliente||'S/N'})<br>
+                    ${_scanResultado.cuf ? `CUF: <small style="color:var(--gray);">${_scanResultado.cuf}</small><br>` : ''}
+                    <b style="color:var(--green);">Monto: ${_scanResultado.monto||'—'} Bs</b>`;
+            } else {
+                res.innerHTML = `<b>Comprobante extraído:</b><br>
+                    Fecha: ${_scanResultado.fecha||'—'}<br>
+                    Concepto: ${_scanResultado.concepto||'—'}<br>
+                    <b style="color:var(--green);">Monto: ${_scanResultado.monto||'—'} Bs</b>`;
+                // Pre-llenar formulario
+                if(_scanResultado.monto) document.getElementById('pago-monto').value = _scanResultado.monto;
+                if(_scanResultado.fecha) document.getElementById('pago-fecha').value = _scanResultado.fecha;
+                if(_scanResultado.concepto) document.getElementById('pago-nota').value = _scanResultado.concepto;
+            }
+            res.style.display = 'block';
+            document.getElementById('btn-scan-confirmar').style.display = 'block';
+        } catch(err) {
+            alert('Error al escanear: ' + err.message);
+        } finally {
+            btn.disabled = false; btn.innerHTML = '<i class="ph-bold ph-magic-wand"></i> Escanear con IA';
+        }
+    };
+
+    window.confirmarScanDoc = async function() {
+        if(!_scanResultado) return;
+        const btn = document.getElementById('btn-scan-confirmar');
+        btn.disabled = true; btn.textContent = 'Guardando...';
+        try {
+            if(_scanMode === 'factura') {
+                const factData = {
+                    nro_factura: _scanResultado.nro_factura || null,
+                    nit_cliente: _scanResultado.nit_cliente || null,
+                    razon_social: _scanResultado.razon_social || null,
+                    cuf: _scanResultado.cuf || null,
+                    fecha: _scanResultado.fecha || new Date().toISOString().slice(0,10),
+                    monto: parseFloat(_scanResultado.monto) || 0,
+                    url: document.getElementById('inp-factura').value.trim() || null,
+                    timestamp: Date.now()
+                };
+                await db.ref(`proyectos/${cid}/${pid}/facturas_emitidas`).push(factData);
+                // Compat: también guardar URL si hay
+                if(factData.url) db.ref(`proyectos/${cid}/${pid}/factura_url`).set(factData.url);
+                document.getElementById('inp-factura').value = '';
+            } else {
+                // Para pago: guardar imagen como comprobante en storage si hay
+                let comprob_url = null;
+                if(_scanImgB64) {
+                    try {
+                        const storage = firebase.storage();
+                        const ref = storage.ref(`proyectos/${cid}/${pid}/comprobantes/pago_${Date.now()}.jpg`);
+                        await ref.putString(_scanImgB64, 'base64', { contentType: _scanMime });
+                        comprob_url = await ref.getDownloadURL();
+                    } catch(e) {}
+                }
+                const pagoData = {
+                    monto: parseFloat(document.getElementById('pago-monto').value) || parseFloat(_scanResultado.monto) || 0,
+                    fecha: document.getElementById('pago-fecha').value || _scanResultado.fecha || new Date().toISOString().slice(0,10),
+                    nota: document.getElementById('pago-nota').value.trim() || _scanResultado.concepto || '',
+                    timestamp: Date.now()
+                };
+                if(comprob_url) pagoData.comprobante_url = comprob_url;
+                if(!pagoData.monto || !pagoData.fecha) { alert('Revisá el monto y fecha.'); btn.disabled=false; btn.innerHTML='<i class="ph-bold ph-check-circle"></i> Confirmar y guardar'; return; }
+                await db.ref(`proyectos/${cid}/${pid}/pagos`).push(pagoData);
+                document.getElementById('pago-monto').value = '';
+                document.getElementById('pago-nota').value = '';
+            }
+            cerrarScanDoc();
+        } catch(err) {
+            alert('Error al guardar: ' + err.message);
+            btn.disabled = false; btn.innerHTML = '<i class="ph-bold ph-check-circle"></i> Confirmar y guardar';
+        }
+    };
 </script>
 
 <script type="module">

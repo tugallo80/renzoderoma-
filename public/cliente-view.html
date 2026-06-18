@@ -3274,6 +3274,20 @@ Solicitud: ${texto}`;
                 
                 let saldo = m - pagado;
 
+                // Facturas emitidas del proyecto
+                const facturas = p.facturas_emitidas ? Object.values(p.facturas_emitidas) : (p.factura_url ? [{ nro_factura:'', fecha:'', monto:0, url: p.factura_url }] : []);
+                const facturasHtml = facturas.length > 0 ? `
+                    <div style="margin-top:10px;padding-top:8px;border-top:1px dashed var(--border);">
+                        <div style="font-size:10px;font-weight:800;color:var(--gray);text-transform:uppercase;margin-bottom:6px;"><i class="ph-bold ph-receipt"></i> Facturas emitidas</div>
+                        ${facturas.map(f => `<div style="display:flex;justify-content:space-between;align-items:center;font-size:11px;padding:3px 0;">
+                            <span>${f.nro_factura ? 'F-'+f.nro_factura : 'Factura'}${f.fecha ? ' · '+f.fecha : ''}</span>
+                            <span style="display:flex;align-items:center;gap:8px;">
+                                ${f.monto ? `<b style="color:var(--blue);">${fMoney(f.monto)} Bs</b>` : ''}
+                                ${f.url ? `<a href="${f.url}" target="_blank" style="color:var(--blue);font-weight:700;font-size:10px;">Ver PDF</a>` : ''}
+                            </span>
+                        </div>`).join('')}
+                    </div>` : '';
+
                 ctn.innerHTML += `<div class="generic-card" style="padding:15px; margin-bottom:10px;">
                     <div style="font-size:14px; font-weight:900; margin-bottom:10px;">${p.nombre}</div>
                     <div style="display:flex; justify-content:space-between; font-size:12px; margin-bottom:5px;">
@@ -3285,6 +3299,7 @@ Solicitud: ${texto}`;
                     <div style="display:flex; justify-content:space-between; font-size:12px; margin-top:8px; padding-top:8px; border-top:1px solid var(--border);">
                         <span style="color:var(--gray); font-weight:700;">Saldo:</span><span style="font-weight:900; color:var(--orange);">${fMoney(saldo)} Bs</span>
                     </div>
+                    ${facturasHtml}
                 </div>`;
             } else {
                 let est = 0;
