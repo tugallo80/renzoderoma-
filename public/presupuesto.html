@@ -3394,17 +3394,19 @@ IMPORTANTE: Dibujá SOLO lo que se describe aquí. No inventes vistas adicionale
         const estructuraTexto = elems.filter(e => e.est).map(e => e.est).join('; ');
         if (hasEst) {
             prompt += `\n\nDETALLE DE ARMADO (incluir obligatoriamente):
-⚠️ REGLA: En el render PRINCIPAL los elementos estructurales internos (tubería, perfiles, planchas, nodos) están OCULTOS bajo el acabado exterior terminado. El render principal muestra SOLO el aspecto exterior acabado — lona, vinilo, acrílico, pintura, iluminación. La estructura interna NO debe verse en el render principal.
-En la esquina inferior derecha, dibujá un recuadro independiente rotulado "Detalle constructivo" que muestre una vista de CORTE o EXPLOSIÓN de un borde/esquina del objeto. Usá líneas punteadas para los perfiles y relleno translúcido en las partes estructurales para ver el armado sin taparlo. El detalle debe mostrar: ${estructuraTexto}.`;
+⚠️ REGLA MATERIALIDAD EXTERIOR: Para estructuras curvas o cilíndricas, la plancha galvanizada y la lona son el REVESTIMIENTO EXTERIOR — envuelven el AFUERA del cilindro/curva. Los tubines, costillas y perfiles son el esqueleto INTERNO que no se ve en el render principal. El exterior visible del objeto es LISO (plancha + lona), no el esqueleto metálico.
+⚠️ REGLA RENDER PRINCIPAL: Los elementos estructurales internos (tubería, perfiles, nodos) están OCULTOS bajo el acabado exterior. El render principal muestra SOLO el aspecto exterior acabado — lona, vinilo, acrílico, pintura, iluminación. La estructura interna NO debe verse en el render principal.
+En la esquina inferior derecha, dibujá un recuadro independiente rotulado "Detalle constructivo" que muestre una vista de CORTE o EXPLOSIÓN de un borde/esquina del objeto. Usá líneas punteadas para los perfiles y relleno translúcido para ver el armado. El detalle debe mostrar: ${estructuraTexto}.`;
         }
 
         if (hasDetalles) {
             prompt += `\n\n⚠️ RESTRICCIÓN GEOMÉTRICA OBLIGATORIA — PLANOS / DETALLES CONSTRUCTIVOS (${_r3dDetalles.length} imagen(es) adjunta(s)):
 Estos planos/croquis definen la GEOMETRÍA REAL del objeto. Son la autoridad máxima sobre la forma:
 • La silueta, secciones transversales y proporciones del render principal DEBEN coincidir con los planos adjuntos.
-• Las cotas numéricas anotadas son DIMENSIONES EXACTAS — respetá la relación alto/ancho/profundidad.
-• Si el plano muestra una estructura cilíndrica de cierto diámetro, el render DEBE tener ese diámetro relativo.
-• NO generes formas distintas ni más anchas/altas/profundas que las indicadas en los planos.
+• Las cotas numéricas anotadas son DIMENSIONES EXACTAS — respetá la relación alto/ancho.
+• DIMENSIÓN CIRCULAR: Si la estructura es CILÍNDRICA o de base circular, la dimensión "base" o "ancho" es el DIÁMETRO completo (de lado a lado), NO el radio ni la profundidad. Ejemplo: base 0.90m en un cilindro = el círculo mide 0.90m de diámetro, 0.45m de radio. La profundidad del objeto ES IGUAL al ancho (es circular). NO agrandes la profundidad.
+• Si el plano muestra costillas horizontales curvas (media circunferencia), las secciones del cilindro son semicirculares — respetá ese radio.
+• NO generes formas más anchas, profundas o altas que las indicadas en los planos.
 • Los planos también informan el recuadro "Detalle constructivo" en la esquina del render.`;
         }
         prompt += `\n\nMostrar: vista isométrica completa con todos los elementos etiquetados, cotas en metros, materiales indicados en español.${hasEst ? ' El recuadro de detalle constructivo es OBLIGATORIO.' : ''} No agregues vistas adicionales que no hayan sido solicitadas.`;
