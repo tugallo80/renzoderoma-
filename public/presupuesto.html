@@ -3329,10 +3329,12 @@ REFERENCIA RECORTADA: La imagen adjunta contiene ÚNICAMENTE el elemento/compone
 REFERENCIA CON ZONAS COLOREADAS POR ELEMENTO: La imagen tiene trazos semitransparentes de distintos colores. Cada color identifica un componente diferente del conjunto (ver MAPEO DE COLORES más abajo). Respetá el branding y estilo visual de la referencia en todos los elementos.`;
             } else if (_r3dRefAnnotated) {
                 imgGuide = `INSTRUCCIÓN DE IMAGEN:
-REFERENCIA CON ZONA MARCADA: Los trazos de color en la imagen delimitan el ELEMENTO ESPECÍFICO a renderizar.
-⚠️ REGLA CRÍTICA 1: renderizá ÚNICAMENTE el objeto dentro de la zona marcada. El resto de la imagen es contexto — no lo copies.
-⚠️ REGLA CRÍTICA 2: los trazos son SOLO delimitadores de zona — NO definen el color real del material. Usá los colores, texturas y branding descritos en texto.
-Aplicá el branding/colores de la referencia en todas las caras del objeto.`;
+REFERENCIA CON ANOTACIONES DE COLOR: La imagen tiene trazos de color dibujados encima.
+⚠️ INTERPRETACIÓN DE TRAZOS — dos casos posibles:
+  A) Si la referencia es un BOCETO o FOTO del cliente y los trazos delimitan una zona: renderizá ÚNICAMENTE el objeto dentro de la zona marcada, ignorando el resto. Los trazos son solo delimitadores, no colores de material.
+  B) Si la referencia es un RENDER YA GENERADO y los trazos señalan medidas, áreas a cambiar o correcciones: interpretá los trazos como INSTRUCCIONES DE MODIFICACIÓN. Aplicá los cambios indicados y generá una imagen COMPLETAMENTE NUEVA con esas correcciones — NO copies ni reproduzcas el render de entrada.
+⚠️ REGLA ABSOLUTA: SIEMPRE generá una imagen nueva. Nunca devuelvas la imagen de referencia sin cambios.
+Los colores, texturas y branding vienen del texto descriptivo, no del color del trazo.`;
             } else {
                 imgGuide = `INSTRUCCIÓN DE IMAGEN:
 REFERENCIA DEL CLIENTE: respetá exactamente el branding, colores, tipografía y proporciones. Aplicalo en TODAS las caras visibles del objeto (frente, laterales, techo, fondo).`;
@@ -3397,7 +3399,13 @@ En la esquina inferior derecha, dibujá un recuadro independiente rotulado "Deta
         }
 
         if (hasDetalles) {
-            prompt += `\n\nIMAGENES DE DETALLE CONSTRUCTIVO (últimas ${_r3dDetalles.length} imagen(es) adjunta(s)): son croquis o fotos de perfiles, costillas, cortes o detalles de armado. Usalas como referencia de geometría exacta para el Detalle constructivo. Los trazos o anotaciones sobre estas imágenes son notas de medidas — respetá esas proporciones.`;
+            prompt += `\n\n⚠️ RESTRICCIÓN GEOMÉTRICA OBLIGATORIA — PLANOS / DETALLES CONSTRUCTIVOS (${_r3dDetalles.length} imagen(es) adjunta(s)):
+Estos planos/croquis definen la GEOMETRÍA REAL del objeto. Son la autoridad máxima sobre la forma:
+• La silueta, secciones transversales y proporciones del render principal DEBEN coincidir con los planos adjuntos.
+• Las cotas numéricas anotadas son DIMENSIONES EXACTAS — respetá la relación alto/ancho/profundidad.
+• Si el plano muestra una estructura cilíndrica de cierto diámetro, el render DEBE tener ese diámetro relativo.
+• NO generes formas distintas ni más anchas/altas/profundas que las indicadas en los planos.
+• Los planos también informan el recuadro "Detalle constructivo" en la esquina del render.`;
         }
         prompt += `\n\nMostrar: vista isométrica completa con todos los elementos etiquetados, cotas en metros, materiales indicados en español.${hasEst ? ' El recuadro de detalle constructivo es OBLIGATORIO.' : ''} No agregues vistas adicionales que no hayan sido solicitadas.`;
         return prompt;
