@@ -2390,9 +2390,14 @@ EJEMPLO VÁLIDO:
       <div style="margin-top:10px;">
         <label style="font-size:.85rem;font-weight:600;">Detalles constructivos adicionales <span style="font-size:.75rem;font-weight:400;color:var(--gray);">(croquis, costillas, cortes — opcional)</span></label>
         <div id="r3d-detalles-list" style="display:flex;flex-wrap:wrap;gap:8px;margin-top:6px;"></div>
-        <button onclick="agregarDetalleR3D()" style="margin-top:6px;background:none;border:1.5px dashed #c5d0e6;border-radius:8px;padding:8px 14px;font-size:.78rem;color:var(--gray);cursor:pointer;width:100%;">
-          <i class="ph-bold ph-plus"></i> Agregar imagen de detalle
-        </button>
+        <div style="display:flex;gap:6px;margin-top:6px;">
+          <button onclick="agregarDetalleR3D()" style="flex:1;background:none;border:1.5px dashed #c5d0e6;border-radius:8px;padding:8px 10px;font-size:.78rem;color:var(--gray);cursor:pointer;">
+            <i class="ph-bold ph-plus"></i> Agregar detalle
+          </button>
+          <button onclick="pegarDetalleR3D()" style="flex:1;background:none;border:1.5px dashed #c5d0e6;border-radius:8px;padding:8px 10px;font-size:.78rem;color:var(--gray);cursor:pointer;">
+            <i class="ph-bold ph-clipboard"></i> Pegar detalle
+          </button>
+        </div>
         <input type="file" id="r3d-detalle-input" accept="image/*" style="display:none;" onchange="onR3dDetalleImagen(this)">
       </div>
 
@@ -2767,6 +2772,13 @@ EJEMPLO VÁLIDO:
 
     window.agregarDetalleR3D = function() {
         document.getElementById('r3d-detalle-input').click();
+    };
+
+    window.pegarDetalleR3D = async function() {
+        const r = await _clipboardImage();
+        if (!r) return alert('No hay imagen en el portapapeles.\nCopiá la imagen primero (Ctrl+C sobre ella).');
+        _r3dDetalles.push({ data: r.dataUrl.split(',')[1], mime: r.mime, label: 'Detalle ' + (_r3dDetalles.length + 1) });
+        _renderDetallesList();
     };
 
     window.onR3dDetalleImagen = function(input) {
