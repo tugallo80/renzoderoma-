@@ -411,6 +411,7 @@
     let data = []; let activeMod = null; let targetIdx = null; let sortableInstance;
     let dbMats = {}; let dbItems = {}; let dbMo = {}; let dbOtros = {};
     let saveTimeout;
+    let _ctxPanelOpen = new Set();
 
     setTimeout(() => { document.getElementById('global-loader').style.display = 'none'; }, 800);
 
@@ -696,7 +697,7 @@
                     <button class="btn-mini" style="background:#af52de; flex:1; padding:4px;" onclick="pasteComputo(${i}, null, null)" title="Pegar Cómputo">PEGAR</button>
                 </div>
 
-                </div><div class="val-box"><span class="lbl">P.UNIT</span><input id="pu-${i}" class="inp-num" type="number" step="any" value="${visualPu}" oninput="upd(${i}, 'pu', this.value)"><button class="btn-mini btn-orange" onclick="openApu(${i})">APU</button></div><div class="val-box"><span class="lbl">CARACTERÍSTICAS</span><textarea id="feat-${i}" class="feat-area" onchange="upd(${i}, 'feat', this.value)">${item.feat || ''}</textarea></div></div><div class="item-foot"><div class="total-lbl" id="tot-lbl-${i}" style="${activo ? '' : 'text-decoration:line-through; color:var(--gray);'}">TOTAL: ${fMoney(sub)}</div><i class="ph-bold ${eyeIcon} icon-btn" style="color:${eyeColor}" onclick="toggleActivo(${i})" title="${activo ? 'Desactivar ítem' : 'Activar ítem'}"></i><i class="ph-bold ph-image-square icon-btn" style="color:${iconColor}" onclick="openPhotoOpt(${i})"></i>${item.iaPrompt ? `<i class="ph-bold ph-magic-wand icon-btn" style="color:var(--purple)" onclick="abrirRegenIA(${i})" title="Re-generar con IA"></i>` : ''}<i class="ph-bold ph-copy icon-btn" onclick="dup(${i})"></i><i class="ph-bold ph-trash icon-btn" style="color:var(--red)" onclick="del(${i})"></i></div></div></div>`;
+                </div><div class="val-box"><span class="lbl">P.UNIT</span><input id="pu-${i}" class="inp-num" type="number" step="any" value="${visualPu}" oninput="upd(${i}, 'pu', this.value)"><button class="btn-mini btn-orange" onclick="openApu(${i})">APU</button></div><div class="val-box"><span class="lbl">CARACTERÍSTICAS</span><textarea id="feat-${i}" class="feat-area" onchange="upd(${i}, 'feat', this.value)">${item.feat || ''}</textarea></div></div><div class="item-foot"><div class="total-lbl" id="tot-lbl-${i}" style="${activo ? '' : 'text-decoration:line-through; color:var(--gray);'}">TOTAL: ${fMoney(sub)}</div><i class="ph-bold ${eyeIcon} icon-btn" style="color:${eyeColor}" onclick="toggleActivo(${i})" title="${activo ? 'Desactivar ítem' : 'Activar ítem'}"></i><i class="ph-bold ph-image-square icon-btn" style="color:${iconColor}" onclick="openPhotoOpt(${i})"></i>${item.iaPrompt ? `<i class="ph-bold ph-magic-wand icon-btn" style="color:var(--purple)" onclick="abrirRegenIA(${i})" title="Re-generar con IA"></i>` : ''}<i class="ph-bold ph-brain icon-btn" style="color:${(item.ctx_img||item.ctx_mat||item.ctx_est)?'var(--blue)':'var(--gray)'}" onclick="toggleCtxPanel(${i})" title="Contexto IA"></i><i class="ph-bold ph-copy icon-btn" onclick="dup(${i})"></i><i class="ph-bold ph-trash icon-btn" style="color:var(--red)" onclick="del(${i})"></i></div></div>${_buildCtxPanel(i, item)}</div>`;
             }
         });
         
@@ -713,7 +714,88 @@
     function del(i) { if(confirm("¿Borrar?")) { clearTimeout(saveTimeout); data.splice(i,1); saveDB(true); render(); } }
     function dup(i) { data.splice(i+1, 0, JSON.parse(JSON.stringify(data[i]))); saveDB(true); render(); }
 
-    function upd(i, f, v) { 
+    // ── Contexto IA por ítem ──────────────────────────────────────────
+    function _buildCtxPanel(i, item) {
+        const show = _ctxPanelOpen.has(i);
+        const imgSrc = item.ctx_img || '';
+        const mat = (item.ctx_mat || '').replace(/"/g, '&quot;');
+        const est = (item.ctx_est || '').replace(/"/g, '&quot;');
+        const imgSlot = imgSrc
+            ? `<div style="position:relative;display:inline-block;margin-bottom:6px;">
+                <img src="${imgSrc}" style="max-height:80px;border-radius:6px;display:block;border:1px solid #ddd;cursor:pointer;" onclick="ctxAnotar(${i})" title="Clic para anotar/medir">
+                <button onclick="ctxRemoveImg(${i})" style="position:absolute;top:-7px;right:-7px;background:#e74c3c;color:#fff;border:none;border-radius:50%;width:20px;height:20px;cursor:pointer;font-size:.8rem;line-height:1;">&times;</button>
+               </div>
+               <div style="margin-bottom:6px;"><button onclick="ctxAnotar(${i})" style="background:none;border:1px solid var(--blue);border-radius:6px;padding:4px 10px;font-size:.75rem;color:var(--blue);cursor:pointer;"><i class="ph-bold ph-ruler"></i> Anotar / Medir</button></div>`
+            : `<div style="border:2px dashed #ddd;border-radius:8px;padding:8px;text-align:center;position:relative;margin-bottom:6px;">
+                <input type="file" accept="image/*" style="position:absolute;inset:0;opacity:0;cursor:pointer;z-index:1;" onchange="ctxUpload(${i},this)">
+                <i class="ph-bold ph-image" style="color:#bbb;font-size:1.2rem;"></i>
+                <div style="font-size:.72rem;color:#aaa;margin-top:2px;">Foto de referencia del ítem</div>
+                <button onclick="ctxPaste(${i},event)" style="position:relative;z-index:2;margin-top:5px;padding:3px 10px;background:rgba(0,0,0,.05);border:1px solid #ccc;border-radius:6px;font-size:.72rem;cursor:pointer;color:#666;"><i class="ph-bold ph-clipboard"></i> Pegar</button>
+               </div>`;
+        return `<div id="ctx-panel-${i}" style="display:${show?'block':'none'};margin-left:20px;padding:8px 10px 10px;border-top:1px solid #eee;background:#f8f9fc;border-radius:0 0 8px 8px;">
+            <div style="font-size:.75rem;font-weight:700;color:var(--blue);margin-bottom:7px;display:flex;align-items:center;gap:5px;">
+                <i class="ph-bold ph-brain"></i> Contexto para IA
+                <span style="font-size:.67rem;font-weight:400;color:var(--gray);">— se incluye al re-generar APU</span>
+            </div>
+            ${imgSlot}
+            <input value="${mat}" placeholder="Materiales (ej: lona 510g, tubín 20×20, acrílico)" onchange="ctxSaveMat(${i},this.value)" style="width:100%;box-sizing:border-box;border:1px solid #ddd;border-radius:6px;padding:5px 8px;font-size:.8rem;margin-bottom:5px;outline:none;background:#fff;">
+            <input value="${est}" placeholder="Estructura / acabado (ej: soldado, laminado, tensado)" onchange="ctxSaveEst(${i},this.value)" style="width:100%;box-sizing:border-box;border:1px solid #ddd;border-radius:6px;padding:5px 8px;font-size:.8rem;outline:none;background:#fff;">
+        </div>`;
+    }
+
+    window.toggleCtxPanel = function(i) {
+        if (_ctxPanelOpen.has(i)) _ctxPanelOpen.delete(i);
+        else _ctxPanelOpen.add(i);
+        render();
+    };
+
+    window.ctxUpload = function(i, input) {
+        if (!input.files || !input.files[0]) return;
+        const r = new FileReader();
+        r.onload = async function(e) {
+            const compressed = await _compressB64(e.target.result, 512, 0.5);
+            data[i].ctx_img = compressed;
+            saveDB();
+            render();
+        };
+        r.readAsDataURL(input.files[0]);
+        input.value = '';
+    };
+
+    window.ctxPaste = async function(i, e) {
+        if (e) { e.preventDefault(); e.stopPropagation(); }
+        const clipFn = window._clipboardImage;
+        if (!clipFn) return alert('Función de portapapeles no disponible.');
+        const r = await clipFn();
+        if (!r) return alert('No hay imagen en el portapapeles.\nCopiá la imagen primero (Ctrl+C sobre ella).');
+        const compressed = await _compressB64(r.dataUrl, 512, 0.5);
+        data[i].ctx_img = compressed;
+        saveDB();
+        render();
+    };
+
+    window.ctxAnotar = function(i) {
+        const src = data[i].ctx_img || '';
+        if (!src) return alert('Primero cargá o pegá una imagen.');
+        window.abrirMedicionPres(src, function(dataUrl) {
+            _compressB64(dataUrl, 512, 0.5).then(function(compressed) {
+                data[i].ctx_img = compressed;
+                saveDB();
+                render();
+            });
+        });
+    };
+
+    window.ctxRemoveImg = function(i) {
+        data[i].ctx_img = null;
+        saveDB();
+        render();
+    };
+
+    window.ctxSaveMat = function(i, v) { data[i].ctx_mat = v; saveDB(); };
+    window.ctxSaveEst = function(i, v) { data[i].ctx_est = v; saveDB(); };
+
+    function upd(i, f, v) {
         data[i][f] = (f==='pu' || f==='cant') ? stripZeros(v) : v; 
         if(f === 'pu' || f === 'cant') {
             let sub = stripZeros(data[i].cant) * stripZeros(data[i].pu);
@@ -1553,15 +1635,37 @@ REGLA UNIDADES MATERIAL — CRÍTICA: Si el catálogo da precio por "barra" (tub
 Devolvé exactamente este formato (sin texto adicional):
 [{"desc":"NOMBRE TÉCNICO","cant":1,"und":"glb","feat":"- Característica 1\\n- Área: (2×11×1.2)+(2×9×1.2) = 48 m2\\n- Característica 3","apu":{"mat":[{"d":"TUBIN 20X20","u":"barra","q":3,"p":55}],"mo":[{"d":"SOLDADOR estructura","u":"jornal","q":1,"p":250},{"d":"TENSADOR lona","u":"m2","q":12,"p":8}],"eq":[],"sub":[]},"util":50,"ind":10}]`;
 
+            // Enrich prompt and parts with per-item ctx context
+            let _regenFullPrompt = userPrompt;
+            if (data[idx].ctx_mat || data[idx].ctx_est) {
+                _regenFullPrompt += '\n\nCONTEXTO DEL ÍTEM (cargado por el usuario):';
+                if (data[idx].ctx_mat) _regenFullPrompt += `\nMateriales: ${data[idx].ctx_mat}`;
+                if (data[idx].ctx_est) _regenFullPrompt += `\nEstructura/Acabado: ${data[idx].ctx_est}`;
+            }
+            if (data[idx].ctx_img) _regenFullPrompt += '\n\nFOTO DE REFERENCIA ADJUNTA: ver imagen del ítem para identificar materiales, geometría y acabado.';
+
+            const _regenParts = [{ text: _regenFullPrompt }];
+            if (data[idx].ctx_img && data[idx].ctx_img.startsWith('data:')) {
+                try {
+                    const _ctxComp = await _compressB64(data[idx].ctx_img, 512, 0.45);
+                    _regenParts.push({ inlineData: { data: _ctxComp.split(',')[1], mimeType: 'image/jpeg' } });
+                } catch(_ce) {}
+            }
+
             const token = firebase.auth().currentUser ? await firebase.auth().currentUser.getIdToken() : null;
             const headers = { 'Content-Type': 'application/json' };
             if(token) headers['Authorization'] = 'Bearer ' + token;
 
-            const resp = await fetch('/api/gemini', {
+            const _regenPayloadKB = Math.round(JSON.stringify(_regenParts).length / 1024);
+            const _regenUrl = _regenPayloadKB > 50
+                ? 'https://us-central1-rubik-bolivia.cloudfunctions.net/geminiProxy'
+                : '/api/gemini';
+
+            const resp = await fetch(_regenUrl, {
                 method: 'POST', headers,
                 body: JSON.stringify({
                     systemInstruction: { parts: [{ text: sysPrompt }] },
-                    contents: [{ role: 'user', parts: [{ text: userPrompt }] }]
+                    contents: [{ role: 'user', parts: _regenParts }]
                 })
             });
             if(!resp.ok) throw new Error(`HTTP ${resp.status}`);
@@ -2727,6 +2831,7 @@ EJEMPLO VÁLIDO:
         } catch(e) {}
         return null;
     }
+    window._clipboardImage = _clipboardImage;
 
     window.pasteR3dRef = async function(e) {
         e.preventDefault(); e.stopPropagation();
