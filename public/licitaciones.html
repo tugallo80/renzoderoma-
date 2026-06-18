@@ -182,6 +182,27 @@
         <div id="utilidad-detalle" style="display:none;font-size:11px;color:var(--gray);border-top:1px dashed var(--border);padding-top:12px;"></div>
     </div>
 
+    <!-- Modal selector tipo de licitación -->
+    <div id="mod-lic-tipo" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.65);z-index:2500;align-items:flex-end;justify-content:center;backdrop-filter:blur(8px);">
+        <div style="background:var(--card);border-radius:24px 24px 0 0;padding:24px 20px 40px;width:100%;max-width:480px;">
+            <div style="font-size:16px;font-weight:900;margin-bottom:5px;text-align:center;">Nueva Asignación</div>
+            <div style="font-size:12px;color:var(--gray);margin-bottom:22px;text-align:center;">¿Qué tipo de licitación querés crear?</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:16px;">
+                <button onclick="_openNewLicWithMode('mo')" style="padding:22px 14px;background:rgba(0,122,255,0.07);border:2px solid var(--blue);border-radius:18px;cursor:pointer;text-align:center;">
+                    <div style="font-size:30px;margin-bottom:8px;">👷</div>
+                    <div style="font-size:14px;font-weight:900;color:var(--blue);">Mano de Obra</div>
+                    <div style="font-size:10px;color:var(--gray);margin-top:4px;">Solo trabajo, sin materiales</div>
+                </button>
+                <button onclick="_openNewLicWithMode('venta')" style="padding:22px 14px;background:rgba(52,199,89,0.07);border:2px solid var(--green);border-radius:18px;cursor:pointer;text-align:center;">
+                    <div style="font-size:30px;margin-bottom:8px;">📦</div>
+                    <div style="font-size:14px;font-weight:900;color:var(--green);">Obra Vendida</div>
+                    <div style="font-size:10px;color:var(--gray);margin-top:4px;">Precio total de producción</div>
+                </button>
+            </div>
+            <button onclick="document.getElementById('mod-lic-tipo').style.display='none'" style="width:100%;padding:13px;background:var(--bg);border:1px solid var(--border);border-radius:12px;cursor:pointer;font-weight:700;color:var(--gray);">Cancelar</button>
+        </div>
+    </div>
+
     <div id="mod-new-lic" class="modal">
         <div class="modal-box">
             <i class="ph-bold ph-x" style="position:absolute; top:20px; right:20px; font-size:20px; cursor:pointer;" onclick="document.getElementById('mod-new-lic').style.display='none'"></i>
@@ -336,6 +357,7 @@
     let _licArtsData = {};   // { itemIdx: [{id,nombre,base,altura,cantidad,material,precio,imgRef,parentDesc},...] }
     let _licMatPrices = {};  // { 'Lona': 45, 'Adhesivo': 50, ... }
     let _isGraphicMode = false;
+    let _licMode = 'mo'; // 'mo' = Mano de Obra | 'venta' = Obra Vendida
 
     function fMoney(num) { return parseFloat(num || 0).toLocaleString('es-BO', {minimumFractionDigits: 2, maximumFractionDigits: 2}); }
     function getValidObjects(obj) { if(!obj) return []; return Object.values(obj).filter(x => x != null && typeof x === 'object'); }
@@ -364,19 +386,24 @@
     }
 
     function openNewLic() {
+        document.getElementById('mod-lic-tipo').style.display = 'flex';
+    }
+
+    window._openNewLicWithMode = function(mode) {
+        document.getElementById('mod-lic-tipo').style.display = 'none';
+        _licMode = mode;
         editingLicId = null; pendingPrefillTareas = null;
         _licArtsData = {}; _licMatPrices = {}; _isGraphicMode = false;
         document.getElementById('filter-assigned').value = 'pending';
         document.getElementById('mod-new-lic').style.display = 'flex'; document.getElementById('bat-box').style.display = 'none';
         document.getElementById('box-modo-interno').style.display = 'none'; document.getElementById('box-supervision-oferta').style.display = 'none';
         document.getElementById('box-grafico-precios').style.display = 'none';
-        document.getElementById('lic-oferta-supervision').value = ''; document.getElementById('tit-modal-lic').innerText = "Crear Licitación";
-        // Período por defecto = mes actual
+        document.getElementById('lic-oferta-supervision').value = '';
+        document.getElementById('tit-modal-lic').innerText = mode === 'venta' ? 'Obra Vendida — Propuesta Económica' : 'Asignación Mano de Obra';
         document.getElementById('lic-periodo').value = new Date().toISOString().substring(0, 7);
-        // Resetear prorrateo
         _licSplitReset();
         loadWorkers();
-    }
+    };
 
     window.updateModoInterno = function() {
         if(!isInternalWorkerActive) return;
@@ -803,32 +830,50 @@
                     let displayStyle = (filterMode === 'pending' && isAlreadyLicitado) ? 'none' : 'flex';
                     let assignedClass = isAlreadyLicitado ? 'assigned-row' : '';
                     let badgeAlready = isAlreadyLicitado ? `<span style="background:var(--orange); color:white; font-size:8px; padding:3px 6px; border-radius:4px; margin-left:5px; vertical-align:middle; font-weight:900;">YA ASIGNADO</span>` : '';
-                    let badgeMo = (isInternalWorkerActive && totalMoGlobalItem > 0) ? `<div class="badge-mo">Bolsa MO: +${fMoney(totalMoGlobalItem)} Bs</div>` : '';
-                    let reqTxt = (moRequired.length > 0 && !isSupervisionWorker) ? `<br><span style="font-size:9px; color:var(--orange);">M.O: ${moRequired.join(', ')}</span>` : '';
-                    let basePriceMain = it.pu || 0;
-                    let puFieldMain = `<div style="display:flex; flex-direction:column; align-items:flex-end; gap:4px; margin-top:8px;">
-<span style="font-size:9px; font-weight:800; color:var(--gray);">P.U. REF/BASE (Bs):</span>
-<input type="number" id="pu_main_${i}" class="inp-std" style="width:75px; padding:6px; margin:0; text-align:right; border-color:var(--blue);" value="${basePriceMain}" oninput="recalcularSeleccionInterna()" onclick="event.stopPropagation()">
-<span style="font-size:9px; color:var(--gray);">× ${it.cant} ${it.und} =</span>
-<span id="sub_main_${i}" style="font-size:11px; font-weight:800; color:var(--blue);">${(parseFloat(basePriceMain||0)*parseFloat(it.cant||0)).toFixed(0)} Bs</span>
-<span style="font-size:9px; font-weight:800; color:var(--green); margin-top:4px;">PROPONGO PAGAR:</span>
-<input type="number" id="propuesto_main_${i}" class="inp-std" style="width:75px; padding:5px; margin:0; text-align:right; border-color:var(--green); background:rgba(52,199,89,0.08);" placeholder="Total" oninput="recalcularSeleccionInterna()" onclick="event.stopPropagation()">
-</div>`;
-                    html += `<label class="item-row ${assignedClass}" style="align-items:flex-start; display:${displayStyle};"><div style="display:flex; flex-grow:1; align-items:center;">${thumbHtml}<div><b>${it.desc}</b> ${badgeAlready} <span style="font-size:9px; color:var(--blue); display:block; margin-top:2px;">(Ítem Principal)</span><span style="color:var(--gray)">${it.cant} ${it.und}</span>${reqTxt} <div style="margin-top:4px;">${badgeMo}</div></div></div><div style="display:flex; flex-direction:column; align-items:flex-end;"><input type="checkbox" class="chk-box lic-chk" data-type="main" data-idx="${i}" data-movalue="${totalMoGlobalItem}" onchange="recalcularSeleccionInterna()">${puFieldMain}</div></label>`;
 
-                    if(_moSource.length > 0 && !isSupervisionWorker) {
-                        _moSource.forEach((apu, aIdx) => {
-                            if (!apu.d) return;
-                            let subBadgeMo = (isInternalWorkerActive && totalMoGlobalItem > 0) ? `<div class="badge-mo">Bolsa MO: Activa</div>` : '';
-                            // prod_apu ya tiene cant total; apu tiene cant por unidad
-                            const cantTotal_display = _usandoProdApu
-                                ? parseFloat(apu.q||0)
-                                : parseFloat(apu.q||0) * parseFloat(it.cant||1);
-                            // Badge de fuente para saber de dónde viene
-                            const fuenteBadge = _usandoProdApu
-                                ? `<span style="font-size:8px;background:#1a3a1a;color:var(--green);padding:2px 5px;border-radius:4px;margin-left:4px;">PROD</span>`
-                                : `<span style="font-size:8px;background:#2a2a1a;color:var(--orange);padding:2px 5px;border-radius:4px;margin-left:4px;">APU</span>`;
-                            let puField = `<div style="display:flex; flex-direction:column; align-items:flex-end; gap:4px; margin-top:8px;">
+                    if (_licMode === 'venta') {
+                        // ── MODO OBRA VENDIDA: precio total del ítem (cant × pu de producción) ──
+                        let precioBase = parseFloat(it.cant||0) * parseFloat(it.pu||0);
+                        html += `<label class="item-row ${assignedClass}" style="align-items:flex-start; display:${displayStyle};">
+<div style="display:flex; flex-grow:1; align-items:center;">${thumbHtml}<div>
+<b>${it.desc}</b> ${badgeAlready}
+<span style="color:var(--gray); display:block; font-size:11px;">${it.cant} ${it.und}</span>
+</div></div>
+<div style="display:flex; flex-direction:column; align-items:flex-end;">
+<input type="checkbox" class="chk-box lic-chk" data-type="venta" data-idx="${i}" onchange="recalcularSeleccionInterna()">
+<div style="display:flex; flex-direction:column; align-items:flex-end; gap:3px; margin-top:8px;">
+<span style="font-size:9px; font-weight:800; color:var(--gray);">PRECIO BASE (Producción):</span>
+<span style="font-size:12px; font-weight:900; color:var(--gray);">${fMoney(precioBase)} Bs</span>
+<span style="font-size:9px; font-weight:800; color:var(--green); margin-top:4px;">PRECIO OFERTADO:</span>
+<input type="number" id="propuesto_venta_${i}" class="inp-std" style="width:90px; padding:6px; margin:0; text-align:right; border-color:var(--green); background:rgba(52,199,89,0.08);" value="${precioBase.toFixed(0)}" oninput="recalcularSeleccionInterna()" onclick="event.stopPropagation()">
+</div>
+</div></label>`;
+                    } else {
+                        // ── MODO MANO DE OBRA: header del ítem + filas de MO ──
+                        let badgeMo = (isInternalWorkerActive && totalMoGlobalItem > 0) ? `<div class="badge-mo">Bolsa MO: +${fMoney(totalMoGlobalItem)} Bs</div>` : '';
+                        let reqTxt = (moRequired.length > 0 && !isSupervisionWorker) ? `<br><span style="font-size:9px; color:var(--orange);">M.O: ${moRequired.join(', ')}</span>` : '';
+
+                        // Header no-seleccionable del ítem
+                        html += `<div class="item-row" style="display:${displayStyle}; border-left-color:var(--gray); opacity:0.9; cursor:default;">
+<div style="display:flex; flex-grow:1; align-items:center;">${thumbHtml}<div>
+<b style="font-size:13px;">${it.desc}</b> ${badgeAlready}
+<span style="color:var(--gray); display:block; font-size:11px;">${it.cant} ${it.und}</span>
+${reqTxt}<div style="margin-top:4px;">${badgeMo}</div>
+</div></div>
+<div style="font-size:9px; font-weight:800; color:var(--gray); padding:4px 8px; background:var(--bg); border-radius:6px; border:1px solid var(--border);">ÍTEM</div>
+</div>`;
+
+                        if(_moSource.length > 0 && !isSupervisionWorker) {
+                            _moSource.forEach((apu, aIdx) => {
+                                if (!apu.d) return;
+                                let subBadgeMo = (isInternalWorkerActive && totalMoGlobalItem > 0) ? `<div class="badge-mo">Bolsa MO: Activa</div>` : '';
+                                const cantTotal_display = _usandoProdApu
+                                    ? parseFloat(apu.q||0)
+                                    : parseFloat(apu.q||0) * parseFloat(it.cant||1);
+                                const fuenteBadge = _usandoProdApu
+                                    ? `<span style="font-size:8px;background:#1a3a1a;color:var(--green);padding:2px 5px;border-radius:4px;margin-left:4px;">PROD</span>`
+                                    : `<span style="font-size:8px;background:#2a2a1a;color:var(--orange);padding:2px 5px;border-radius:4px;margin-left:4px;">APU</span>`;
+                                let puField = `<div style="display:flex; flex-direction:column; align-items:flex-end; gap:4px; margin-top:8px;">
 <span style="font-size:9px; font-weight:800; color:var(--gray);">P.U. REF/BASE (Bs):</span>
 <input type="number" id="pu_${i}_mo_${aIdx}" class="inp-std" style="width:75px; padding:6px; margin:0; text-align:right; border-color:var(--orange);" value="${apu.p || 0}" oninput="recalcularSeleccionInterna()" onclick="event.stopPropagation()">
 <span style="font-size:9px; color:var(--gray);">× ${cantTotal_display.toFixed(2)} ${apu.u} =</span>
@@ -836,8 +881,9 @@
 <span style="font-size:9px; font-weight:800; color:var(--green); margin-top:4px;">PROPONGO PAGAR:</span>
 <input type="number" id="propuesto_${i}_mo_${aIdx}" class="inp-std" style="width:75px; padding:5px; margin:0; text-align:right; border-color:var(--green); background:rgba(52,199,89,0.08);" placeholder="Total" oninput="recalcularSeleccionInterna()" onclick="event.stopPropagation()">
 </div>`;
-                            html += `<label class="item-row apu-row ${assignedClass}" style="align-items:flex-start; display:${displayStyle};"><div style="display:flex; flex-grow:1; align-items:center;">${thumbHtml}<div><span style="font-size:10px; font-weight:800; color:var(--gray); text-transform:uppercase;">PERTENECE A: ${it.desc} &gt;</span><br><b style="font-size:14px;">${apu.d}</b>${fuenteBadge} ${badgeAlready}<br><span style="color:var(--gray)">Cant. real: ${cantTotal_display.toFixed(2)} ${apu.u}</span> <div style="margin-top:4px;">${subBadgeMo}</div></div></div><div style="display:flex; flex-direction:column; align-items:flex-end;"><input type="checkbox" class="chk-box lic-chk" data-type="mo" data-idx="${i}" data-apuidx="${aIdx}" data-cant="${cantTotal_display}" data-movalue="0" onchange="recalcularSeleccionInterna()">${puField}</div></label>`;
-                        });
+                                html += `<label class="item-row apu-row ${assignedClass}" style="align-items:flex-start; display:${displayStyle};"><div style="display:flex; flex-grow:1; align-items:center;">${thumbHtml}<div><span style="font-size:10px; font-weight:800; color:var(--gray); text-transform:uppercase;">PERTENECE A: ${it.desc} &gt;</span><br><b style="font-size:14px;">${apu.d}</b>${fuenteBadge} ${badgeAlready}<br><span style="color:var(--gray)">Cant. real: ${cantTotal_display.toFixed(2)} ${apu.u}</span> <div style="margin-top:4px;">${subBadgeMo}</div></div></div><div style="display:flex; flex-direction:column; align-items:flex-end;"><input type="checkbox" class="chk-box lic-chk" data-type="mo" data-idx="${i}" data-apuidx="${aIdx}" data-cant="${cantTotal_display}" data-movalue="0" onchange="recalcularSeleccionInterna()">${puField}</div></label>`;
+                            });
+                        }
                     }
                 }
             });
@@ -977,6 +1023,10 @@
                 let puInput = document.getElementById(`pu_main_${idx}`); let pu = parseFloat(puInput ? puInput.value : 0) || 0;
                 let propInput = document.getElementById(`propuesto_main_${idx}`); let prop = propInput ? parseFloat(propInput.value) : NaN;
                 sum += isNaN(prop) || propInput.value === '' ? (cantInput * pu) : prop;
+            } else if(type === 'venta') {
+                let propInput = document.getElementById(`propuesto_venta_${idx}`);
+                let prop = propInput ? parseFloat(propInput.value) : NaN;
+                if (!isNaN(prop)) sum += prop;
             }
         });
         document.getElementById('lbl-total-ref').innerText = fMoney(sum) + ' Bs';
@@ -1075,6 +1125,16 @@
                     const cantMain = parseFloat(it.cant || 1);
                     const puMainReal = (propInputMain && propInputMain.value !== '') ? (subMain / (cantMain || 1)) : puMain;
                     tareas[`m_${idx}`] = { parent_desc: 'ÍTEM PRINCIPAL', task_name: it.desc, desc: it.desc, cant: cantMain, und: it.und, pu: puMainReal, subtotal: subMain, feat: featStr, mats: matsStr, measures: it.measures || [], img: it.img || null, cortes: it.cortes || [], op_images: it.op_images || [], originIdx: idx, originType: 'main', fecha_entrega: it.prod_entrega || it.print_entrega || it.gantt_end || 'Sin fecha' };
+                } else if(type === 'venta') {
+                    // ── MODO OBRA VENDIDA: precio total del ítem ──
+                    let matsArr = []; _matSrc.forEach(m => { if(m.d) matsArr.push({d:m.d, q:m.q, u:m.u}); });
+                    let propInputV = document.getElementById(`propuesto_venta_${idx}`);
+                    let subVenta = propInputV ? (parseFloat(propInputV.value) || parseFloat(it.cant||0)*parseFloat(it.pu||0)) : parseFloat(it.cant||0)*parseFloat(it.pu||0);
+                    const cantV = parseFloat(it.cant || 1);
+                    const puV = subVenta / (cantV || 1);
+                    totalMoAsignado += subVenta;
+                    countedIndices.add(idx);
+                    tareas[`venta_${idx}`] = { parent_desc: it.desc, task_name: it.desc, desc: it.desc, cant: cantV, und: it.und, pu: puV, subtotal: subVenta, feat: featStr, mats: matsStr, matsArr: matsArr, measures: it.measures || [], img: it.img || null, cortes: it.cortes || [], op_images: it.op_images || [], originIdx: idx, originType: 'venta', fecha_entrega: it.prod_entrega || it.print_entrega || it.gantt_end || 'Sin fecha' };
                 }
                 count++;
             });
@@ -1084,7 +1144,7 @@
         let oldLic = editingLicId ? currentLics[editingLicId] : null; let finalLicKey = editingLicId || db.ref(`proyectos/${cid}/${pid}/licitaciones`).push().key;
         let payload = oldLic ? JSON.parse(JSON.stringify(oldLic)) : {};
         
-        payload.id = finalLicKey; payload.pid = pid; payload.cid = cid; payload.pName = pName; payload.worker_id = workerId; payload.worker_name = worker.nombre; payload.is_grafico = isGraphic; payload.is_supervision = isSupervision; payload.is_internal_assignment = isInternal; payload.tareas = tareas;
+        payload.id = finalLicKey; payload.pid = pid; payload.cid = cid; payload.pName = pName; payload.worker_id = workerId; payload.worker_name = worker.nombre; payload.is_grafico = isGraphic; payload.is_supervision = isSupervision; payload.is_internal_assignment = isInternal; payload.lic_mode = _licMode || 'mo'; payload.tareas = tareas;
         if (isGraphic) { payload.mat_prices = Object.assign({}, _licMatPrices); }
 
         if (isSupervision) {
@@ -1136,7 +1196,9 @@
     }
 
     function editarLicitacion(key) {
-        editingLicId = key; let lic = currentLics[key]; document.getElementById('filter-assigned').value = 'all'; document.getElementById('lic-tipo').value = lic.is_supervision ? 'supervision' : (lic.is_grafico ? 'graficos' : 'obra');
+        editingLicId = key; let lic = currentLics[key];
+        _licMode = lic.lic_mode || 'mo';
+        document.getElementById('filter-assigned').value = 'all'; document.getElementById('lic-tipo').value = lic.is_supervision ? 'supervision' : (lic.is_grafico ? 'graficos' : 'obra');
         loadWorkers();
         setTimeout(() => {
             document.getElementById('lic-worker').value = lic.worker_id;
@@ -1717,6 +1779,11 @@ LICITACIONES ACTUALES DEL PROYECTO:
             doc.setFont('helvetica', 'normal');
             doc.text(pName, W/2, 22, {align:'center'});
             doc.setTextColor(0, 0, 0);
+            // Logo RUBIK — esquina superior derecha del header
+            try {
+                const rubikLogo = await _loadImgBase64('/IA RUBIK BOTON.png');
+                if (rubikLogo) doc.addImage(rubikLogo, 'PNG', W - mR - 22, 3, 24, 24);
+            } catch(e) {}
 
             const workerName = lic.worker_name || lic.worker_id || '';
             let yH = 38;
@@ -1772,7 +1839,7 @@ LICITACIONES ACTUALES DEL PROYECTO:
             const groups = {};
             tareas.forEach(t => {
                 const k = (t.originIdx != null) ? String(t.originIdx) : '_' + String(t.task_name||'').slice(0,8);
-                if (!groups[k]) groups[k] = {label: t.task_name||t.desc||'Ítem', subtotal:0, fechaEntrega: t.fecha_entrega||'', imgs:[]};
+                if (!groups[k]) groups[k] = {label: t.task_name||t.desc||'Ítem', subtotal:0, fechaEntrega: t.fecha_entrega||'', imgs:[], matsArr: t.matsArr||[]};
                 groups[k].subtotal += parseFloat(t.subtotal||0);
                 if (t.img) groups[k].imgs.push(t.img);
                 if (t.op_images) {
@@ -1797,6 +1864,41 @@ LICITACIONES ACTUALES DEL PROYECTO:
 
             for (const [k, group] of Object.entries(groups)) {
                 const uniqueImgs = [...new Set(group.imgs)].slice(0, 8);
+                const hasMats = lic.lic_mode === 'venta' && group.matsArr && group.matsArr.length > 0;
+
+                // ── Para Obra Vendida: página de materiales antes de las imágenes ──
+                if (hasMats) {
+                    doc.addPage();
+                    doc.setFillColor(52, 199, 89);
+                    doc.rect(0, 0, W, 14, 'F');
+                    doc.setTextColor(255, 255, 255);
+                    doc.setFont('helvetica', 'bold');
+                    doc.setFontSize(9);
+                    const matLabelClean = group.label.replace(/[\u{1F000}-\u{1FFFF}]/gu,'').trim().substring(0,90);
+                    doc.text(matLabelClean, W/2, 9.5, {align:'center'});
+                    doc.setTextColor(0, 0, 0);
+                    doc.setFont('helvetica', 'bold');
+                    doc.setFontSize(10);
+                    doc.text('Materiales requeridos', mL, 23);
+                    let mY = 30;
+                    doc.setFont('helvetica', 'normal');
+                    doc.setFontSize(9);
+                    group.matsArr.forEach(m => {
+                        if (mY > 270) { doc.addPage(); mY = 15; }
+                        doc.text(`${m.d}   ×  ${m.q} ${m.u}`, mL + 4, mY);
+                        mY += 7;
+                    });
+                    // Precio en esquina inferior derecha
+                    const mpbW = 60, mpbH = 12;
+                    doc.setFillColor(0, 0, 0);
+                    doc.roundedRect(W - mR - mpbW, 275, mpbW, mpbH, 2, 2, 'F');
+                    doc.setTextColor(255, 255, 255);
+                    doc.setFont('helvetica', 'bold');
+                    doc.setFontSize(10);
+                    doc.text(fM(group.subtotal) + ' Bs', W - mR - mpbW/2, 283, {align:'center'});
+                    doc.setTextColor(0, 0, 0);
+                }
+
                 if (uniqueImgs.length === 0) continue;
 
                 for (const imgUrl of uniqueImgs) {
