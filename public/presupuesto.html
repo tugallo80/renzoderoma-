@@ -1760,6 +1760,22 @@ Devolvé exactamente este formato (sin texto adicional):
     }
 
     // --- FILAS MANUALES MULTI-FOTO (PASTE Y UPLOAD) ---
+    function _makeIAImgWrap(imgEl) {
+        const wrap = document.createElement('div');
+        wrap.style.cssText = 'position:relative;display:inline-block;';
+        const annotBtn = document.createElement('button');
+        annotBtn.title = 'Anotar / Medir';
+        annotBtn.innerHTML = '<i class="ph-bold ph-ruler"></i>';
+        annotBtn.style.cssText = 'position:absolute;bottom:2px;left:2px;background:rgba(0,100,255,0.8);color:#fff;border:none;border-radius:3px;padding:2px 5px;font-size:10px;cursor:pointer;z-index:1;';
+        annotBtn.onclick = function(e) {
+            e.stopPropagation();
+            window.abrirMedicionPres(imgEl.src, function(dataUrl) { imgEl.src = dataUrl; });
+        };
+        wrap.appendChild(imgEl);
+        wrap.appendChild(annotBtn);
+        return wrap;
+    }
+
     window.addIARow = function() {
         iaRowCounter++;
         const idActual = iaRowCounter;
@@ -1767,7 +1783,7 @@ Devolvé exactamente este formato (sin texto adicional):
         const row = document.createElement('div');
         row.className = 'ia-item-row';
         row.style = "background:#1c1c1e; padding:15px; border-radius:8px; margin-bottom:10px; border:1px solid #333; position:relative;";
-        
+
         row.innerHTML = `
             <button class="btn-del-row" onclick="this.parentElement.remove()" style="position:absolute; right:10px; top:10px; background:none; border:none; color:#ff4444; cursor:pointer;"><i class="ph-bold ph-x"></i></button>
             <div style="display:grid; grid-template-columns: 1fr 80px; gap:10px; margin-bottom:10px;">
@@ -1782,8 +1798,12 @@ Devolvé exactamente este formato (sin texto adicional):
             </div>
             <div>
                 <span style="font-size:10px; color:#888; display:block; margin-bottom:4px;">Instrucciones o PEGA AQUÍ TUS CAPTURAS (Ctrl+V)</span>
-                <textarea class="ia-inp-prompt" placeholder="Describe el ítem o pega varias imágenes aquí..." 
+                <textarea class="ia-inp-prompt" placeholder="Describe el ítem o pega varias imágenes aquí..."
                     style="width:100%; background:#000; color:#fff; border:1px solid #444; padding:8px; border-radius:4px; height:60px; font-size:12px; resize:none;"></textarea>
+            </div>
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:6px; margin-top:8px;">
+                <input type="text" class="ia-inp-mat" placeholder="Materiales (ej: lona, tubín, acrílico)" style="width:100%;background:#000;color:#fff;border:1px solid #444;padding:6px 8px;border-radius:4px;font-size:11px;box-sizing:border-box;">
+                <input type="text" class="ia-inp-est" placeholder="Estructura (ej: soldado, tensado)" style="width:100%;background:#000;color:#fff;border:1px solid #444;padding:6px 8px;border-radius:4px;font-size:11px;box-sizing:border-box;">
             </div>
             <div style="display:flex; align-items:center; gap:10px; margin-top:10px;">
                 <input type="file" id="ia-file-${idActual}" accept="image/*" multiple style="display:none" onchange="window.handleIARowPhoto(this, ${idActual})">
@@ -1805,8 +1825,8 @@ Devolvé exactamente este formato (sin texto adicional):
                         const newImg = document.createElement('img');
                         newImg.src = event.target.result;
                         newImg.style = "height:60px; border-radius:4px; border:1px solid #555; object-fit:cover;";
-                        newImg.className = "ia-row-image-data"; // Etiqueta clave para que la IA la lea
-                        imgContainer.appendChild(newImg);
+                        newImg.className = "ia-row-image-data";
+                        imgContainer.appendChild(_makeIAImgWrap(newImg));
                     };
                     reader.readAsDataURL(blob);
                 }
@@ -1828,7 +1848,7 @@ Devolvé exactamente este formato (sin texto adicional):
                     newImg.src = e.target.result;
                     newImg.style = "height:60px; border-radius:4px; border:1px solid #555; object-fit:cover;";
                     newImg.className = "ia-row-image-data";
-                    imgContainer.appendChild(newImg);
+                    imgContainer.appendChild(_makeIAImgWrap(newImg));
                 };
                 reader.readAsDataURL(file);
             });
@@ -2206,8 +2226,17 @@ F3. MATERIALES POR PIEZAS COMPLEJAS — preguntar si no se especifica:
             const cant = row.querySelector('.ia-inp-cant').value;
             const prompt = row.querySelector('.ia-inp-prompt').value.trim();
 
+            const mat = row.querySelector('.ia-inp-mat')?.value?.trim() || '';
+            const est = row.querySelector('.ia-inp-est')?.value?.trim() || '';
+
             if(name) {
                 textPrompt += `ÍTEM ${index+1}: ${name} (Cantidad: ${cant}).\nInstrucciones del usuario: ${prompt}\n`;
+                if (mat || est) {
+                    textPrompt += 'Contexto del ítem:';
+                    if (mat) textPrompt += `\nMateriales: ${mat}`;
+                    if (est) textPrompt += `\nEstructura/Acabado: ${est}`;
+                    textPrompt += '\n';
+                }
 
                 const rowImages = row.querySelectorAll('.ia-row-image-data');
                 // Comprimir TODAS las imágenes a un tamaño muy pequeño (512px / 0.4)
