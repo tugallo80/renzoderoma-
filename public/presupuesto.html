@@ -1547,8 +1547,11 @@ PROCESO OBLIGATORIO ANTES DE GENERAR EL JSON:
 
 No cambies el nombre del ítem — el desc lo pone el usuario.
 
+REGLA MANO DE OBRA — CRÍTICA: Cada rubro MO lleva su tipo ESPECÍFICO: SOLDADOR, TENSADOR, INSTALADOR, PINTOR, CORTADOR, ARMADOR, etc. NUNCA usar "Mano de obra" genérico.
+REGLA UNIDADES MATERIAL — CRÍTICA: Si el catálogo da precio por "barra" (tubería 6ml, ángulo 6ml) o "rollo" o "pliego", la cantidad en el APU va en esa unidad. Calculá cuántas barras/rollos/pliegos necesita el ítem. Ej: si necesitás 12ml de tubín y la barra es 6ml → q=2 barras. NUNCA poner q=12 con precio por barra (eso sería 12×precio_barra = 6 veces el costo real).
+
 Devolvé exactamente este formato (sin texto adicional):
-[{"desc":"NOMBRE TÉCNICO","cant":1,"und":"glb","feat":"- Característica 1\\n- Área: (2×11×1.2)+(2×9×1.2) = 48 m2\\n- Característica 3","apu":{"mat":[{"d":"MATERIAL","u":"und","q":1,"p":50}],"mo":[{"d":"MANO DE OBRA","u":"hr","q":4,"p":12.5}],"eq":[],"sub":[]},"util":50,"ind":10}]`;
+[{"desc":"NOMBRE TÉCNICO","cant":1,"und":"glb","feat":"- Característica 1\\n- Área: (2×11×1.2)+(2×9×1.2) = 48 m2\\n- Característica 3","apu":{"mat":[{"d":"TUBIN 20X20","u":"barra","q":3,"p":55}],"mo":[{"d":"SOLDADOR estructura","u":"jornal","q":1,"p":250},{"d":"TENSADOR lona","u":"m2","q":12,"p":8}],"eq":[],"sub":[]},"util":50,"ind":10}]`;
 
             const token = firebase.auth().currentUser ? await firebase.auth().currentUser.getIdToken() : null;
             const headers = { 'Content-Type': 'application/json' };
@@ -1829,7 +1832,8 @@ PASO 3 — BUSCAR EN BASE DE DATOS:
 
 PASO 4 — ARMAR EL APU:
   Listar cada material por separado con su cantidad calculada en PASO 2 y precio de PASO 3.
-  Listar mano de obra con horas o m2 reales según el ítem.
+  REGLA UNIDADES: Si el catálogo tiene precio por "barra" (tubería 6ml), "rollo" o "pliego", la cantidad en el APU va en ESA unidad. Convertí: barras = ceil(ml_total / 5.8). NUNCA poner ml con precio de barra.
+  REGLA MO: Cada rubro va con tipo específico — SOLDADOR, TENSADOR, INSTALADOR, PINTOR, CORTADOR, ARMADOR. NUNCA "Mano de obra" genérico.
   util=50, ind=10 siempre.
 
 PASO 5 — VERIFICAR CONSISTENCIA:
@@ -3233,7 +3237,8 @@ IMPORTANTE: Dibujá SOLO lo que se describe aquí. No inventes vistas adicionale
         const estructuraTexto = elems.filter(e => e.est).map(e => e.est).join('; ');
         if (hasEst) {
             prompt += `\n\nDETALLE DE ARMADO (incluir obligatoriamente):
-En la esquina inferior derecha del render, dibujá un recuadro independiente rotulado "Detalle constructivo" que muestre una vista de CORTE O EXPLOSIÓN del borde/esquina del objeto. Usá líneas punteadas para los perfiles internos y relleno translúcido/semitransparente en las partes estructurales para que se vea el armado sin tapar la vista principal. El detalle debe mostrar: ${estructuraTexto}.`;
+⚠️ REGLA: En el render PRINCIPAL los elementos estructurales internos (tubería, perfiles, planchas, nodos) están OCULTOS bajo el acabado exterior terminado. El render principal muestra SOLO el aspecto exterior acabado — lona, vinilo, acrílico, pintura, iluminación. La estructura interna NO debe verse en el render principal.
+En la esquina inferior derecha, dibujá un recuadro independiente rotulado "Detalle constructivo" que muestre una vista de CORTE o EXPLOSIÓN de un borde/esquina del objeto. Usá líneas punteadas para los perfiles y relleno translúcido en las partes estructurales para ver el armado sin taparlo. El detalle debe mostrar: ${estructuraTexto}.`;
         }
 
         prompt += `\n\nMostrar: vista isométrica completa con todos los elementos etiquetados, cotas en metros, materiales indicados en español.${hasEst ? ' El recuadro de detalle constructivo es OBLIGATORIO.' : ''} No agregues vistas adicionales que no hayan sido solicitadas.`;
