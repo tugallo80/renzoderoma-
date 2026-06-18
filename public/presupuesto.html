@@ -2386,6 +2386,16 @@ EJEMPLO VÁLIDO:
         </div>
       </div>
 
+      <!-- Detalles adicionales: croquis, costillas, cortes, etc. -->
+      <div style="margin-top:10px;">
+        <label style="font-size:.85rem;font-weight:600;">Detalles constructivos adicionales <span style="font-size:.75rem;font-weight:400;color:var(--gray);">(croquis, costillas, cortes — opcional)</span></label>
+        <div id="r3d-detalles-list" style="display:flex;flex-wrap:wrap;gap:8px;margin-top:6px;"></div>
+        <button onclick="agregarDetalleR3D()" style="margin-top:6px;background:none;border:1.5px dashed #c5d0e6;border-radius:8px;padding:8px 14px;font-size:.78rem;color:var(--gray);cursor:pointer;width:100%;">
+          <i class="ph-bold ph-plus"></i> Agregar imagen de detalle
+        </button>
+        <input type="file" id="r3d-detalle-input" accept="image/*" style="display:none;" onchange="onR3dDetalleImagen(this)">
+      </div>
+
       <!-- Elementos dinámicos -->
       <div style="margin-top:14px;">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
@@ -2596,6 +2606,7 @@ EJEMPLO VÁLIDO:
     var _r3dRefCropped   = false; // true when ref was auto-cropped to marked zone
     var _r3dVolBase64 = null;
     var _r3dVolMime   = 'image/jpeg';
+    var _r3dDetalles  = [];  // [{data, mime, label}] — additional detail images
     var _r3dRenderDataUrl = null;
 
     window.abrirModalRender3D = function() {
@@ -2606,9 +2617,11 @@ EJEMPLO VÁLIDO:
         _r3dRefAnnotated = false;
         _r3dRefCropped   = false;
         _r3dVolBase64 = null;
+        _r3dDetalles  = [];
         _r3dRenderDataUrl = null;
         limpiarR3dRef();
         limpiarR3dVol();
+        _renderDetallesList();
         renderDims3D();
         renderElementosR3D();
         document.getElementById('r3d-step1').style.display = 'block';
@@ -2734,6 +2747,56 @@ EJEMPLO VÁLIDO:
         document.getElementById('r3d-vol-placeholder').style.display = 'none';
     };
 
+    // ── Detalles constructivos adicionales ───────────────────────
+    function _renderDetallesList() {
+        var list = document.getElementById('r3d-detalles-list');
+        if (!list) return;
+        list.innerHTML = '';
+        _r3dDetalles.forEach(function(det, i) {
+            var div = document.createElement('div');
+            div.style.cssText = 'position:relative;display:inline-block;';
+            div.innerHTML = '<img src="data:' + det.mime + ';base64,' + det.data + '" style="width:80px;height:80px;object-fit:cover;border-radius:8px;border:2px solid var(--border);">'
+                + '<div style="position:absolute;bottom:0;left:0;right:0;background:rgba(0,0,0,.55);border-radius:0 0 7px 7px;padding:2px 4px;display:flex;align-items:center;justify-content:space-between;">'
+                + '<span style="font-size:.6rem;color:#ccc;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:55px;">' + (det.label || ('Det.'+(i+1))) + '</span>'
+                + '<button onclick="abrirMedicionDetalle('+i+')" style="background:none;border:none;color:#ffd60a;font-size:.75rem;cursor:pointer;padding:0 2px;" title="Agregar notas/medidas"><i class="ph-bold ph-ruler"></i></button>'
+                + '</div>'
+                + '<button onclick="eliminarDetalleR3D('+i+')" style="position:absolute;top:-6px;right:-6px;background:#e74c3c;color:#fff;border:none;border-radius:50%;width:18px;height:18px;font-size:.7rem;cursor:pointer;line-height:1;">&times;</button>';
+            list.appendChild(div);
+        });
+    }
+
+    window.agregarDetalleR3D = function() {
+        document.getElementById('r3d-detalle-input').click();
+    };
+
+    window.onR3dDetalleImagen = function(input) {
+        var file = input.files[0];
+        if (!file) return;
+        var reader = new FileReader();
+        reader.onload = function(e) {
+            _r3dDetalles.push({ data: e.target.result.split(',')[1], mime: file.type || 'image/jpeg', label: file.name.replace(/\.[^.]+$/, '').slice(0, 20) });
+            _renderDetallesList();
+        };
+        reader.readAsDataURL(file);
+        input.value = '';
+    };
+
+    window.eliminarDetalleR3D = function(i) {
+        _r3dDetalles.splice(i, 1);
+        _renderDetallesList();
+    };
+
+    window.abrirMedicionDetalle = function(i) {
+        var det = _r3dDetalles[i];
+        if (!det) return;
+        var dataUrl = 'data:' + det.mime + ';base64,' + det.data;
+        abrirMedicionRefRender(dataUrl, function(newDataUrl) {
+            _r3dDetalles[i].data = newDataUrl.split(',')[1];
+            _r3dDetalles[i].mime = 'image/png';
+            _renderDetallesList();
+        });
+    };
+
     // ──────────────────────────────────────────────────────────────
     //  ANOTACIÓN DE REFERENCIA — dos canvas: display + overlay
     //  El overlay almacena solo los trazos (full opacity).
@@ -2759,9 +2822,12 @@ EJEMPLO VÁLIDO:
     function _anotCenterInViewport() {
         var vp = document.getElementById('anot-viewport');
         if (!vp || !_anotCanvas) return;
-        _anotOx = Math.max(0, (vp.clientWidth  - _anotCanvas.width)  / 2);
-        _anotOy = Math.max(0, (vp.clientHeight - _anotCanvas.height) / 2);
-        _anotZoom = 1;
+        var vpW = vp.clientWidth, vpH = vp.clientHeight;
+        // Fit image entirely in viewport on open
+        var fitZoom = Math.min(vpW / _anotCanvas.width, vpH / _anotCanvas.height, 1);
+        _anotZoom = fitZoom;
+        _anotOx = (vpW - _anotCanvas.width  * fitZoom) / 2;
+        _anotOy = (vpH - _anotCanvas.height * fitZoom) / 2;
         _anotApplyTransform();
     }
 
@@ -2910,8 +2976,10 @@ EJEMPLO VÁLIDO:
                 var newCx = (p1.x + p2.x) / 2, newCy = (p1.y + p2.y) / 2;
                 var scaleRatio = _pinchRef.dist > 0 ? newDist / _pinchRef.dist : 1;
                 _anotZoom = Math.max(0.3, Math.min(8, _pinchRef.zoom * scaleRatio));
-                _anotOx   = _pinchRef.ox + (newCx - _pinchRef.cx);
-                _anotOy   = _pinchRef.oy + (newCy - _pinchRef.cy);
+                // Zoom toward pinch center: the canvas point under the center must stay there
+                var r = _anotZoom / _pinchRef.zoom;
+                _anotOx = newCx - (_pinchRef.cx - _pinchRef.ox) * r;
+                _anotOy = newCy - (_pinchRef.cy - _pinchRef.oy) * r;
                 _anotApplyTransform();
             } else if (nPtrs === 1 && _anotDrawing) {
                 var p = _anotPos(e);
@@ -3223,6 +3291,7 @@ EJEMPLO VÁLIDO:
         const hasVol = !!_r3dVolBase64;
         const elems  = _r3dElements.filter(e => e.nombre || e.mat || e.est || e.acab);
         const hasEst = elems.some(e => e.est && e.est.trim());
+        const hasDetalles = _r3dDetalles.length > 0;
 
         // ── Color → element mapping (when multi-element with colors) ──────
         const coloredElems   = elems.filter(e => e.color);
@@ -3315,6 +3384,9 @@ IMPORTANTE: Dibujá SOLO lo que se describe aquí. No inventes vistas adicionale
 En la esquina inferior derecha, dibujá un recuadro independiente rotulado "Detalle constructivo" que muestre una vista de CORTE o EXPLOSIÓN de un borde/esquina del objeto. Usá líneas punteadas para los perfiles y relleno translúcido en las partes estructurales para ver el armado sin taparlo. El detalle debe mostrar: ${estructuraTexto}.`;
         }
 
+        if (hasDetalles) {
+            prompt += `\n\nIMAGENES DE DETALLE CONSTRUCTIVO (últimas ${_r3dDetalles.length} imagen(es) adjunta(s)): son croquis o fotos de perfiles, costillas, cortes o detalles de armado. Usalas como referencia de geometría exacta para el Detalle constructivo. Los trazos o anotaciones sobre estas imágenes son notas de medidas — respetá esas proporciones.`;
+        }
         prompt += `\n\nMostrar: vista isométrica completa con todos los elementos etiquetados, cotas en metros, materiales indicados en español.${hasEst ? ' El recuadro de detalle constructivo es OBLIGATORIO.' : ''} No agregues vistas adicionales que no hayan sido solicitadas.`;
         return prompt;
     }
@@ -3381,6 +3453,9 @@ En la esquina inferior derecha, dibujá un recuadro independiente rotulado "Deta
             }
             if (_r3dVolBase64) {
                 body.volumetryImage = { data: _r3dVolBase64, mimeType: _r3dVolMime };
+            }
+            if (_r3dDetalles.length > 0) {
+                body.detalleImages = _r3dDetalles.map(function(d) { return { data: d.data, mimeType: d.mime }; });
             }
 
             // Usamos Web Worker para que el fetch no congele el browser

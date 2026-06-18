@@ -116,6 +116,11 @@ exports.geminiProxy = onRequest(GEMINI_PROXY_OPTS, async (req, res) => {
             if (body.volumetryImage?.data) {
                 userParts.push({ inlineData: { data: body.volumetryImage.data, mimeType: body.volumetryImage.mimeType || "image/jpeg" } });
             }
+            if (Array.isArray(body.detalleImages)) {
+                body.detalleImages.forEach(img => {
+                    if (img?.data) userParts.push({ inlineData: { data: img.data, mimeType: img.mimeType || "image/jpeg" } });
+                });
+            }
             userParts.push({ text: imgPrompt });
 
             // ── 1. Descubrir modelos disponibles via ListModels ──────────────
