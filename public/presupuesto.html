@@ -1805,6 +1805,9 @@ Devolvé exactamente este formato (sin texto adicional):
                 <input type="text" class="ia-inp-mat" placeholder="Materiales (ej: lona, tubín, acrílico)" style="width:100%;background:#000;color:#fff;border:1px solid #444;padding:6px 8px;border-radius:4px;font-size:11px;box-sizing:border-box;">
                 <input type="text" class="ia-inp-est" placeholder="Estructura (ej: soldado, tensado)" style="width:100%;background:#000;color:#fff;border:1px solid #444;padding:6px 8px;border-radius:4px;font-size:11px;box-sizing:border-box;">
             </div>
+            <div style="margin-top:6px;">
+                <input type="text" class="ia-inp-acab" placeholder="Acabado / branding (ej: impresión UV, neon flex, pintura duco, vinilo)" style="width:100%;background:#000;color:#fff;border:1px solid #444;padding:6px 8px;border-radius:4px;font-size:11px;box-sizing:border-box;">
+            </div>
             <div style="display:flex; align-items:center; gap:10px; margin-top:10px;">
                 <input type="file" id="ia-file-${idActual}" accept="image/*" multiple style="display:none" onchange="window.handleIARowPhoto(this, ${idActual})">
                 <button type="button" onclick="document.getElementById('ia-file-${idActual}').click()" style="background:#333; color:#fff; border:none; padding:5px 10px; border-radius:4px; cursor:pointer; font-size:11px;"><i class="ph-bold ph-camera"></i> Subir Foto(s)</button>
@@ -1919,6 +1922,11 @@ Devolvé exactamente este formato (sin texto adicional):
 
     window.generateIABudget = async function() {
         const rows = document.querySelectorAll('.ia-item-row');
+        const hasName = Array.from(rows).some(r => r.querySelector('.ia-inp-name')?.value?.trim());
+        if (!hasName) {
+            alert('Completá el nombre del ítem (campo "Ítem / Tarea") antes de generar.');
+            return;
+        }
         const btnGen = document.getElementById('btn-ia-generate');
         btnGen.disabled = true;
         btnGen.innerHTML = '<i class="ph-bold ph-spinner-gap anim-spin"></i> Generando...';
@@ -2226,15 +2234,17 @@ F3. MATERIALES POR PIEZAS COMPLEJAS — preguntar si no se especifica:
             const cant = row.querySelector('.ia-inp-cant').value;
             const prompt = row.querySelector('.ia-inp-prompt').value.trim();
 
-            const mat = row.querySelector('.ia-inp-mat')?.value?.trim() || '';
-            const est = row.querySelector('.ia-inp-est')?.value?.trim() || '';
+            const mat  = row.querySelector('.ia-inp-mat')?.value?.trim()  || '';
+            const est  = row.querySelector('.ia-inp-est')?.value?.trim()  || '';
+            const acab = row.querySelector('.ia-inp-acab')?.value?.trim() || '';
 
             if(name) {
                 textPrompt += `ÍTEM ${index+1}: ${name} (Cantidad: ${cant}).\nInstrucciones del usuario: ${prompt}\n`;
-                if (mat || est) {
+                if (mat || est || acab) {
                     textPrompt += 'Contexto del ítem:';
-                    if (mat) textPrompt += `\nMateriales: ${mat}`;
-                    if (est) textPrompt += `\nEstructura/Acabado: ${est}`;
+                    if (mat)  textPrompt += `\nMateriales: ${mat}`;
+                    if (est)  textPrompt += `\nEstructura: ${est}`;
+                    if (acab) textPrompt += `\nAcabado/Branding: ${acab}`;
                     textPrompt += '\n';
                 }
 
