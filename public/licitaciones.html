@@ -1811,21 +1811,38 @@ LICITACIONES ACTUALES DEL PROYECTO:
             doc.setFontSize(9);
             doc.text('Fecha: ' + new Date().toLocaleDateString('es-BO'), W - mR, yH, {align:'right'});
 
-            // ── TABLA RESUMEN ──
+            // ── TABLA RESUMEN — agrupada por ítem ──
             const tareas = Object.values(lic.tareas);
+
+            // Agrupar tareas por originIdx para mostrar encabezado de ítem
+            const _tGroups = {};
+            const _tGroupKeys = [];
+            tareas.forEach(t => {
+                const k = (t.originIdx != null) ? String(t.originIdx) : '_' + String(t.task_name||'').slice(0,6);
+                if (!_tGroups[k]) { _tGroups[k] = {label: t.parent_desc || t.task_name || 'Ítem', tareas:[], fecha:''}; _tGroupKeys.push(k); }
+                _tGroups[k].tareas.push(t);
+                if (!_tGroups[k].fecha && t.fecha_entrega && t.fecha_entrega !== 'Sin fecha') _tGroups[k].fecha = t.fecha_entrega;
+            });
+
             let rowNum = 1;
-            const tableRows = tareas.map(t => {
-                const fe = (t.fecha_entrega && t.fecha_entrega !== 'Sin fecha') ? t.fecha_entrega : '';
-                const label = (t.task_name || t.desc || '—').substring(0, 80);
-                const desc = fe ? label + '\nEntrega: ' + fe : label;
-                return [
-                    String(rowNum++),
-                    desc,
-                    t.und || 'u',
-                    parseFloat(t.cant||0).toFixed(2),
-                    fM(t.pu) + ' Bs',
-                    fM(t.subtotal) + ' Bs'
-                ];
+            const tableRows = [];
+            const headerRowSet = new Set();
+
+            _tGroupKeys.forEach(k => {
+                const g = _tGroups[k];
+                const fe = (g.fecha && g.fecha !== 'Sin fecha') ? '   —   Entrega: ' + g.fecha : '';
+                headerRowSet.add(tableRows.length);
+                tableRows.push(['', g.label.substring(0, 90) + fe, '', '', '', '']);
+                g.tareas.forEach(t => {
+                    tableRows.push([
+                        String(rowNum++),
+                        (t.task_name || t.desc || '—').substring(0, 72),
+                        t.und || 'u',
+                        parseFloat(t.cant||0).toFixed(2),
+                        fM(t.pu) + ' Bs',
+                        fM(t.subtotal) + ' Bs'
+                    ]);
+                });
             });
 
             const calcTotal = tareas.reduce((s,t)=>s+parseFloat(t.subtotal||0),0);
@@ -1848,7 +1865,17 @@ LICITACIONES ACTUALES DEL PROYECTO:
                     5: {cellWidth:27, halign:'right'}
                 },
                 styles: {fontSize:8, cellPadding:3, overflow:'linebreak'},
-                margin: {left:mL, right:mR}
+                margin: {left:mL, right:mR},
+                didParseCell: function(d) {
+                    if (d.section !== 'body') return;
+                    if (headerRowSet.has(d.row.index)) {
+                        d.cell.styles.fillColor = [30, 30, 30];
+                        d.cell.styles.textColor = [255, 255, 255];
+                        d.cell.styles.fontStyle = 'bold';
+                        d.cell.styles.fontSize = 8;
+                        d.cell.styles.cellPadding = {top:5, right:4, bottom:5, left:4};
+                    }
+                }
             });
 
             // ── PÁGINAS DE IMÁGENES POR ÍTEM ──
