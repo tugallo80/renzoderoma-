@@ -5,6 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Licitaciones y Asignaciones - Rubik OS</title>
     <script src="https://unpkg.com/@phosphor-icons/web"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.1.3/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.1.3/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.1.3/firebase-database-compat.js"></script>
@@ -1209,6 +1211,7 @@
                             <div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:3px;">${badgeType}${saldoBadge}</div>
                         </div>
                         <div style="display:flex;gap:6px;align-items:center;">
+                            <button class="btn-del-lic" style="background:rgba(0,122,255,0.1);color:var(--blue);" onclick="exportarPropuestaPDF('${key}')" title="Exportar Propuesta PDF"><i class="ph-bold ph-file-pdf"></i></button>
                             <button class="btn-del-lic" onclick="eliminarLicitacion('${key}','${lic.worker_id}','${lic.estado}',${lic.precio_final||lic.precio_propuesto||0})" title="Eliminar"><i class="ph-bold ph-trash"></i></button>
                         </div>
                     </div>
@@ -1469,6 +1472,393 @@ LICITACIONES ACTUALES DEL PROYECTO:
         } finally {
             if (btnCalc) { btnCalc.disabled = false; btnCalc.innerHTML = '<i class="ph-bold ph-calculator"></i> Calcular'; }
         }
+    };
+
+
+    // ══════════════════════════════════════════════════════
+    // FINANZAS SUPERVISOR — desde licitaciones (admin view)
+    // ══════════════════════════════════════════════════════
+    let _supFinCtx = {}; // { wid, pid, cid, licKey }
+    let _supFotoB64 = null, _supFotoMime = 'image/jpeg';
+
+    async function cargarBalanceSup(wid, pid, cid, licKey, elId, montoContrato) {
+        const el = document.getElementById(elId);
+        if (!el) return;
+        try {
+            // Leer pagos de la licitación (mismos que compras/abonar)
+            const [snapPagos, snapExt] = await Promise.all([
+                db.ref(`proyectos/${cid}/${pid}/licitaciones/${licKey}/pagos`).once('value'),
+                db.ref(`supervisores/${wid}/proyectos/${pid}/extras`).once('value'),
+            ]);
+
+            let totalPagado = 0;
+            const pagos = [];
+            if (snapPagos.exists()) snapPagos.forEach(c => {
+                const p = {...c.val(), _key: c.key};
+                pagos.push(p);
+                totalPagado += parseFloat(p.monto||0);
+            });
+
+            let totalExt = 0;
+            const exts = [];
+            if (snapExt.exists()) snapExt.forEach(c => {
+                const e = {...c.val(), _key: c.key};
+                exts.push(e);
+                totalExt += parseFloat(e.monto||0);
+            });
+
+            const totalContrato = montoContrato + totalExt;
+            const saldo = totalContrato - totalPagado;
+            const fM = n => parseFloat(n||0).toLocaleString('es-BO',{minimumFractionDigits:2,maximumFractionDigits:2});
+
+            el.innerHTML = `
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:8px;text-align:center;">
+                <div style="background:rgba(0,122,255,0.08);border-radius:8px;padding:6px;">
+                    <div style="font-size:9px;color:var(--gray);font-weight:800;">CONTRATO${totalExt>0?' + EXTRAS':''}</div>
+                    <div style="font-size:12px;font-weight:900;color:var(--blue);">${fM(totalContrato)} Bs</div>
+                </div>
+                <div style="background:rgba(52,199,89,0.08);border-radius:8px;padding:6px;">
+                    <div style="font-size:9px;color:var(--gray);font-weight:800;">PAGADO</div>
+                    <div style="font-size:12px;font-weight:900;color:var(--green);">${fM(totalPagado)} Bs</div>
+                </div>
+                <div style="background:rgba(255,149,0,0.08);border-radius:8px;padding:6px;">
+                    <div style="font-size:9px;color:var(--gray);font-weight:800;">SALDO</div>
+                    <div style="font-size:12px;font-weight:900;color:${saldo>0?'var(--orange)':'var(--green)'};">${fM(saldo)} Bs</div>
+                </div>
+            </div>
+            ${pagos.length ? `
+            <div style="margin-bottom:6px;">
+                <div style="font-size:10px;font-weight:800;color:var(--green);margin-bottom:3px;">✅ Pagos registrados en Compras</div>
+                ${pagos.map(p => `<div style="display:flex;justify-content:space-between;align-items:center;font-size:10px;padding:3px 0;border-bottom:1px dashed var(--border);">
+                    <span style="color:var(--gray);">${p.nota||'Abono'} · ${p.fecha||''}</span>
+                    <span style="font-weight:900;color:var(--green);">+${fM(p.monto)} Bs</span>
+                </div>`).join('')}
+            </div>` : '<div style="font-size:10px;color:var(--gray);margin-bottom:6px;">Sin pagos aún · Registrá en <b>Compras → Abonar</b></div>'}
+            ${exts.length ? `
+            <div>
+                <div style="font-size:10px;font-weight:800;color:var(--purple);margin-bottom:3px;">➕ Extras aprobados</div>
+                ${exts.map(e => `<div style="display:flex;justify-content:space-between;font-size:10px;padding:3px 0;border-bottom:1px dashed var(--border);">
+                    <span style="color:var(--gray);">${e.descripcion||'Extra'} · ${e.fecha||''}</span>
+                    <span style="font-weight:900;color:var(--purple);">+${fM(e.monto)} Bs</span>
+                </div>`).join('')}
+            </div>` : ''}
+            `;
+        } catch(e) {
+            if (el) el.innerHTML = '<span style="color:var(--gray);">Sin datos aún</span>';
+        }
+    }
+
+    function abrirFinSupModal(wid, pid, cid, licKey) {
+        _supFinCtx = { wid, pid, cid, licKey };
+        _supFotoB64 = null; _supFotoMime = 'image/jpeg';
+        // reset campos
+        ['sup-fin-monto','sup-fin-concepto'].forEach(id => { const el = document.getElementById(id); if(el) el.value = ''; });
+        const fechaEl = document.getElementById('sup-fin-fecha');
+        if (fechaEl) fechaEl.value = new Date().toISOString().substring(0,10);
+        const tipoEl = document.getElementById('sup-fin-tipo');
+        if (tipoEl) tipoEl.value = 'deposito';
+        document.getElementById('sup-fin-foto-nombre').style.display = 'none';
+        document.getElementById('sup-fin-btn-scan').style.display = 'none';
+        document.getElementById('mod-fin-sup').style.display = 'flex';
+    }
+
+    function onSupFinFotoCargada(input) {
+        const file = input.files[0]; if (!file) return;
+        const reader = new FileReader();
+        reader.onload = e => {
+            _supFotoB64 = e.target.result;
+            _supFotoMime = file.type || 'image/jpeg';
+            document.getElementById('sup-fin-foto-nombre').textContent = '📎 ' + file.name;
+            document.getElementById('sup-fin-foto-nombre').style.display = 'block';
+            document.getElementById('sup-fin-btn-scan').style.display = 'block';
+        };
+        reader.readAsDataURL(file);
+    }
+
+    async function escanearFinSup() {
+        if (!_supFotoB64) return alert('Primero cargá una foto del comprobante.');
+        const btn = document.getElementById('sup-fin-btn-scan');
+        btn.disabled = true; btn.innerHTML = '<i class="ph-bold ph-spinner"></i> Analizando...';
+        try {
+            const token = await firebase.auth().currentUser.getIdToken();
+            const resp = await fetch('/api/gemini', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+                body: JSON.stringify({
+                    model: 'gemini-2.5-flash',
+                    systemInstruction: 'Extractor de comprobantes. Devuelve SOLO JSON válido.',
+                    contents: [{ role: 'user', parts: [
+                        { inlineData: { mimeType: _supFotoMime, data: _supFotoB64.split(',')[1] } },
+                        { text: 'Extrae: monto (número), fecha (YYYY-MM-DD), concepto (texto). Devuelve SOLO JSON con esas 3 claves. null si no encontrás.' }
+                    ]}]
+                })
+            });
+            const data = await resp.json();
+            const texto = data.candidates?.[0]?.content?.parts?.[0]?.text || data.text || '';
+            const match = texto.match(/\{[\s\S]*\}/);
+            if (match) {
+                const d = JSON.parse(match[0]);
+                if (d.monto)    document.getElementById('sup-fin-monto').value   = d.monto;
+                if (d.fecha)    document.getElementById('sup-fin-fecha').value   = d.fecha;
+                if (d.concepto) document.getElementById('sup-fin-concepto').value = d.concepto;
+                btn.innerHTML = '✅ Completado por IA';
+                btn.style.background = 'rgba(52,199,89,0.15)'; btn.style.color = 'var(--green)'; btn.style.borderColor = 'var(--green)';
+            } else {
+                alert('No se pudo extraer. Intentá con imagen más nítida.');
+                btn.innerHTML = '<i class="ph-bold ph-magic-wand"></i> Leer con IA';
+            }
+        } catch(e) { alert('Error: ' + e.message); btn.innerHTML = '<i class="ph-bold ph-magic-wand"></i> Leer con IA'; }
+        finally { btn.disabled = false; }
+    }
+
+    async function subirFotoSupLic(b64, mime, wid, nodo, key) {
+        if (!b64) return null;
+        try {
+            const blob = await (await fetch(b64)).blob();
+            const ref  = firebase.storage().ref(`supervisores/${wid}/${nodo}/${key}_${Date.now()}.jpg`);
+            await ref.put(blob, { contentType: mime });
+            return await ref.getDownloadURL();
+        } catch(e) { console.warn('No se pudo subir foto sup:', e); return null; }
+    }
+
+    async function guardarFinSup() {
+        const { wid, pid, cid, licKey } = _supFinCtx;
+        const tipo    = document.getElementById('sup-fin-tipo').value;
+        const monto   = parseFloat(document.getElementById('sup-fin-monto').value);
+        const desc    = document.getElementById('sup-fin-concepto').value.trim();
+        const fecha   = document.getElementById('sup-fin-fecha').value;
+        if (!monto || isNaN(monto)) return alert('Ingresá un monto válido.');
+        if (!desc) return alert('Ingresá el concepto.');
+        const btn = document.querySelector('#mod-fin-sup button[onclick="guardarFinSup()"]');
+        if (btn) { btn.disabled = true; btn.textContent = 'Guardando...'; }
+        try {
+            const nodo = 'extras';
+            const newRef = db.ref(`supervisores/${wid}/proyectos/${pid}/${nodo}`).push();
+            const fotoUrl = _supFotoB64 ? await subirFotoSupLic(_supFotoB64, _supFotoMime, wid, nodo, newRef.key) : null;
+            const payload = { monto, descripcion: desc, fecha, timestamp: Date.now(), ...(fotoUrl ? { fotoUrl } : {}) };
+            if (tipo === 'extra') payload.aprobado = true;
+            await newRef.set(payload);
+            const licSnap = await db.ref(`proyectos/${cid}/${pid}/licitaciones/${licKey}`).once('value');
+            const lic = licSnap.val() || {};
+            const montoContrato = parseFloat(lic.precio_propuesto || lic.precio_final || 0);
+            await cargarBalanceSup(wid, pid, cid, licKey, 'sup-fin-' + licKey + '-body', montoContrato);
+            document.getElementById('mod-fin-sup').style.display = 'none';
+        } finally {
+            if (btn) { btn.disabled = false; btn.textContent = 'Guardar'; }
+        }
+    }
+
+    // Adjuntar foto a movimiento existente desde licitaciones
+    let _adjSupCtx = {};
+    function abrirAdjuntarFotoSup(wid, pid, nodo, key, licKey, cid, montoContrato) {
+        _adjSupCtx = { wid, pid, nodo, key, licKey, cid, montoContrato };
+        let inp = document.getElementById('adj-sup-foto-input');
+        if (!inp) { inp = document.createElement('input'); inp.type='file'; inp.id='adj-sup-foto-input'; inp.accept='image/*'; inp.style.display='none'; document.body.appendChild(inp);
+            inp.onchange = async function() {
+                const file = inp.files[0]; if (!file) return;
+                const b64 = await new Promise(r => { const fr = new FileReader(); fr.onload = e => r(e.target.result); fr.readAsDataURL(file); });
+                const url = await subirFotoSupLic(b64, file.type, _adjSupCtx.wid, _adjSupCtx.nodo, _adjSupCtx.key);
+                if (url) {
+                    await db.ref(`supervisores/${_adjSupCtx.wid}/proyectos/${_adjSupCtx.pid}/${_adjSupCtx.nodo}/${_adjSupCtx.key}/fotoUrl`).set(url);
+                    await cargarBalanceSup(_adjSupCtx.wid, _adjSupCtx.pid, _adjSupCtx.cid, _adjSupCtx.licKey, 'sup-fin-' + _adjSupCtx.licKey + '-body', _adjSupCtx.montoContrato);
+                }
+            };
+        }
+        inp.click();
+    }
+
+    // ─────────────────────────────────────────────
+    // EXPORTAR PROPUESTA ECONÓMICA PDF
+    // ─────────────────────────────────────────────
+    async function _loadImgBase64(url) {
+        if (!url) return null;
+        if (url.startsWith('data:')) return url;
+        try {
+            const resp = await fetch(url, {mode:'cors'});
+            if (!resp.ok) throw new Error('HTTP ' + resp.status);
+            const blob = await resp.blob();
+            return new Promise((res, rej) => {
+                const fr = new FileReader();
+                fr.onload = () => res(fr.result);
+                fr.onerror = rej;
+                fr.readAsDataURL(blob);
+            });
+        } catch(e) { console.warn('_loadImgBase64:', e); return null; }
+    }
+
+    function _getImgDims(dataUrl) {
+        return new Promise(res => {
+            const img = new Image();
+            img.onload = () => res({w: img.naturalWidth || 800, h: img.naturalHeight || 600});
+            img.onerror = () => res({w: 800, h: 600});
+            img.src = dataUrl;
+        });
+    }
+
+    window.exportarPropuestaPDF = async function(licKey) {
+        const lic = currentLics[licKey];
+        if (!lic || !lic.tareas) { alert('No hay datos de esta licitación.'); return; }
+        showLoader('Generando propuesta PDF...');
+        try {
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF({orientation:'portrait', unit:'mm', format:'a4'});
+            const fM = n => parseFloat(n||0).toLocaleString('es-BO',{minimumFractionDigits:2,maximumFractionDigits:2});
+            const W = 210, mL = 14, mR = 14;
+            const usableW = W - mL - mR;
+
+            // ── HEADER ──
+            doc.setFillColor(0, 122, 255);
+            doc.rect(0, 0, W, 30, 'F');
+            doc.setTextColor(255, 255, 255);
+            doc.setFont('helvetica', 'bold');
+            doc.setFontSize(16);
+            doc.text('PROPUESTA ECONÓMICA', W/2, 14, {align:'center'});
+            doc.setFontSize(9);
+            doc.setFont('helvetica', 'normal');
+            doc.text(pName, W/2, 22, {align:'center'});
+            doc.setTextColor(0, 0, 0);
+
+            const workerName = lic.worker_name || lic.worker_id || '';
+            let yH = 38;
+            if (workerName) {
+                doc.setFont('helvetica', 'normal');
+                doc.setFontSize(9);
+                doc.text('Contratista: ' + workerName, mL, yH);
+            }
+            doc.setFontSize(9);
+            doc.text('Fecha: ' + new Date().toLocaleDateString('es-BO'), W - mR, yH, {align:'right'});
+
+            // ── TABLA RESUMEN ──
+            const tareas = Object.values(lic.tareas);
+            let rowNum = 1;
+            const tableRows = tareas.map(t => {
+                const fe = (t.fecha_entrega && t.fecha_entrega !== 'Sin fecha') ? t.fecha_entrega : '';
+                const label = (t.task_name || t.desc || '—').substring(0, 80);
+                const desc = fe ? label + '\nEntrega: ' + fe : label;
+                return [
+                    String(rowNum++),
+                    desc,
+                    t.und || 'u',
+                    parseFloat(t.cant||0).toFixed(2),
+                    fM(t.pu) + ' Bs',
+                    fM(t.subtotal) + ' Bs'
+                ];
+            });
+
+            const calcTotal = tareas.reduce((s,t)=>s+parseFloat(t.subtotal||0),0);
+            const totalFinal = parseFloat(lic.precio_propuesto || lic.precio_final || calcTotal);
+
+            doc.autoTable({
+                startY: 44,
+                head: [['#', 'Trabajo / Descripción', 'Und', 'Cant', 'P.U.', 'Subtotal']],
+                body: tableRows,
+                foot: [['', '', '', '', 'TOTAL', fM(totalFinal) + ' Bs']],
+                theme: 'striped',
+                headStyles: {fillColor:[0,122,255], textColor:255, fontStyle:'bold', fontSize:9, cellPadding:3},
+                footStyles: {fillColor:[220,220,220], textColor:[0,0,0], fontStyle:'bold', fontSize:10},
+                columnStyles: {
+                    0: {cellWidth:8,  halign:'center'},
+                    1: {cellWidth:80},
+                    2: {cellWidth:13, halign:'center'},
+                    3: {cellWidth:16, halign:'right'},
+                    4: {cellWidth:27, halign:'right'},
+                    5: {cellWidth:27, halign:'right'}
+                },
+                styles: {fontSize:8, cellPadding:3, overflow:'linebreak'},
+                margin: {left:mL, right:mR}
+            });
+
+            // ── PÁGINAS DE IMÁGENES POR ÍTEM ──
+            const groups = {};
+            tareas.forEach(t => {
+                const k = (t.originIdx != null) ? String(t.originIdx) : '_' + String(t.task_name||'').slice(0,8);
+                if (!groups[k]) groups[k] = {label: t.task_name||t.desc||'Ítem', subtotal:0, fechaEntrega: t.fecha_entrega||'', imgs:[]};
+                groups[k].subtotal += parseFloat(t.subtotal||0);
+                if (t.img) groups[k].imgs.push(t.img);
+                if (t.op_images) {
+                    const arr = Array.isArray(t.op_images) ? t.op_images : Object.values(t.op_images);
+                    arr.forEach(u => { if (u) groups[k].imgs.push(u); });
+                }
+                if (t.cortes) {
+                    const arr = Array.isArray(t.cortes) ? t.cortes : Object.values(t.cortes);
+                    arr.forEach(u => { if (u) groups[k].imgs.push(u); });
+                }
+            });
+
+            // Agregar imágenes de artes gráficos
+            if (_licArtsData) {
+                Object.keys(_licArtsData).forEach(idx => {
+                    if (!groups[idx]) return;
+                    (_licArtsData[idx]||[]).forEach(art => {
+                        if (art.imgRef) groups[idx].imgs.push(art.imgRef);
+                    });
+                });
+            }
+
+            for (const [k, group] of Object.entries(groups)) {
+                const uniqueImgs = [...new Set(group.imgs)].slice(0, 8);
+                if (uniqueImgs.length === 0) continue;
+
+                for (const imgUrl of uniqueImgs) {
+                    let imgData = null;
+                    try { imgData = await _loadImgBase64(imgUrl); } catch(e) {}
+                    if (!imgData) continue;
+
+                    doc.addPage();
+
+                    // Barra de título del ítem
+                    doc.setFillColor(30, 30, 30);
+                    doc.rect(0, 0, W, 14, 'F');
+                    doc.setTextColor(255, 255, 255);
+                    doc.setFont('helvetica', 'bold');
+                    doc.setFontSize(9);
+                    const labelClean = group.label.replace(/[\u{1F000}-\u{1FFFF}]/gu,'').trim().substring(0,90);
+                    doc.text(labelClean, W/2, 9.5, {align:'center'});
+                    doc.setTextColor(0, 0, 0);
+
+                    if (group.fechaEntrega && group.fechaEntrega !== 'Sin fecha') {
+                        doc.setFont('helvetica', 'normal');
+                        doc.setFontSize(8);
+                        doc.text('Entrega: ' + group.fechaEntrega, mL, 22);
+                    }
+
+                    const imgTop = 26;
+                    const maxImgH = 230;
+                    let dims = {w:800, h:600};
+                    try { dims = await _getImgDims(imgData); } catch(e) {}
+                    const scale = Math.min(usableW / dims.w, maxImgH / dims.h);
+                    const drawW = dims.w * scale;
+                    const drawH = dims.h * scale;
+                    const imgX  = mL + (usableW - drawW) / 2;
+
+                    const imgFmt = imgData.startsWith('data:image/png') ? 'PNG' : 'JPEG';
+                    try {
+                        doc.addImage(imgData, imgFmt, imgX, imgTop, drawW, drawH);
+                    } catch(e) {
+                        try { doc.addImage(imgData, 'PNG', imgX, imgTop, drawW, drawH); } catch(e2) { continue; }
+                    }
+
+                    // Badge monto — esquina inferior derecha de la imagen
+                    const badgeW = 58, badgeH = 12;
+                    const bX = imgX + drawW - badgeW;
+                    const bY = imgTop + drawH - badgeH;
+                    doc.setFillColor(0, 0, 0);
+                    doc.roundedRect(bX, bY, badgeW, badgeH, 2, 2, 'F');
+                    doc.setTextColor(255, 255, 255);
+                    doc.setFont('helvetica', 'bold');
+                    doc.setFontSize(10);
+                    doc.text(fM(group.subtotal) + ' Bs', bX + badgeW/2, bY + 8, {align:'center'});
+                    doc.setTextColor(0, 0, 0);
+                }
+            }
+
+            const safeName = pName.replace(/[^a-zA-Z0-9\-_]/g,'_').substring(0,30);
+            doc.save('propuesta_' + safeName + '_' + licKey.slice(-6) + '.pdf');
+        } catch(e) {
+            console.error('PDF export error:', e);
+            alert('Error generando PDF: ' + e.message);
+        }
+        hideLoader();
     };
 
 </script>
