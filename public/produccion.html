@@ -539,7 +539,14 @@
     function switchTab(t) { currentTab = t; currentFilter = 'all'; document.getElementById('tab-items').classList.remove('active'); document.getElementById('tab-prints').classList.remove('active'); document.getElementById(`tab-${t}`).classList.add('active'); document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active')); document.querySelector('.filter-btn').classList.add('active'); renderTasks(); }
     function filterItems(filter, btn) { currentFilter = filter; document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active')); btn.classList.add('active'); renderTasks(); }
 
-    function isGraphicTarget(desc, unit) { let u = String(unit || '').toLowerCase().trim(); let d = String(desc || '').toLowerCase().trim(); return (u.indexOf('m2') !== -1 || u.indexOf('mt2') !== -1 || /lona|vinil|adhesivo|impresi|banner|microperforado/.test(d)); }
+    function isGraphicTarget(desc, unit) {
+        let u = String(unit || '').toLowerCase().trim();
+        let d = String(desc || '').toLowerCase().trim();
+        // Excluir mano de obra y materiales/accesorios no gráficos
+        if (/jornal|jornada/.test(u)) return false;
+        if (/tornillo|accesorio|herramienta|rotulista|instalaci|montaje|tensado|clamp|tirafondo|perno|bisagra/.test(d)) return false;
+        return (u.indexOf('m2') !== -1 || u.indexOf('mt2') !== -1 || /lona|vinil|adhesivo|impresi|banner|microperforado/.test(d));
+    }
     window.isGraphicTarget = isGraphicTarget;
 
     function generateMeasuresHTML(measures, itemIdx, apuType, apuIdx, itemDesc, itemUnd) {
