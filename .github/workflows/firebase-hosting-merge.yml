@@ -17,6 +17,14 @@ jobs:
           channelId: live
           projectId: rubik-bolivia
 
+  deploy_database_rules:
+    name: Deploy Database Rules
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Deploy Database Rules
+        run: npx firebase-tools deploy --only database --token "${{ secrets.FIREBASE_TOKEN }}" --project rubik-bolivia --non-interactive
+
   deploy_functions:
     name: Deploy Functions
     runs-on: ubuntu-latest

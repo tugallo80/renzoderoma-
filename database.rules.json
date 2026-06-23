@@ -68,9 +68,15 @@
     },
 
     // ─── PERSONAL ─────────────────────────────────────────────────
+    // Hub: puede leer/escribir todo el árbol.
+    // Trabajador (anónimo): solo puede leer/escribir su propio nodo ($wid).
     "personal": {
       ".read":  "auth != null && auth.token.email != null",
-      ".write": "auth != null && auth.token.email != null"
+      ".write": "auth != null && auth.token.email != null",
+      "$wid": {
+        ".read":  "auth != null",
+        ".write": "auth != null && auth.token.email != null"
+      }
     },
 
     // ─── CONFIG IA (prompts personalizados) ───────────────────────

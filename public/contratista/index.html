@@ -149,7 +149,7 @@
 
     const urlParams = new URLSearchParams(window.location.search);
     let workerId = urlParams.get('wid');
-    let targetLicId = urlParams.get('lic'); 
+    let targetLicId = urlParams.get('lic');
     let userName = "Contratista";
 
     if(!workerId) {
@@ -157,31 +157,20 @@
         document.getElementById('pending-container').innerHTML = '<div class="empty-msg">Error: Falta el ID del contratista.</div>';
         document.getElementById('active-container').innerHTML = '<div class="empty-msg">Contacta a la oficina matriz.</div>';
     } else {
-        db.ref(`personal/${workerId}/nombre`).once('value').then(snap => {
-            if(snap.exists()){
-                userName = snap.val();
-                document.getElementById('u-name').innerText = userName;
-            }
-        });
-    }
-
-    let solicitudesGlobales = {};
-    let currentCotKey = null;
-    let pidToCidMap = {};
-    let currentPhotosArray = [];
-    let currentPhotoIndex = 0;
-    let currentTareasArray = [];
-
-    async function generateAdminLink(cId, pId) {
-        let current = window.location.href.split('?')[0];
-        let base = current.includes('file://') ? (await db.ref('config/base_url').once('value')).val() || "https://misistema-rubik.com" : current.replace(/\/(graficos|contratista)\/index\.html$/, '');
-        return `${base.replace(/\/+$/, '')}/licitaciones.html?cid=${cId}&pid=${pId}`;
-    }
-
-    if(workerId) {
-        db.ref('proyectos').once('value').then(pSnap => {
-            if(pSnap.exists()) { pSnap.forEach(c => c.forEach(p => pidToCidMap[p.key] = c.key)); }
-            iniciarEscuchaSolicitudes();
+        firebase.auth().signInAnonymously().then(() => {
+            db.ref(`personal/${workerId}/nombre`).once('value').then(snap => {
+                if(snap.exists()){
+                    userName = snap.val();
+                    document.getElementById('u-name').innerText = userName;
+                }
+            });
+            db.ref('proyectos').once('value').then(pSnap => {
+                if(pSnap.exists()) { pSnap.forEach(c => c.forEach(p => pidToCidMap[p.key] = c.key)); }
+                iniciarEscuchaSolicitudes();
+            });
+        }).catch(err => {
+            document.getElementById('u-name').innerText = "Error de conexión";
+            console.error('Auth error:', err);
         });
     }
 

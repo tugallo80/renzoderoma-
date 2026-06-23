@@ -129,10 +129,12 @@
     let workerId = urlParams.get('wid') || localStorage.getItem('rubik_graphic_wid');
     if (workerId) {
         localStorage.setItem('rubik_graphic_wid', workerId);
-        db.ref(`personal/${workerId}`).once('value', snap => {
-            if (snap.exists()) { document.getElementById('u-name').innerText = snap.val().nombre; iniciarEscuchaHub(); }
-            else alert("Usuario no encontrado.");
-        });
+        firebase.auth().signInAnonymously().then(() => {
+            db.ref(`personal/${workerId}`).once('value', snap => {
+                if (snap.exists()) { document.getElementById('u-name').innerText = snap.val().nombre; iniciarEscuchaHub(); }
+                else alert("Usuario no encontrado.");
+            });
+        }).catch(err => { console.error('Auth error:', err); alert("Error de conexión. Intentá de nuevo."); });
     } else alert("Enlace inválido. Falta el identificador.");
 
     let solicitudesGlobales = {};
