@@ -429,7 +429,16 @@
     }
 
     function calcArtM2Lic(art) {
-        return ((parseFloat(art.base) || 0) / 100) * ((parseFloat(art.altura) || 0) / 100) * (parseFloat(art.cantidad) || 1);
+        if (art.m2_directo && art.m2_directo > 0) return parseFloat(art.m2_directo);
+        const b = parseFloat(art.base) || 0;
+        const h = parseFloat(art.altura) || 0;
+        const c = parseFloat(art.cantidad) || 1;
+        if (b <= 0 || h <= 0) return 0;
+        // Misma lógica que calcArtM2 en produccion.html:
+        // base/altura >= 5 → cm; ambos < 5 → ya en metros
+        const enCm = (b >= 5 || h >= 5);
+        if (enCm) return (b / 100) * (h / 100) * c;
+        return b * h * c;
     }
 
     // Lee artes: primero desde artes_data en Firebase (fuente de verdad),
@@ -462,15 +471,16 @@
             const it = items[idx];
             const parentDesc = it ? (it.desc || ('Ítem ' + idx)) : ('Ítem ' + idx);
             const mapped = saved.map(a => ({
-                id:         a.id       || ('a_' + idx + '_' + Math.random()),
-                nombre:     a.nombre   || '',
-                base:       parseFloat(a.base)    || 0,
-                altura:     parseFloat(a.altura)  || 0,
-                cantidad:   parseFloat(a.cantidad) || 1,
-                material:   a.material || detectMaterialLic(a.nombre || ''),
-                precio:     parseFloat(a.precio)  || 0,
-                imgRef:     a.imgRef   || '',
-                parentDesc: parentDesc
+                id:          a.id       || ('a_' + idx + '_' + Math.random()),
+                nombre:      a.nombre   || '',
+                base:        parseFloat(a.base)       || 0,
+                altura:      parseFloat(a.altura)     || 0,
+                cantidad:    parseFloat(a.cantidad)   || 1,
+                material:    a.material || detectMaterialLic(a.nombre || ''),
+                precio:      parseFloat(a.precio)     || 0,
+                imgRef:      a.imgRef   || '',
+                m2_directo:  parseFloat(a.m2_directo) || 0,
+                parentDesc:  parentDesc
             })).filter(a => !isLaborArte(a.nombre));
             if (mapped.length === 0) return;
             _licArtsData[idx] = mapped;
@@ -490,7 +500,8 @@
                         id: a.id, nombre: a.nombre || '', base: parseFloat(a.base)||0,
                         altura: parseFloat(a.altura)||0, cantidad: parseFloat(a.cantidad)||1,
                         material: a.material || detectMaterialLic(a.nombre||''),
-                        precio: parseFloat(a.precio)||0, imgRef: a.imgRef||'', parentDesc
+                        precio: parseFloat(a.precio)||0, imgRef: a.imgRef||'',
+                        m2_directo: parseFloat(a.m2_directo)||0, parentDesc
                     }));
                 } else {
                     // Fusionar: agregar artes IA que no estén en Firebase aún
@@ -500,7 +511,8 @@
                                 id: ma.id, nombre: ma.nombre||'', base: parseFloat(ma.base)||0,
                                 altura: parseFloat(ma.altura)||0, cantidad: parseFloat(ma.cantidad)||1,
                                 material: ma.material||detectMaterialLic(ma.nombre||''),
-                                precio: parseFloat(ma.precio)||0, imgRef: ma.imgRef||'', parentDesc
+                                precio: parseFloat(ma.precio)||0, imgRef: ma.imgRef||'',
+                                m2_directo: parseFloat(ma.m2_directo)||0, parentDesc
                             });
                         }
                     });
