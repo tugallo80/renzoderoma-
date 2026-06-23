@@ -367,7 +367,7 @@
     function showLoader(txt) { document.getElementById('loader-text').innerText = txt; document.getElementById('loader').style.display = 'flex'; }
     function hideLoader() { document.getElementById('loader').style.display = 'none'; }
 
-    db.ref('personal').once('value', snap => { workers = snap.val() || {}; loadWorkers(); });
+    // personal se carga después de que auth esté listo (ver arrancarCarga)
 
     function loadWorkers() {
         const sel = document.getElementById('lic-worker');
@@ -1465,10 +1465,14 @@ LICITACIONES ACTUALES DEL PROYECTO:
     // INIT
     (function arrancarCarga() {
         var auth = firebase.auth();
-        if (auth.currentUser) { loadLicitaciones(); return; }
+        function onAuthed() {
+            db.ref('personal').once('value', snap => { workers = snap.val() || {}; loadWorkers(); });
+            loadLicitaciones();
+        }
+        if (auth.currentUser) { onAuthed(); return; }
         var unsub = auth.onAuthStateChanged(function(user) {
             unsub();
-            if (user) { loadLicitaciones(); }
+            if (user) { onAuthed(); }
             else { window.location.href = 'login.html'; }
         });
     })();
