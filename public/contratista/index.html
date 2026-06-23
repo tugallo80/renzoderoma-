@@ -152,6 +152,8 @@
     let workerId = urlParams.get('wid');
     let targetLicId = urlParams.get('lic');
     let userName = "Contratista";
+    let pidToCidMap = {};
+    let solicitudesGlobales = {};
 
     if(!workerId) {
         document.getElementById('u-name').innerText = "Enlace inválido o no autorizado";
