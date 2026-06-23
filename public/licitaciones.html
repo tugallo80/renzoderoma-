@@ -362,7 +362,7 @@
     function fMoney(num) { return parseFloat(num || 0).toLocaleString('es-BO', {minimumFractionDigits: 2, maximumFractionDigits: 2}); }
     function getValidObjects(obj) { if(!obj) return []; return Object.values(obj).filter(x => x != null && typeof x === 'object'); }
     function getValidKeys(obj) { if(!obj) return []; return Object.keys(obj).filter(k => obj[k] != null && typeof obj[k] === 'object'); }
-    function isGraphicTarget(desc, unit) { let u = String(unit || '').toLowerCase().trim(); let d = String(desc || '').toLowerCase().trim(); if (/jornal|jornada/.test(u)) return false; if (/tornillo|accesorio|herramienta|rotulista|instalaci|montaje|tensado|clamp|tirafondo|perno|bisagra|logistica|logística|colgado|desmontaje|flete|transporte/.test(d)) return false; return (u.indexOf('m2') !== -1 || u.indexOf('mt2') !== -1 || /lona|vinil|adhesivo|impresi|banner|microperforado/.test(d)); }
+    function isGraphicTarget(desc, unit) { let u = String(unit || '').toLowerCase().trim(); let d = String(desc || '').toLowerCase().trim(); if (/jornal|jornada|hr|hora/.test(u)) return false; if (/tornillo|accesorio|herramienta|rotulista|instalaci|montaje|tensado|clamp|tirafondo|perno|bisagra|soldador|tesador|soldadura|pintor|pintura|electrici|carpinter|plomero|albanil|albañil|mano.de.obra|logistica|logística|colgado|desmontaje|flete|transporte/.test(d)) return false; return (u.indexOf('m2') !== -1 || u.indexOf('mt2') !== -1 || /lona|vinil|adhesivo|impresi|banner|microperforado/.test(d)); }
 
     function showLoader(txt) { document.getElementById('loader-text').innerText = txt; document.getElementById('loader').style.display = 'flex'; }
     function hideLoader() { document.getElementById('loader').style.display = 'none'; }
@@ -447,6 +447,10 @@
         console.log('[LIC] artes_data en Firebase:', savedArts);
         console.log('[LIC] items:', Object.keys(items).length);
 
+        // Excluir artes de mano de obra / labor guardados históricamente
+        const LABOR_RE = /soldador|tesador|instalaci|montaje|tensado|mano.de.obra|logistica|logística|colgado|desmontaje|flete|transporte|pintor|electrici|carpinter|plomero|albanil|albañil/;
+        const isLaborArte = n => LABOR_RE.test(String(n || '').toLowerCase());
+
         // ── 1. Cargar artes guardados desde produccion.html (artes_data) ──
         Object.keys(savedArts).forEach(idx => {
             let saved = savedArts[idx];
@@ -457,7 +461,7 @@
             if (!saved || !Array.isArray(saved) || saved.length === 0) return;
             const it = items[idx];
             const parentDesc = it ? (it.desc || ('Ítem ' + idx)) : ('Ítem ' + idx);
-            _licArtsData[idx] = saved.map(a => ({
+            const mapped = saved.map(a => ({
                 id:         a.id       || ('a_' + idx + '_' + Math.random()),
                 nombre:     a.nombre   || '',
                 base:       parseFloat(a.base)    || 0,
@@ -467,14 +471,16 @@
                 precio:     parseFloat(a.precio)  || 0,
                 imgRef:     a.imgRef   || '',
                 parentDesc: parentDesc
-            }));
+            })).filter(a => !isLaborArte(a.nombre));
+            if (mapped.length === 0) return;
+            _licArtsData[idx] = mapped;
             console.log(`[LIC] idx=${idx} → ${_licArtsData[idx].length} artes cargados desde Firebase`);
         });
 
         // ── 2. También fusionar artes en memoria (misma sesión) si los hay ──
         if (window._artsData && Object.keys(window._artsData).length > 0) {
             for (const idx in window._artsData) {
-                const memArts = (window._artsData[idx] || []).filter(a => a.id);
+                const memArts = (window._artsData[idx] || []).filter(a => a.id && !isLaborArte(a.nombre));
                 if (memArts.length === 0) continue;
                 const it = items[idx];
                 const parentDesc = it ? (it.desc || ('Ítem ' + idx)) : ('Ítem ' + idx);

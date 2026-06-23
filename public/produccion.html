@@ -543,8 +543,8 @@
         let u = String(unit || '').toLowerCase().trim();
         let d = String(desc || '').toLowerCase().trim();
         // Excluir mano de obra y materiales/accesorios no gráficos
-        if (/jornal|jornada/.test(u)) return false;
-        if (/tornillo|accesorio|herramienta|rotulista|instalaci|montaje|tensado|clamp|tirafondo|perno|bisagra/.test(d)) return false;
+        if (/jornal|jornada|hr|hora/.test(u)) return false;
+        if (/tornillo|accesorio|herramienta|rotulista|instalaci|montaje|tensado|clamp|tirafondo|perno|bisagra|soldador|tesador|soldadura|pintor|pintura|electrici|carpinter|plomero|albanil|albañil|mano.de.obra|logistica|logística|colgado|desmontaje|flete|transporte/.test(d)) return false;
         return (u.indexOf('m2') !== -1 || u.indexOf('mt2') !== -1 || /lona|vinil|adhesivo|impresi|banner|microperforado/.test(d));
     }
     window.isGraphicTarget = isGraphicTarget;
@@ -2304,6 +2304,7 @@
     }
 
     // Inicializa _artsData para todos los ítems gráficos (necesario si nunca se visitó la pestaña)
+    window._artsDataInitialized = window._artsDataInitialized || new Set(); // índices ya inicializados (incluye vaciados explícitos)
     function _initAllArtsData() {
         getValidKeys(allItems).forEach(idx => {
             const item = allItems[idx];
@@ -2319,7 +2320,7 @@
                 });
             }
             if (!mainIsG && gApus.length === 0) return;
-            if (window._artsData[idx] && window._artsData[idx].length > 0) return; // ya inicializado
+            if (window._artsDataInitialized.has(String(idx))) return; // ya inicializado (incluso si vacío)
             window._artsData[idx] = [];
             // calcArtM2 detecta unidad automáticamente — guardar tal como vienen
             if (mainIsG && item.measures) {
@@ -2346,6 +2347,7 @@
                     window._artsData[idx].push({ id: 'apu_'+pack.t+'_'+pack.aIdx, nombre: pack.apu.d, base: 0, altura: 0, cantidad: qVal2, material: mat, precio: parseFloat(pack.apu.p||pack.apu.pu||0), imgRef: '', fromApuIdx: pack.aIdx, m2_directo: esM2b ? qVal2 : 0 });
                 }
             });
+            window._artsDataInitialized.add(String(idx)); // marcar como inicializado
         });
     }
 
@@ -2604,6 +2606,9 @@
                 fromApuIdx: art.fromApuIdx || null
             });
         }
+        // Marcar como "inicializado explícitamente" para que _initAllArtsData no repueble desde APU
+        window._artsDataInitialized = window._artsDataInitialized || new Set();
+        window._artsDataInitialized.add(String(itemIdx));
         try {
             await db.ref(`proyectos/${cid}/${pid}/artes_data/${itemIdx}`).set(
                 serialized.length > 0 ? serialized : null
@@ -2620,9 +2625,11 @@
             const snap = await db.ref(`proyectos/${cid}/${pid}/artes_data`).once('value');
             const data = snap.val();
             if (!data) return;
+            window._artsDataInitialized = window._artsDataInitialized || new Set();
             Object.keys(data).forEach(itemIdx => {
                 const saved = data[itemIdx];
-                if (!saved || !Array.isArray(saved)) return;
+                window._artsDataInitialized.add(String(itemIdx)); // item está en Firebase → no repoblar desde APU
+                if (!saved || !Array.isArray(saved)) { window._artsData[itemIdx] = []; return; }
                 // Firebase es la fuente de verdad para artes guardados explícitamente
                 // (ia_, manual_). Los artes sintéticos del APU (m_, apu_) se mantienen si no hay
                 // versión guardada del mismo ID.
