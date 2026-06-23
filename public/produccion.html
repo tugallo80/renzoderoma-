@@ -609,8 +609,26 @@
     window.toggleTaskBody = function(idx) {
         let body = document.getElementById('task-body-' + idx);
         let icon = document.getElementById('task-icon-' + idx);
-        if(body.style.display === 'none') { body.style.display = 'block'; icon.style.transform = 'rotate(180deg)'; } 
+        if(body.style.display === 'none') { body.style.display = 'block'; icon.style.transform = 'rotate(180deg)'; }
         else { body.style.display = 'none'; icon.style.transform = 'rotate(0deg)'; }
+    };
+
+    window._captureOpenState = function() {
+        const open = new Set();
+        document.querySelectorAll('[id^="task-body-"]').forEach(el => {
+            if (el.style.display !== 'none') open.add(el.id.replace('task-body-', ''));
+        });
+        return open;
+    };
+
+    window._restoreOpenState = function(openSet) {
+        if (!openSet || openSet.size === 0) return;
+        openSet.forEach(idx => {
+            const body = document.getElementById('task-body-' + idx);
+            const icon = document.getElementById('task-icon-' + idx);
+            if (body) { body.style.display = 'block'; }
+            if (icon) { icon.style.transform = 'rotate(180deg)'; }
+        });
     };
 
     function renderTasks() {
@@ -4122,7 +4140,22 @@ window.actualizarPreciosBDProd = async function() {
                 resLines.push(`✅ ${mat.desc} → ${mejorItem.precio} Bs/${mejorItem.und} \xb7 ${mejorItem.proveedor || 'BD'} (score: ${(mejorScore*100).toFixed(0)}%)`);
             } else {
                 sinPrecio++;
-                resLines.push(`🔍 ${mat.
+                resLines.push(`🔍 ${mat.desc} — sin coincidencia en BD`);
+            }
+        });
+
+        if (Object.keys(updates).length > 0) {
+            await firebase.database().ref('/').update(updates);
+        }
+
+        alert(`Precios actualizados desde BD:\n✅ ${encontrados} materiales\n🔍 ${sinPrecio} sin coincidencia\n\n` + resLines.slice(0, 20).join('\n'));
+    } catch(e) {
+        console.error('actualizarPreciosBDProd error:', e);
+        alert('Error al buscar precios: ' + (e.message || e));
+    } finally {
+        setLoading(false);
+    }
+};
     </script>
     <!-- Barra de acciones mobile (fija en la parte inferior) -->
     <div id="mobile-action-bar">
