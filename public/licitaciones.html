@@ -362,7 +362,7 @@
     function fMoney(num) { return parseFloat(num || 0).toLocaleString('es-BO', {minimumFractionDigits: 2, maximumFractionDigits: 2}); }
     function getValidObjects(obj) { if(!obj) return []; return Object.values(obj).filter(x => x != null && typeof x === 'object'); }
     function getValidKeys(obj) { if(!obj) return []; return Object.keys(obj).filter(k => obj[k] != null && typeof obj[k] === 'object'); }
-    function isGraphicTarget(desc, unit) { let u = String(unit || '').toLowerCase().trim(); let d = String(desc || '').toLowerCase().trim(); return (u.indexOf('m2') !== -1 || u.indexOf('mt2') !== -1 || /lona|vinil|adhesivo|impresi|banner|microperforado/.test(d)); }
+    function isGraphicTarget(desc, unit) { let u = String(unit || '').toLowerCase().trim(); let d = String(desc || '').toLowerCase().trim(); if (/jornal|jornada/.test(u)) return false; if (/tornillo|accesorio|herramienta|rotulista|instalaci|montaje|tensado|clamp|tirafondo|perno|bisagra|logistica|logística|colgado|desmontaje|flete|transporte/.test(d)) return false; return (u.indexOf('m2') !== -1 || u.indexOf('mt2') !== -1 || /lona|vinil|adhesivo|impresi|banner|microperforado/.test(d)); }
 
     function showLoader(txt) { document.getElementById('loader-text').innerText = txt; document.getElementById('loader').style.display = 'flex'; }
     function hideLoader() { document.getElementById('loader').style.display = 'none'; }
@@ -502,13 +502,12 @@
             }
         }
 
-        // ── 3. Fallback: mostrar TODOS los ítems del presupuesto como artes seleccionables ──
-        // En modo gráfico mostramos todos los ítems (no solo los que pasan isGraphicTarget)
-        // para que el usuario pueda seleccionar lo que necesita aunque el APU no tenga keywords.
+        // ── 3. Fallback: mostrar ítems gráficos del presupuesto como artes seleccionables ──
         Object.keys(items).forEach(i => {
             if (_licArtsData[i] && _licArtsData[i].length > 0) return;
             const it = items[i];
             if (!it || it.type === 'chapter') return;
+            if (!isGraphicTarget(it.desc, it.und)) return;
             let arts = [];
             // Intentar extraer artes desde APU mat/sub (sin filtro isGraphicTarget)
             const addFromApu = (apuSection) => {
