@@ -128,7 +128,7 @@
     <p class="subtitle">Cuartel General</p>
     
     <input type="email" id="email" placeholder="Correo electrónico" autocomplete="email" name="username">
-    <input type="password" id="password" placeholder="Contraseña" name="password">
+    <input type="password" id="password" placeholder="Contraseña" name="password" onkeydown="if(event.key==='Enter') iniciarSesion()">
     
     <label class="remember-container">
         <input type="checkbox" id="remember">
@@ -254,17 +254,13 @@
             })
             .catch(err => {
                 let msg = 'Error al iniciar sesión.';
-                if (err.code === 'auth/wrong-password' || err.code === 'auth/user-not-found') msg = 'Email o contraseña incorrectos.';
+                if (err.code === 'auth/wrong-password' || err.code === 'auth/user-not-found' || err.code === 'auth/invalid-credential') msg = 'Email o contraseña incorrectos.';
                 else if (err.code === 'auth/too-many-requests') msg = 'Demasiados intentos. Intenta más tarde.';
                 else if (err.code === 'auth/invalid-email') msg = 'Email inválido.';
-                showError(msg);
+                errorMsg.style.color = "#ff453a";
+                errorMsg.innerText = msg;
             });
     }
-
-    document.getElementById('btn-login').addEventListener('click', hacerLogin);
-    document.getElementById('inp-pass').addEventListener('keydown', function(e) {
-        if (e.key === 'Enter') hacerLogin();
-    });
     </script>
 </body>
 </html>
