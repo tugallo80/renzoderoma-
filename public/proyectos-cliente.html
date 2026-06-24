@@ -210,13 +210,23 @@
 
     function _cargarProyectos() {
     const grid = document.getElementById('project-grid');
-    // Mostrar skeleton solo si el grid está vacío (primera carga sin caché)
     if (!grid.children.length) {
         grid.innerHTML = `<div style="grid-column:span 4;text-align:center;color:var(--gray);padding:40px;font-size:.85rem;">Cargando proyectos...</div>`;
     }
 
-    // CARGA DE PROYECTOS CON MOTOR DE ORDENAMIENTO
-    db.ref(`proyectos/${cid}`).once('value', snap => {
+    // Timeout de 5s: si firecache no sirvió nada y Firebase no respondió, mostrar reintento
+    const loadTimeout = setTimeout(() => {
+        if (grid.querySelector && grid.innerHTML.includes('Cargando proyectos')) {
+            grid.innerHTML = `<div style="grid-column:span 4;text-align:center;padding:40px;">
+              <div style="color:var(--gray);font-size:.85rem;margin-bottom:12px;">Sin conexión — tocá para reintentar</div>
+              <button onclick="_cargarProyectos()" style="background:var(--blue);color:#fff;border:none;border-radius:10px;padding:10px 22px;font-size:.9rem;cursor:pointer;">Reintentar</button>
+            </div>`;
+        }
+    }, 5000);
+
+    // .on() en lugar de .once() — firecache sirve desde localStorage inmediatamente
+    db.ref(`proyectos/${cid}`).on('value', snap => {
+        clearTimeout(loadTimeout);
         grid.innerHTML = "";
         globalProjectsArr = [];
         if(!snap.exists()) { grid.innerHTML = `<div style="grid-column:span 4; text-align:center; color:var(--gray); padding:40px;">Este cliente no tiene proyectos.</div>`; return; }
@@ -228,14 +238,12 @@
             tempArr.push(p);
         });
 
-        // Ordenamos por la variable 'orden' (si no existe, va al final)
         tempArr.sort((a, b) => {
             let oA = a.orden !== undefined ? a.orden : 999999;
             let oB = b.orden !== undefined ? b.orden : 999999;
             return oA - oB;
         });
 
-        // Normalizamos los números de orden (0, 1, 2, 3...)
         globalProjectsArr = tempArr.map((p, index) => {
             p.orden = index;
             return p;
@@ -265,7 +273,7 @@
             </div>`;
         });
     }, err => {
-        // Error o timeout — mostrar botón de reintento
+        clearTimeout(loadTimeout);
         if (grid.children.length <= 1) {
             grid.innerHTML = `<div style="grid-column:span 4;text-align:center;padding:40px;">
               <div style="color:var(--gray);font-size:.85rem;margin-bottom:12px;">Sin conexión o timeout — tocá para reintentar</div>
