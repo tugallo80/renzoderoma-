@@ -210,77 +210,100 @@
 
     function _cargarProyectos() {
     const grid = document.getElementById('project-grid');
-    if (!grid.children.length) {
+    if (!grid.children.length || !grid.querySelector('.proj-items')) {
         grid.innerHTML = `<div style="grid-column:span 4;text-align:center;color:var(--gray);padding:40px;font-size:.85rem;">Cargando proyectos...</div>`;
     }
 
-    // Timeout de 5s: si firecache no sirvió nada y Firebase no respondió, mostrar reintento
-    const loadTimeout = setTimeout(() => {
-        if (grid.querySelector && grid.innerHTML.includes('Cargando proyectos')) {
-            grid.innerHTML = `<div style="grid-column:span 4;text-align:center;padding:40px;">
-              <div style="color:var(--gray);font-size:.85rem;margin-bottom:12px;">Sin conexión — tocá para reintentar</div>
-              <button onclick="_cargarProyectos()" style="background:var(--blue);color:#fff;border:none;border-radius:10px;padding:10px 22px;font-size:.9rem;cursor:pointer;">Reintentar</button>
-            </div>`;
-        }
-    }, 5000);
+    // Limpiar listener anterior para evitar duplicados en reintentos
+    if (window._proyectosListener) {
+        try { db.ref(`proyectos/${cid}`).off('value', window._proyectosListener); } catch(e) {}
+        window._proyectosListener = null;
+    }
 
-    // .on() en lugar de .once() — firecache sirve desde localStorage inmediatamente
-    db.ref(`proyectos/${cid}`).on('value', snap => {
-        clearTimeout(loadTimeout);
+    function _renderSnap(snap) {
+        clearTimeout(window._proyectosTimeout);
         grid.innerHTML = "";
         globalProjectsArr = [];
-        if(!snap.exists()) { grid.innerHTML = `<div style="grid-column:span 4; text-align:center; color:var(--gray); padding:40px;">Este cliente no tiene proyectos.</div>`; return; }
-
+        if(!snap || !snap.exists()) {
+            grid.innerHTML = `<div style="grid-column:span 4; text-align:center; color:var(--gray); padding:40px;">Este cliente no tiene proyectos.</div>`;
+            return;
+        }
         let tempArr = [];
-        snap.forEach(child => {
-            let p = child.val();
-            p.pid = child.key;
-            tempArr.push(p);
-        });
+        snap.forEach(child => { let p = child.val(); p.pid = child.key; tempArr.push(p); });
+        tempArr.sort((a, b) => (a.orden ?? 999999) - (b.orden ?? 999999));
+        globalProjectsArr = tempArr.map((p, i) => { p.orden = i; return p; });
 
-        tempArr.sort((a, b) => {
-            let oA = a.orden !== undefined ? a.orden : 999999;
-            let oB = b.orden !== undefined ? b.orden : 999999;
-            return oA - oB;
-        });
-
-        globalProjectsArr = tempArr.map((p, index) => {
-            p.orden = index;
-            return p;
-        });
+        const wrap = document.createElement('div');
+        wrap.className = 'proj-items';
+        wrap.style.cssText = 'grid-column:span 4;display:grid;grid-template-columns:repeat(4,1fr);gap:20px 15px;';
 
         globalProjectsArr.forEach(p => {
             const pid = p.pid;
             let statusIcon = '⚪'; let iconColor = 'var(--gray)';
             if(p.estado === 'produccion') { statusIcon = '🔵'; iconColor = 'var(--blue)'; }
             if(p.estado === 'entregado') { statusIcon = '🟢'; iconColor = 'var(--green)'; }
-
             const imgSrc = p.img ? `<img src="${p.img}" loading="lazy">` : `<i class="ph-bold ph-folder" style="color:var(--gray);"></i>`;
-            const safeName = (p.nombre || "Sin nombre").replace(/'/g, "\\'"); const safeImg = p.img ? p.img : '';
-
+            const safeName = (p.nombre || "Sin nombre").replace(/'/g, "\\'"); const safeImg = p.img || '';
             const oculto = p.visible_cliente === false;
-            const ocultoBadge = oculto ? `<div style="position:absolute;top:4px;left:4px;background:rgba(0,0,0,0.6);color:#fff;font-size:9px;font-weight:800;padding:2px 6px;border-radius:6px;letter-spacing:0.5px;">OCULTO</div>` : '';
-            grid.innerHTML += `
-            <div class="app-item"
-                 onclick="openProject('${pid}', '${safeName}')"
-                 oncontextmenu="openActionMenu('${pid}', '${safeName}', '${safeImg}', '${p.estado}'); event.preventDefault(); return false;"
-                 ontouchstart="_lpStart(event, '${pid}', '${safeName}', '${safeImg}', '${p.estado}')"
-                 ontouchend="_lpCancel()"
-                 ontouchmove="_lpCancel()"
-                 style="${oculto ? 'opacity:0.55;' : ''}">
-                <div class="icon-wrap" style="position:relative;">${imgSrc}<div class="badge-status" style="color:${iconColor};">${statusIcon}</div>${ocultoBadge}</div>
-                <div class="app-name">${p.nombre}${oculto ? ' 🚫' : ''}</div>
-            </div>`;
+            const ocultoBadge = oculto ? `<div style="position:absolute;top:4px;left:4px;background:rgba(0,0,0,0.6);color:#fff;font-size:9px;font-weight:800;padding:2px 6px;border-radius:6px;">OCULTO</div>` : '';
+            const div = document.createElement('div');
+            div.className = 'app-item';
+            if (oculto) div.style.opacity = '0.55';
+            div.innerHTML = `<div class="icon-wrap" style="position:relative;">${imgSrc}<div class="badge-status" style="color:${iconColor};">${statusIcon}</div>${ocultoBadge}</div><div class="app-name">${p.nombre}${oculto ? ' 🚫' : ''}</div>`;
+            div.addEventListener('click', () => openProject(pid, safeName));
+            div.addEventListener('contextmenu', e => { openActionMenu(pid, safeName, safeImg, p.estado); e.preventDefault(); });
+            div.addEventListener('touchstart', e => _lpStart(e, pid, safeName, safeImg, p.estado), {passive:true});
+            div.addEventListener('touchend', _lpCancel, {passive:true});
+            div.addEventListener('touchmove', _lpCancel, {passive:true});
+            wrap.appendChild(div);
         });
-    }, err => {
-        clearTimeout(loadTimeout);
-        if (grid.children.length <= 1) {
-            grid.innerHTML = `<div style="grid-column:span 4;text-align:center;padding:40px;">
-              <div style="color:var(--gray);font-size:.85rem;margin-bottom:12px;">Sin conexión o timeout — tocá para reintentar</div>
-              <button onclick="_cargarProyectos()" style="background:var(--blue);color:#fff;border:none;border-radius:10px;padding:10px 22px;font-size:.9rem;cursor:pointer;">Reintentar</button>
-            </div>`;
+        grid.appendChild(wrap);
+    }
+
+    function _mostrarError() {
+        clearTimeout(window._proyectosTimeout);
+        grid.innerHTML = '';
+        const msg = document.createElement('div');
+        msg.style.cssText = 'grid-column:span 4;text-align:center;padding:40px;';
+        const txt = document.createElement('div');
+        txt.style.cssText = 'color:var(--gray);font-size:.85rem;margin-bottom:12px;';
+        txt.textContent = 'Sin conexión — tocá para reintentar';
+        const btn = document.createElement('button');
+        btn.textContent = 'Reintentar';
+        btn.style.cssText = 'background:var(--blue);color:#fff;border:none;border-radius:10px;padding:10px 22px;font-size:.9rem;cursor:pointer;';
+        btn.addEventListener('click', _cargarProyectos);
+        msg.appendChild(txt);
+        msg.appendChild(btn);
+        grid.appendChild(msg);
+    }
+
+    // Timeout de 8s → fallback REST API (HTTPS puro, sin WebSocket)
+    window._proyectosTimeout = setTimeout(async () => {
+        try {
+            const token = await firebase.auth().currentUser?.getIdToken();
+            if (!token) throw new Error('sin token');
+            const url = `https://rubik-bolivia-default-rtdb.firebaseio.com/proyectos/${cid}.json?auth=${token}`;
+            const res = await fetch(url);
+            if (!res.ok) throw new Error('http ' + res.status);
+            const data = await res.json();
+            if (data) {
+                // Construir un snapshot sintético compatible con _renderSnap
+                const fakeSnap = {
+                    exists: () => true,
+                    forEach: (cb) => { Object.entries(data).forEach(([k, v]) => { cb({ key: k, val: () => v }); }); }
+                };
+                _renderSnap(fakeSnap);
+            } else {
+                _renderSnap({ exists: () => false, forEach: () => {} });
+            }
+        } catch(e) {
+            _mostrarError();
         }
-    });
+    }, 8000);
+
+    // Listener principal via WebSocket (firecache sirve desde localStorage si hay caché)
+    window._proyectosListener = _renderSnap;
+    db.ref(`proyectos/${cid}`).on('value', _renderSnap, () => _mostrarError());
     } // fin _cargarProyectos
 
     // FUNCIÓN PARA MOVER PROYECTOS (-1 = Izquierda, 1 = Derecha)
