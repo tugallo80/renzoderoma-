@@ -627,7 +627,7 @@
             doc.text(`PROYECTO: ${window.pName || 'Proyecto'}   |   CONTRATISTA: ${lic.worker_name}   |   ${new Date().toLocaleDateString('es-BO')}`, 105, 21, {align:'center'});
             // Logo Rubik
             try {
-                const rubikLogoBlob = await fetch('/IA RUBIK BOTON.png').then(r => r.blob());
+                const rubikLogoBlob = await fetch('/IA%20RUBIK%20BOTON.png').then(r => { if(!r.ok) throw new Error('logo'); return r.blob(); });
                 const rubikLogoB64 = await new Promise((res,rej) => { const fr = new FileReader(); fr.onload=()=>res(fr.result); fr.onerror=rej; fr.readAsDataURL(rubikLogoBlob); });
                 if (rubikLogoB64) doc.addImage(rubikLogoB64, 'PNG', 182, 3, 22, 22);
             } catch(e) { /* logo no disponible */ }
@@ -702,27 +702,46 @@
                         let medida = '-';
                         let b64 = null;
 
+                        const fmMed = (b, h) => `${parseFloat(b).toFixed(2)} × ${parseFloat(h).toFixed(2)} cm`;
+
                         if (t.originType === 'llm_art' && t.originMatidx !== undefined) {
-                            // Arte gráfico: medida viene del prod_apu.mat del item
                             const itItem = window.budgetItems[t.originIdx];
                             const matEntry = itItem?.prod_apu?.mat?.[t.originMatidx];
                             if (matEntry?.measures?.length > 0) {
-                                const ms = matEntry.measures.filter(m => m.b && m.h);
-                                if (ms.length > 0) medida = `${ms[0].b} × ${ms[0].h} cm`;
+                                const ms = matEntry.measures.filter(m => parseFloat(m.b) > 0 && parseFloat(m.h) > 0);
+                                if (ms.length > 0) medida = fmMed(ms[0].b, ms[0].h);
                             }
                             if (matEntry?.corte_url) b64 = await getBase64ImageFromUrl(matEntry.corte_url);
                         } else if (t.originType === 'art') {
-                            // Arte legacy: medida del item original
                             const itItem = window.budgetItems[t.originIdx];
                             if (itItem?.measures) {
-                                const m0 = Object.values(itItem.measures).find(m => m.b && m.h);
-                                if (m0) { medida = `${m0.b} × ${m0.h} cm`; if (m0.img) b64 = await getBase64ImageFromUrl(m0.img); }
+                                const m0 = Object.values(itItem.measures).find(m => parseFloat(m.b) > 0 && parseFloat(m.h) > 0);
+                                if (m0) { medida = fmMed(m0.b, m0.h); if (m0.img) b64 = await getBase64ImageFromUrl(m0.img); }
                             }
                         } else if (t.img) {
                             b64 = await getBase64ImageFromUrl(t.img);
                         }
 
-                        bodyData.push([t.task_name||t.desc, medida, t.cant, fMoney(t.pu)+' Bs', fMoney(t.subtotal)+' Bs', b64]);
+                        // Fallback: buscar medidas en el ítem presupuestado para cualquier tipo
+                        if (medida === '-' && t.originIdx !== undefined) {
+                            const itItem = window.budgetItems[t.originIdx];
+                            if (itItem?.measures) {
+                                const m0 = Object.values(itItem.measures).find(m => parseFloat(m.b) > 0 && parseFloat(m.h) > 0);
+                                if (m0) { medida = fmMed(m0.b, m0.h); if (!b64 && m0.img) b64 = await getBase64ImageFromUrl(m0.img); }
+                            }
+                            // También intentar en prod_apu.mat del ítem (para tareas MO asociadas a artes)
+                            if (medida === '-' && itItem?.prod_apu?.mat) {
+                                for (const matE of itItem.prod_apu.mat) {
+                                    if (matE?.measures?.length > 0) {
+                                        const ms2 = matE.measures.filter(m => parseFloat(m.b) > 0 && parseFloat(m.h) > 0);
+                                        if (ms2.length > 0) { medida = fmMed(ms2[0].b, ms2[0].h); break; }
+                                    }
+                                }
+                            }
+                        }
+
+                        const cantFmt = parseFloat(parseFloat(t.cant||0).toFixed(2));
+                        bodyData.push([t.task_name||t.desc, medida, cantFmt, fMoney(t.pu)+' Bs', fMoney(t.subtotal)+' Bs', b64]);
                     }
                 }
 
@@ -792,9 +811,9 @@
                     if (cy > 255) { doc.addPage(); cy = 15; }
                     doc.text("Imágenes adjuntas:", margin, cy); cy += 6;
 
-                    let cx = margin, imgW = 82, imgH = 58, gap = 8;
+                    const MAX_W = 85, MAX_H = 125, gap = 8;
+                    let cx = margin;
                     for (let p of pagosConComp) {
-                        // Intentar fetch con modo cors para Firebase Storage
                         let b64 = null;
                         try {
                             const resp = await fetch(p.comprobante);
@@ -806,13 +825,25 @@
                             b64 = await getBase64ImageFromUrl(p.comprobante).catch(()=>null);
                         }
                         if (!b64) continue;
-                        if (cx + imgW > 195) { cx = margin; cy += imgH + 14; }
-                        if (cy + imgH + 8 > 275) { doc.addPage(); cx = margin; cy = 15; }
+
+                        // Obtener dimensiones reales para preservar proporción
+                        const [natW, natH] = await new Promise(res => {
+                            const img = new Image();
+                            img.onload = () => res([img.naturalWidth || 1, img.naturalHeight || 1]);
+                            img.onerror = () => res([1, 1]);
+                            img.src = b64;
+                        });
+                        const ratio = natH / natW;
+                        let drawW = MAX_W, drawH = MAX_W * ratio;
+                        if (drawH > MAX_H) { drawH = MAX_H; drawW = MAX_H / ratio; }
+
+                        if (cx + drawW > 195) { cx = margin; cy += MAX_H + 14; }
+                        if (cy + drawH + 8 > 275) { doc.addPage(); cx = margin; cy = 15; }
                         doc.setFontSize(7); doc.setFont(undefined, 'bold');
                         doc.text(`${new Date(p.fecha+'T12:00:00').toLocaleDateString('es-BO')} — ${fMoney(p.monto||0)} Bs`, cx, cy - 2);
                         const mimeGuess = b64.startsWith('data:image/png') ? 'PNG' : 'JPEG';
-                        doc.addImage(b64, mimeGuess, cx, cy, imgW, imgH);
-                        cx += imgW + gap;
+                        doc.addImage(b64, mimeGuess, cx, cy, drawW, drawH);
+                        cx += drawW + gap;
                     }
                 }
             }
