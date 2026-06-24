@@ -210,26 +210,29 @@
 
     function _cargarProyectos() {
     const grid = document.getElementById('project-grid');
-    if (!grid.children.length || !grid.querySelector('.proj-items')) {
-        grid.innerHTML = `<div style="grid-column:span 4;text-align:center;color:var(--gray);padding:40px;font-size:.85rem;">Cargando proyectos...</div>`;
+
+    // Cancelar timeout anterior (evita race condition en reintentos)
+    clearTimeout(window._proyectosTimeout);
+
+    // Limpiar listener WebSocket anterior
+    if (window._proyectosRef && window._proyectosOnHandler) {
+        try { window._proyectosRef.off('value', window._proyectosOnHandler); } catch(e) {}
     }
 
-    // Limpiar listener anterior para evitar duplicados en reintentos
-    if (window._proyectosListener) {
-        try { db.ref(`proyectos/${cid}`).off('value', window._proyectosListener); } catch(e) {}
-        window._proyectosListener = null;
-    }
+    grid.innerHTML = `<div style="grid-column:span 4;text-align:center;color:var(--gray);padding:40px;font-size:.85rem;">Cargando proyectos...</div>`;
 
-    function _renderSnap(snap) {
+    let _yaRenderizado = false;
+
+    function _renderData(dataObj) {
+        // dataObj: objeto plano {pid: {...}, pid2: {...}} o null
         clearTimeout(window._proyectosTimeout);
-        grid.innerHTML = "";
+        grid.innerHTML = '';
         globalProjectsArr = [];
-        if(!snap || !snap.exists()) {
-            grid.innerHTML = `<div style="grid-column:span 4; text-align:center; color:var(--gray); padding:40px;">Este cliente no tiene proyectos.</div>`;
+        if (!dataObj || Object.keys(dataObj).length === 0) {
+            grid.innerHTML = `<div style="grid-column:span 4;text-align:center;color:var(--gray);padding:40px;">Este cliente no tiene proyectos.</div>`;
             return;
         }
-        let tempArr = [];
-        snap.forEach(child => { let p = child.val(); p.pid = child.key; tempArr.push(p); });
+        let tempArr = Object.entries(dataObj).map(([pid, p]) => { p = {...p}; p.pid = pid; return p; });
         tempArr.sort((a, b) => (a.orden ?? 999999) - (b.orden ?? 999999));
         globalProjectsArr = tempArr.map((p, i) => { p.orden = i; return p; });
 
@@ -261,6 +264,7 @@
     }
 
     function _mostrarError() {
+        if (_yaRenderizado) return;
         clearTimeout(window._proyectosTimeout);
         grid.innerHTML = '';
         const msg = document.createElement('div');
@@ -277,33 +281,38 @@
         grid.appendChild(msg);
     }
 
-    // Timeout de 8s → fallback REST API (HTTPS puro, sin WebSocket)
-    window._proyectosTimeout = setTimeout(async () => {
+    // ── VÍA 1: REST API inmediata (HTTPS puro — no depende de WebSocket) ──
+    (async () => {
         try {
-            const token = await firebase.auth().currentUser?.getIdToken();
-            if (!token) throw new Error('sin token');
-            const url = `https://rubik-bolivia-default-rtdb.firebaseio.com/proyectos/${cid}.json?auth=${token}`;
-            const res = await fetch(url);
-            if (!res.ok) throw new Error('http ' + res.status);
+            const user = firebase.auth().currentUser;
+            if (!user) return;
+            const token = await user.getIdToken(false); // usa token en caché, sin red
+            const res = await fetch(`https://rubik-bolivia-default-rtdb.firebaseio.com/proyectos/${cid}.json?auth=${token}`);
+            if (!res.ok) return;
             const data = await res.json();
-            if (data) {
-                // Construir un snapshot sintético compatible con _renderSnap
-                const fakeSnap = {
-                    exists: () => true,
-                    forEach: (cb) => { Object.entries(data).forEach(([k, v]) => { cb({ key: k, val: () => v }); }); }
-                };
-                _renderSnap(fakeSnap);
-            } else {
-                _renderSnap({ exists: () => false, forEach: () => {} });
+            if (!_yaRenderizado) {
+                _yaRenderizado = true;
+                _renderData(data);
             }
-        } catch(e) {
-            _mostrarError();
-        }
-    }, 8000);
+        } catch(e) { /* WebSocket o REST posterior pueden servir igualmente */ }
+    })();
 
-    // Listener principal via WebSocket (firecache sirve desde localStorage si hay caché)
-    window._proyectosListener = _renderSnap;
-    db.ref(`proyectos/${cid}`).on('value', _renderSnap, () => _mostrarError());
+    // ── VÍA 2: WebSocket con firecache (sirve localStorage inmediatamente si hay caché) ──
+    window._proyectosOnHandler = (snap) => {
+        _yaRenderizado = true; // permitir re-renders en tiempo real
+        clearTimeout(window._proyectosTimeout);
+        _renderData(snap ? snap.val() : null);
+    };
+    window._proyectosRef = db.ref(`proyectos/${cid}`);
+    window._proyectosRef.on('value', window._proyectosOnHandler, () => {
+        if (!_yaRenderizado) _mostrarError();
+    });
+
+    // ── Timeout 10s: si ninguna vía respondió, mostrar reintento ──
+    window._proyectosTimeout = setTimeout(() => {
+        if (!_yaRenderizado) _mostrarError();
+    }, 10000);
+
     } // fin _cargarProyectos
 
     // FUNCIÓN PARA MOVER PROYECTOS (-1 = Izquierda, 1 = Derecha)
