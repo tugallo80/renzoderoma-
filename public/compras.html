@@ -617,15 +617,23 @@
             let totalPagado = pagosArr.reduce((s,p) => s + parseFloat(p.monto||0), 0);
             let saldo = totalProp - totalPagado;
 
-            // ══ HOJA 1: RESUMEN FINANCIERO ══
-            doc.setFontSize(20); doc.setFont(undefined, 'bold');
-            doc.text("LIQUIDACIÓN DE CONTRATO", margin, 20);
-            doc.setFontSize(10); doc.setFont(undefined, 'normal');
-            doc.text(`PROYECTO: ${window.pName || 'Proyecto'}`, margin, 28);
-            doc.text(`CONTRATISTA: ${lic.worker_name}`, margin, 33);
-            doc.text(`FECHA DE EMISIÓN: ${new Date().toLocaleDateString('es-BO')}`, margin, 38);
+            // ══ HOJA 1: ENCABEZADO CON LOGO ══
+            // Barra azul de encabezado
+            doc.setFillColor(0, 122, 255);
+            doc.rect(0, 0, 210, 28, 'F');
+            doc.setTextColor(255,255,255); doc.setFont(undefined,'bold'); doc.setFontSize(18);
+            doc.text("LIQUIDACIÓN DE CONTRATO", 105, 12, {align:'center'});
+            doc.setFontSize(9); doc.setFont(undefined,'normal');
+            doc.text(`PROYECTO: ${window.pName || 'Proyecto'}   |   CONTRATISTA: ${lic.worker_name}   |   ${new Date().toLocaleDateString('es-BO')}`, 105, 21, {align:'center'});
+            // Logo Rubik
+            try {
+                const rubikLogoBlob = await fetch('/IA RUBIK BOTON.png').then(r => r.blob());
+                const rubikLogoB64 = await new Promise((res,rej) => { const fr = new FileReader(); fr.onload=()=>res(fr.result); fr.onerror=rej; fr.readAsDataURL(rubikLogoBlob); });
+                if (rubikLogoB64) doc.addImage(rubikLogoB64, 'PNG', 182, 3, 22, 22);
+            } catch(e) { /* logo no disponible */ }
+            doc.setTextColor(0);
 
-            let y = 45;
+            let y = 35;
             doc.setFontSize(12); doc.setFont(undefined, 'bold');
             doc.text("1. RESUMEN FINANCIERO DEL TRATO", margin, y);
             doc.autoTable({
@@ -691,37 +699,30 @@
                     bodyData.push([{ content: grp.parentDesc.toUpperCase(), colSpan: 5, styles: { fillColor: [230,240,255], fontStyle:'bold', fontSize:8, textColor:[0,80,180] } }, { content: '', colSpan: 1, styles: { fillColor: [230,240,255] } }]);
 
                     for (let t of grp.tasks) {
-                        let itOrig = window.budgetItems[t.originIdx];
-                        if (!itOrig || !itOrig.measures) {
-                            const sd = (t.parent_desc || t.desc || '').toUpperCase().trim();
-                            itOrig = Object.values(window.budgetItems).find(i => {
-                                if (!i || !i.desc) return false;
-                                const d = i.desc.toUpperCase();
-                                return d === sd || d.includes(sd) || sd.includes(d);
-                            });
+                        let medida = '-';
+                        let b64 = null;
+
+                        if (t.originType === 'llm_art' && t.originMatidx !== undefined) {
+                            // Arte gráfico: medida viene del prod_apu.mat del item
+                            const itItem = window.budgetItems[t.originIdx];
+                            const matEntry = itItem?.prod_apu?.mat?.[t.originMatidx];
+                            if (matEntry?.measures?.length > 0) {
+                                const ms = matEntry.measures.filter(m => m.b && m.h);
+                                if (ms.length > 0) medida = `${ms[0].b} × ${ms[0].h} cm`;
+                            }
+                            if (matEntry?.corte_url) b64 = await getBase64ImageFromUrl(matEntry.corte_url);
+                        } else if (t.originType === 'art') {
+                            // Arte legacy: medida del item original
+                            const itItem = window.budgetItems[t.originIdx];
+                            if (itItem?.measures) {
+                                const m0 = Object.values(itItem.measures).find(m => m.b && m.h);
+                                if (m0) { medida = `${m0.b} × ${m0.h} cm`; if (m0.img) b64 = await getBase64ImageFromUrl(m0.img); }
+                            }
+                        } else if (t.img) {
+                            b64 = await getBase64ImageFromUrl(t.img);
                         }
 
-                        // Si el ítem tiene medidas gráficas (base×altura), expandir por medida
-                        const hasMeasures = itOrig && itOrig.measures && Object.keys(itOrig.measures).some(k => itOrig.measures[k].b || itOrig.measures[k].h);
-                        if (hasMeasures) {
-                            for (let mId in itOrig.measures) {
-                                let m = itOrig.measures[mId]; if (!m.b && !m.h) continue;
-                                let b = parseFloat(m.b||0), h = parseFloat(m.h||0), c = parseFloat(m.c||1);
-                                let m2 = (b/100)*(h/100)*c;
-                                let pu = parseFloat(t.pu||0);
-                                let b64 = m.img ? await getBase64ImageFromUrl(m.img) : null;
-                                bodyData.push([t.task_name||t.desc, `${b} × ${h} cm`, c, fMoney(pu)+' Bs', fMoney(m2*pu)+' Bs', b64]);
-                            }
-                        } else {
-                            // Tarea simple: MO, material, obra vendida
-                            let medida = '-';
-                            if (t.measures && t.measures.length > 0) {
-                                const fm = t.measures.find(m => m.b && m.h);
-                                if (fm) medida = `${fm.b} × ${fm.h} cm`;
-                            }
-                            let b64 = t.img ? await getBase64ImageFromUrl(t.img) : null;
-                            bodyData.push([t.task_name||t.desc, medida, t.cant, fMoney(t.pu)+' Bs', fMoney(t.subtotal)+' Bs', b64]);
-                        }
+                        bodyData.push([t.task_name||t.desc, medida, t.cant, fMoney(t.pu)+' Bs', fMoney(t.subtotal)+' Bs', b64]);
                     }
                 }
 
@@ -759,23 +760,60 @@
             }
 
             // ══ HOJA 3: COMPROBANTES DE PAGO ══
-            const pagosConComp = pagosArr.filter(p => p.comprobante);
-            if (pagosConComp.length > 0) {
+            // Mostrar página de comprobantes si hay CUALQUIER pago (con o sin imagen adjunta)
+            if (pagosArr.length > 0) {
                 doc.addPage();
                 doc.setFontSize(16); doc.setFont(undefined, 'bold'); doc.setTextColor(52,199,89);
                 doc.text("ANEXO: COMPROBANTES DE PAGO", margin, 20);
                 doc.setTextColor(0);
 
-                let cx = margin, cy = 28, imgW = 82, imgH = 58, gap = 8;
-                for (let p of pagosConComp) {
-                    let b64 = await getBase64ImageFromUrl(p.comprobante);
-                    if (!b64) continue;
-                    if (cx + imgW > 195) { cx = margin; cy += imgH + 14; }
-                    if (cy + imgH + 8 > 275) { doc.addPage(); cx = margin; cy = 20; }
-                    doc.setFontSize(7); doc.setFont(undefined, 'bold');
-                    doc.text(`${new Date(p.fecha+'T12:00:00').toLocaleDateString('es-BO')} — ${fMoney(p.monto||0)} Bs`, cx, cy - 2);
-                    doc.addImage(b64, 'JPEG', cx, cy, imgW, imgH);
-                    cx += imgW + gap;
+                // Tabla resumen de pagos
+                doc.autoTable({
+                    startY: 26,
+                    head: [['#', 'Fecha', 'Concepto', 'Monto', 'Comprobante']],
+                    body: pagosArr.map((p, i) => [
+                        i+1,
+                        new Date(p.fecha+'T12:00:00').toLocaleDateString('es-BO'),
+                        p.nota || 'Abono',
+                        fMoney(parseFloat(p.monto||0)) + ' Bs',
+                        p.comprobante ? 'Adjunto' : 'Sin imagen'
+                    ]),
+                    theme: 'grid',
+                    headStyles: { fillColor: [52,199,89] },
+                    styles: { fontSize: 8 },
+                    columnStyles: { 0:{cellWidth:8,halign:'center'}, 3:{halign:'right'}, 4:{halign:'center'} }
+                });
+
+                // Imágenes de comprobantes (si existen)
+                const pagosConComp = pagosArr.filter(p => p.comprobante);
+                if (pagosConComp.length > 0) {
+                    let cy = doc.lastAutoTable.finalY + 10;
+                    doc.setFontSize(11); doc.setFont(undefined,'bold');
+                    if (cy > 255) { doc.addPage(); cy = 15; }
+                    doc.text("Imágenes adjuntas:", margin, cy); cy += 6;
+
+                    let cx = margin, imgW = 82, imgH = 58, gap = 8;
+                    for (let p of pagosConComp) {
+                        // Intentar fetch con modo cors para Firebase Storage
+                        let b64 = null;
+                        try {
+                            const resp = await fetch(p.comprobante);
+                            if (resp.ok) {
+                                const blob = await resp.blob();
+                                b64 = await new Promise((res,rej) => { const fr=new FileReader(); fr.onload=()=>res(fr.result); fr.onerror=rej; fr.readAsDataURL(blob); });
+                            }
+                        } catch(e2) {
+                            b64 = await getBase64ImageFromUrl(p.comprobante).catch(()=>null);
+                        }
+                        if (!b64) continue;
+                        if (cx + imgW > 195) { cx = margin; cy += imgH + 14; }
+                        if (cy + imgH + 8 > 275) { doc.addPage(); cx = margin; cy = 15; }
+                        doc.setFontSize(7); doc.setFont(undefined, 'bold');
+                        doc.text(`${new Date(p.fecha+'T12:00:00').toLocaleDateString('es-BO')} — ${fMoney(p.monto||0)} Bs`, cx, cy - 2);
+                        const mimeGuess = b64.startsWith('data:image/png') ? 'PNG' : 'JPEG';
+                        doc.addImage(b64, mimeGuess, cx, cy, imgW, imgH);
+                        cx += imgW + gap;
+                    }
                 }
             }
 
