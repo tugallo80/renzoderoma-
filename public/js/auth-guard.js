@@ -50,17 +50,10 @@
 
         var auth = window.firebase.auth();
 
-        // Suscribir a cambios de estado (principal mecanismo)
-        auth.onAuthStateChanged(function (user) {
-            settle(user);
-            // Después del primer settle, seguir escuchando para detectar logout
-            if (settled && !user && !isExempt) redirect();
-        });
-
         // Polling agresivo de currentUser como fallback
         // (onAuthStateChanged a veces tarda con sesiones cacheadas en indexedDB)
         var polls = 0;
-        var maxPolls = 60; // 3 segundos máximo
+        var maxPolls = 200; // 10 segundos máximo (móvil LTE puede tardar)
         var poller = setInterval(function () {
             polls++;
             if (settled) { clearInterval(poller); return; }
@@ -68,9 +61,22 @@
             if (u) { clearInterval(poller); settle(u); return; }
             if (polls >= maxPolls) {
                 clearInterval(poller);
-                settle(null); // no hay usuario tras 3s → rechazar
+                settle(null); // no hay usuario tras 10s → rechazar
             }
         }, 50);
+
+        // Después del primer settle, seguir escuchando para detectar logout real.
+        // Se ignora el primer evento (ya procesado por settle), y se espera 2s
+        // antes de redirigir para evitar falsos positivos durante token refresh.
+        var firstEvent = true;
+        auth.onAuthStateChanged(function (user) {
+            if (firstEvent) { firstEvent = false; return; }
+            if (!user && !isExempt) {
+                setTimeout(function () {
+                    if (!firebase.auth().currentUser) redirect();
+                }, 2000);
+            }
+        });
     }
 
     start();
