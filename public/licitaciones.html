@@ -880,22 +880,66 @@
                     let badgeAlready = isAlreadyLicitado ? `<span style="background:var(--orange); color:white; font-size:8px; padding:3px 6px; border-radius:4px; margin-left:5px; vertical-align:middle; font-weight:900;">YA ASIGNADO</span>` : '';
 
                     if (_licMode === 'venta') {
-                        // ── MODO OBRA VENDIDA: precio total del ítem (cant × pu de producción) ──
-                        let precioBase = parseFloat(it.cant||0) * parseFloat(it.pu||0);
-                        html += `<label class="item-row ${assignedClass}" style="align-items:flex-start; display:${displayStyle};">
-<div style="display:flex; flex-grow:1; align-items:center;">${thumbHtml}<div>
-<b>${it.desc}</b> ${badgeAlready}
-<span style="color:var(--gray); display:block; font-size:11px;">${it.cant} ${it.und}</span>
-</div></div>
-<div style="display:flex; flex-direction:column; align-items:flex-end;">
-<input type="checkbox" class="chk-box lic-chk" data-type="venta" data-idx="${i}" onchange="recalcularSeleccionInterna()">
-<div style="display:flex; flex-direction:column; align-items:flex-end; gap:3px; margin-top:8px;">
-<span style="font-size:9px; font-weight:800; color:var(--gray);">PRECIO BASE (Producción):</span>
-<span style="font-size:12px; font-weight:900; color:var(--gray);">${fMoney(precioBase)} Bs</span>
-<span style="font-size:9px; font-weight:800; color:var(--green); margin-top:4px;">PRECIO OFERTADO:</span>
-<input type="number" id="propuesto_venta_${i}" class="inp-std" style="width:90px; padding:6px; margin:0; text-align:right; border-color:var(--green); background:rgba(52,199,89,0.08);" value="${precioBase.toFixed(0)}" oninput="recalcularSeleccionInterna()" onclick="event.stopPropagation()">
-</div>
+                        // ── MODO OBRA VENDIDA: precio desde prod_apu, expandible por MO + Materiales ──
+                        const _pa = it.prod_apu || {};
+                        const _moArr  = (_pa.mo  && _pa.mo.length  > 0) ? _pa.mo  : (it.apu && it.apu.mo  ? getValidObjects(it.apu.mo)  : []);
+                        const _matAll = (_pa.mat && _pa.mat.length > 0) ? _pa.mat : (it.apu && it.apu.mat ? getValidObjects(it.apu.mat) : []);
+                        const _matNorm = _matAll.filter(m => m.d && !m.es_arte);
+                        const _totalMoProd  = _moArr.reduce((s,m)  => s + (parseFloat(m.q||0)*parseFloat(m.p||0)), 0);
+                        const _totalMatProd = _matNorm.reduce((s,m) => s + (parseFloat(m.q||0)*parseFloat(m.p||0)), 0);
+                        const _prodTotal    = _totalMoProd + _totalMatProd;
+
+                        // Sub-filas MO
+                        let _moRowsHtml = '';
+                        _moArr.forEach((mo, moIdx) => {
+                            if (!mo.d) return;
+                            const moBase = parseFloat(mo.q||0) * parseFloat(mo.p||0);
+                            _moRowsHtml += `<label class="item-row apu-row" style="margin:0;padding:7px 0;border-bottom:1px solid var(--border);cursor:pointer;" onclick="event.stopPropagation()">
+<div style="flex:1;min-width:0;"><div style="font-size:12px;font-weight:800;">${mo.d}</div><div style="font-size:10px;color:var(--gray);">${mo.q} ${mo.u} × ${fMoney(mo.p)} Bs</div></div>
+<div style="display:flex;flex-direction:column;align-items:flex-end;gap:3px;">
+<input type="checkbox" class="chk-box lic-chk" data-type="venta_mo" data-idx="${i}" data-moidx="${moIdx}" data-base="${moBase}" onchange="onVentaSubChk(${i},this);recalcularSeleccionInterna()" onclick="event.stopPropagation()">
+<span style="font-size:9px;color:var(--gray);">BASE: ${fMoney(moBase)} Bs</span>
+<input type="number" id="propuesto_venta_mo_${i}_${moIdx}" class="inp-std" style="width:80px;padding:5px;margin:0;text-align:right;border-color:var(--orange);background:rgba(255,149,0,0.07);font-size:12px;" value="${moBase.toFixed(0)}" oninput="recalcularSeleccionInterna()" onclick="event.stopPropagation()">
 </div></label>`;
+                        });
+
+                        // Sub-filas Materiales
+                        let _matRowsHtml = '';
+                        _matNorm.forEach(mat => {
+                            const origIdx = _matAll.indexOf(mat);
+                            const matBase = parseFloat(mat.q||0) * parseFloat(mat.p||0);
+                            _matRowsHtml += `<label class="item-row apu-row" style="margin:0;padding:7px 0;border-bottom:1px solid var(--border);cursor:pointer;" onclick="event.stopPropagation()">
+<div style="flex:1;min-width:0;"><div style="font-size:12px;font-weight:800;">${mat.d}</div><div style="font-size:10px;color:var(--gray);">${mat.q} ${mat.u} × ${fMoney(mat.p)} Bs</div></div>
+<div style="display:flex;flex-direction:column;align-items:flex-end;gap:3px;">
+<input type="checkbox" class="chk-box lic-chk" data-type="venta_mat" data-idx="${i}" data-matidx="${origIdx}" data-base="${matBase}" onchange="onVentaSubChk(${i},this);recalcularSeleccionInterna()" onclick="event.stopPropagation()">
+<span style="font-size:9px;color:var(--gray);">BASE: ${fMoney(matBase)} Bs</span>
+<input type="number" id="propuesto_venta_mat_${i}_${origIdx}" class="inp-std" style="width:80px;padding:5px;margin:0;text-align:right;border-color:var(--blue);background:rgba(0,122,255,0.07);font-size:12px;" value="${matBase.toFixed(0)}" oninput="recalcularSeleccionInterna()" onclick="event.stopPropagation()">
+</div></label>`;
+                        });
+
+                        html += `<div class="item-row ${assignedClass}" style="display:${displayStyle};flex-direction:column;padding:0;overflow:hidden;">
+<div style="display:flex;align-items:center;padding:12px 14px;gap:0;">
+${thumbHtml}
+<div style="flex:1;min-width:0;"><b style="font-size:13px;">${it.desc}</b> ${badgeAlready}<span style="color:var(--gray);display:block;font-size:11px;">${it.cant} ${it.und}</span></div>
+<div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;margin-left:10px;">
+<div style="display:flex;align-items:center;gap:6px;">
+<span style="font-size:9px;font-weight:800;color:var(--green);">COMPLETO</span>
+<input type="checkbox" class="chk-box lic-chk" data-type="venta" data-idx="${i}" onchange="onVentaCompletaChk(${i},this);recalcularSeleccionInterna()" onclick="event.stopPropagation()" style="width:20px;height:20px;cursor:pointer;">
+</div>
+<span style="font-size:9px;font-weight:800;color:var(--gray);">BASE PROD: ${fMoney(_prodTotal)} Bs</span>
+<input type="number" id="propuesto_venta_${i}" class="inp-std" style="width:90px;padding:6px;margin:0;text-align:right;border-color:var(--green);background:rgba(52,199,89,0.08);" value="${_prodTotal.toFixed(0)}" oninput="recalcularSeleccionInterna()" onclick="event.stopPropagation()">
+<div style="display:flex;align-items:center;gap:4px;cursor:pointer;" onclick="toggleVentaExpand(${i})">
+<span style="font-size:9px;color:var(--blue);font-weight:700;">desglosar</span>
+<i class="ph-bold ph-caret-down" id="venta-caret-${i}" style="color:var(--blue);font-size:12px;transition:0.3s;"></i>
+</div>
+</div>
+</div>
+<div id="venta-detail-${i}" style="display:none;padding:4px 14px 14px;border-top:1px solid var(--border);background:var(--bg);">
+${_moArr.some(m=>m.d) ? `<div style="font-size:10px;font-weight:900;color:var(--orange);text-transform:uppercase;letter-spacing:0.5px;margin:10px 0 4px;"><i class="ph-bold ph-person-simple-run"></i> Mano de Obra</div>${_moRowsHtml}` : ''}
+${_matNorm.length > 0 ? `<div style="font-size:10px;font-weight:900;color:var(--blue);text-transform:uppercase;letter-spacing:0.5px;margin:12px 0 4px;"><i class="ph-bold ph-wrench"></i> Materiales</div>${_matRowsHtml}` : ''}
+${!_moArr.some(m=>m.d) && _matNorm.length===0 ? `<div style="font-size:11px;color:var(--gray);padding:10px 0;">Sin datos de producción para este ítem.</div>` : ''}
+</div>
+</div>`;
                     } else {
                         // ── MODO MANO DE OBRA: header del ítem + filas de MO ──
                         let badgeMo = (isInternalWorkerActive && totalMoGlobalItem > 0) ? `<div class="badge-mo">Bolsa MO: +${fMoney(totalMoGlobalItem)} Bs</div>` : '';
@@ -1328,6 +1372,14 @@ ${reqTxt}<div style="margin-top:4px;">${badgeMo}</div>
                 let propInput = document.getElementById(`propuesto_venta_${idx}`);
                 let prop = propInput ? parseFloat(propInput.value) : NaN;
                 if (!isNaN(prop)) sum += prop;
+            } else if(type === 'venta_mo') {
+                const moIdx = chk.getAttribute('data-moidx');
+                const propInput = document.getElementById(`propuesto_venta_mo_${idx}_${moIdx}`);
+                if (propInput) sum += parseFloat(propInput.value) || 0;
+            } else if(type === 'venta_mat') {
+                const matIdx = chk.getAttribute('data-matidx');
+                const propInput = document.getElementById(`propuesto_venta_mat_${idx}_${matIdx}`);
+                if (propInput) sum += parseFloat(propInput.value) || 0;
             }
         });
         document.getElementById('lbl-total-ref').innerText = fMoney(sum) + ' Bs';
@@ -1477,7 +1529,7 @@ ${reqTxt}<div style="margin-top:4px;">${badgeMo}</div>
                     const puMainReal = (propInputMain && propInputMain.value !== '') ? (subMain / (cantMain || 1)) : puMain;
                     tareas[`m_${idx}`] = { parent_desc: 'ÍTEM PRINCIPAL', task_name: it.desc, desc: it.desc, cant: cantMain, und: it.und, pu: puMainReal, subtotal: subMain, feat: featStr, mats: matsStr, measures: it.measures || [], img: it.img || null, cortes: it.cortes || [], op_images: it.op_images || [], originIdx: idx, originType: 'main', fecha_entrega: it.prod_entrega || it.print_entrega || it.gantt_end || 'Sin fecha' };
                 } else if(type === 'venta') {
-                    // ── MODO OBRA VENDIDA: precio total del ítem ──
+                    // ── MODO OBRA VENDIDA: ítem completo ──
                     let matsArr = []; _matSrc.forEach(m => { if(m.d) matsArr.push({d:m.d, q:m.q, u:m.u}); });
                     let propInputV = document.getElementById(`propuesto_venta_${idx}`);
                     let subVenta = propInputV ? (parseFloat(propInputV.value) || parseFloat(it.cant||0)*parseFloat(it.pu||0)) : parseFloat(it.cant||0)*parseFloat(it.pu||0);
@@ -1486,6 +1538,26 @@ ${reqTxt}<div style="margin-top:4px;">${badgeMo}</div>
                     totalMoAsignado += subVenta;
                     countedIndices.add(idx);
                     tareas[`venta_${idx}`] = { parent_desc: it.desc, task_name: it.desc, desc: it.desc, cant: cantV, und: it.und, pu: puV, subtotal: subVenta, feat: featStr, mats: matsStr, matsArr: matsArr, measures: it.measures || [], img: it.img || null, cortes: it.cortes || [], op_images: it.op_images || [], originIdx: idx, originType: 'venta', fecha_entrega: it.prod_entrega || it.print_entrega || it.gantt_end || 'Sin fecha' };
+                } else if(type === 'venta_mo') {
+                    // ── MODO OBRA VENDIDA: solo mano de obra del ítem ──
+                    const moIdx = parseInt(chk.getAttribute('data-moidx'));
+                    const _moSrcV = (it.prod_apu && it.prod_apu.mo && it.prod_apu.mo.length > 0) ? it.prod_apu.mo : (it.apu && it.apu.mo ? getValidObjects(it.apu.mo) : []);
+                    const mo = _moSrcV[moIdx] || {};
+                    const propInputMo = document.getElementById(`propuesto_venta_mo_${idx}_${moIdx}`);
+                    const subMo = propInputMo ? (parseFloat(propInputMo.value) || 0) : 0;
+                    totalMoAsignado += subMo;
+                    countedIndices.add(idx);
+                    tareas[`venta_mo_${idx}_${moIdx}`] = { parent_desc: it.desc, task_name: mo.d || 'M.O.', desc: `${it.desc} → ${mo.d||'M.O.'} (M.O.)`, cant: parseFloat(mo.q||0), und: mo.u||'hr', pu: parseFloat(mo.p||0), subtotal: subMo, feat: featStr, mats: matsStr, measures: it.measures||[], img: it.img||null, cortes: it.cortes||[], op_images: it.op_images||[], originIdx: idx, originType: 'venta_mo', originMoidx: moIdx, fecha_entrega: it.prod_entrega||it.print_entrega||it.gantt_end||'Sin fecha' };
+                } else if(type === 'venta_mat') {
+                    // ── MODO OBRA VENDIDA: solo material del ítem ──
+                    const matIdx = parseInt(chk.getAttribute('data-matidx'));
+                    const _matSrcV = (it.prod_apu && it.prod_apu.mat && it.prod_apu.mat.length > 0) ? it.prod_apu.mat : (it.apu && it.apu.mat ? getValidObjects(it.apu.mat) : []);
+                    const mat = _matSrcV[matIdx] || {};
+                    const propInputMat = document.getElementById(`propuesto_venta_mat_${idx}_${matIdx}`);
+                    const subMat = propInputMat ? (parseFloat(propInputMat.value) || 0) : 0;
+                    totalMoAsignado += subMat;
+                    countedIndices.add(idx);
+                    tareas[`venta_mat_${idx}_${matIdx}`] = { parent_desc: it.desc, task_name: mat.d || 'Material', desc: `${it.desc} → ${mat.d||'Material'} (Mat.)`, cant: parseFloat(mat.q||0), und: mat.u||'und', pu: parseFloat(mat.p||0), subtotal: subMat, feat: featStr, mats: matsStr, measures: it.measures||[], img: it.img||null, cortes: it.cortes||[], op_images: it.op_images||[], originIdx: idx, originType: 'venta_mat', originMatidx: matIdx, fecha_entrega: it.prod_entrega||it.print_entrega||it.gantt_end||'Sin fecha' };
                 }
                 count++;
             });
@@ -1682,6 +1754,29 @@ ${reqTxt}<div style="margin-top:4px;">${badgeMo}</div>
     // ─────────────────────────────────────────────
     // GANTT AUTO-ASSIGN
 
+
+    // ─────────────────────────────────────────────
+    // OBRA VENDIDA — helpers expand / exclusión mutua
+    // ─────────────────────────────────────────────
+    window.toggleVentaExpand = function(idx) {
+        const detail = document.getElementById(`venta-detail-${idx}`);
+        const caret  = document.getElementById(`venta-caret-${idx}`);
+        if (!detail) return;
+        const open = detail.style.display === 'none';
+        detail.style.display = open ? 'block' : 'none';
+        if (caret) caret.style.transform = open ? 'rotate(180deg)' : '';
+    };
+    window.onVentaCompletaChk = function(idx, el) {
+        if (el.checked) {
+            document.querySelectorAll(`.lic-chk[data-idx="${idx}"][data-type="venta_mo"], .lic-chk[data-idx="${idx}"][data-type="venta_mat"]`).forEach(c => { c.checked = false; });
+        }
+    };
+    window.onVentaSubChk = function(idx, el) {
+        if (el.checked) {
+            const completoChk = document.querySelector(`.lic-chk[data-idx="${idx}"][data-type="venta"]`);
+            if (completoChk) completoChk.checked = false;
+        }
+    };
 
     // ─────────────────────────────────────────────
     // REVIEW MODAL
