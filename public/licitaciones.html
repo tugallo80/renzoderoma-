@@ -97,18 +97,12 @@
         .grafico-section-title::after { content: ''; flex: 1; height: 1px; background: var(--border); }
 
         /* ── LLAVE EN MANO ── */
-        .llm-card { background: var(--bg); border: 1px solid var(--border); border-left: 4px solid var(--gold); border-radius: 14px; margin-bottom: 10px; overflow: hidden; }
-        .llm-card.assigned { border-left-color: var(--orange); opacity: 0.78; }
-        .llm-header { display: flex; align-items: center; gap: 10px; padding: 12px 14px; cursor: pointer; user-select: none; }
-        .llm-body { border-top: 1px solid var(--border); padding: 0 12px 12px; }
-        .llm-section-title { font-size: 9px; font-weight: 900; color: var(--gray); text-transform: uppercase; margin: 10px 0 6px; display: flex; align-items: center; gap: 6px; }
-        .llm-section-title::after { content: ''; flex: 1; height: 1px; background: var(--border); }
-        .llm-row { display: flex; align-items: center; gap: 8px; background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 8px 10px; margin-bottom: 5px; font-size: 11px; }
-        .llm-desc { flex: 1; min-width: 0; }
-        .llm-sub { font-weight: 900; color: var(--green); font-size: 11px; white-space: nowrap; min-width: 54px; text-align: right; }
-        .llm-pu-input { width: 64px; padding: 5px 6px; border: 1.5px solid var(--border); border-radius: 8px; font-size: 12px; font-weight: 900; text-align: right; background: var(--bg); color: var(--text); outline: none; }
-        .llm-split-box { display: flex; align-items: center; gap: 8px; background: rgba(255,149,0,0.06); border: 1px dashed var(--orange); border-radius: 10px; padding: 7px 10px; margin: 8px 0 4px; font-size: 11px; color: var(--orange); font-weight: 800; }
-        .llm-split-box input { width: 65px; padding: 4px 6px; border: 1.5px solid var(--orange); border-radius: 8px; font-size: 13px; font-weight: 900; text-align: right; background: var(--bg); color: var(--orange); outline: none; }
+        .llm-chapter-header { display:flex; align-items:center; gap:8px; font-size:11px; font-weight:900; color:var(--text); text-transform:uppercase; padding:8px 12px; background:var(--bg); border:1px solid var(--border); border-radius:8px; margin:10px 0 5px; }
+        .llm-split-box { display:flex; align-items:center; gap:8px; background:rgba(255,149,0,0.06); border:1px dashed var(--orange); border-radius:10px; padding:7px 10px; margin:6px 0; font-size:11px; color:var(--orange); font-weight:800; }
+        .llm-split-box input { width:65px; padding:4px 6px; border:1.5px solid var(--orange); border-radius:8px; font-size:13px; font-weight:900; text-align:right; background:var(--bg); color:var(--orange); outline:none; }
+        .llm-pu-input { width:64px; padding:5px 6px; border:1.5px solid var(--border); border-radius:8px; font-size:12px; font-weight:900; text-align:right; background:var(--bg); color:var(--text); outline:none; }
+        .llm-section-title { font-size:9px; font-weight:900; color:var(--gray); text-transform:uppercase; margin:8px 0 4px; display:flex; align-items:center; gap:6px; }
+        .llm-section-title::after { content:''; flex:1; height:1px; background:var(--border); }
 
         /* ESTILOS IA FLOTANTE */
         .fab-ai-btn { position: fixed; bottom: 25px; right: 20px; width: 65px; height: 65px; border-radius: 50%; background: #000; box-shadow: 0 8px 25px rgba(0,122,255,0.4); cursor: pointer; z-index: 900; display: flex; align-items: center; justify-content: center; border: 2px solid var(--card); padding:0; -webkit-tap-highlight-color: transparent;}
@@ -998,7 +992,7 @@ ${reqTxt}<div style="margin-top:4px;">${badgeMo}</div>
         if (!body) return;
         const open = body.style.display !== 'none';
         body.style.display = open ? 'none' : 'block';
-        if (icon) icon.style.transform = open ? '' : 'rotate(180deg)';
+        if (icon) icon.style.transform = open ? 'rotate(-90deg)' : 'rotate(0deg)';
     };
 
     window.toggleLlmAllSubs = function(idx, checked) {
@@ -1008,7 +1002,7 @@ ${reqTxt}<div style="margin-top:4px;">${badgeMo}</div>
             const icon = document.getElementById('llm-icon-' + idx);
             if (body && body.style.display === 'none') {
                 body.style.display = 'block';
-                if (icon) icon.style.transform = 'rotate(180deg)';
+                if (icon) icon.style.transform = 'rotate(0deg)';
             }
         }
         window.recalcularLlaveEnMano();
@@ -1104,49 +1098,75 @@ ${reqTxt}<div style="margin-top:4px;">${badgeMo}</div>
 
         const filterMode = document.getElementById('filter-assigned').value || 'pending';
         let html = '';
+        let pendingChapter = null; // lazy chapter header — se imprime antes del 1er ítem visible
 
         getValidKeys(globalItems).forEach(i => {
             const it = globalItems[i];
-            if (!it || it.type === 'chapter') return;
+            if (!it) return;
+
+            // ── Capítulo: guardar para impresión lazy ──
+            if (it.type === 'chapter') {
+                pendingChapter = it.desc;
+                return;
+            }
+
             const isAssigned = assignedSet.has(String(i));
             if (filterMode === 'pending' && isAssigned) return;
 
-            const useProdMo = !!(it.prod_apu && it.prod_apu.mo && it.prod_apu.mo.length > 0);
-            const moSrc = useProdMo ? it.prod_apu.mo : (it.apu && it.apu.mo ? getValidObjects(it.apu.mo) : []);
+            // Si hay un capítulo pendiente, imprimirlo ahora
+            if (pendingChapter !== null) {
+                html += `<div class="llm-chapter-header"><i class="ph-bold ph-folder-open" style="color:var(--gold);"></i> ${pendingChapter}</div>`;
+                pendingChapter = null;
+            }
+
+            const useProdMo  = !!(it.prod_apu && it.prod_apu.mo  && it.prod_apu.mo.length  > 0);
+            const moSrc  = useProdMo  ? it.prod_apu.mo  : (it.apu && it.apu.mo  ? getValidObjects(it.apu.mo)  : []);
             const useProdMat = !!(it.prod_apu && it.prod_apu.mat && it.prod_apu.mat.length > 0);
             const matSrc = useProdMat ? it.prod_apu.mat : (it.apu && it.apu.mat ? Object.values(it.apu.mat).filter(x=>x&&x.d) : []);
             const artes = _licArtsData[i] || [];
+            const moRows  = moSrc.filter(mo => mo.d);
+            const matRows = matSrc.filter(m  => m.d);
 
             // Totales base
             let moTotal = 0;
-            moSrc.forEach(mo => { if(!mo.d) return; const q = useProdMo ? parseFloat(mo.q||0) : parseFloat(mo.q||0)*parseFloat(it.cant||1); moTotal += q*parseFloat(mo.p||0); });
+            moRows.forEach(mo => { const q = useProdMo ? parseFloat(mo.q||0) : parseFloat(mo.q||0)*parseFloat(it.cant||1); moTotal += q*parseFloat(mo.p||0); });
             let matTotal = 0;
-            matSrc.forEach(m => { if(!m.d) return; const q = useProdMat ? parseFloat(m.q||0) : parseFloat(m.q||0)*parseFloat(it.cant||1); matTotal += q*parseFloat(m.p||0); });
+            matRows.forEach(m => { const q = useProdMat ? parseFloat(m.q||0) : parseFloat(m.q||0)*parseFloat(it.cant||1); matTotal += q*parseFloat(m.p||0); });
             let artTotal = 0;
             artes.forEach(a => { artTotal += calcArtM2Lic(a)*parseFloat(a.precio||0); });
             const grandItemTotal = moTotal + matTotal + artTotal;
 
-            const thumbImg = it.img || (it.op_images ? Object.values(it.op_images)[0] : null) || (it.cortes ? Object.values(it.cortes)[0] : null);
-            const thumbHtml = thumbImg
-                ? `<img loading="lazy" src="${thumbImg}" style="width:40px;height:40px;object-fit:cover;border-radius:8px;border:1px solid var(--border);flex-shrink:0;">`
-                : `<div style="width:40px;height:40px;border-radius:8px;background:var(--card);border:1px dashed var(--border);flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:16px;color:var(--gray);"><i class="ph-bold ph-package"></i></div>`;
-            const badgeAssigned = isAssigned ? `<span style="background:var(--orange);color:white;font-size:8px;padding:2px 5px;border-radius:4px;font-weight:900;margin-left:4px;">YA ASIG.</span>` : '';
+            // Resumen de componentes para el subtítulo del header
+            const parts = [];
+            if (moRows.length  > 0) parts.push(`${moRows.length} M.O.`);
+            if (matRows.length > 0) parts.push(`${matRows.length} Mat.`);
+            if (artes.length   > 0) parts.push(`${artes.length} Arte(s)`);
+            const summaryTxt = parts.length ? parts.join(' · ') : 'Sin desglose APU';
 
-            html += `<div class="llm-card${isAssigned?' assigned':''}" id="llm-card-${i}">
-<div class="llm-header" onclick="toggleLlmItem('${i}')">
+            const badgeAssigned = isAssigned ? `<span style="background:var(--orange);color:white;font-size:8px;padding:2px 5px;border-radius:4px;font-weight:900;margin-left:4px;">YA ASIG.</span>` : '';
+            const thumbImg = it.img || (it.op_images ? Object.values(it.op_images)[0] : null) || (it.cortes ? Object.values(it.cortes)[0] : null);
+
+            // ── Contenedor tipo licitación gráfica ──
+            html += `<div style="background:rgba(241,196,15,0.04);border:1px solid rgba(241,196,15,0.25);border-radius:10px;margin-bottom:6px;overflow:hidden;${isAssigned?'opacity:0.78;':''}">
+
+<!-- HEADER colapsable -->
+<div style="display:flex;align-items:center;gap:10px;padding:10px 14px;cursor:pointer;user-select:none;" onclick="toggleLlmItem('${i}')">
   <input type="checkbox" class="chk-box llm-main-chk" id="llm-main-chk-${i}" data-idx="${i}"
-         onclick="event.stopPropagation()" onchange="toggleLlmAllSubs('${i}',this.checked)">
-  ${thumbHtml}
-  <div style="flex:1;min-width:0;margin-left:8px;">
-    <b style="font-size:13px;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${it.desc}</b>${badgeAssigned}
-    <span style="font-size:10px;color:var(--gray);">${it.cant} ${it.und}</span>
+         onclick="event.stopPropagation()" onchange="toggleLlmAllSubs('${i}',this.checked)"
+         style="width:16px;height:16px;cursor:pointer;flex-shrink:0;accent-color:var(--gold);">
+  ${thumbImg
+    ? `<img loading="lazy" src="${thumbImg}" style="width:40px;height:40px;object-fit:cover;border-radius:8px;border:1px solid var(--border);flex-shrink:0;">`
+    : `<div style="width:40px;height:40px;border-radius:8px;background:var(--card);border:1px dashed rgba(241,196,15,0.4);flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:16px;color:var(--gold);"><i class="ph-bold ph-package"></i></div>`}
+  <div style="flex:1;min-width:0;">
+    <div style="font-size:12px;font-weight:900;color:#b8960a;text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${it.desc}${badgeAssigned}</div>
+    <div style="font-size:10px;color:var(--gray);font-weight:700;margin-top:2px;">${it.cant} ${it.und} · ${summaryTxt} · <span id="llm-total-${i}">${fMoney(grandItemTotal)}</span> Bs</div>
   </div>
-  <div style="display:flex;flex-direction:column;align-items:flex-end;gap:2px;margin-left:8px;flex-shrink:0;">
-    <span id="llm-total-${i}" style="font-size:12px;font-weight:900;color:#b8960a;">${fMoney(grandItemTotal)} Bs</span>
-    <i class="ph-bold ph-caret-down" id="llm-icon-${i}" style="font-size:13px;color:var(--gray);transition:transform 0.2s;"></i>
-  </div>
+  <i class="ph-bold ph-caret-down" id="llm-icon-${i}" style="color:#b8960a;transition:0.25s;flex-shrink:0;transform:rotate(-90deg);"></i>
 </div>
-<div id="llm-body-${i}" style="display:none;" class="llm-body">
+
+<!-- BODY colapsado por defecto -->
+<div id="llm-body-${i}" style="display:none;border-top:1px solid rgba(241,196,15,0.2);padding:8px 12px 10px;">
+  <!-- Distribuir -->
   <div class="llm-split-box">
     <i class="ph-bold ph-scissors" style="font-size:13px;"></i>
     <span>Distribuir:</span>
@@ -1155,38 +1175,56 @@ ${reqTxt}<div style="margin-top:4px;">${badgeMo}</div>
     <span style="color:var(--gray);font-weight:700;">/ ${it.cant} ${it.und}</span>
   </div>`;
 
-            // ── MO ──
-            const moRows = moSrc.filter(mo => mo.d);
+            // ── MO rows ──
             if (moRows.length > 0) {
                 html += `<div class="llm-section-title">👷 Mano de Obra</div>`;
                 moRows.forEach((mo, aIdx) => {
                     const q = useProdMo ? parseFloat(mo.q||0) : parseFloat(mo.q||0)*parseFloat(it.cant||1);
-                    const src = useProdMo ? `<span style="font-size:8px;background:#1a3a1a;color:var(--green);padding:1px 4px;border-radius:3px;margin-left:3px;">PROD</span>` : `<span style="font-size:8px;background:#2a2a1a;color:var(--orange);padding:1px 4px;border-radius:3px;margin-left:3px;">APU</span>`;
-                    html += `<div class="llm-row">
-  <input type="checkbox" class="chk-box llm-sub-chk" data-idx="${i}" data-type="mo" data-apuidx="${aIdx}" data-cant="${q.toFixed(4)}" onchange="recalcularLlaveEnMano()" onclick="event.stopPropagation()">
-  <div class="llm-desc"><div style="font-weight:800;">${mo.d}${src}</div><div style="color:var(--gray);font-size:9px;">${q.toFixed(2)} ${mo.u||'U'}</div></div>
-  <div style="display:flex;align-items:center;gap:3px;flex-shrink:0;">
-    <input type="number" class="llm-pu-input" id="llm-pu-mo-${i}-${aIdx}" value="${parseFloat(mo.p||0).toFixed(0)}" min="0" oninput="recalcularLlaveEnMano()" onclick="event.stopPropagation()">
-    <span style="font-size:9px;color:var(--gray);">Bs/${mo.u||'U'} =</span>
-    <span class="llm-sub" id="llm-sub-mo-${i}-${aIdx}">${fMoney(q*parseFloat(mo.p||0))} Bs</span>
+                    const srcBadge = useProdMo
+                        ? `<span style="font-size:8px;background:#1a3a1a;color:var(--green);padding:1px 4px;border-radius:3px;margin-left:3px;">PROD</span>`
+                        : `<span style="font-size:8px;background:#2a2a1a;color:var(--orange);padding:1px 4px;border-radius:3px;margin-left:3px;">APU</span>`;
+                    html += `<div style="display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:8px;border:1px solid rgba(255,149,0,0.2);background:rgba(255,149,0,0.04);margin-bottom:4px;">
+  <input type="checkbox" style="width:16px;height:16px;cursor:pointer;flex-shrink:0;accent-color:var(--orange);"
+         class="llm-sub-chk" data-idx="${i}" data-type="mo" data-apuidx="${aIdx}" data-cant="${q.toFixed(4)}"
+         onchange="recalcularLlaveEnMano()" onclick="event.stopPropagation()">
+  <div style="flex:1;min-width:0;">
+    <div style="font-size:11px;font-weight:900;">${mo.d}${srcBadge}</div>
+    <div style="font-size:9px;color:var(--gray);margin-top:1px;">${q.toFixed(2)} ${mo.u||'U'}</div>
+  </div>
+  <div style="display:flex;flex-direction:column;align-items:flex-end;gap:2px;flex-shrink:0;">
+    <span style="font-size:8px;font-weight:900;padding:1px 6px;border-radius:4px;background:rgba(255,149,0,0.12);color:var(--orange);">M.O.</span>
+    <div style="display:flex;align-items:center;gap:3px;margin-top:2px;">
+      <input type="number" class="llm-pu-input" id="llm-pu-mo-${i}-${aIdx}" value="${parseFloat(mo.p||0).toFixed(0)}"
+             min="0" style="border-color:rgba(255,149,0,0.4);" oninput="recalcularLlaveEnMano()" onclick="event.stopPropagation()">
+      <span style="font-size:9px;color:var(--gray);">Bs =</span>
+    </div>
+    <span style="font-size:11px;font-weight:900;color:var(--orange);" id="llm-sub-mo-${i}-${aIdx}">${fMoney(q*parseFloat(mo.p||0))} Bs</span>
   </div>
 </div>`;
                 });
             }
 
             // ── Materiales ──
-            const matRows = matSrc.filter(m => m.d);
             if (matRows.length > 0) {
                 html += `<div class="llm-section-title">🧱 Materiales</div>`;
                 matRows.forEach((m, mIdx) => {
                     const q = useProdMat ? parseFloat(m.q||0) : parseFloat(m.q||0)*parseFloat(it.cant||1);
-                    html += `<div class="llm-row">
-  <input type="checkbox" class="chk-box llm-sub-chk" data-idx="${i}" data-type="mat" data-matidx="${mIdx}" data-cant="${q.toFixed(4)}" onchange="recalcularLlaveEnMano()" onclick="event.stopPropagation()">
-  <div class="llm-desc"><div style="font-weight:800;">${m.d}</div><div style="color:var(--gray);font-size:9px;">${q.toFixed(2)} ${m.u||'U'}</div></div>
-  <div style="display:flex;align-items:center;gap:3px;flex-shrink:0;">
-    <input type="number" class="llm-pu-input" id="llm-pu-mat-${i}-${mIdx}" value="${parseFloat(m.p||0).toFixed(0)}" min="0" oninput="recalcularLlaveEnMano()" onclick="event.stopPropagation()">
-    <span style="font-size:9px;color:var(--gray);">Bs/${m.u||'U'} =</span>
-    <span class="llm-sub" id="llm-sub-mat-${i}-${mIdx}">${fMoney(q*parseFloat(m.p||0))} Bs</span>
+                    html += `<div style="display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:8px;border:1px solid rgba(0,122,255,0.2);background:rgba(0,122,255,0.04);margin-bottom:4px;">
+  <input type="checkbox" style="width:16px;height:16px;cursor:pointer;flex-shrink:0;accent-color:var(--blue);"
+         class="llm-sub-chk" data-idx="${i}" data-type="mat" data-matidx="${mIdx}" data-cant="${q.toFixed(4)}"
+         onchange="recalcularLlaveEnMano()" onclick="event.stopPropagation()">
+  <div style="flex:1;min-width:0;">
+    <div style="font-size:11px;font-weight:900;">${m.d}</div>
+    <div style="font-size:9px;color:var(--gray);margin-top:1px;">${q.toFixed(2)} ${m.u||'U'}</div>
+  </div>
+  <div style="display:flex;flex-direction:column;align-items:flex-end;gap:2px;flex-shrink:0;">
+    <span style="font-size:8px;font-weight:900;padding:1px 6px;border-radius:4px;background:rgba(0,122,255,0.1);color:var(--blue);">MAT.</span>
+    <div style="display:flex;align-items:center;gap:3px;margin-top:2px;">
+      <input type="number" class="llm-pu-input" id="llm-pu-mat-${i}-${mIdx}" value="${parseFloat(m.p||0).toFixed(0)}"
+             min="0" style="border-color:rgba(0,122,255,0.4);" oninput="recalcularLlaveEnMano()" onclick="event.stopPropagation()">
+      <span style="font-size:9px;color:var(--gray);">Bs =</span>
+    </div>
+    <span style="font-size:11px;font-weight:900;color:var(--blue);" id="llm-sub-mat-${i}-${mIdx}">${fMoney(q*parseFloat(m.p||0))} Bs</span>
   </div>
 </div>`;
                 });
@@ -1197,23 +1235,38 @@ ${reqTxt}<div style="margin-top:4px;">${badgeMo}</div>
                 html += `<div class="llm-section-title">🎨 Gráficos</div>`;
                 artes.forEach((art, artI) => {
                     const m2 = calcArtM2Lic(art);
-                    html += `<div class="llm-row" style="border-left:3px solid var(--purple);">
-  <input type="checkbox" class="chk-box llm-sub-chk" id="llm-art-chk-${i}-${artI}" data-idx="${i}" data-type="art" data-arti="${artI}" onchange="recalcularLlaveEnMano()" onclick="event.stopPropagation()">
-  <div class="llm-desc"><div style="font-weight:800;">${art.nombre||'(arte)'}</div><div style="color:var(--purple);font-size:9px;">${m2.toFixed(2)} m² · ${art.material}</div></div>
-  <div style="display:flex;align-items:center;gap:3px;flex-shrink:0;">
-    <input type="number" class="llm-pu-input" id="llm-pu-art-${i}-${artI}" value="${parseFloat(art.precio||0).toFixed(0)}" min="0" oninput="recalcularLlaveEnMano()" onclick="event.stopPropagation()" style="border-color:var(--purple);">
-    <span style="font-size:9px;color:var(--purple);">Bs/m² =</span>
-    <span class="llm-sub" id="llm-sub-art-${i}-${artI}" style="color:var(--purple);">${fMoney(m2*parseFloat(art.precio||0))} Bs</span>
+                    const tieneImg = art.imgRef && (art.imgRef.startsWith('http') || art.imgRef.startsWith('data:image'));
+                    const artThumb = tieneImg
+                        ? `<img src="${art.imgRef}" style="width:36px;height:36px;border-radius:6px;object-fit:cover;flex-shrink:0;border:1px solid rgba(175,82,222,0.3);">`
+                        : `<div style="width:36px;height:36px;border-radius:6px;background:rgba(175,82,222,0.06);border:1px dashed rgba(175,82,222,0.3);flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:14px;color:var(--purple);"><i class="ph-bold ph-image"></i></div>`;
+                    const matColor = getMaterialColorLic ? getMaterialColorLic(art.material) : 'var(--purple)';
+                    html += `<div style="display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:8px;border:1px solid rgba(175,82,222,0.2);background:rgba(175,82,222,0.04);margin-bottom:4px;">
+  <input type="checkbox" style="width:16px;height:16px;cursor:pointer;flex-shrink:0;accent-color:var(--purple);"
+         class="llm-sub-chk" id="llm-art-chk-${i}-${artI}" data-idx="${i}" data-type="art" data-arti="${artI}"
+         onchange="recalcularLlaveEnMano()" onclick="event.stopPropagation()">
+  ${artThumb}
+  <div style="flex:1;min-width:0;">
+    <div style="font-size:11px;font-weight:900;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${art.nombre||'(arte)'}</div>
+    <div style="font-size:9px;color:var(--gray);margin-top:1px;">${m2.toFixed(2)} m²</div>
+  </div>
+  <div style="display:flex;flex-direction:column;align-items:flex-end;gap:2px;flex-shrink:0;">
+    <span style="font-size:8px;font-weight:900;padding:1px 6px;border-radius:4px;background:${matColor}18;color:${matColor};">${art.material}</span>
+    <div style="display:flex;align-items:center;gap:3px;margin-top:2px;">
+      <input type="number" class="llm-pu-input" id="llm-pu-art-${i}-${artI}" value="${parseFloat(art.precio||0).toFixed(0)}"
+             min="0" style="border-color:rgba(175,82,222,0.4);" oninput="recalcularLlaveEnMano()" onclick="event.stopPropagation()">
+      <span style="font-size:9px;color:var(--purple);">Bs/m² =</span>
+    </div>
+    <span style="font-size:11px;font-weight:900;color:var(--purple);" id="llm-sub-art-${i}-${artI}">${fMoney(m2*parseFloat(art.precio||0))} Bs</span>
   </div>
 </div>`;
                 });
             }
 
             if (moRows.length === 0 && matRows.length === 0 && artes.length === 0) {
-                html += `<div style="padding:10px;font-size:11px;color:var(--gray);text-align:center;"><i class="ph-bold ph-warning"></i> Sin desglose APU — agrega artes/APU en Producción</div>`;
+                html += `<div style="padding:10px;font-size:11px;color:var(--gray);text-align:center;"><i class="ph-bold ph-warning"></i> Sin desglose APU — definí el APU en Presupuesto o los artes en Producción</div>`;
             }
 
-            html += `</div></div>`;
+            html += `</div></div>`; // cierre body + card
         });
 
         document.getElementById('lic-items').innerHTML = html || '<div class="empty-msg">Sin ítems disponibles. Intenta "Mostrar Todos".</div>';
