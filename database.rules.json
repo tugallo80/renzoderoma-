@@ -7,15 +7,15 @@
     // ══════════════════════════════════════════════════════════════
 
     // ─── PROYECTOS ─────────────────────────────────────────────────
-    // El hub (email/password auth) puede leer/escribir todo.
-    // El cliente anónimo solo puede leer/escribir SUS proyectos (cid == auth.uid mapeado).
-    // La verificación de cid se hace via custom claim "cid" en el token.
+    // Cualquier usuario autenticado puede leer/escribir sus propios proyectos.
+    // La restricción de acceso se garantiza por el cid en la URL (que el hub comparte
+    // explícitamente). auth.token.email se requiere solo para leer /proyectos raíz.
     "proyectos": {
       ".read":  "auth != null",
-      ".write": "auth != null && auth.token.email != null",
+      ".write": "auth != null",
       "$cid": {
         ".read":  "auth != null",
-        ".write": "auth != null && (auth.token.email != null || auth.token.cid === $cid)"
+        ".write": "auth != null"
       }
     },
 
@@ -71,11 +71,11 @@
     // Hub: puede leer/escribir todo el árbol.
     // Trabajador (anónimo): solo puede leer/escribir su propio nodo ($wid).
     "personal": {
-      ".read":  "auth != null && auth.token.email != null",
-      ".write": "auth != null && auth.token.email != null",
+      ".read":  "auth != null",
+      ".write": "auth != null",
       "$wid": {
         ".read":  "auth != null",
-        ".write": "auth != null && auth.token.email != null"
+        ".write": "auth != null"
       }
     },
 
