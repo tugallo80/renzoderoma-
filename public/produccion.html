@@ -2992,7 +2992,7 @@
     }
 
     // ── Guardar/restaurar estado abierto de ítems y artes (para re-renders) ──
-    function _captureOpenState() {
+    function _capturePrintsState() {
         const state = { items: new Set(), arts: new Set() };
         document.querySelectorAll('[id^="task-body-pi_"]').forEach(el => {
             if (el.style.display !== 'none') state.items.add(el.id.replace('task-body-pi_', ''));
@@ -3002,7 +3002,7 @@
         });
         return state;
     }
-    function _restoreOpenState(state) {
+    function _restorePrintsState(state) {
         state.items.forEach(idx => {
             const body = document.getElementById(`task-body-pi_${idx}`);
             const icon = document.getElementById(`task-icon-pi_${idx}`);
@@ -3101,11 +3101,10 @@
         const prec = window._artsData[itemIdx][0] ? window._artsData[itemIdx][0].precio : 0;
         window._artsData[itemIdx].push({ id: 'manual_' + Date.now(), nombre: '', base: 0, altura: 0, cantidad: 1, material: 'Lona', precio: prec, imgRef: '' });
         window._saveArtsItem(itemIdx);
-        const state = _captureOpenState();
-        // Asegurar que el ítem padre quede abierto
+        const state = _capturePrintsState();
         state.items.add(String(itemIdx));
         renderPrintsArea();
-        _restoreOpenState(state);
+        _restorePrintsState(state);
         // Scroll al último arte del ítem y abrirlo
         setTimeout(() => {
             const arts = window._artsData[itemIdx] || [];
@@ -3120,11 +3119,11 @@
 
     window.eliminarArte = function(itemIdx, artI) {
         if (!window._artsData[itemIdx]) return;
-        const state = _captureOpenState();
+        const state = _capturePrintsState();
         window._artsData[itemIdx].splice(artI, 1);
         window._saveArtsItem(itemIdx);
         renderPrintsArea();
-        _restoreOpenState(state);
+        _restorePrintsState(state);
     }
 
     // ── Imagen referencial modal ──
@@ -3426,10 +3425,10 @@ INSTRUCCIONES:
             }
 
             await window._saveArtsItem(targetIdx); // persistir artes IA en Firebase
-            const stateIA = _captureOpenState();
-            stateIA.items.add(String(targetIdx)); // mantener ítem padre abierto
+            const stateIA = _capturePrintsState();
+            stateIA.items.add(String(targetIdx));
             window.renderPrintsArea();
-            _restoreOpenState(stateIA);
+            _restorePrintsState(stateIA);
 
             if (window._iaScanMode === 'single') {
                 // MODO BATCH: no cerrar — preparar para la siguiente foto
