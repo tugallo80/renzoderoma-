@@ -281,20 +281,38 @@
         grid.appendChild(msg);
     }
 
-    // ── VÍA 1: REST API inmediata (HTTPS puro — no depende de WebSocket) ──
+    // ── VÍA 1: REST API con ?shallow=true (evita bajar presupuesto/prod_apu anidados) ──
     (async () => {
         try {
             const user = firebase.auth().currentUser;
             if (!user) return;
-            const token = await user.getIdToken(false); // usa token en caché, sin red
-            const res = await fetch(`https://rubik-bolivia-default-rtdb.firebaseio.com/proyectos/${cid}.json?auth=${token}`);
-            if (!res.ok) return;
-            const data = await res.json();
-            if (!_yaRenderizado) {
-                _yaRenderizado = true;
-                _renderData(data);
-            }
-        } catch(e) { /* WebSocket o REST posterior pueden servir igualmente */ }
+            const token = await user.getIdToken(false);
+            const base = 'https://rubik-bolivia-default-rtdb.firebaseio.com';
+
+            // Paso 1: solo PIDs del cliente (shallow devuelve {pid1:true, pid2:true})
+            const keysRes = await fetch(`${base}/proyectos/${cid}.json?shallow=true&auth=${token}`);
+            if (!keysRes.ok) return;
+            const keys = await keysRes.json();
+            if (!keys) { if (!_yaRenderizado) { _yaRenderizado = true; _renderData(null); } return; }
+
+            // Paso 2: por cada PID, solo campos escalares del proyecto (nombre, estado, img, orden…)
+            // shallow=true en /{pid} devuelve scalars con valor y sub-objetos como true
+            const pids = Object.keys(keys);
+            const proyectos = await Promise.all(pids.map(async pid => {
+                try {
+                    const r = await fetch(`${base}/proyectos/${cid}/${pid}.json?shallow=true&auth=${token}`);
+                    if (!r.ok) return null;
+                    const p = await r.json();
+                    if (p && typeof p === 'object') { p.pid = pid; return p; }
+                    return null;
+                } catch(e2) { return null; }
+            }));
+
+            const dataObj = {};
+            proyectos.filter(Boolean).forEach(p => { dataObj[p.pid] = p; });
+
+            if (!_yaRenderizado) { _yaRenderizado = true; _renderData(dataObj); }
+        } catch(e) { /* WebSocket o timeout manejan el fallback */ }
     })();
 
     // ── VÍA 2: WebSocket con firecache (sirve localStorage inmediatamente si hay caché) ──
