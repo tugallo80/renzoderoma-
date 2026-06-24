@@ -1649,11 +1649,16 @@ ${reqTxt}<div style="margin-top:4px;">${badgeMo}</div>
 
                 let estado = lic.estado || 'pendiente';
                 if(estado==='enviado'||estado==='espera_cotizacion'||estado==='pendiente') {
-                    card += `<button class="btn-action btn-rev" onclick="editarLicitacion('${key}')"><i class="ph-bold ph-pencil-simple"></i> Revisar / Aprobar</button>`;
+                    card += `<div style="display:flex;gap:6px;">
+                        <button class="btn-action btn-rev" style="flex:1;" onclick="editarLicitacion('${key}')"><i class="ph-bold ph-pencil-simple"></i> Editar</button>
+                        <button class="btn-action btn-done" style="flex:1;background:rgba(52,199,89,0.12);color:var(--green);" onclick="openReviewModal('${key}','${lic.worker_id}')"><i class="ph-bold ph-check-circle"></i> Aprobar</button>
+                    </div>`;
                     lPend.innerHTML += card + '</div>'; cPend++;
                 } else if(estado==='contra_oferta'||estado==='revisado'||estado==='adjudicado') {
-                    card += `<button class="btn-action btn-rev" onclick="editarLicitacion('${key}')"><i class="ph-bold ph-pencil-simple"></i> Ver / Editar</button>`;
-                    card += `<button class="btn-action btn-done" style="margin-top:6px;" onclick="editarLicitacion('${key}')"><i class="ph-bold ph-check-circle"></i> Gestionar</button>`;
+                    card += `<div style="display:flex;gap:6px;">
+                        <button class="btn-action btn-rev" style="flex:1;" onclick="editarLicitacion('${key}')"><i class="ph-bold ph-pencil-simple"></i> Editar</button>
+                        <button class="btn-action btn-done" style="flex:1;background:rgba(52,199,89,0.12);color:var(--green);" onclick="openReviewModal('${key}','${lic.worker_id}')"><i class="ph-bold ph-check-circle"></i> Aprobar</button>
+                    </div>`;
                     lRev.innerHTML += card + '</div>'; cRev++;
                 } else if(estado==='aprobado'||estado==='terminado') {
                     card += `<button class="btn-action btn-done" onclick="editarLicitacion('${key}')"><i class="ph-bold ph-pencil-simple"></i> Ver / Editar</button>`;
