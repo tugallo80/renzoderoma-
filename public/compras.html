@@ -710,15 +710,41 @@
                         // ── MEDIDAS: fuente primaria = t.measures ──
                         if (t.measures) {
                             if (parseFloat(t.measures.b) > 0 && parseFloat(t.measures.h) > 0) {
-                                // t.measures = {b, h} directamente
                                 medida = fmMed(t.measures.b, t.measures.h);
                             } else {
-                                // t.measures = array o {0:{b,h}, 1:{b,h}...}
                                 const measArr = Array.isArray(t.measures)
                                     ? t.measures
                                     : Object.values(t.measures).filter(v => v && typeof v === 'object');
                                 const m0 = measArr.find(m => m && parseFloat(m.b) > 0 && parseFloat(m.h) > 0);
                                 if (m0) medida = fmMed(m0.b, m0.h);
+                            }
+                        }
+                        // ── MO: mo_partes (computo métrico) → mat con es_arte (cantidad copiada de impresión) ──
+                        if (medida === '-' && t.originType === 'mo' && t.originIdx !== undefined && t.originApuidx !== undefined) {
+                            const itItemMo = window.budgetItems[t.originIdx];
+                            if (itItemMo?.prod_apu?.mo) {
+                                const moArr = Array.isArray(itItemMo.prod_apu.mo)
+                                    ? itItemMo.prod_apu.mo
+                                    : Object.values(itItemMo.prod_apu.mo);
+                                const moEntry = moArr[parseInt(t.originApuidx)];
+                                if (moEntry?.mo_partes) {
+                                    const partes = Array.isArray(moEntry.mo_partes) ? moEntry.mo_partes : Object.values(moEntry.mo_partes);
+                                    const toCm = moEntry.mo_input_und === 'cm' ? 1 : 100;
+                                    const p0 = partes.find(p => parseFloat(p.base) > 0 && parseFloat(p.altura) > 0);
+                                    if (p0) medida = fmMed(parseFloat(p0.base) * toCm, parseFloat(p0.altura) * toCm);
+                                }
+                                if (medida === '-' && itItemMo?.prod_apu?.mat) {
+                                    const matArrMo = Array.isArray(itItemMo.prod_apu.mat)
+                                        ? itItemMo.prod_apu.mat
+                                        : Object.values(itItemMo.prod_apu.mat);
+                                    for (const matE of matArrMo) {
+                                        if (!matE || !matE.es_arte) continue;
+                                        if (parseFloat(matE.b) > 0 && parseFloat(matE.h) > 0) { medida = fmMed(matE.b, matE.h); break; }
+                                        const mArr = Array.isArray(matE.measures) ? matE.measures : (matE.measures ? Object.values(matE.measures) : []);
+                                        const ms = mArr.filter(m => m && parseFloat(m.b) > 0 && parseFloat(m.h) > 0);
+                                        if (ms.length > 0) { medida = fmMed(ms[0].b, ms[0].h); break; }
+                                    }
+                                }
                             }
                         }
                         // ── FALLBACK: prod_apu.mat (medidas de IMPRESIONES en producción) ──
@@ -732,14 +758,8 @@
                                 const matList = (idx2use !== null && matArr[idx2use]) ? [matArr[idx2use]] : matArr;
                                 for (const matE of matList) {
                                     if (!matE) continue;
-                                    // b/h directo en el entry (formato IMPRESIONES de produccion.html)
-                                    if (parseFloat(matE.b) > 0 && parseFloat(matE.h) > 0) {
-                                        medida = fmMed(matE.b, matE.h); break;
-                                    }
-                                    // b/h en sub-array measures
-                                    const measArr2 = Array.isArray(matE.measures)
-                                        ? matE.measures
-                                        : (matE.measures ? Object.values(matE.measures) : []);
+                                    if (parseFloat(matE.b) > 0 && parseFloat(matE.h) > 0) { medida = fmMed(matE.b, matE.h); break; }
+                                    const measArr2 = Array.isArray(matE.measures) ? matE.measures : (matE.measures ? Object.values(matE.measures) : []);
                                     const ms = measArr2.filter(m => m && parseFloat(m.b) > 0 && parseFloat(m.h) > 0);
                                     if (ms.length > 0) { medida = fmMed(ms[0].b, ms[0].h); break; }
                                 }
