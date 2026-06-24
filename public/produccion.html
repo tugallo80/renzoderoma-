@@ -495,7 +495,13 @@
 
     window.onload = () => {
         if(isWorker) { document.querySelectorAll('.admin-only').forEach(el => el.style.display = 'none'); }
-        loadWorkers(); 
+        // Esperar a que Firebase Auth esté lista antes de leer Firestore
+        const startLoad = () => loadWorkers();
+        if (window.rubikAuthReady) {
+            window.rubikAuthReady.then(startLoad).catch(startLoad);
+        } else {
+            startLoad();
+        }
     };
 
     function rutearAtras() {
