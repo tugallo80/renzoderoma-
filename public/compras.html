@@ -175,16 +175,17 @@
         <div class="modal-box">
             <i class="ph-bold ph-x" style="position:absolute; top:20px; right:20px; font-size:20px; cursor:pointer;" onclick="document.getElementById('mod-pago').style.display='none'"></i>
             <h3 style="margin-top:0;">Abonar a Contrato</h3>
-            <label class="inp-lbl">Monto Pagado (Bs)</label>
-            <input type="number" step="any" id="pay-amt" class="inp-std" placeholder="Ej: 1500.50">
-            <label class="inp-lbl">Fecha del Depósito</label>
-            <input type="date" id="pay-date" class="inp-std">
             <label class="inp-lbl">Comprobante (Opcional)</label>
             <div class="upload-zone" onclick="document.getElementById('pay-file').click()">
                 <i class="ph-bold ph-receipt" style="font-size:30px;"></i>
                 <span id="txt-file-name">Subir o Pegar Imagen (Ctrl+V)</span>
             </div>
-            <input type="file" id="pay-file" accept="image/*" style="display:none;" onchange="handleFile(this, 'txt-file-name')">
+            <input type="file" id="pay-file" accept="image/*" style="display:none;" onchange="handlePayFile(this)">
+            <button id="btn-scan-receipt" class="btn-main" style="display:none;background:linear-gradient(135deg,#5856d6,#af52de);margin-bottom:10px;" onclick="scanReceiptWithAI()"><i class="ph-bold ph-sparkle"></i> Leer con IA (fecha + monto)</button>
+            <label class="inp-lbl" id="lbl-pay-amt">Monto Pagado (Bs)</label>
+            <input type="number" step="any" id="pay-amt" class="inp-std" placeholder="Ej: 1500.50">
+            <label class="inp-lbl">Fecha del Depósito</label>
+            <input type="date" id="pay-date" class="inp-std">
             <button class="btn-main" onclick="guardarPago()"><i class="ph-bold ph-check-circle"></i> Confirmar Pago</button>
         </div>
     </div>
@@ -436,10 +437,11 @@
             let lic = currentLics[key]; if(lic.estado !== 'aprobado' && lic.estado !== 'terminado' && lic.estado !== 'liquidado' && lic.estado !== 'pagado') return; 
             let totalProp = parseFloat(lic.precio_final || lic.precio_propuesto || 0); let totalPagado = 0; let historyHtml = '';
             if(lic.pagos) {
-                Object.keys(lic.pagos).forEach(pKey => {
-                    let p = lic.pagos[pKey]; totalPagado += parseFloat(p.monto);
+                const _pagosOrdenados = Object.values(lic.pagos).sort((a,b) => (a.fecha||'') > (b.fecha||'') ? 1 : -1);
+                _pagosOrdenados.forEach(p => {
+                    totalPagado += parseFloat(p.monto||0);
                     let receiptBtn = p.comprobante ? `<a href="${p.comprobante}" target="_blank" class="p-view"><i class="ph-bold ph-image"></i> Ver Doc</a>` : '-';
-                    historyHtml += `<div class="pay-row"><span class="p-date">${new Date(p.fecha).toLocaleDateString()}</span><span>${p.nota||'Abono'}</span><span class="p-amt">${fMoney(p.monto)} Bs</span>${receiptBtn}</div>`;
+                    historyHtml += `<div class="pay-row"><span class="p-date">${new Date(p.fecha+'T12:00:00').toLocaleDateString('es-BO')}</span><span>${p.nota||'Abono'}</span><span class="p-amt">${fMoney(p.monto)} Bs</span>${receiptBtn}</div>`;
                 });
             }
             if ((lic.estado === 'pagado' || lic.estado === 'liquidado') && totalPagado === 0) { totalPagado = totalProp; }
@@ -455,6 +457,8 @@
         targetLicId = licId; targetWorkerId = wId; tempB64Receipt = null;
         document.getElementById('pay-amt').value = ''; document.getElementById('pay-date').valueAsDate = new Date();
         document.getElementById('txt-file-name').innerText = "Subir o Pegar Imagen (Ctrl+V)";
+        const btnScan = document.getElementById('btn-scan-receipt');
+        if (btnScan) { btnScan.style.display = 'none'; btnScan.disabled = false; btnScan.style.background = 'linear-gradient(135deg,#5856d6,#af52de)'; btnScan.innerHTML = '<i class="ph-bold ph-sparkle"></i> Leer con IA (fecha + monto)'; }
         document.getElementById('mod-pago').style.display = 'flex';
     }
 
@@ -509,7 +513,65 @@
     }
 
     function handleFile(inp, txtId) { if(inp.files[0]) { document.getElementById(txtId).innerText = "Comprimiendo..."; compressImage(inp.files[0], 800, 0.7).then(b64 => { tempB64Receipt = b64; document.getElementById(txtId).innerText = "✅ Comprobante Listo"; }); } }
-    document.addEventListener('paste', e => { if ((document.getElementById('mod-pago').style.display === 'flex' || document.getElementById('mod-req').style.display === 'flex') && e.clipboardData.files.length > 0) { let txtId = document.getElementById('mod-pago').style.display === 'flex' ? 'txt-file-name' : 'txt-req-file'; document.getElementById(txtId).innerText = "Comprimiendo..."; compressImage(e.clipboardData.files[0], 800, 0.7).then(b64 => { tempB64Receipt = b64; document.getElementById(txtId).innerText = "✅ Imagen Pegada"; }); } });
+    function handlePayFile(inp) {
+        if (!inp.files[0]) return;
+        document.getElementById('txt-file-name').innerText = "Comprimiendo...";
+        compressImage(inp.files[0], 800, 0.7).then(b64 => {
+            tempB64Receipt = b64;
+            document.getElementById('txt-file-name').innerText = "✅ Comprobante Listo";
+            const btn = document.getElementById('btn-scan-receipt');
+            if (btn) { btn.style.display = 'block'; btn.style.background = 'linear-gradient(135deg,#5856d6,#af52de)'; btn.innerHTML = '<i class="ph-bold ph-sparkle"></i> Leer con IA (fecha + monto)'; btn.disabled = false; }
+        });
+    }
+    document.addEventListener('paste', e => {
+        if ((document.getElementById('mod-pago').style.display === 'flex' || document.getElementById('mod-req').style.display === 'flex') && e.clipboardData.files.length > 0) {
+            let isPago = document.getElementById('mod-pago').style.display === 'flex';
+            let txtId = isPago ? 'txt-file-name' : 'txt-req-file';
+            document.getElementById(txtId).innerText = "Comprimiendo...";
+            compressImage(e.clipboardData.files[0], 800, 0.7).then(b64 => {
+                tempB64Receipt = b64;
+                document.getElementById(txtId).innerText = "✅ Imagen Pegada";
+                if (isPago) {
+                    const btn = document.getElementById('btn-scan-receipt');
+                    if (btn) { btn.style.display = 'block'; btn.style.background = 'linear-gradient(135deg,#5856d6,#af52de)'; btn.innerHTML = '<i class="ph-bold ph-sparkle"></i> Leer con IA (fecha + monto)'; btn.disabled = false; }
+                }
+            });
+        }
+    });
+
+    async function scanReceiptWithAI() {
+        if (!tempB64Receipt) return;
+        const btn = document.getElementById('btn-scan-receipt');
+        btn.disabled = true; btn.innerHTML = '<i class="ph-bold ph-spinner"></i> Leyendo comprobante...';
+        try {
+            const tok = await firebase.auth().currentUser.getIdToken();
+            const imgData = tempB64Receipt.split(',')[1];
+            const res = await fetch('/api/gemini', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + tok },
+                body: JSON.stringify({
+                    prompt: 'Eres un asistente que lee comprobantes de pago bolivianos (transferencias, depósitos, recibos). Extrae el monto total pagado y la fecha. Responde ÚNICAMENTE con JSON válido, sin texto adicional: {"monto": 1500.50, "fecha": "2026-06-24"}. Usa formato YYYY-MM-DD para la fecha. Si no encontrás la fecha usa la de hoy. Si no encontrás el monto usa 0.',
+                    model: 'gemini-2.5-flash',
+                    image: { data: imgData, mimeType: 'image/jpeg' }
+                })
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || 'Error IA');
+            let text = data.text || '';
+            let cleanJson = text.replace(/```json/gi,'').replace(/```/g,'').trim();
+            const match = cleanJson.match(/\{[\s\S]*?\}/);
+            if (match) cleanJson = match[0];
+            const parsed = JSON.parse(cleanJson);
+            if (parsed.monto > 0) document.getElementById('pay-amt').value = parsed.monto;
+            if (parsed.fecha) document.getElementById('pay-date').value = parsed.fecha;
+            btn.innerHTML = '<i class="ph-bold ph-check-circle"></i> Campos completados por IA';
+            btn.style.background = 'var(--green)';
+        } catch(e) {
+            console.error('scanReceiptWithAI:', e);
+            btn.innerHTML = '<i class="ph-bold ph-warning"></i> No pudo leer — completá manual';
+            btn.style.background = 'var(--red)';
+        } finally { btn.disabled = false; }
+    }
     function compressImage(file, max, q) { return new Promise(res => { const r = new FileReader(); r.onload = e => { const i = new Image(); i.onload = () => { const c = document.createElement('canvas'); let s = i.width>max ? max/i.width : 1; c.width = i.width*s; c.height = i.height*s; c.getContext('2d').drawImage(i, 0, 0, c.width, c.height); res(c.toDataURL('image/jpeg', q)); }; i.src = e.target.result; }; r.readAsDataURL(file); }); }
 
     // ==========================================================
@@ -539,55 +601,59 @@
         const lic = window.currentLics[licId];
         if (!lic) return alert("No se encontró el contrato.");
 
-        document.getElementById('loader-title').innerText = "Generando PDF Pro..."; 
+        document.getElementById('loader-title').innerText = "Generando Liquidación...";
         document.getElementById('global-loader').style.display = 'flex';
 
         try {
             const { jsPDF } = window.jspdf;
             const doc = new jsPDF('p', 'mm', 'a4');
             const margin = 15;
-            
-            // --- HOJA 1: RESUMEN FINANCIERO ---
+
+            // Pagos ordenados cronológicamente
+            const pagosArr = lic.pagos
+                ? Object.values(lic.pagos).sort((a,b) => (a.fecha||'') > (b.fecha||'') ? 1 : -1)
+                : [];
+            let totalProp = parseFloat(lic.precio_final || lic.precio_propuesto || 0);
+            let totalPagado = pagosArr.reduce((s,p) => s + parseFloat(p.monto||0), 0);
+            let saldo = totalProp - totalPagado;
+
+            // ══ HOJA 1: RESUMEN FINANCIERO ══
             doc.setFontSize(20); doc.setFont(undefined, 'bold');
             doc.text("LIQUIDACIÓN DE CONTRATO", margin, 20);
             doc.setFontSize(10); doc.setFont(undefined, 'normal');
             doc.text(`PROYECTO: ${window.pName || 'Proyecto'}`, margin, 28);
             doc.text(`CONTRATISTA: ${lic.worker_name}`, margin, 33);
-            doc.text(`FECHA DE EMISIÓN: ${new Date().toLocaleDateString()}`, margin, 38);
-
-            let totalProp = parseFloat(lic.precio_final || lic.precio_propuesto || 0);
-            let totalPagado = 0;
-            const pagosRows = [];
-            if(lic.pagos) {
-                Object.values(lic.pagos).forEach(p => {
-                    let amt = parseFloat(p.monto||0);
-                    totalPagado += amt;
-                    pagosRows.push([ new Date(p.fecha).toLocaleDateString(), p.nota || 'Abono', fMoney(amt) + ' Bs' ]);
-                });
-            }
+            doc.text(`FECHA DE EMISIÓN: ${new Date().toLocaleDateString('es-BO')}`, margin, 38);
 
             let y = 45;
             doc.setFontSize(12); doc.setFont(undefined, 'bold');
             doc.text("1. RESUMEN FINANCIERO DEL TRATO", margin, y);
             doc.autoTable({
                 startY: y + 5,
-                head: [['CONCEPTO DE CUENTA', 'MONTO TOTAL']],
+                head: [['CONCEPTO', 'MONTO']],
                 body: [
                     ['MONTO TOTAL ACORDADO', fMoney(totalProp) + ' Bs'],
                     ['TOTAL DESEMBOLSADO (PAGADO)', fMoney(totalPagado) + ' Bs'],
-                    ['SALDO PENDIENTE POR CANCELAR', fMoney(totalProp - totalPagado) + ' Bs']
+                    ['SALDO PENDIENTE', fMoney(saldo) + ' Bs']
                 ],
                 theme: 'grid', headStyles: { fillColor: [0, 122, 255] }
             });
 
-            y = doc.lastAutoTable.finalY + 15;
-            doc.setFontSize(12); doc.text("2. HISTORIAL DE PAGOS Y ANTICIPOS", margin, y);
-            if (pagosRows.length > 0) {
+            y = doc.lastAutoTable.finalY + 12;
+            doc.setFontSize(12); doc.setFont(undefined, 'bold');
+            doc.text("2. HISTORIAL DE PAGOS Y ANTICIPOS", margin, y);
+            if (pagosArr.length > 0) {
                 doc.autoTable({
-                    startY: y + 5, head: [['Fecha de Pago', 'Concepto / Nota', 'Monto']],
-                    body: pagosRows, theme: 'striped', headStyles: { fillColor: [52, 199, 89] }
+                    startY: y + 5,
+                    head: [['Fecha', 'Concepto', 'Monto']],
+                    body: pagosArr.map(p => [
+                        new Date(p.fecha+'T12:00:00').toLocaleDateString('es-BO'),
+                        p.nota || 'Abono',
+                        fMoney(parseFloat(p.monto||0)) + ' Bs'
+                    ]),
+                    theme: 'striped', headStyles: { fillColor: [52, 199, 89] }
                 });
-                y = doc.lastAutoTable.finalY + 15;
+                y = doc.lastAutoTable.finalY + 12;
             } else {
                 doc.setFontSize(10); doc.setFont(undefined, 'italic');
                 doc.text("No se registran pagos realizados a este contrato.", margin, y + 8);
@@ -595,88 +661,128 @@
             }
 
             if (y > 250) { doc.addPage(); y = 20; }
-            doc.setFontSize(14); doc.setFont(undefined, 'bold'); doc.setTextColor(255, 149, 0);
-            doc.text(`ESTADO FINAL: ${fMoney(totalProp - totalPagado)} Bs PENDIENTES`, margin, y);
+            const saldoOk = saldo <= 0;
+            doc.setFontSize(14); doc.setFont(undefined, 'bold');
+            doc.setTextColor(...(saldoOk ? [52,199,89] : [255,149,0]));
+            doc.text(saldoOk ? '✓ CONTRATO LIQUIDADO' : `SALDO PENDIENTE: ${fMoney(saldo)} Bs`, margin, y);
             doc.setTextColor(0);
 
-            // --- HOJA 2: ANEXO TÉCNICO ---
+            // ══ HOJA 2: ANEXO TÉCNICO AGRUPADO POR ÍTEM ══
             if (lic.tareas) {
                 doc.addPage();
-                doc.setFontSize(16); doc.setFont(undefined, 'bold'); doc.setTextColor(0, 122, 255);
+                doc.setFontSize(16); doc.setFont(undefined, 'bold'); doc.setTextColor(0,122,255);
                 doc.text("ANEXO: DESGLOSE TÉCNICO Y GRÁFICO", margin, 20);
-                
-                let rowsAnexo = [];
-                for (let tId in lic.tareas) {
-                    let t = lic.tareas[tId];
-                    if (!t) continue;
-                    
-                    // BÚSQUEDA BLINDADA (Fuzzy Search por si se cambió el nombre o ID)
-                    let searchDesc = (t.parent_desc || t.desc || "").toUpperCase().replace("IMPRESIÓN: ", "").replace("IMPRESIONES ", "").trim();
-                    let itOrig = window.budgetItems[t.originIdx];
-                    
-                    if (!itOrig || !itOrig.measures) {
-                        itOrig = Object.values(window.budgetItems).find(i => {
-                            if(!i || !i.desc) return false;
-                            let d = i.desc.toUpperCase();
-                            return d === searchDesc || d.includes(searchDesc) || searchDesc.includes(d);
-                        });
-                    }
-                    
-                    if (itOrig && itOrig.measures) {
-                        for (let mId in itOrig.measures) {
-                            let m = itOrig.measures[mId];
-                            if(!m.b && !m.h) continue; 
-                            
-                            let b = parseFloat(m.b||0); let h = parseFloat(m.h||0); let c = parseFloat(m.c||1);
-                            let m2 = (b/100) * (h/100) * c;
-                            let pu = parseFloat(t.pu || 0);
-                            let b64 = m.img ? await getBase64ImageFromUrl(m.img) : null;
+                doc.setTextColor(0);
 
-                            rowsAnexo.push([
-                                itOrig.desc,
-                                m.d || "Arte",
-                                `${b} x ${h} cm`,
-                                c,
-                                fMoney(pu) + " Bs",
-                                fMoney(m2 * pu) + " Bs",
-                                b64
-                            ]);
+                // Agrupar tareas por originIdx preservando el orden de primera aparición
+                const groupOrder = [];
+                const groups = {};
+                for (let tId in lic.tareas) {
+                    let t = lic.tareas[tId]; if (!t) continue;
+                    const gk = t.originIdx !== undefined ? String(t.originIdx) : 'z_general';
+                    if (!groups[gk]) { groups[gk] = { parentDesc: t.parent_desc || t.desc || 'General', tasks: [] }; groupOrder.push(gk); }
+                    groups[gk].tasks.push(t);
+                }
+
+                const bodyData = [];
+                for (let gk of groupOrder) {
+                    const grp = groups[gk];
+                    // Cabecera del grupo (ítem padre)
+                    bodyData.push([{ content: grp.parentDesc.toUpperCase(), colSpan: 5, styles: { fillColor: [230,240,255], fontStyle:'bold', fontSize:8, textColor:[0,80,180] } }, { content: '', colSpan: 1, styles: { fillColor: [230,240,255] } }]);
+
+                    for (let t of grp.tasks) {
+                        let itOrig = window.budgetItems[t.originIdx];
+                        if (!itOrig || !itOrig.measures) {
+                            const sd = (t.parent_desc || t.desc || '').toUpperCase().trim();
+                            itOrig = Object.values(window.budgetItems).find(i => {
+                                if (!i || !i.desc) return false;
+                                const d = i.desc.toUpperCase();
+                                return d === sd || d.includes(sd) || sd.includes(d);
+                            });
                         }
-                    } else {
-                        let b64 = t.img ? await getBase64ImageFromUrl(t.img) : null;
-                        rowsAnexo.push([t.parent_desc || "General", t.task_name || t.desc, "-", t.cant, fMoney(t.pu) + " Bs", fMoney(t.subtotal) + " Bs", b64]);
+
+                        // Si el ítem tiene medidas gráficas (base×altura), expandir por medida
+                        const hasMeasures = itOrig && itOrig.measures && Object.keys(itOrig.measures).some(k => itOrig.measures[k].b || itOrig.measures[k].h);
+                        if (hasMeasures) {
+                            for (let mId in itOrig.measures) {
+                                let m = itOrig.measures[mId]; if (!m.b && !m.h) continue;
+                                let b = parseFloat(m.b||0), h = parseFloat(m.h||0), c = parseFloat(m.c||1);
+                                let m2 = (b/100)*(h/100)*c;
+                                let pu = parseFloat(t.pu||0);
+                                let b64 = m.img ? await getBase64ImageFromUrl(m.img) : null;
+                                bodyData.push([t.task_name||t.desc, `${b} × ${h} cm`, c, fMoney(pu)+' Bs', fMoney(m2*pu)+' Bs', b64]);
+                            }
+                        } else {
+                            // Tarea simple: MO, material, obra vendida
+                            let medida = '-';
+                            if (t.measures && t.measures.length > 0) {
+                                const fm = t.measures.find(m => m.b && m.h);
+                                if (fm) medida = `${fm.b} × ${fm.h} cm`;
+                            }
+                            let b64 = t.img ? await getBase64ImageFromUrl(t.img) : null;
+                            bodyData.push([t.task_name||t.desc, medida, t.cant, fMoney(t.pu)+' Bs', fMoney(t.subtotal)+' Bs', b64]);
+                        }
                     }
                 }
 
-                if (rowsAnexo.length > 0) {
+                if (bodyData.length > 0) {
                     doc.autoTable({
-                        startY: 30,
-                        head: [['Ítem Padre', 'Detalle/Arte', 'Medida', 'Cant', 'P.U. (m2)', 'Subtotal', 'Imagen']],
-                        body: rowsAnexo,
+                        startY: 28,
+                        head: [['Tarea / Arte', 'Medida (Base×Alt)', 'Cant', 'P.U.', 'Subtotal', 'Imagen']],
+                        body: bodyData,
                         theme: 'grid',
-                        headStyles: { fillColor: [0, 122, 255], halign: 'center' },
+                        headStyles: { fillColor: [0,122,255], halign:'center', fontSize:8 },
                         styles: { fontSize: 7, valign: 'middle' },
-                        columnStyles: { 6: { cellWidth: 30, halign: 'center' } },
-                        didParseCell: function(data) {
-                            if (data.column.index === 6 && data.cell.section === 'body') {
-                                data.cell.text = ''; data.cell.styles.minCellHeight = 22;
+                        columnStyles: { 0:{cellWidth:52}, 1:{cellWidth:28,halign:'center'}, 2:{cellWidth:12,halign:'center'}, 3:{cellWidth:20,halign:'right'}, 4:{cellWidth:22,halign:'right'}, 5:{cellWidth:28,halign:'center'} },
+                        didParseCell: function(d) {
+                            if (d.column.index === 5 && d.cell.section === 'body' && Array.isArray(d.row.raw)) {
+                                d.cell.text = ''; d.cell.styles.minCellHeight = 20;
                             }
                         },
-                        didDrawCell: function(data) {
-                            if (data.column.index === 6 && data.cell.section === 'body' && data.cell.raw) {
-                                let imgB64 = data.cell.raw;
-                                if (imgB64.startsWith('data:image')) { doc.addImage(imgB64, 'JPEG', data.cell.x + 2, data.cell.y + 2, 26, 18); }
+                        didDrawCell: function(d) {
+                            if (d.column.index === 5 && d.cell.section === 'body' && Array.isArray(d.row.raw)) {
+                                const img = d.cell.raw;
+                                if (img && typeof img === 'string' && img.startsWith('data:image')) {
+                                    doc.addImage(img, 'JPEG', d.cell.x+2, d.cell.y+2, 24, 16);
+                                }
                             }
                         }
                     });
                 }
+
+                // Subtotal del anexo
+                const subTotalAnexo = Object.values(lic.tareas).reduce((s,t) => s + parseFloat(t.subtotal||0), 0);
+                let yFin = doc.lastAutoTable ? doc.lastAutoTable.finalY + 8 : 200;
+                if (yFin > 270) { doc.addPage(); yFin = 20; }
+                doc.setFontSize(10); doc.setFont(undefined, 'bold');
+                doc.text(`TOTAL CONTRATO: ${fMoney(subTotalAnexo)} Bs`, margin, yFin);
             }
 
-            doc.save(`Liquidacion_${(lic.worker_name || 'Contrato').replace(/ /g, '_')}.pdf`);
-        } catch (e) {
+            // ══ HOJA 3: COMPROBANTES DE PAGO ══
+            const pagosConComp = pagosArr.filter(p => p.comprobante);
+            if (pagosConComp.length > 0) {
+                doc.addPage();
+                doc.setFontSize(16); doc.setFont(undefined, 'bold'); doc.setTextColor(52,199,89);
+                doc.text("ANEXO: COMPROBANTES DE PAGO", margin, 20);
+                doc.setTextColor(0);
+
+                let cx = margin, cy = 28, imgW = 82, imgH = 58, gap = 8;
+                for (let p of pagosConComp) {
+                    let b64 = await getBase64ImageFromUrl(p.comprobante);
+                    if (!b64) continue;
+                    if (cx + imgW > 195) { cx = margin; cy += imgH + 14; }
+                    if (cy + imgH + 8 > 275) { doc.addPage(); cx = margin; cy = 20; }
+                    doc.setFontSize(7); doc.setFont(undefined, 'bold');
+                    doc.text(`${new Date(p.fecha+'T12:00:00').toLocaleDateString('es-BO')} — ${fMoney(p.monto||0)} Bs`, cx, cy - 2);
+                    doc.addImage(b64, 'JPEG', cx, cy, imgW, imgH);
+                    cx += imgW + gap;
+                }
+            }
+
+            doc.save(`Liquidacion_${(lic.worker_name || 'Contrato').replace(/ /g,'_')}.pdf`);
+        } catch(e) {
             console.error(e); alert("Fallo en generación: " + e.message);
         } finally { document.getElementById('global-loader').style.display = 'none'; }
-    
     }
 </script>
 
