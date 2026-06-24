@@ -1,9 +1,5 @@
 /**
  * Rubik OS — Auth Guard
- *
- * Expone window.rubikAuthReady — Promise que resuelve con el usuario autenticado.
- * Estrategia: polling agresivo de auth.currentUser hasta que esté disponible,
- * con onAuthStateChanged como confirmación. Funciona con sesiones cacheadas.
  */
 (function () {
     var _resolve, _reject;
@@ -43,40 +39,39 @@
 
     function start() {
         if (!window.firebase || typeof window.firebase.auth !== 'function') {
-            // Firebase aún no cargó — esperar
             setTimeout(start, 50);
             return;
         }
 
         var auth = window.firebase.auth();
 
-        // Polling agresivo de currentUser como fallback
-        // (onAuthStateChanged a veces tarda con sesiones cacheadas en indexedDB)
-        var polls = 0;
-        var maxPolls = 200; // 10 segundos máximo (móvil LTE puede tardar)
-        var poller = setInterval(function () {
-            polls++;
-            if (settled) { clearInterval(poller); return; }
-            var u = auth.currentUser;
-            if (u) { clearInterval(poller); settle(u); return; }
-            if (polls >= maxPolls) {
-                clearInterval(poller);
-                settle(null); // no hay usuario tras 10s → rechazar
-            }
-        }, 50);
-
-        // Después del primer settle, seguir escuchando para detectar logout real.
-        // Se ignora el primer evento (ya procesado por settle), y se espera 2s
-        // antes de redirigir para evitar falsos positivos durante token refresh.
-        var firstEvent = true;
+        // onAuthStateChanged es el mecanismo PRINCIPAL — siempre resuelve la sesión
+        var authEventCount = 0;
         auth.onAuthStateChanged(function (user) {
-            if (firstEvent) { firstEvent = false; return; }
-            if (!user && !isExempt) {
+            authEventCount++;
+            if (authEventCount === 1) {
+                // Primer evento: resolver la sesión (puede traer user o null)
+                settle(user);
+            } else if (!user && !isExempt) {
+                // Eventos posteriores: redirigir solo si sigue sin usuario tras 2s
+                // (evita falsos positivos durante token refresh de Firebase)
                 setTimeout(function () {
                     if (!firebase.auth().currentUser) redirect();
                 }, 2000);
             }
         });
+
+        // Polling de currentUser como FALLBACK para sesiones cacheadas en IndexedDB
+        // (onAuthStateChanged puede tardar varios segundos en móvil)
+        var polls = 0;
+        var maxPolls = 200; // 10 segundos máximo
+        var poller = setInterval(function () {
+            polls++;
+            if (settled) { clearInterval(poller); return; }
+            var u = auth.currentUser;
+            if (u) { clearInterval(poller); settle(u); return; }
+            if (polls >= maxPolls) { clearInterval(poller); settle(null); }
+        }, 50);
     }
 
     start();
