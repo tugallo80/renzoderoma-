@@ -211,7 +211,7 @@
     function _cargarProyectos() {
     const grid = document.getElementById('project-grid');
 
-    // Cancelar timeout anterior (evita race condition en reintentos)
+    // Cancelar timeout anterior
     clearTimeout(window._proyectosTimeout);
 
     // Limpiar listener WebSocket anterior
@@ -222,9 +222,10 @@
     grid.innerHTML = `<div style="grid-column:span 4;text-align:center;color:var(--gray);padding:40px;font-size:.85rem;">Cargando proyectos...</div>`;
 
     let _yaRenderizado = false;
+    // true once real project cards have been shown — prevents null/empty WebSocket from wiping them
+    let _hadGoodData = false;
 
     function _renderData(dataObj) {
-        // dataObj: objeto plano {pid: {...}, pid2: {...}} o null
         clearTimeout(window._proyectosTimeout);
         grid.innerHTML = '';
         globalProjectsArr = [];
@@ -232,6 +233,7 @@
             grid.innerHTML = `<div style="grid-column:span 4;text-align:center;color:var(--gray);padding:40px;">Este cliente no tiene proyectos.</div>`;
             return;
         }
+        _hadGoodData = true;
         let tempArr = Object.entries(dataObj).map(([pid, p]) => { p = {...p}; p.pid = pid; return p; });
         tempArr.sort((a, b) => (a.orden ?? 999999) - (b.orden ?? 999999));
         globalProjectsArr = tempArr.map((p, i) => { p.orden = i; return p; });
@@ -281,7 +283,8 @@
         grid.appendChild(msg);
     }
 
-    // ── VÍA 1: REST API con ?shallow=true (evita bajar presupuesto/prod_apu anidados) ──
+    // ── VÍA 1: REST API con ?shallow=true ──
+    // Siempre renderiza si consigue datos reales — anula cualquier render previo vacío de firecache/WebSocket
     (async () => {
         try {
             const user = firebase.auth().currentUser;
@@ -289,18 +292,21 @@
             const token = await user.getIdToken(false);
             const base = 'https://rubik-bolivia-default-rtdb.firebaseio.com';
 
-            // Paso 1: solo PIDs del cliente (shallow devuelve {pid1:true, pid2:true})
+            // Paso 1: solo PIDs (shallow devuelve {pid1:true, pid2:true})
             const keysRes = await fetch(`${base}/proyectos/${cid}.json?shallow=true&auth=${token}`);
             if (!keysRes.ok) return;
             const keys = await keysRes.json();
-            if (!keys) { if (!_yaRenderizado) { _yaRenderizado = true; _renderData(null); } return; }
+            if (!keys) { _yaRenderizado = true; _renderData(null); return; }
 
-            // Paso 2: por cada PID, solo campos escalares del proyecto (nombre, estado, img, orden…)
-            // shallow=true en /{pid} devuelve scalars con valor y sub-objetos como true
+            // Paso 2: campos escalares de cada proyecto (nombre, estado, img, orden…)
+            // shallow=true devuelve scalars directamente y sub-objetos como true
             const pids = Object.keys(keys);
             const proyectos = await Promise.all(pids.map(async pid => {
                 try {
-                    const r = await fetch(`${base}/proyectos/${cid}/${pid}.json?shallow=true&auth=${token}`);
+                    const ctrl = new AbortController();
+                    const tid = setTimeout(() => ctrl.abort(), 10000);
+                    const r = await fetch(`${base}/proyectos/${cid}/${pid}.json?shallow=true&auth=${token}`, { signal: ctrl.signal });
+                    clearTimeout(tid);
                     if (!r.ok) return null;
                     const p = await r.json();
                     if (p && typeof p === 'object') { p.pid = pid; return p; }
@@ -311,25 +317,35 @@
             const dataObj = {};
             proyectos.filter(Boolean).forEach(p => { dataObj[p.pid] = p; });
 
-            if (!_yaRenderizado) { _yaRenderizado = true; _renderData(dataObj); }
+            // Render siempre que tengamos datos reales; si llegamos vacíos solo render si nadie lo hizo antes
+            if (Object.keys(dataObj).length > 0) {
+                _yaRenderizado = true;
+                _renderData(dataObj);
+            } else if (!_yaRenderizado) {
+                _yaRenderizado = true;
+                _renderData(null);
+            }
         } catch(e) { /* WebSocket o timeout manejan el fallback */ }
     })();
 
-    // ── VÍA 2: WebSocket con firecache (sirve localStorage inmediatamente si hay caché) ──
+    // ── VÍA 2: WebSocket con firecache ──
     window._proyectosOnHandler = (snap) => {
-        _yaRenderizado = true; // permitir re-renders en tiempo real
+        const val = snap ? snap.val() : null;
         clearTimeout(window._proyectosTimeout);
-        _renderData(snap ? snap.val() : null);
+        // Si WebSocket devuelve vacío/null pero REST ya mostró proyectos reales, no borrar la grilla
+        if (!val && _hadGoodData) return;
+        _yaRenderizado = true;
+        _renderData(val);
     };
     window._proyectosRef = db.ref(`proyectos/${cid}`);
     window._proyectosRef.on('value', window._proyectosOnHandler, () => {
         if (!_yaRenderizado) _mostrarError();
     });
 
-    // ── Timeout 10s: si ninguna vía respondió, mostrar reintento ──
+    // ── Timeout 12s: si ninguna vía respondió, mostrar reintento ──
     window._proyectosTimeout = setTimeout(() => {
         if (!_yaRenderizado) _mostrarError();
-    }, 10000);
+    }, 12000);
 
     } // fin _cargarProyectos
 
