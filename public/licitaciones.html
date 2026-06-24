@@ -1830,7 +1830,7 @@ LICITACIONES ACTUALES DEL PROYECTO:
     (function arrancarCarga() {
         var auth = firebase.auth();
         function onAuthed() {
-            db.ref('personal').once('value', snap => { workers = snap.val() || {}; loadWorkers(); });
+            db.ref('personal').once('value', snap => { workers = snap.val() || {}; loadWorkers(); }).catch(() => { loadWorkers(); });
             loadLicitaciones();
         }
         if (auth.currentUser) { onAuthed(); return; }

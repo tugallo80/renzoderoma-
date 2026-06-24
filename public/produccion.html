@@ -510,29 +510,28 @@
     window.getValidStringsKeys = getValidStringsKeys;
 
     function loadWorkers() {
-        db.ref('personal').once('value', pSnap => { 
+        // Cargar workers (best-effort — permission_denied no bloquea la carga de ítems)
+        db.ref('personal').once('value', pSnap => {
             workerOptions = [];
             if(pSnap.exists()) {
-                pSnap.forEach(w => { if(w.val().nombre) workerOptions.push(w.val().nombre); }); 
+                pSnap.forEach(w => { if(w.val().nombre) workerOptions.push(w.val().nombre); });
             }
-            db.ref(`proyectos/${cid}/${pid}/presupuesto/items`).on('value', snap => {
-                allItems = snap.val() || [];
-                window.allItems = allItems;
-                // Si el cambio vino de nuestra propia escritura, suprimir re-render
-                if (window._suppressRenderTasks) { window._suppressRenderTasks = false; return; }
-                // Capturar qué ítems estaban abiertos ANTES de renderizar
-                const _estadoAntes = (typeof _captureOpenState === 'function') ? _captureOpenState() : null;
-                renderTasks();
-                // Restaurar inmediatamente los ítems que estaban abiertos
-                if (_estadoAntes && typeof _restoreOpenState === 'function') {
-                    _restoreOpenState(_estadoAntes);
-                }
-                document.getElementById('global-loader').style.display = 'none';
-                // Cargar artes guardados desde Firebase (solo la primera vez)
-                if (!window._artsLoadedFromDB) {
-                    window._loadArtsFromFirebase();
-                }
-            });
+        }).catch(() => {}); // ignorar permission_denied
+
+        // Listener de ítems siempre activo, independiente de workers
+        db.ref(`proyectos/${cid}/${pid}/presupuesto/items`).on('value', snap => {
+            allItems = snap.val() || [];
+            window.allItems = allItems;
+            if (window._suppressRenderTasks) { window._suppressRenderTasks = false; return; }
+            const _estadoAntes = (typeof _captureOpenState === 'function') ? _captureOpenState() : null;
+            renderTasks();
+            if (_estadoAntes && typeof _restoreOpenState === 'function') {
+                _restoreOpenState(_estadoAntes);
+            }
+            document.getElementById('global-loader').style.display = 'none';
+            if (!window._artsLoadedFromDB) {
+                window._loadArtsFromFirebase();
+            }
         });
     }
 
