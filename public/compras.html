@@ -704,40 +704,37 @@
 
                         const fmMed = (b, h) => `${parseFloat(b).toFixed(2)} × ${parseFloat(h).toFixed(2)} cm`;
 
-                        if (t.originType === 'llm_art' && t.originMatidx !== undefined) {
-                            const itItem = window.budgetItems[t.originIdx];
-                            const matEntry = itItem?.prod_apu?.mat?.[t.originMatidx];
-                            if (matEntry?.measures?.length > 0) {
-                                const ms = matEntry.measures.filter(m => parseFloat(m.b) > 0 && parseFloat(m.h) > 0);
-                                if (ms.length > 0) medida = fmMed(ms[0].b, ms[0].h);
-                            }
-                            if (matEntry?.corte_url) b64 = await getBase64ImageFromUrl(matEntry.corte_url);
-                        } else if (t.originType === 'art') {
-                            const itItem = window.budgetItems[t.originIdx];
-                            if (itItem?.measures) {
-                                const m0 = Object.values(itItem.measures).find(m => parseFloat(m.b) > 0 && parseFloat(m.h) > 0);
-                                if (m0) { medida = fmMed(m0.b, m0.h); if (m0.img) b64 = await getBase64ImageFromUrl(m0.img); }
-                            }
-                        } else if (t.img) {
-                            b64 = await getBase64ImageFromUrl(t.img);
+                        // ── MEDIDAS: fuente primaria = t.measures (copiado desde prod_apu al crear la licitación) ──
+                        if (t.measures) {
+                            const measArr = Array.isArray(t.measures) ? t.measures : Object.values(t.measures);
+                            const m0 = measArr.find(m => parseFloat(m.b) > 0 && parseFloat(m.h) > 0);
+                            if (m0) medida = fmMed(m0.b, m0.h);
                         }
-
-                        // Fallback: buscar medidas en el ítem presupuestado para cualquier tipo
+                        // ── FALLBACK: prod_apu.mat del ítem en Firebase (medidas ajustadas en producción) ──
                         if (medida === '-' && t.originIdx !== undefined) {
                             const itItem = window.budgetItems[t.originIdx];
-                            if (itItem?.measures) {
-                                const m0 = Object.values(itItem.measures).find(m => parseFloat(m.b) > 0 && parseFloat(m.h) > 0);
-                                if (m0) { medida = fmMed(m0.b, m0.h); if (!b64 && m0.img) b64 = await getBase64ImageFromUrl(m0.img); }
-                            }
-                            // También intentar en prod_apu.mat del ítem (para tareas MO asociadas a artes)
-                            if (medida === '-' && itItem?.prod_apu?.mat) {
-                                for (const matE of itItem.prod_apu.mat) {
-                                    if (matE?.measures?.length > 0) {
-                                        const ms2 = matE.measures.filter(m => parseFloat(m.b) > 0 && parseFloat(m.h) > 0);
-                                        if (ms2.length > 0) { medida = fmMed(ms2[0].b, ms2[0].h); break; }
+                            if (itItem?.prod_apu?.mat) {
+                                const idx2use = (t.originMatidx !== undefined) ? t.originMatidx : null;
+                                const matList = idx2use !== null ? [itItem.prod_apu.mat[idx2use]] : itItem.prod_apu.mat;
+                                for (const matE of (matList || [])) {
+                                    if (!matE) continue;
+                                    if (matE.measures?.length > 0) {
+                                        const ms = matE.measures.filter(m => parseFloat(m.b) > 0 && parseFloat(m.h) > 0);
+                                        if (ms.length > 0) { medida = fmMed(ms[0].b, ms[0].h); break; }
                                     }
                                 }
                             }
+                        }
+
+                        // ── IMAGEN ──
+                        if (t.img) {
+                            b64 = await getBase64ImageFromUrl(t.img);
+                        } else if (t.originIdx !== undefined) {
+                            const itItem = window.budgetItems[t.originIdx];
+                            const idx2use = (t.originMatidx !== undefined) ? t.originMatidx : null;
+                            const matE = idx2use !== null ? itItem?.prod_apu?.mat?.[idx2use] : null;
+                            const imgSrc = matE?.corte_url || matE?.img || null;
+                            if (imgSrc) b64 = await getBase64ImageFromUrl(imgSrc);
                         }
 
                         const cantFmt = parseFloat(parseFloat(t.cant||0).toFixed(2));
