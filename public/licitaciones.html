@@ -1015,15 +1015,34 @@ ${reqTxt}<div style="margin-top:4px;">${badgeMo}</div>
             for(let tk in tareasData) {
                 let t = tareasData[tk];
                 if (t.originType === 'mo') {
-                    let chk = document.querySelector(`.lic-chk[data-idx="${t.originIdx}"][data-apuidx="${t.originApuidx}"]`); if (chk) chk.checked = true;
-                    let puInp = document.getElementById(`pu_${t.originIdx}_mo_${t.originApuidx}`); if (puInp) puInp.value = t.pu;
+                    let chk = document.querySelector(`.lic-chk[data-idx="${t.originIdx}"][data-apuidx="${t.originApuidx}"]`);
+                    if (chk) chk.checked = true;
+                    let puInp = document.getElementById(`pu_${t.originIdx}_mo_${t.originApuidx}`);
+                    if (puInp) puInp.value = t.pu;
+                } else if (t.originType === 'venta') {
+                    let chk = document.querySelector(`.lic-chk[data-idx="${t.originIdx}"][data-type="venta"]`);
+                    if (chk) { chk.checked = true; onVentaCompletaChk(t.originIdx, chk); }
+                    let propInp = document.getElementById(`propuesto_venta_${t.originIdx}`);
+                    if (propInp) propInp.value = t.subtotal || '';
+                } else if (t.originType === 'venta_mo') {
+                    let chk = document.querySelector(`.lic-chk[data-idx="${t.originIdx}"][data-type="venta_mo"][data-moidx="${t.originMoidx}"]`);
+                    if (chk) { chk.checked = true; onVentaSubChk(t.originIdx, chk); }
+                    let propInp = document.getElementById(`propuesto_venta_mo_${t.originIdx}_${t.originMoidx}`);
+                    if (propInp) propInp.value = t.subtotal || '';
+                } else if (t.originType === 'venta_mat') {
+                    let chk = document.querySelector(`.lic-chk[data-idx="${t.originIdx}"][data-type="venta_mat"][data-matidx="${t.originMatidx}"]`);
+                    if (chk) { chk.checked = true; onVentaSubChk(t.originIdx, chk); }
+                    let propInp = document.getElementById(`propuesto_venta_mat_${t.originIdx}_${t.originMatidx}`);
+                    if (propInp) propInp.value = t.subtotal || '';
                 } else {
-                    let chk = document.querySelector(`.lic-chk[data-idx="${t.originIdx}"][data-type="main"]`); if (chk) chk.checked = true;
-                    let puInp = document.getElementById(`pu_main_${t.originIdx}`); if (puInp) puInp.value = t.pu;
+                    let chk = document.querySelector(`.lic-chk[data-idx="${t.originIdx}"][data-type="main"]`);
+                    if (chk) chk.checked = true;
+                    let puInp = document.getElementById(`pu_main_${t.originIdx}`);
+                    if (puInp) puInp.value = t.pu;
                 }
             }
             recalcularSeleccionInterna();
-        }, 100);
+        }, 200);
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -1573,8 +1592,17 @@ ${reqTxt}<div style="margin-top:4px;">${badgeMo}</div>
         if (isSupervision) {
             let ofertaSup = parseFloat(document.getElementById('lic-oferta-supervision').value) || 0; if(ofertaSup <= 0) return alert("Ingresa tu propuesta económica por la supervisión.");
             payload.precio_propuesto = ofertaSup; payload.costo_meta_general = totalMoAsignado; if (!oldLic) payload.estado = 'enviado';
-        } else if (!oldLic) { payload.estado = isInternal ? (isLicitacionInterna ? 'enviado' : 'aprobado') : 'enviado'; payload.precio_propuesto = totalMoAsignado; } 
-        else { payload.precio_propuesto = totalMoAsignado; }
+        } else if (!oldLic) {
+            payload.estado = isInternal ? (isLicitacionInterna ? 'enviado' : 'aprobado') : 'enviado';
+            payload.precio_propuesto = totalMoAsignado;
+        } else {
+            payload.precio_propuesto = totalMoAsignado;
+            // Si estaba en espera de precio y ahora el hub lo completó → avanzar estado
+            const estadoActual = oldLic.estado || '';
+            if (totalMoAsignado > 0 && (estadoActual === 'espera_cotizacion' || estadoActual === 'enviado')) {
+                payload.estado = isInternal ? 'aprobado' : 'enviado';
+            }
+        }
         
         if(!oldLic) payload.fecha_envio = new Date().toISOString();
         // Período de planilla — siempre se guarda (permite cambiar en ediciones)

@@ -6,6 +6,7 @@
     <title>Panel de Obra - Rubik OS</title>
     <script src="https://unpkg.com/@phosphor-icons/web" defer></script>
     <script src="https://www.gstatic.com/firebasejs/9.1.3/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.1.3/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.1.3/firebase-database-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.1.3/firebase-storage-compat.js"></script>
     <script>
@@ -146,10 +147,16 @@
 
     window.onload = async () => {
         if(wid && cid && pid) {
-            await cargarNombreProyectoYUsuario(); 
+            // Asegurar auth anónima antes de cualquier lectura en la BD
+            try {
+                if (!firebase.auth().currentUser) {
+                    await firebase.auth().signInAnonymously();
+                }
+            } catch(authErr) { console.warn('Auth anon:', authErr); }
+            await cargarNombreProyectoYUsuario();
             cargarMisTareasYPlanos();
             cargarGantt();
-            addCompraRow(); 
+            addCompraRow();
         }
     };
 
