@@ -1030,7 +1030,7 @@ ${reqTxt}<div style="margin-top:4px;">${badgeMo}</div>
                 if (subEl) subEl.innerText = fMoney(sub) + ' Bs';
                 if (chk.checked) itemTotal += sub;
             });
-            // Mat
+            // Mat + Artes (prod_apu.mat unificado — es_arte:true entries son gráficos)
             document.querySelectorAll(`.llm-sub-chk[data-idx="${i}"][data-type="mat"]`).forEach(chk => {
                 const mIdx = chk.getAttribute('data-matidx');
                 const q = parseFloat(chk.getAttribute('data-cant')) || 0;
@@ -1038,18 +1038,6 @@ ${reqTxt}<div style="margin-top:4px;">${badgeMo}</div>
                 const pu = puInp ? (parseFloat(puInp.value) || 0) : 0;
                 const sub = q * pu * ratio;
                 const subEl = document.getElementById(`llm-sub-mat-${i}-${mIdx}`);
-                if (subEl) subEl.innerText = fMoney(sub) + ' Bs';
-                if (chk.checked) itemTotal += sub;
-            });
-            // Artes
-            (_licArtsData[i] || []).forEach((art, artI) => {
-                const chk = document.getElementById(`llm-art-chk-${i}-${artI}`);
-                if (!chk) return;
-                const m2 = calcArtM2Lic(art);
-                const puInp = document.getElementById(`llm-pu-art-${i}-${artI}`);
-                const pu = puInp ? (parseFloat(puInp.value) || 0) : 0;
-                const sub = m2 * pu;
-                const subEl = document.getElementById(`llm-sub-art-${i}-${artI}`);
                 if (subEl) subEl.innerText = fMoney(sub) + ' Bs';
                 if (chk.checked) itemTotal += sub;
             });
@@ -1062,30 +1050,11 @@ ${reqTxt}<div style="margin-top:4px;">${badgeMo}</div>
     };
 
     async function loadAndRenderLlaveEnMano() {
-        document.getElementById('lic-items').innerHTML = '<div class="empty-msg"><div class="spinner" style="width:24px;height:24px;border-width:3px;margin:0 auto 8px;"></div>Cargando ítems...</div>';
+        document.getElementById('lic-items').innerHTML = '<div class="empty-msg"><div class="spinner" style="width:24px;height:24px;border-width:3px;margin:0 auto 8px;"></div>Cargando ítems de Producción...</div>';
 
-        const [itemsSnap, artsSnap] = await Promise.all([
-            db.ref(`proyectos/${cid}/${pid}/presupuesto/items`).once('value'),
-            db.ref(`proyectos/${cid}/${pid}/artes_data`).once('value')
-        ]);
+        // Lee SOLO desde prod_apu — es la fuente de verdad configurada en Producción
+        const itemsSnap = await db.ref(`proyectos/${cid}/${pid}/presupuesto/items`).once('value');
         globalItems = itemsSnap.val() || [];
-        const savedArts = artsSnap.val() || {};
-
-        // Cargar artes filtrando labor
-        _licArtsData = {};
-        const LLM_LABOR_RE = /soldador|tesador|instalaci|montaje|tensado|mano.de.obra|logistica|logística|colgado|desmontaje|flete|transporte|pintor|electrici|carpinter|plomero|albanil|albañil/;
-        Object.keys(savedArts).forEach(idx => {
-            let saved = savedArts[idx];
-            if (saved && !Array.isArray(saved) && typeof saved === 'object') saved = Object.values(saved).filter(x => x != null);
-            if (!saved || !Array.isArray(saved) || saved.length === 0) return;
-            const mapped = saved.map(a => ({
-                id: a.id||'', nombre: a.nombre||'', base: parseFloat(a.base)||0,
-                altura: parseFloat(a.altura)||0, cantidad: parseFloat(a.cantidad)||1,
-                material: a.material || detectMaterialLic(a.nombre||''),
-                precio: parseFloat(a.precio)||0, m2_directo: parseFloat(a.m2_directo)||0, imgRef: a.imgRef||''
-            })).filter(a => !LLM_LABOR_RE.test(String(a.nombre||'').toLowerCase()));
-            if (mapped.length > 0) _licArtsData[idx] = mapped;
-        });
 
         // Índices ya asignados
         let assignedSet = new Set();
@@ -1098,58 +1067,53 @@ ${reqTxt}<div style="margin-top:4px;">${badgeMo}</div>
 
         const filterMode = document.getElementById('filter-assigned').value || 'pending';
         let html = '';
-        let pendingChapter = null; // lazy chapter header — se imprime antes del 1er ítem visible
+        let pendingChapter = null;
 
         getValidKeys(globalItems).forEach(i => {
             const it = globalItems[i];
             if (!it) return;
 
-            // ── Capítulo: guardar para impresión lazy ──
-            if (it.type === 'chapter') {
-                pendingChapter = it.desc;
-                return;
-            }
+            if (it.type === 'chapter') { pendingChapter = it.desc; return; }
 
             const isAssigned = assignedSet.has(String(i));
             if (filterMode === 'pending' && isAssigned) return;
 
-            // Si hay un capítulo pendiente, imprimirlo ahora
             if (pendingChapter !== null) {
                 html += `<div class="llm-chapter-header"><i class="ph-bold ph-folder-open" style="color:var(--gold);"></i> ${pendingChapter}</div>`;
                 pendingChapter = null;
             }
 
             const useProdMo  = !!(it.prod_apu && it.prod_apu.mo  && it.prod_apu.mo.length  > 0);
-            const moSrc  = useProdMo  ? it.prod_apu.mo  : (it.apu && it.apu.mo  ? getValidObjects(it.apu.mo)  : []);
             const useProdMat = !!(it.prod_apu && it.prod_apu.mat && it.prod_apu.mat.length > 0);
+            const moSrc  = useProdMo  ? it.prod_apu.mo  : (it.apu && it.apu.mo  ? getValidObjects(it.apu.mo)  : []);
             const matSrc = useProdMat ? it.prod_apu.mat : (it.apu && it.apu.mat ? Object.values(it.apu.mat).filter(x=>x&&x.d) : []);
-            const artes = _licArtsData[i] || [];
-            const moRows  = moSrc.filter(mo => mo.d);
-            const matRows = matSrc.filter(m  => m.d);
 
-            // Totales base
+            const moRows = moSrc.filter(mo => mo.d);
+            // Todos los materiales de prod_apu — los es_arte:true son gráficos de producción
+            const matWithIdx = matSrc.map((m, idx) => ({ m, idx })).filter(({ m }) => m.d);
+            const regMatWithIdx  = matWithIdx.filter(({ m }) => !m.es_arte);
+            const arteMatWithIdx = matWithIdx.filter(({ m }) =>  m.es_arte);
+
+            // Totales estimados
             let moTotal = 0;
             moRows.forEach(mo => { const q = useProdMo ? parseFloat(mo.q||0) : parseFloat(mo.q||0)*parseFloat(it.cant||1); moTotal += q*parseFloat(mo.p||0); });
             let matTotal = 0;
-            matRows.forEach(m => { const q = useProdMat ? parseFloat(m.q||0) : parseFloat(m.q||0)*parseFloat(it.cant||1); matTotal += q*parseFloat(m.p||0); });
+            regMatWithIdx.forEach(({ m }) => { const q = useProdMat ? parseFloat(m.q||0) : parseFloat(m.q||0)*parseFloat(it.cant||1); matTotal += q*parseFloat(m.p||0); });
             let artTotal = 0;
-            artes.forEach(a => { artTotal += calcArtM2Lic(a)*parseFloat(a.precio||0); });
+            arteMatWithIdx.forEach(({ m }) => { artTotal += parseFloat(m.q||0)*parseFloat(m.p||0); });
             const grandItemTotal = moTotal + matTotal + artTotal;
 
-            // Resumen de componentes para el subtítulo del header
             const parts = [];
-            if (moRows.length  > 0) parts.push(`${moRows.length} M.O.`);
-            if (matRows.length > 0) parts.push(`${matRows.length} Mat.`);
-            if (artes.length   > 0) parts.push(`${artes.length} Arte(s)`);
-            const summaryTxt = parts.length ? parts.join(' · ') : 'Sin desglose APU';
+            if (moRows.length         > 0) parts.push(`${moRows.length} M.O.`);
+            if (regMatWithIdx.length  > 0) parts.push(`${regMatWithIdx.length} Mat.`);
+            if (arteMatWithIdx.length > 0) parts.push(`${arteMatWithIdx.length} Gráfico(s)`);
+            const summaryTxt = parts.length ? parts.join(' · ') : 'Sin APU en Producción';
 
             const badgeAssigned = isAssigned ? `<span style="background:var(--orange);color:white;font-size:8px;padding:2px 5px;border-radius:4px;font-weight:900;margin-left:4px;">YA ASIG.</span>` : '';
             const thumbImg = it.img || (it.op_images ? Object.values(it.op_images)[0] : null) || (it.cortes ? Object.values(it.cortes)[0] : null);
 
-            // ── Contenedor tipo licitación gráfica ──
             html += `<div style="background:rgba(241,196,15,0.04);border:1px solid rgba(241,196,15,0.25);border-radius:10px;margin-bottom:6px;overflow:hidden;${isAssigned?'opacity:0.78;':''}">
 
-<!-- HEADER colapsable -->
 <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;cursor:pointer;user-select:none;" onclick="toggleLlmItem('${i}')">
   <input type="checkbox" class="chk-box llm-main-chk" id="llm-main-chk-${i}" data-idx="${i}"
          onclick="event.stopPropagation()" onchange="toggleLlmAllSubs('${i}',this.checked)"
@@ -1164,9 +1128,7 @@ ${reqTxt}<div style="margin-top:4px;">${badgeMo}</div>
   <i class="ph-bold ph-caret-down" id="llm-icon-${i}" style="color:#b8960a;transition:0.25s;flex-shrink:0;transform:rotate(-90deg);"></i>
 </div>
 
-<!-- BODY colapsado por defecto -->
 <div id="llm-body-${i}" style="display:none;border-top:1px solid rgba(241,196,15,0.2);padding:8px 12px 10px;">
-  <!-- Distribuir -->
   <div class="llm-split-box">
     <i class="ph-bold ph-scissors" style="font-size:13px;"></i>
     <span>Distribuir:</span>
@@ -1204,10 +1166,10 @@ ${reqTxt}<div style="margin-top:4px;">${badgeMo}</div>
                 });
             }
 
-            // ── Materiales ──
-            if (matRows.length > 0) {
+            // ── Materiales regulares (de prod_apu.mat, no es_arte) ──
+            if (regMatWithIdx.length > 0) {
                 html += `<div class="llm-section-title">🧱 Materiales</div>`;
-                matRows.forEach((m, mIdx) => {
+                regMatWithIdx.forEach(({ m, idx: mIdx }) => {
                     const q = useProdMat ? parseFloat(m.q||0) : parseFloat(m.q||0)*parseFloat(it.cant||1);
                     html += `<div style="display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:8px;border:1px solid rgba(0,122,255,0.2);background:rgba(0,122,255,0.04);margin-bottom:4px;">
   <input type="checkbox" style="width:16px;height:16px;cursor:pointer;flex-shrink:0;accent-color:var(--blue);"
@@ -1230,43 +1192,42 @@ ${reqTxt}<div style="margin-top:4px;">${badgeMo}</div>
                 });
             }
 
-            // ── Artes / Gráficos ──
-            if (artes.length > 0) {
-                html += `<div class="llm-section-title">🎨 Gráficos</div>`;
-                artes.forEach((art, artI) => {
-                    const m2 = calcArtM2Lic(art);
-                    const tieneImg = art.imgRef && (art.imgRef.startsWith('http') || art.imgRef.startsWith('data:image'));
+            // ── Gráficos (prod_apu.mat con es_arte:true — configurados en Producción) ──
+            if (arteMatWithIdx.length > 0) {
+                html += `<div class="llm-section-title">🎨 Gráficos · Producción</div>`;
+                arteMatWithIdx.forEach(({ m, idx: mIdx }) => {
+                    const m2 = parseFloat(m.q||0); // q ya es m² calculado en produccion.html
+                    const tieneImg = m.corte_url && (m.corte_url.startsWith('http') || m.corte_url.startsWith('data:image'));
                     const artThumb = tieneImg
-                        ? `<img src="${art.imgRef}" style="width:36px;height:36px;border-radius:6px;object-fit:cover;flex-shrink:0;border:1px solid rgba(175,82,222,0.3);">`
+                        ? `<img src="${m.corte_url}" style="width:36px;height:36px;border-radius:6px;object-fit:cover;flex-shrink:0;border:1px solid rgba(175,82,222,0.3);">`
                         : `<div style="width:36px;height:36px;border-radius:6px;background:rgba(175,82,222,0.06);border:1px dashed rgba(175,82,222,0.3);flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:14px;color:var(--purple);"><i class="ph-bold ph-image"></i></div>`;
-                    const matColor = getMaterialColorLic ? getMaterialColorLic(art.material) : 'var(--purple)';
                     html += `<div style="display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:8px;border:1px solid rgba(175,82,222,0.2);background:rgba(175,82,222,0.04);margin-bottom:4px;">
   <input type="checkbox" style="width:16px;height:16px;cursor:pointer;flex-shrink:0;accent-color:var(--purple);"
-         class="llm-sub-chk" id="llm-art-chk-${i}-${artI}" data-idx="${i}" data-type="art" data-arti="${artI}"
+         class="llm-sub-chk" data-idx="${i}" data-type="mat" data-matidx="${mIdx}" data-cant="${m2.toFixed(4)}"
          onchange="recalcularLlaveEnMano()" onclick="event.stopPropagation()">
   ${artThumb}
   <div style="flex:1;min-width:0;">
-    <div style="font-size:11px;font-weight:900;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${art.nombre||'(arte)'}</div>
+    <div style="font-size:11px;font-weight:900;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${m.d}</div>
     <div style="font-size:9px;color:var(--gray);margin-top:1px;">${m2.toFixed(2)} m²</div>
   </div>
   <div style="display:flex;flex-direction:column;align-items:flex-end;gap:2px;flex-shrink:0;">
-    <span style="font-size:8px;font-weight:900;padding:1px 6px;border-radius:4px;background:${matColor}18;color:${matColor};">${art.material}</span>
+    <span style="font-size:8px;font-weight:900;padding:1px 6px;border-radius:4px;background:rgba(175,82,222,0.1);color:var(--purple);">GRÁF.</span>
     <div style="display:flex;align-items:center;gap:3px;margin-top:2px;">
-      <input type="number" class="llm-pu-input" id="llm-pu-art-${i}-${artI}" value="${parseFloat(art.precio||0).toFixed(0)}"
+      <input type="number" class="llm-pu-input" id="llm-pu-mat-${i}-${mIdx}" value="${parseFloat(m.p||0).toFixed(0)}"
              min="0" style="border-color:rgba(175,82,222,0.4);" oninput="recalcularLlaveEnMano()" onclick="event.stopPropagation()">
       <span style="font-size:9px;color:var(--purple);">Bs/m² =</span>
     </div>
-    <span style="font-size:11px;font-weight:900;color:var(--purple);" id="llm-sub-art-${i}-${artI}">${fMoney(m2*parseFloat(art.precio||0))} Bs</span>
+    <span style="font-size:11px;font-weight:900;color:var(--purple);" id="llm-sub-mat-${i}-${mIdx}">${fMoney(m2*parseFloat(m.p||0))} Bs</span>
   </div>
 </div>`;
                 });
             }
 
-            if (moRows.length === 0 && matRows.length === 0 && artes.length === 0) {
-                html += `<div style="padding:10px;font-size:11px;color:var(--gray);text-align:center;"><i class="ph-bold ph-warning"></i> Sin desglose APU — definí el APU en Presupuesto o los artes en Producción</div>`;
+            if (moRows.length === 0 && matWithIdx.length === 0) {
+                html += `<div style="padding:10px;font-size:11px;color:var(--gray);text-align:center;"><i class="ph-bold ph-warning"></i> Sin APU en Producción — armá el proceso primero en la vista Producción</div>`;
             }
 
-            html += `</div></div>`; // cierre body + card
+            html += `</div></div>`;
         });
 
         document.getElementById('lic-items').innerHTML = html || '<div class="empty-msg">Sin ítems disponibles. Intenta "Mostrar Todos".</div>';
@@ -1434,7 +1395,7 @@ ${reqTxt}<div style="margin-top:4px;">${badgeMo}</div>
                     count++;
                 });
 
-                // Materiales
+                // Materiales + Gráficos (ambos desde prod_apu.mat — es_arte:true = gráfico)
                 document.querySelectorAll(`.llm-sub-chk[data-idx="${i}"][data-type="mat"]:checked`).forEach(chk => {
                     const mIdx = parseInt(chk.getAttribute('data-matidx'));
                     const q = parseFloat(chk.getAttribute('data-cant')) || 0;
@@ -1445,20 +1406,11 @@ ${reqTxt}<div style="margin-top:4px;">${badgeMo}</div>
                     const matSrcG = (it.prod_apu && it.prod_apu.mat && it.prod_apu.mat.length > 0) ? it.prod_apu.mat : (it.apu && it.apu.mat ? Object.values(it.apu.mat).filter(x=>x&&x.d) : []);
                     const m = matSrcG[mIdx] || {};
                     totalMoAsignado += subtotal;
-                    tareas[`llm_mat_${i}_${mIdx}`] = { parent_desc: it.desc, task_name: m.d||'(Material)', desc: `${it.desc} → ${m.d||'Material'} (Mat.)`, cant: cantAsig, und: m.u||'U', pu, subtotal, feat: featStr, img: it.img||null, originIdx: i, originType: 'llm_mat', originMatidx: mIdx, llm_ratio: ratio, fecha_entrega: it.prod_entrega||it.gantt_end||'Sin fecha' };
-                    count++;
-                });
-
-                // Artes / Gráficos
-                (_licArtsData[i] || []).forEach((art, artI) => {
-                    const chk = document.getElementById(`llm-art-chk-${i}-${artI}`);
-                    if (!chk || !chk.checked) return;
-                    const m2 = calcArtM2Lic(art);
-                    const puInp = document.getElementById(`llm-pu-art-${i}-${artI}`);
-                    const pu = puInp ? (parseFloat(puInp.value) || 0) : 0;
-                    const subtotal = m2 * pu;
-                    totalMoAsignado += subtotal;
-                    tareas[`llm_art_${i}_${artI}`] = { parent_desc: it.desc, task_name: art.nombre||'(Arte)', desc: `${it.desc} → ${art.nombre||'Arte'} (Gráfico)`, cant: m2, und: 'm²', pu, subtotal, material: art.material, base_cm: art.base, altura_cm: art.altura, img: art.imgRef||null, originIdx: i, originType: 'llm_art', artI, fecha_entrega: it.prod_entrega||it.gantt_end||'Sin fecha' };
+                    if (m.es_arte) {
+                        tareas[`llm_mat_${i}_${mIdx}`] = { parent_desc: it.desc, task_name: m.d||'(Gráfico)', desc: `${it.desc} → ${m.d||'Gráfico'} (Gráfico)`, cant: cantAsig, und: 'm²', pu, subtotal, es_arte: true, corte_url: m.corte_url||'', img: m.corte_url||it.img||null, originIdx: i, originType: 'llm_art', originMatidx: mIdx, llm_ratio: ratio, fecha_entrega: it.prod_entrega||it.gantt_end||'Sin fecha' };
+                    } else {
+                        tareas[`llm_mat_${i}_${mIdx}`] = { parent_desc: it.desc, task_name: m.d||'(Material)', desc: `${it.desc} → ${m.d||'Material'} (Mat.)`, cant: cantAsig, und: m.u||'U', pu, subtotal, feat: featStr, img: it.img||null, originIdx: i, originType: 'llm_mat', originMatidx: mIdx, llm_ratio: ratio, fecha_entrega: it.prod_entrega||it.gantt_end||'Sin fecha' };
+                    }
                     count++;
                 });
 
