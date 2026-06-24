@@ -632,7 +632,7 @@
             try {
                 const rubikLogoBlob = await fetch('/LOGO-IA-RUBIK.jpg').then(r => { if(!r.ok) throw new Error('logo'); return r.blob(); });
                 const rubikLogoB64 = await new Promise((res,rej) => { const fr = new FileReader(); fr.onload=()=>res(fr.result); fr.onerror=rej; fr.readAsDataURL(rubikLogoBlob); });
-                if (rubikLogoB64) doc.addImage(rubikLogoB64, 'JPEG', 182, 3, 22, 22);
+                if (rubikLogoB64) doc.addImage(rubikLogoB64, 'JPEG', 4, 3, 22, 22);
             } catch(e) { /* logo no disponible */ }
             doc.setTextColor(0);
 
@@ -707,16 +707,21 @@
 
                         const fmMed = (b, h) => `${parseFloat(b).toFixed(2)} × ${parseFloat(h).toFixed(2)} cm`;
 
-                        // ── MEDIDAS: fuente primaria = t.measures (copiado desde prod_apu al crear la licitación) ──
+                        // ── MEDIDAS: fuente primaria = t.measures ──
                         if (t.measures) {
-                            const measArr = Array.isArray(t.measures)
-                                ? t.measures
-                                : Object.values(t.measures).filter(v => v && typeof v === 'object');
-                            const m0 = measArr.find(m => m && parseFloat(m.b) > 0 && parseFloat(m.h) > 0);
-                            if (m0) medida = fmMed(m0.b, m0.h);
+                            if (parseFloat(t.measures.b) > 0 && parseFloat(t.measures.h) > 0) {
+                                // t.measures = {b, h} directamente
+                                medida = fmMed(t.measures.b, t.measures.h);
+                            } else {
+                                // t.measures = array o {0:{b,h}, 1:{b,h}...}
+                                const measArr = Array.isArray(t.measures)
+                                    ? t.measures
+                                    : Object.values(t.measures).filter(v => v && typeof v === 'object');
+                                const m0 = measArr.find(m => m && parseFloat(m.b) > 0 && parseFloat(m.h) > 0);
+                                if (m0) medida = fmMed(m0.b, m0.h);
+                            }
                         }
-                        // ── FALLBACK: prod_apu.mat del ítem en Firebase (medidas ajustadas en producción) ──
-                        // prod_apu.mat puede ser array o {0:..., 1:...} (Firebase convierte arrays a objetos)
+                        // ── FALLBACK: prod_apu.mat (medidas de IMPRESIONES en producción) ──
                         if (medida === '-' && t.originIdx !== undefined) {
                             const itItem = window.budgetItems[t.originIdx];
                             if (itItem?.prod_apu?.mat) {
@@ -727,10 +732,15 @@
                                 const matList = (idx2use !== null && matArr[idx2use]) ? [matArr[idx2use]] : matArr;
                                 for (const matE of matList) {
                                     if (!matE) continue;
+                                    // b/h directo en el entry (formato IMPRESIONES de produccion.html)
+                                    if (parseFloat(matE.b) > 0 && parseFloat(matE.h) > 0) {
+                                        medida = fmMed(matE.b, matE.h); break;
+                                    }
+                                    // b/h en sub-array measures
                                     const measArr2 = Array.isArray(matE.measures)
                                         ? matE.measures
                                         : (matE.measures ? Object.values(matE.measures) : []);
-                                    const ms = measArr2.filter(m => parseFloat(m.b) > 0 && parseFloat(m.h) > 0);
+                                    const ms = measArr2.filter(m => m && parseFloat(m.b) > 0 && parseFloat(m.h) > 0);
                                     if (ms.length > 0) { medida = fmMed(ms[0].b, ms[0].h); break; }
                                 }
                             }
