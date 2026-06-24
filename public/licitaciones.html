@@ -1711,8 +1711,15 @@ ${reqTxt}<div style="margin-top:4px;">${badgeMo}</div>
         if (precio <= 0) return alert('Ingresa el precio final aprobado.');
         showLoader('Aprobando...');
         let upd = { estado: 'aprobado', precio_final: precio, fecha_aprobacion: Date.now() };
-        await db.ref(`proyectos/${cid}/${pid}/licitaciones/${currentReviewLicId}`).update(upd);
-        if (currentReviewWorkerId) await db.ref(`personal/${currentReviewWorkerId}/solicitudes/${currentReviewLicId}`).update(upd);
+        try {
+            await db.ref(`proyectos/${cid}/${pid}/licitaciones/${currentReviewLicId}`).update(upd);
+        } catch(e) {
+            hideLoader(); alert('Error al guardar la aprobación: ' + e.message); return;
+        }
+        // Write to personal (best-effort — puede fallar por reglas Firebase pero no bloquea)
+        if (currentReviewWorkerId) {
+            db.ref(`personal/${currentReviewWorkerId}/solicitudes/${currentReviewLicId}`).update(upd).catch(() => {});
+        }
         hideLoader();
         document.getElementById('mod-review').style.display = 'none';
     };
