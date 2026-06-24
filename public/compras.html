@@ -600,6 +600,9 @@
     async function exportarLiquidacion(licId) {
         const lic = window.currentLics[licId];
         if (!lic) return alert("No se encontró el contrato.");
+        // Evitar dos generaciones simultáneas (corrompen el estado interno de jsPDF)
+        if (window._pdfGenerando) return alert("Ya hay un PDF generándose, espera que termine.");
+        window._pdfGenerando = true;
 
         document.getElementById('loader-title').innerText = "Generando Liquidación...";
         document.getElementById('global-loader').style.display = 'flex';
@@ -625,11 +628,11 @@
             doc.text("LIQUIDACIÓN DE CONTRATO", 105, 12, {align:'center'});
             doc.setFontSize(9); doc.setFont(undefined,'normal');
             doc.text(`PROYECTO: ${window.pName || 'Proyecto'}   |   CONTRATISTA: ${lic.worker_name}   |   ${new Date().toLocaleDateString('es-BO')}`, 105, 21, {align:'center'});
-            // Logo Rubik
+            // Logo Rubik (LOGO-IA-RUBIK.jpg no tiene espacios en el nombre)
             try {
-                const rubikLogoBlob = await fetch('/IA%20RUBIK%20BOTON.png').then(r => { if(!r.ok) throw new Error('logo'); return r.blob(); });
+                const rubikLogoBlob = await fetch('/LOGO-IA-RUBIK.jpg').then(r => { if(!r.ok) throw new Error('logo'); return r.blob(); });
                 const rubikLogoB64 = await new Promise((res,rej) => { const fr = new FileReader(); fr.onload=()=>res(fr.result); fr.onerror=rej; fr.readAsDataURL(rubikLogoBlob); });
-                if (rubikLogoB64) doc.addImage(rubikLogoB64, 'PNG', 182, 3, 22, 22);
+                if (rubikLogoB64) doc.addImage(rubikLogoB64, 'JPEG', 182, 3, 22, 22);
             } catch(e) { /* logo no disponible */ }
             doc.setTextColor(0);
 
@@ -706,22 +709,29 @@
 
                         // ── MEDIDAS: fuente primaria = t.measures (copiado desde prod_apu al crear la licitación) ──
                         if (t.measures) {
-                            const measArr = Array.isArray(t.measures) ? t.measures : Object.values(t.measures);
-                            const m0 = measArr.find(m => parseFloat(m.b) > 0 && parseFloat(m.h) > 0);
+                            const measArr = Array.isArray(t.measures)
+                                ? t.measures
+                                : Object.values(t.measures).filter(v => v && typeof v === 'object');
+                            const m0 = measArr.find(m => m && parseFloat(m.b) > 0 && parseFloat(m.h) > 0);
                             if (m0) medida = fmMed(m0.b, m0.h);
                         }
                         // ── FALLBACK: prod_apu.mat del ítem en Firebase (medidas ajustadas en producción) ──
+                        // prod_apu.mat puede ser array o {0:..., 1:...} (Firebase convierte arrays a objetos)
                         if (medida === '-' && t.originIdx !== undefined) {
                             const itItem = window.budgetItems[t.originIdx];
                             if (itItem?.prod_apu?.mat) {
-                                const idx2use = (t.originMatidx !== undefined) ? t.originMatidx : null;
-                                const matList = idx2use !== null ? [itItem.prod_apu.mat[idx2use]] : itItem.prod_apu.mat;
-                                for (const matE of (matList || [])) {
+                                const matArr = Array.isArray(itItem.prod_apu.mat)
+                                    ? itItem.prod_apu.mat
+                                    : Object.values(itItem.prod_apu.mat);
+                                const idx2use = (t.originMatidx !== undefined) ? parseInt(t.originMatidx) : null;
+                                const matList = (idx2use !== null && matArr[idx2use]) ? [matArr[idx2use]] : matArr;
+                                for (const matE of matList) {
                                     if (!matE) continue;
-                                    if (matE.measures?.length > 0) {
-                                        const ms = matE.measures.filter(m => parseFloat(m.b) > 0 && parseFloat(m.h) > 0);
-                                        if (ms.length > 0) { medida = fmMed(ms[0].b, ms[0].h); break; }
-                                    }
+                                    const measArr2 = Array.isArray(matE.measures)
+                                        ? matE.measures
+                                        : (matE.measures ? Object.values(matE.measures) : []);
+                                    const ms = measArr2.filter(m => parseFloat(m.b) > 0 && parseFloat(m.h) > 0);
+                                    if (ms.length > 0) { medida = fmMed(ms[0].b, ms[0].h); break; }
                                 }
                             }
                         }
@@ -848,7 +858,10 @@
             doc.save(`Liquidacion_${(lic.worker_name || 'Contrato').replace(/ /g,'_')}.pdf`);
         } catch(e) {
             console.error(e); alert("Fallo en generación: " + e.message);
-        } finally { document.getElementById('global-loader').style.display = 'none'; }
+        } finally {
+            document.getElementById('global-loader').style.display = 'none';
+            window._pdfGenerando = false;
+        }
     }
 </script>
 
