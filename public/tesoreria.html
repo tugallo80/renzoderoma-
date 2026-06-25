@@ -134,9 +134,9 @@
         <div style="margin-top:24px;">
             <div class="section-title"><i class="ph-bold ph-currency-circle-dollar"></i> Consolidado de Contratistas</div>
             <div class="generic-card" style="margin-bottom:14px;">
-                <div style="font-size:11px;font-weight:800;color:var(--gray);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;">PROYECTO / CLIENTE</div>
+                <div style="font-size:11px;font-weight:800;color:var(--gray);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;">PROVEEDOR / CONTRATISTA</div>
                 <select id="ct-cliente-sel" class="inp-std" style="margin-bottom:12px;" onchange="cargarProyectosCT()">
-                    <option value="">Seleccionar proyecto...</option>
+                    <option value="">Seleccionar proveedor...</option>
                 </select>
                 <div id="ct-proyectos-list" style="margin-bottom:14px;"><span style="color:var(--gray);font-size:13px;">Selecciona un cliente primero...</span></div>
                 <div style="display:flex;gap:10px;">
@@ -3081,82 +3081,113 @@
 
     function fMoneyCT(n) { return parseFloat(n||0).toLocaleString('es-BO',{minimumFractionDigits:2,maximumFractionDigits:2}); }
 
+    // Build map of all external workers across all projects
+    function _ctBuildWorkerMap() {
+        const wm = {}; // { workerName: [{cid, pid, pid_nombre, client_nombre, licId, lic}] }
+        Object.entries(proyectosData || {}).forEach(([cid, clientData]) => {
+            if (!clientData || typeof clientData !== 'object') return;
+            Object.entries(clientData).forEach(([pid, proy]) => {
+                if (!proy || !proy.licitaciones) return;
+                const clientName = Object.values(clientData).map(p => p && p.nombre_cliente ? p.nombre_cliente : '').filter(Boolean)[0] || cid;
+                Object.entries(proy.licitaciones).forEach(([licId, lic]) => {
+                    if (!lic || lic.is_supervision || lic.is_internal_assignment) return;
+                    const name = lic.worker_name || lic.nombre_trabajador || lic.trabajador_nombre || lic.worker_id || null;
+                    if (!name) return;
+                    if (!wm[name]) wm[name] = [];
+                    wm[name].push({ cid, pid, pid_nombre: proy.nombre || pid, client_nombre: clientName, licId, lic });
+                });
+            });
+        });
+        return wm;
+    }
+
     function initContratistasSection() {
         const sel = document.getElementById('ct-cliente-sel');
         if (!sel) return;
         while (sel.options.length > 1) sel.remove(1);
-        const cids = Object.keys(proyectosData || {});
-        if (!cids.length) {
-            document.getElementById('ct-proyectos-list').innerHTML = '<span style="color:var(--orange);font-size:13px;">Sin acceso a proyectos. Verificar permisos Firebase.</span>';
+        const wm = _ctBuildWorkerMap();
+        const workers = Object.keys(wm).sort();
+        if (!workers.length) {
+            document.getElementById('ct-proyectos-list').innerHTML = '<span style="color:var(--orange);font-size:13px;">Sin contratos de proveedores encontrados.</span>';
             return;
         }
-        cids.forEach(cid => {
+        workers.forEach(name => {
             const opt = document.createElement('option');
-            opt.value = cid;
-            const pData = proyectosData[cid] || {};
-            // Show project names or client name
-            const projNames = Object.values(pData).map(p => p && p.nombre ? p.nombre : '').filter(Boolean);
-            const clientName = Object.values(pData).map(p => p && p.nombre_cliente ? p.nombre_cliente : '').filter(Boolean)[0];
-            opt.textContent = clientName ? `${clientName}` : (projNames[0] || cid);
+            opt.value = name;
+            const projs = [...new Set(wm[name].map(i => i.pid_nombre))];
+            opt.textContent = `${name}  (${projs.length} proyecto${projs.length>1?'s':''})`;
             sel.appendChild(opt);
         });
-        const savedCid = localStorage.getItem('rubik_client_id');
-        if (savedCid && proyectosData[savedCid]) { sel.value = savedCid; cargarProyectosCT(); }
+        document.getElementById('ct-proyectos-list').innerHTML = '<span style="color:var(--gray);font-size:13px;">Selecciona un proveedor para ver sus proyectos...</span>';
     }
 
     function cargarProyectosCT() {
-        const cid = document.getElementById('ct-cliente-sel').value;
+        const workerName = document.getElementById('ct-cliente-sel').value;
         const container = document.getElementById('ct-proyectos-list');
-        if (!cid) { container.innerHTML = '<span style="color:var(--gray);font-size:13px;">Selecciona un cliente primero...</span>'; return; }
-        const pData = proyectosData[cid] || {};
-        const pids = Object.keys(pData);
-        if (!pids.length) { container.innerHTML = '<span style="color:var(--gray);font-size:13px;">Sin proyectos.</span>'; return; }
+        if (!workerName) { container.innerHTML = '<span style="color:var(--gray);font-size:13px;">Selecciona un proveedor para ver sus proyectos...</span>'; return; }
+        const wm = _ctBuildWorkerMap();
+        const items = wm[workerName] || [];
+        if (!items.length) { container.innerHTML = '<span style="color:var(--gray);font-size:13px;">Sin proyectos para este proveedor.</span>'; return; }
         container.innerHTML = '';
-        pids.forEach(pid => {
-            const p = pData[pid]; if (!p) return;
+        // Unique projects (cid__pid pairs)
+        const seen = new Set();
+        items.forEach(({ cid, pid, pid_nombre, client_nombre }) => {
+            const key = cid + '__' + pid;
+            if (seen.has(key)) return;
+            seen.add(key);
             const label = document.createElement('label');
             label.style.cssText = 'display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px dashed var(--border);cursor:pointer;font-size:13px;font-weight:700;';
-            const cb = document.createElement('input'); cb.type='checkbox'; cb.value=pid; cb.checked=true;
+            const cb = document.createElement('input'); cb.type='checkbox'; cb.value=key; cb.checked=true;
             cb.style.cssText = 'width:16px;height:16px;accent-color:var(--blue);';
-            const span = document.createElement('span'); span.textContent = p.nombre || pid;
+            const span = document.createElement('span'); span.textContent = pid_nombre + (client_nombre ? '  ·  ' + client_nombre : '');
             label.appendChild(cb); label.appendChild(span); container.appendChild(label);
         });
     }
 
-    function _ctGetSelectedPids() {
-        const cid = document.getElementById('ct-cliente-sel').value;
+    function _ctGetSelectedWorker() {
+        const workerName = document.getElementById('ct-cliente-sel').value;
         const checkboxes = document.querySelectorAll('#ct-proyectos-list input[type=checkbox]:checked');
-        return { cid, pids: Array.from(checkboxes).map(cb => cb.value) };
+        const projects = Array.from(checkboxes).map(cb => {
+            const parts = cb.value.split('__');
+            return { cid: parts[0], pid: parts[1] };
+        });
+        return { workerName, projects };
     }
+    // Legacy alias used in PDF export
+    function _ctGetSelectedPids() { return _ctGetSelectedWorker(); }
 
     function cargarYRenderContratistas() {
-        const { cid, pids } = _ctGetSelectedPids();
-        if (!cid || !pids.length) { alert('Seleccioná al menos un proyecto.'); return; }
+        const { workerName, projects } = _ctGetSelectedWorker();
+        if (!workerName) { alert('Seleccioná un proveedor primero.'); return; }
+        if (!projects.length) { alert('Seleccioná al menos un proyecto.'); return; }
         const container = document.getElementById('ct-lista');
         const kpisEl = document.getElementById('ct-kpis');
         container.innerHTML = '<div class="empty-msg">Cargando...</div>';
 
+        // Collect all lics for this worker across checked projects
         const allLics = [];
-        const pData = proyectosData[cid] || {};
-        pids.forEach(pid => {
-            const proy = pData[pid] || {};
+        projects.forEach(({ cid, pid }) => {
+            const proy = (proyectosData[cid] || {})[pid] || {};
             Object.entries(proy.licitaciones || {}).forEach(([licId, lic]) => {
                 if (!lic || lic.is_supervision || lic.is_internal_assignment) return;
+                const name = lic.worker_name || lic.nombre_trabajador || lic.trabajador_nombre || lic.worker_id || '';
+                if (name !== workerName) return;
                 allLics.push({ cid, pid, pid_nombre: proy.nombre || pid, licId, lic });
             });
         });
 
         if (!allLics.length) {
-            container.innerHTML = '<div class="empty-msg">No hay contratos de contratistas en los proyectos seleccionados.</div>';
+            container.innerHTML = '<div class="empty-msg">No se encontraron contratos para este proveedor en los proyectos seleccionados.</div>';
             kpisEl.style.display = 'none'; return;
         }
 
-        // Group by worker
-        const byWorker = {};
+        // Since we selected one worker, group by project for clarity
+        const byWorker = { [workerName]: allLics };
         allLics.forEach(item => {
             const name = item.lic.worker_name || item.lic.nombre_trabajador || item.lic.trabajador_nombre || item.lic.worker_id || 'Sin nombre';
             if (!byWorker[name]) byWorker[name] = [];
-            byWorker[name].push(item);
+            // already pushed above via allLics
+            void name;
         });
 
         // Global KPIs
@@ -3219,7 +3250,7 @@
                         <div style="font-size:10px;color:var(--gray);">${fMoneyCT(wPag)} / ${fMoneyCT(wAcord)} Bs pagado</div>
                     </div>
                 </div>
-                <button onclick="event.stopPropagation();exportarPDFContratista('${workerName.replace(/'/g,"\\'")}')" style="width:100%;margin-top:10px;padding:9px;background:rgba(0,0,0,0.06);border:1px solid var(--border);color:var(--text);border-radius:10px;font-size:12px;font-weight:800;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;"><i class="ph-bold ph-file-pdf"></i> PDF Individual</button>
+                <button onclick="event.stopPropagation();exportarPDFContratista()" style="width:100%;margin-top:10px;padding:9px;background:rgba(0,0,0,0.06);border:1px solid var(--border);color:var(--text);border-radius:10px;font-size:12px;font-weight:800;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;"><i class="ph-bold ph-file-pdf"></i> PDF Consolidado del Proveedor</button>
                 <div id="ct-det-${uid}" style="display:none;margin-top:10px;border-top:1px solid var(--border);padding-top:10px;">${histHtml}</div>
             </div>`;
         });
@@ -3289,10 +3320,9 @@
     };
 
     function abrirExportCT() {
-        const { cid, pids } = _ctGetSelectedPids();
-        if (!cid || !pids.length) { alert('Cargá los contratistas primero.'); return; }
-        const pData = proyectosData[cid] || {};
-        document.getElementById('export-ct-proj-list').innerHTML = pids.map(pid => `• ${(pData[pid]||{}).nombre||pid}`).join('<br>');
+        const { workerName, projects } = _ctGetSelectedWorker();
+        if (!workerName || !projects.length) { alert('Seleccioná un proveedor primero.'); return; }
+        document.getElementById('export-ct-proj-list').innerHTML = `<b>${workerName}</b><br>` + projects.map(({ cid, pid }) => `• ${((proyectosData[cid]||{})[pid]||{}).nombre||pid}`).join('<br>');
         document.getElementById('mod-export-ct').style.display = 'flex';
     }
 
@@ -3320,56 +3350,41 @@
         await ls('https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js');
     }
 
-    // Export a single contractor PDF  — called from the card button
-    window.exportarPDFContratista = async function(workerName) {
-        const { cid, pids } = _ctGetSelectedPids();
-        if (!cid) return alert('Cargá los contratistas primero.');
-        const pData = proyectosData[cid] || {};
-        // collect lics for this worker
+    // Collect items for the selected worker across checked projects
+    function _ctGetWorkerItems(overrideWorker) {
+        const { workerName, projects } = _ctGetSelectedWorker();
+        const wn = overrideWorker || workerName;
         const items = [];
-        pids.forEach(pid => {
-            const proy = pData[pid] || {};
+        projects.forEach(({ cid, pid }) => {
+            const proy = (proyectosData[cid] || {})[pid] || {};
             Object.entries(proy.licitaciones || {}).forEach(([licId, lic]) => {
                 if (!lic || lic.is_supervision || lic.is_internal_assignment) return;
-                const name = lic.worker_name || lic.nombre_trabajador || lic.trabajador_nombre || lic.worker_id || 'Sin nombre';
-                if (name !== workerName) return;
-                items.push({ pid, pid_nombre: proy.nombre || pid, licId, lic });
+                const name = lic.worker_name || lic.nombre_trabajador || lic.trabajador_nombre || lic.worker_id || '';
+                if (name !== wn) return;
+                items.push({ cid, pid, pid_nombre: proy.nombre || pid, licId, lic });
             });
         });
+        return { workerName: wn, items };
+    }
+
+    // Export PDF for the currently selected worker (called from card button)
+    window.exportarPDFContratista = async function() {
+        const { workerName, items } = _ctGetWorkerItems();
+        if (!workerName) return alert('Seleccioná un proveedor primero.');
         if (!items.length) return alert('No se encontraron contratos.');
         document.getElementById('global-loader') && (document.getElementById('global-loader').style.display = 'flex');
-        try {
-            await _ctGenerarPDFContratistaItems(workerName, items);
-        } catch(e) { alert('Error PDF: ' + e.message); console.error(e); }
+        try { await _ctGenerarPDFContratistaItems(workerName, items); }
+        catch(e) { alert('Error PDF: ' + e.message); console.error(e); }
         finally { document.getElementById('global-loader') && (document.getElementById('global-loader').style.display = 'none'); }
     };
 
     async function exportarConsolidadoCT() {
-        const { cid, pids } = _ctGetSelectedPids();
-        if (!cid || !pids.length) { alert('Cargá los contratistas primero.'); return; }
-        const pData = proyectosData[cid] || {};
-        const allLics = [];
-        pids.forEach(pid => {
-            const proy = pData[pid] || {};
-            Object.entries(proy.licitaciones || {}).forEach(([licId, lic]) => {
-                if (!lic || lic.is_supervision || lic.is_internal_assignment) return;
-                allLics.push({ pid, pid_nombre: proy.nombre||pid, licId, lic });
-            });
-        });
-        const byWorker = {};
-        allLics.forEach(item => {
-            const name = item.lic.worker_name || item.lic.nombre_trabajador || item.lic.trabajador_nombre || item.lic.worker_id || 'Sin nombre';
-            if (!byWorker[name]) byWorker[name] = [];
-            byWorker[name].push(item);
-        });
-        if (!Object.keys(byWorker).length) return alert('No hay contratos de contratistas en la selección.');
+        const { workerName, items } = _ctGetWorkerItems();
+        if (!workerName) { alert('Seleccioná un proveedor primero.'); return; }
+        if (!items.length) { alert('No hay contratos en la selección.'); return; }
         document.getElementById('global-loader') && (document.getElementById('global-loader').style.display = 'flex');
-        try {
-            // Generate one PDF per contractor, concatenated
-            for (const [workerName, items] of Object.entries(byWorker)) {
-                await _ctGenerarPDFContratistaItems(workerName, items);
-            }
-        } catch(e) { alert('Error PDF: ' + e.message); console.error(e); }
+        try { await _ctGenerarPDFContratistaItems(workerName, items); }
+        catch(e) { alert('Error PDF: ' + e.message); console.error(e); }
         finally { document.getElementById('global-loader') && (document.getElementById('global-loader').style.display = 'none'); }
         document.getElementById('mod-export-ct').style.display = 'none';
     }
