@@ -1243,10 +1243,14 @@
         const btn = document.querySelector('[onclick="recargarYRenderPlanillas()"]');
         if (btn) { btn.disabled = true; btn.innerHTML = '<i class="ph-bold ph-spinner" style="animation:spin 1s linear infinite;"></i>'; }
         try {
-            const safe = ref => db.ref(ref).once('value').catch(() => ({ val: () => null }));
+            const timeout8s = () => new Promise(res => setTimeout(() => res({ val: () => null }), 8000));
+            const safe = ref => Promise.race([
+                db.ref(ref).once('value').catch(() => ({ val: () => null })),
+                timeout8s()
+            ]);
             const [proySnap, persSnap] = await Promise.all([safe('proyectos'), safe('personal')]);
-            proyectosData = proySnap.val() || {};
-            personalData  = persSnap.val() || {};
+            proyectosData = proySnap.val() || proyectosData;
+            personalData  = persSnap.val() || personalData;
         } catch(e) { console.warn('Recarga parcial:', e); }
         if (btn) { btn.disabled = false; btn.innerHTML = '<i class="ph-bold ph-arrows-clockwise"></i>'; }
         renderPlanillas();
