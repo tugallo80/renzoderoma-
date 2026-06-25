@@ -211,19 +211,32 @@
     </div>
 
     <div class="top-grid">
-        <div class="card">
-            <div class="row"><span>Cliente:</span> <b id="h-cli">...</b></div>
-            <div class="row"><span>Proyecto:</span> <b id="h-pro">...</b></div>
-            <div class="row"><span>Fecha:</span> <input type="date" id="h-date" style="border:none; background:transparent; font-family:inherit; color:var(--blue); font-weight:700;" onchange="saveDB()"></div>
+        <div style="display:flex;flex-direction:column;gap:10px;">
+            <div class="card">
+                <div class="row"><span>Cliente:</span> <b id="h-cli">...</b></div>
+                <div class="row"><span>Proyecto:</span> <b id="h-pro">...</b></div>
+                <div class="row"><span>Fecha:</span> <input type="date" id="h-date" style="border:none; background:transparent; font-family:inherit; color:var(--blue); font-weight:700;" onchange="saveDB()"></div>
+            </div>
+            <div class="card" style="border-color:rgba(255,149,0,0.35);">
+                <div style="font-size:10px;font-weight:700;color:var(--orange);margin-bottom:8px;text-transform:uppercase;letter-spacing:.5px;">% Descuento antes de impuestos</div>
+                <div style="display:flex;align-items:center;gap:8px;">
+                    <input type="number" step="0.5" min="0" max="100" id="t-desc-pct"
+                           style="border:1px solid rgba(255,149,0,0.45);border-radius:8px;background:transparent;font-family:inherit;color:var(--orange);font-weight:800;font-size:22px;width:64px;text-align:center;padding:4px 6px;"
+                           value="0" oninput="calcGlobal();saveDB()">
+                    <span style="color:var(--orange);font-weight:800;font-size:22px;">%</span>
+                    <span style="font-size:11px;color:var(--gray);margin-left:2px;">= <b id="t-desc-calc" style="color:var(--orange)">0,00</b> Bs</span>
+                </div>
+            </div>
         </div>
         <div class="total-card">
             <div class="row"><span>Subtotal:</span> <span id="t-sub">0,00</span></div>
-            <div class="row"><span style="color:var(--orange)">Descuento (Bs):</span> <input type="number" step="any" id="t-desc-val" class="inp-desc-val" value="0" onchange="calcGlobal(); saveDB()"></div>
+            <div class="row" id="t-desc-row" style="display:none"><span style="color:var(--orange)" id="t-desc-lbl">Descuento:</span> <span id="t-desc-show" style="color:var(--orange)">- 0,00</span></div>
             <div class="row"><span>IVA 13%:</span> <span id="t-iva">0,00</span></div>
             <div class="row"><span>IT 3%:</span> <span id="t-it">0,00</span></div>
             <div class="big-total" id="t-total">0,00 Bs</div>
         </div>
     </div>
+    <input type="hidden" id="t-desc-val" value="0">
 
     <div class="cond-wrapper">
         <div class="cond-box"><span class="lbl">Forma Pago</span><input id="c-pago" class="inp-cond" placeholder="50% / 50%" onchange="saveDB()"></div>
@@ -511,7 +524,9 @@
                 document.getElementById('c-pago').value = d.cond.pago || ''; document.getElementById('c-validez').value = d.cond.validez || '';
                 document.getElementById('sw-mont').checked = d.cond.montaje || false; document.getElementById('sw-desm').checked = d.cond.desmontaje || false;
             }
-            document.getElementById('sw-imp').checked = d.impuestos || false; document.getElementById('t-desc-val').value = d.descuento || 0;
+            document.getElementById('sw-imp').checked = d.impuestos || false;
+            document.getElementById('t-desc-pct').value = d.descuento_pct || 0;
+            document.getElementById('t-desc-val').value = d.descuento || 0;
             render();
 
             if(urlParams.get('retApu')) {
@@ -811,20 +826,37 @@
     function calcGlobal(forceSub = null) {
         let subtotal = forceSub !== null ? forceSub : 0;
         if(forceSub === null) { data.forEach(i => { if(i.type !== 'chapter' && i.activo !== false) subtotal += (stripZeros(i.cant) * stripZeros(i.pu)); }); }
-        const desc = parseFloat(document.getElementById('t-desc-val').value) || 0; const baseImp = subtotal - desc; 
+
+        const pct = parseFloat(document.getElementById('t-desc-pct').value) || 0;
+        const desc = Math.round(subtotal * pct / 100 * 100) / 100;
+        // Keep hidden field in sync for PDF/Excel code that reads t-desc-val
+        document.getElementById('t-desc-val').value = desc;
+
+        // Update discount display in left card
+        const calcEl = document.getElementById('t-desc-calc');
+        if (calcEl) calcEl.textContent = fMoney(desc);
+        // Update totals card discount row
+        const descRow = document.getElementById('t-desc-row');
+        if (descRow) descRow.style.display = pct > 0 ? 'flex' : 'none';
+        const descLbl = document.getElementById('t-desc-lbl');
+        if (descLbl) descLbl.textContent = pct > 0 ? pct + '% Desc.:' : 'Descuento:';
+        const descShow = document.getElementById('t-desc-show');
+        if (descShow) descShow.textContent = '- ' + fMoney(desc);
+
+        const baseImp = subtotal - desc;
         let iva = 0, it = 0; if(document.getElementById('sw-imp').checked) { iva = baseImp*0.13; it = baseImp*0.03; }
-        
+
         const finalTotal = baseImp + iva + it;
         document.getElementById('t-sub').innerText = fMoney(subtotal); document.getElementById('t-iva').innerText = fMoney(iva);
         document.getElementById('t-it').innerText = fMoney(it); document.getElementById('t-total').innerText = fMoney(finalTotal) + " Bs";
-        
+
         db.ref('proyectos/' + cid + '/' + pid + '/presupuesto_total').set(finalTotal);
     }
 
     function saveDB(force = false) {
         clearTimeout(saveTimeout);
         let execSave = () => {
-            let payload = { items: data, fecha: document.getElementById('h-date').value, impuestos: document.getElementById('sw-imp').checked, descuento: parseFloat(document.getElementById('t-desc-val').value) || 0, cond: { pago: document.getElementById('c-pago').value, validez: document.getElementById('c-validez').value, montaje: document.getElementById('sw-mont').checked, desmontaje: document.getElementById('sw-desm').checked } };
+            let payload = { items: data, fecha: document.getElementById('h-date').value, impuestos: document.getElementById('sw-imp').checked, descuento: parseFloat(document.getElementById('t-desc-val').value) || 0, descuento_pct: parseFloat(document.getElementById('t-desc-pct').value) || 0, cond: { pago: document.getElementById('c-pago').value, validez: document.getElementById('c-validez').value, montaje: document.getElementById('sw-mont').checked, desmontaje: document.getElementById('sw-desm').checked } };
             db.ref('proyectos/' + cid + '/' + pid + '/presupuesto').set(JSON.parse(JSON.stringify(payload)));
         };
         if(force) execSave(); else saveTimeout = setTimeout(execSave, 1000);
@@ -1148,7 +1180,8 @@
             if (typeof doc.autoTable !== 'function') throw new Error("La librería de Tablas no cargó.");
 
             doc.autoTable({ startY: 45, head: [['Descripción', 'Und', 'Cant', 'P.U. (Bs)', 'Total (Bs)']], body: rows, styles: { cellPadding: 3 } });
-            const descVal = parseFloat(document.getElementById('t-desc-val').value) || 0;
+            const descPct = parseFloat(document.getElementById('t-desc-pct').value) || 0;
+            const descVal = Math.round(subtotal * descPct / 100 * 100) / 100;
             const base = subtotal - descVal;
             const conImp = document.getElementById('sw-imp').checked;
             // Calcular espacio necesario para el bloque de totales + condiciones
@@ -1165,7 +1198,7 @@
                          { content: 'Subtotal:', styles: { halign: 'right', fontStyle: 'bold' } },
                          { content: fMoney(subtotal) + ' Bs', styles: { halign: 'right', fontStyle: 'bold' } }],
                         ...(descVal > 0 ? [[{ content: '', colSpan: 3 },
-                         { content: 'Descuento:', styles: { halign: 'right' } },
+                         { content: (descPct > 0 ? descPct + '% Descuento:' : 'Descuento:'), styles: { halign: 'right' } },
                          { content: '- ' + fMoney(descVal) + ' Bs', styles: { halign: 'right' } }]] : []),
                         ...(conImp ? [
                             [{ content: '', colSpan: 3 },
@@ -1188,7 +1221,7 @@
                 finalY += 5;
                 doc.setFontSize(9); doc.setFont(undefined, 'normal');
                 doc.text(`Subtotal:`, 140, finalY); doc.text(`${fMoney(subtotal)} Bs`, 195, finalY, {align:'right'}); finalY += 5;
-                if(descVal > 0) { doc.text(`Descuento:`, 140, finalY); doc.text(`- ${fMoney(descVal)} Bs`, 195, finalY, {align:'right'}); finalY += 5; }
+                if(descVal > 0) { doc.text(descPct > 0 ? descPct + '% Descuento:' : 'Descuento:', 140, finalY); doc.text(`- ${fMoney(descVal)} Bs`, 195, finalY, {align:'right'}); finalY += 5; }
                 if(conImp) { doc.text(`IVA (13%):`, 140, finalY); doc.text(`${fMoney(base*0.13)} Bs`, 195, finalY, {align:'right'}); finalY += 5; doc.text(`IT (3%):`, 140, finalY); doc.text(`${fMoney(base*0.03)} Bs`, 195, finalY, {align:'right'}); finalY += 5; }
                 if(montoCierre > 0) {
                     // Caja verde destacada para precio negociado
@@ -1438,11 +1471,12 @@
             // ── Condiciones (igual que exportPDF) ───────────────────────────
             let finalY = doc.lastAutoTable.finalY + 8;
             if (finalY > 185) { doc.addPage(); finalY = 20; }
+            const descPct2 = parseFloat(document.getElementById('t-desc-pct').value) || 0;
             const descVal = parseFloat(document.getElementById('t-desc-val').value) || 0;
 
             doc.setFontSize(8); doc.setFont(undefined, 'normal');
             doc.text(`Subtotal:`, 200, finalY); doc.text(`${fMoney(sumTotal)} Bs`, 283, finalY, { align: 'right' }); finalY += 5;
-            if (descVal > 0) { doc.text(`Descuento:`, 200, finalY); doc.text(`- ${fMoney(descVal)} Bs`, 283, finalY, { align: 'right' }); finalY += 5; }
+            if (descVal > 0) { doc.text(descPct2 > 0 ? descPct2 + '% Descuento:' : 'Descuento:', 200, finalY); doc.text(`- ${fMoney(descVal)} Bs`, 283, finalY, { align: 'right' }); finalY += 5; }
             doc.text(`IVA (13%):`, 200, finalY); doc.text(`${fMoney(sumIVA)} Bs`, 283, finalY, { align: 'right' }); finalY += 5;
             doc.text(`IT (3%):`,   200, finalY); doc.text(`${fMoney(sumIT)} Bs`, 283, finalY, { align: 'right' }); finalY += 5;
             doc.setFontSize(9); doc.setFont(undefined, 'bold'); doc.setTextColor(0, 100, 0);
