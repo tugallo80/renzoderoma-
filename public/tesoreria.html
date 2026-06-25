@@ -3210,23 +3210,27 @@
     let _ctPayData = null; // { cid, pid, licId, workerName }
     let _ctPayFile = null;
 
-    // Called when Contratistas tab is first activated
+    // Called every time Contratistas tab is activated
     function initContratistasTab() {
         const sel = document.getElementById('ct-cliente-sel');
-        if (sel.options.length > 1) return; // already populated
-        // Populate client selector from proyectosData
+        const prevVal = sel.value;
+        // Re-populate in case data wasn't ready on first click
+        while (sel.options.length > 1) sel.remove(1);
         const cids = Object.keys(proyectosData || {});
+        if (!cids.length) {
+            document.getElementById('ct-proyectos-list').innerHTML = '<span style="color:var(--gray)">Cargando datos...</span>';
+            return;
+        }
         cids.forEach(cid => {
             const opt = document.createElement('option');
             opt.value = cid;
-            // Try to get a friendly name from first project
             const pData = proyectosData[cid] || {};
             const names = Object.values(pData).map(p => p && p.nombre_cliente ? p.nombre_cliente : '').filter(Boolean);
             opt.textContent = names[0] || cid;
             sel.appendChild(opt);
         });
-        // Pre-select from localStorage
-        const savedCid = localStorage.getItem('rubik_client_id');
+        // Restore previous selection or pre-select from localStorage
+        const savedCid = prevVal || localStorage.getItem('rubik_client_id');
         if (savedCid && proyectosData[savedCid]) {
             sel.value = savedCid;
             cargarProyectosCT();
@@ -3279,8 +3283,7 @@
             const proy = pData[pid] || {};
             const lics = proy.licitaciones || {};
             Object.entries(lics).forEach(([licId, lic]) => {
-                if (!lic || lic.is_supervision) return;
-                if (!lic.worker_name && !lic.nombre_trabajador) return;
+                if (!lic || lic.is_supervision || lic.is_internal_assignment) return;
                 allLics.push({ cid, pid, pid_nombre: proy.nombre || pid, licId, lic });
             });
         });
@@ -3291,10 +3294,10 @@
             return;
         }
 
-        // Group by worker_name
+        // Group by contractor name — covers obra, gráfico, and any other type
         const byWorker = {};
         allLics.forEach(item => {
-            const name = item.lic.worker_name || item.lic.nombre_trabajador || 'Sin nombre';
+            const name = item.lic.worker_name || item.lic.nombre_trabajador || item.lic.trabajador_nombre || item.lic.worker_id || 'Sin nombre';
             if (!byWorker[name]) byWorker[name] = [];
             byWorker[name].push(item);
         });
@@ -3568,16 +3571,15 @@
                 const proy = pData[pid] || {};
                 const lics = proy.licitaciones || {};
                 Object.entries(lics).forEach(([licId, lic]) => {
-                    if (!lic || lic.is_supervision) return;
-                    if (!lic.worker_name && !lic.nombre_trabajador) return;
+                    if (!lic || lic.is_supervision || lic.is_internal_assignment) return;
                     allItems.push({ pid, pid_nombre: proy.nombre||pid, licId, lic });
                 });
             });
 
-            // Group by worker
+            // Group by contractor name — covers obra, gráfico, and any other type
             const byWorker = {};
             allItems.forEach(item => {
-                const name = item.lic.worker_name || item.lic.nombre_trabajador || 'Sin nombre';
+                const name = item.lic.worker_name || item.lic.nombre_trabajador || item.lic.trabajador_nombre || item.lic.worker_id || 'Sin nombre';
                 if (!byWorker[name]) byWorker[name] = [];
                 byWorker[name].push(item);
             });
