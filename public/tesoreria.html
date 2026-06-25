@@ -134,9 +134,9 @@
         <div style="margin-top:24px;">
             <div class="section-title"><i class="ph-bold ph-currency-circle-dollar"></i> Consolidado de Contratistas</div>
             <div class="generic-card" style="margin-bottom:14px;">
-                <div style="font-size:11px;font-weight:800;color:var(--gray);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;">CLIENTE</div>
+                <div style="font-size:11px;font-weight:800;color:var(--gray);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;">PROYECTO / CLIENTE</div>
                 <select id="ct-cliente-sel" class="inp-std" style="margin-bottom:12px;" onchange="cargarProyectosCT()">
-                    <option value="">Seleccionar cliente...</option>
+                    <option value="">Seleccionar proyecto...</option>
                 </select>
                 <div id="ct-proyectos-list" style="margin-bottom:14px;"><span style="color:var(--gray);font-size:13px;">Selecciona un cliente primero...</span></div>
                 <div style="display:flex;gap:10px;">
@@ -709,14 +709,16 @@
     let supervisoresData = {}; // { wid: { nombre, proyectos: { pid: { depositos, gastos, extras } } } }
 
     async function cargarTesoreraData() {
+        // Use allSettled so a permission error on one path doesn't kill the rest
+        const safe = ref => db.ref(ref).once('value').catch(() => ({ val: () => null }));
         try {
             const [proySnap, ingSnap, compSnap, cancSnap, supSnap, personalSnap] = await Promise.all([
-                db.ref('proyectos').once('value'),
-                db.ref('ingresos').once('value'),
-                db.ref('compras_facturadas').once('value'),
-                db.ref('cancheos').once('value'),
-                db.ref('supervisores').once('value'),
-                db.ref('personal').once('value')
+                safe('proyectos'),
+                safe('ingresos'),
+                safe('compras_facturadas'),
+                safe('cancheos'),
+                safe('supervisores'),
+                safe('personal')
             ]);
             proyectosData         = proySnap.val()  || {};
             ingresosData          = ingSnap.val()   || {};
@@ -724,7 +726,6 @@
             cancheosData          = cancSnap.val()  || {};
             const personalData    = personalSnap.val() || {};
             const rawSup          = supSnap.val()   || {};
-            // Enriquecer supervisoresData con nombre del personal
             supervisoresData = {};
             Object.entries(rawSup).forEach(([wid, wdata]) => {
                 const persona = personalData[wid] || {};
@@ -3085,12 +3086,18 @@
         if (!sel) return;
         while (sel.options.length > 1) sel.remove(1);
         const cids = Object.keys(proyectosData || {});
+        if (!cids.length) {
+            document.getElementById('ct-proyectos-list').innerHTML = '<span style="color:var(--orange);font-size:13px;">Sin acceso a proyectos. Verificar permisos Firebase.</span>';
+            return;
+        }
         cids.forEach(cid => {
             const opt = document.createElement('option');
             opt.value = cid;
             const pData = proyectosData[cid] || {};
-            const names = Object.values(pData).map(p => p && p.nombre_cliente ? p.nombre_cliente : '').filter(Boolean);
-            opt.textContent = names[0] || cid;
+            // Show project names or client name
+            const projNames = Object.values(pData).map(p => p && p.nombre ? p.nombre : '').filter(Boolean);
+            const clientName = Object.values(pData).map(p => p && p.nombre_cliente ? p.nombre_cliente : '').filter(Boolean)[0];
+            opt.textContent = clientName ? `${clientName}` : (projNames[0] || cid);
             sel.appendChild(opt);
         });
         const savedCid = localStorage.getItem('rubik_client_id');
