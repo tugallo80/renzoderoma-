@@ -3315,6 +3315,11 @@
         }
         await db.ref(`proyectos/${cid}/${pid}/licitaciones/${licId}/pagos`).push({ monto, concepto, fecha, comprobante: urlComp||null, timestamp: new Date().toISOString() });
         document.getElementById('mod-pago-ct').style.display = 'none';
+        // Refresh proyectosData cache so the new payment shows immediately
+        const updLic = await db.ref(`proyectos/${cid}/${pid}/licitaciones/${licId}`).once('value');
+        if (updLic.val() && proyectosData[cid] && proyectosData[cid][pid] && proyectosData[cid][pid].licitaciones) {
+            proyectosData[cid][pid].licitaciones[licId] = updLic.val();
+        }
         _ctPayData = null; _ctPayFile = null;
         cargarYRenderContratistas();
     };
@@ -3468,39 +3473,59 @@
                 proyectosData[cid][pid].presupuesto && proyectosData[cid][pid].presupuesto.items) || {};
 
             function getMedida(t) {
-                const tryM = (b,h) => (parseFloat(b)>0 && parseFloat(h)>0) ? `${parseFloat(b).toFixed(2)}×${parseFloat(h).toFixed(2)}` : null;
-                // 1. Direct measures on task
+                const fmMed = (b,h) => `${parseFloat(b).toFixed(2)}×${parseFloat(h).toFixed(2)}`;
+                let medida = '';
+                // 1. Direct t.measures
                 if (t.measures) {
-                    if (t.measures.b) { const m=tryM(t.measures.b,t.measures.h); if(m) return m; }
-                    else {
-                        const ms=(Array.isArray(t.measures)?t.measures:Object.values(t.measures)).filter(m=>m&&parseFloat(m.b)>0);
-                        if (ms.length) { const m=tryM(ms[0].b,ms[0].h); if(m) return m; }
+                    if (parseFloat(t.measures.b)>0 && parseFloat(t.measures.h)>0) {
+                        medida = fmMed(t.measures.b, t.measures.h);
+                    } else {
+                        const measArr = Array.isArray(t.measures) ? t.measures : Object.values(t.measures).filter(v=>v&&typeof v==='object');
+                        const m0 = measArr.find(m=>m&&parseFloat(m.b)>0&&parseFloat(m.h)>0);
+                        if (m0) medida = fmMed(m0.b, m0.h);
                     }
                 }
-                // 2. prod_apu.mo[originApuidx].mo_partes or base/altura
-                if (t.originIdx !== undefined) {
-                    const bi = budgetItems[t.originIdx];
-                    if (bi && bi.prod_apu) {
-                        if (t.originApuidx !== undefined && bi.prod_apu.mo && bi.prod_apu.mo[t.originApuidx]) {
-                            const moPart = bi.prod_apu.mo[t.originApuidx];
-                            if (moPart.mo_partes) {
-                                const partes = (Array.isArray(moPart.mo_partes)?moPart.mo_partes:Object.values(moPart.mo_partes)).filter(p=>parseFloat(p.base)>0);
-                                if (partes.length) return partes.map(p=>`${parseFloat(p.base).toFixed(2)}×${parseFloat(p.altura||1).toFixed(2)}`).join(', ');
-                            }
-                            if (moPart.base && parseFloat(moPart.base)>0) return tryM(moPart.base,moPart.altura||1)||'';
+                // 2. MO: mo_partes with unit conversion
+                if (!medida && t.originType==='mo' && t.originIdx!==undefined && t.originApuidx!==undefined) {
+                    const itMo = budgetItems[t.originIdx];
+                    if (itMo && itMo.prod_apu && itMo.prod_apu.mo) {
+                        const moArr = Array.isArray(itMo.prod_apu.mo) ? itMo.prod_apu.mo : Object.values(itMo.prod_apu.mo);
+                        const moEntry = moArr[parseInt(t.originApuidx)];
+                        if (moEntry && moEntry.mo_partes) {
+                            const partes = Array.isArray(moEntry.mo_partes) ? moEntry.mo_partes : Object.values(moEntry.mo_partes);
+                            const toCm = moEntry.mo_input_und === 'cm' ? 1 : 100;
+                            const p0 = partes.find(p=>parseFloat(p.base)>0&&parseFloat(p.altura)>0);
+                            if (p0) medida = fmMed(parseFloat(p0.base)*toCm, parseFloat(p0.altura)*toCm);
                         }
-                        // 3. prod_apu.mat[originMatidx]
-                        if (t.originMatidx !== undefined && bi.prod_apu.mat && bi.prod_apu.mat[t.originMatidx]) {
-                            const mat = bi.prod_apu.mat[t.originMatidx];
-                            if (mat.measures) {
-                                const ms=(Array.isArray(mat.measures)?mat.measures:Object.values(mat.measures)).filter(m=>m&&parseFloat(m.b)>0);
-                                if (ms.length) return ms.map(m=>`${parseFloat(m.b).toFixed(2)}×${parseFloat(m.h||1).toFixed(2)}`).join(', ');
+                        if (!medida && itMo.prod_apu.mat) {
+                            const matArrMo = Array.isArray(itMo.prod_apu.mat) ? itMo.prod_apu.mat : Object.values(itMo.prod_apu.mat);
+                            for (const matE of matArrMo) {
+                                if (!matE || !matE.es_arte) continue;
+                                if (parseFloat(matE.b)>0&&parseFloat(matE.h)>0) { medida=fmMed(matE.b,matE.h); break; }
+                                const mA = Array.isArray(matE.measures)?matE.measures:(matE.measures?Object.values(matE.measures):[]);
+                                const ms = mA.filter(m=>m&&parseFloat(m.b)>0&&parseFloat(m.h)>0);
+                                if (ms.length) { medida=fmMed(ms[0].b,ms[0].h); break; }
                             }
-                            if (mat.b && parseFloat(mat.b)>0) return tryM(mat.b,mat.h||1)||'';
                         }
                     }
                 }
-                return '';
+                // 3. Fallback: prod_apu.mat (impressions / mat tasks)
+                if (!medida && t.originIdx!==undefined) {
+                    const itItem = budgetItems[t.originIdx];
+                    if (itItem && itItem.prod_apu && itItem.prod_apu.mat) {
+                        const matArr = Array.isArray(itItem.prod_apu.mat) ? itItem.prod_apu.mat : Object.values(itItem.prod_apu.mat);
+                        const idx2use = t.originMatidx!==undefined ? parseInt(t.originMatidx) : null;
+                        const matList = (idx2use!==null && matArr[idx2use]) ? [matArr[idx2use]] : matArr;
+                        for (const matE of matList) {
+                            if (!matE) continue;
+                            if (parseFloat(matE.b)>0&&parseFloat(matE.h)>0) { medida=fmMed(matE.b,matE.h); break; }
+                            const mA2 = Array.isArray(matE.measures)?matE.measures:(matE.measures?Object.values(matE.measures):[]);
+                            const ms2 = mA2.filter(m=>m&&parseFloat(m.b)>0&&parseFloat(m.h)>0);
+                            if (ms2.length) { medida=fmMed(ms2[0].b,ms2[0].h); break; }
+                        }
+                    }
+                }
+                return medida;
             }
 
             // ── 1. Resumen financiero ──
