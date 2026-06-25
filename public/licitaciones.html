@@ -242,6 +242,22 @@
                 </select>
             </div>
 
+            <!-- PICKER DE PARTICIPANTES: visible solo en asignaciones internas -->
+            <div id="box-participantes" style="display:none; background:rgba(52,199,89,0.06); border:1px dashed var(--green); border-radius:12px; padding:12px 15px; margin-bottom:15px;">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+                    <div>
+                        <div style="font-size:11px;font-weight:900;color:var(--green);text-transform:uppercase;">🤝 Reparto entre participantes</div>
+                        <div style="font-size:10px;color:var(--gray);">Asigná % a cada trabajador (debe sumar 100%)</div>
+                    </div>
+                    <button type="button" onclick="addParticipante()" style="background:var(--green);color:white;border:none;border-radius:8px;padding:5px 12px;font-size:11px;font-weight:800;cursor:pointer;"><i class="ph-bold ph-plus"></i> Agregar</button>
+                </div>
+                <div id="participantes-list"></div>
+                <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-top:1px dashed rgba(52,199,89,0.3);margin-top:4px;">
+                    <span style="font-size:11px;font-weight:800;color:var(--gray);">Total asignado</span>
+                    <span id="participantes-total" style="font-size:13px;font-weight:900;color:var(--green);">100%</span>
+                </div>
+            </div>
+
             <div id="bat-box" class="bat-container">
                 <div style="font-size:12px; font-weight:900;"><i class="ph-fill ph-chart-polar"></i> Medidor de Producción Mensual</div>
                 <div style="font-size:10px; color:var(--gray);">Sueldo Fijo: <span id="bat-sueldo">0</span> Bs</div>
@@ -371,6 +387,7 @@
     let editingLicId = null; let pendingPrefillTareas = null;
     let _adjDirecta = false; // When true, createLicitacion() saves with estado='aprobado'
     let _pagoLicCtx = null; let _pagoLicFile = null;
+    let _participantes = []; // [{worker_id, nombre, porcentaje}] for shared internal assignments
     // Artes gráficos para licitaciones
     let _licArtsData = {};   // { itemIdx: [{id,nombre,base,altura,cantidad,material,precio,imgRef,parentDesc},...] }
     let _licMatPrices = {};  // { 'Lona': 45, 'Adhesivo': 50, ... }
@@ -435,6 +452,71 @@
         let modo = document.getElementById('lic-modo-interno').value;
         if(modo === 'directa') { document.getElementById('tit-modal-lic').innerText = editingLicId ? "Editar Asignación Directa" : "Asignación Directa de Taller"; document.getElementById('btn-submit-lic').innerHTML = `<i class="ph-bold ph-check-circle"></i> Guardar y Asignar Tareas`; document.getElementById('btn-submit-lic').style.background = "var(--green)"; document.getElementById('bat-box').style.display = 'block'; } 
         else { document.getElementById('tit-modal-lic').innerText = "Enviar Licitación Interna"; document.getElementById('btn-submit-lic').innerHTML = `<i class="ph-bold ph-paper-plane-tilt"></i> Enviar a Cotizar`; document.getElementById('btn-submit-lic').style.background = "var(--blue)"; document.getElementById('bat-box').style.display = 'none'; }
+    }
+
+    // ─────────────────────────────────────────────
+    // PARTICIPANTES — reparto porcentual interno
+    // ─────────────────────────────────────────────
+    function initParticipantes(workerId, workerName) {
+        _participantes = [{ worker_id: workerId, nombre: workerName, porcentaje: 100 }];
+        renderParticipantesUI();
+    }
+
+    window.addParticipante = function() {
+        _participantes.push({ worker_id: '', nombre: '', porcentaje: 0 });
+        renderParticipantesUI();
+    };
+
+    window.removeParticipante = function(idx) {
+        _participantes.splice(idx, 1);
+        renderParticipantesUI();
+    };
+
+    window.updateParticipante = function(idx, field, val) {
+        if (!_participantes[idx]) return;
+        if (field === 'worker') {
+            const w = workers[val];
+            _participantes[idx].worker_id = val;
+            _participantes[idx].nombre = w ? (w.nombre || val) : val;
+        } else {
+            _participantes[idx].porcentaje = parseFloat(val) || 0;
+        }
+        renderParticipantesUI();
+    };
+
+    function renderParticipantesUI() {
+        const list = document.getElementById('participantes-list');
+        const totalEl = document.getElementById('participantes-total');
+        if (!list) return;
+
+        const internalWorkerOpts = Object.entries(workers)
+            .filter(([, w]) => { const t = (w.tipo || '').toLowerCase(); return t.includes('interno') || t.includes('planta'); })
+            .map(([wid, w]) => ({ wid, nombre: w.nombre || wid }));
+
+        list.innerHTML = _participantes.map((p, i) => {
+            const opts = internalWorkerOpts.map(o => `<option value="${o.wid}" ${p.worker_id === o.wid ? 'selected' : ''}>${o.nombre}</option>`).join('');
+            return `<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+                <select onchange="updateParticipante(${i},'worker',this.value)" style="flex:1;padding:7px 8px;border-radius:8px;border:1px solid var(--border);background:var(--card);color:var(--text);font-size:12px;font-weight:700;">
+                    <option value="">Seleccionar trabajador...</option>${opts}
+                </select>
+                <input type="number" value="${p.porcentaje}" min="0" max="100" step="1"
+                    onchange="updateParticipante(${i},'pct',this.value)"
+                    style="width:58px;padding:7px;border-radius:8px;border:1px solid var(--border);background:var(--card);color:var(--text);font-size:13px;font-weight:900;text-align:right;">
+                <span style="font-size:12px;font-weight:800;color:var(--gray);">%</span>
+                ${_participantes.length > 1 ? `<button type="button" onclick="removeParticipante(${i})" style="background:rgba(255,59,48,0.1);border:none;border-radius:8px;width:30px;height:30px;cursor:pointer;color:var(--red);display:flex;align-items:center;justify-content:center;"><i class="ph-bold ph-x"></i></button>` : '<div style="width:30px;"></div>'}
+            </div>`;
+        }).join('');
+
+        const total = _participantes.reduce((s, p) => s + (parseFloat(p.porcentaje) || 0), 0);
+        if (totalEl) {
+            totalEl.textContent = total.toFixed(0) + '%';
+            totalEl.style.color = Math.abs(total - 100) < 0.01 ? 'var(--green)' : 'var(--red)';
+        }
+    }
+
+    function getParticipantesForSave() {
+        const valid = _participantes.filter(p => p.worker_id && parseFloat(p.porcentaje) > 0);
+        return valid.length > 1 ? valid : null;
     }
 
     // ─────────────────────────────────────────────
@@ -764,6 +846,7 @@
             document.getElementById('lic-items').innerHTML = '<div class="empty-msg">Selecciona un trabajador primero.</div>';
             document.getElementById('bat-box').style.display = 'none';
             document.getElementById('box-modo-interno').style.display = 'none';
+            document.getElementById('box-participantes').style.display = 'none';
             document.getElementById('box-supervision-oferta').style.display = 'none';
             document.getElementById('lbl-total-ref').innerText = '0,00 Bs';
             boxGrafico.style.display = 'none'; _isGraphicMode = false; return;
@@ -782,6 +865,7 @@
             filterRow.style.display = 'flex';
             document.getElementById('bat-box').style.display = 'none';
             document.getElementById('box-modo-interno').style.display = 'none';
+            document.getElementById('box-participantes').style.display = 'none';
             document.getElementById('box-supervision-oferta').style.display = 'none';
             document.getElementById('tit-modal-lic').innerText = editingLicId ? 'Editar — Llave en Mano' : 'Licitación — Llave en Mano';
             document.getElementById('btn-submit-lic').innerHTML = `<i class="ph-bold ph-key"></i> Guardar Licitación`;
@@ -798,6 +882,7 @@
 
         if (isSupervisionWorker) {
             document.getElementById('box-modo-interno').style.display = 'none';
+            document.getElementById('box-participantes').style.display = 'none';
             document.getElementById('box-supervision-oferta').style.display = 'flex';
             document.getElementById('tit-modal-lic').innerText = editingLicId ? "Editar Licitación Supervisión" : "Asignar Supervisión";
             document.getElementById('btn-submit-lic').innerHTML = `<i class="ph-bold ph-paper-plane-tilt"></i> Enviar Oferta a Supervisor`;
@@ -806,6 +891,15 @@
         } else if (isInternalWorkerActive) {
             document.getElementById('box-modo-interno').style.display = 'flex';
             document.getElementById('box-supervision-oferta').style.display = 'none';
+            document.getElementById('box-participantes').style.display = 'block';
+            // Restore participantes if editing, otherwise init with primary worker
+            if (editingLicId && currentLics[editingLicId] && currentLics[editingLicId].participantes) {
+                const saved = currentLics[editingLicId].participantes;
+                _participantes = Array.isArray(saved) ? saved : Object.values(saved);
+                renderParticipantesUI();
+            } else {
+                initParticipantes(wId, worker.nombre);
+            }
             updateModoInterno();
             document.getElementById('bat-sueldo').innerText = fMoney(currentWorkerSueldo);
             totalAcumuladoMes = 0;
@@ -816,6 +910,7 @@
             });
         } else {
             document.getElementById('box-modo-interno').style.display = 'none';
+            document.getElementById('box-participantes').style.display = 'none';
             document.getElementById('box-supervision-oferta').style.display = 'none';
             document.getElementById('tit-modal-lic').innerText = editingLicId ? "Editar Licitación" : (_adjDirecta ? "✅ Adjudicación Directa" : (pendingPrefillTareas ? "Duplicar a Licitación Externa" : (isGraphicWorker ? "Licitación de Impresión / Gráficos" : "Crear Licitación Externa")));
             document.getElementById('btn-submit-lic').innerHTML = _adjDirecta ? `<i class="ph-bold ph-check-fat"></i> Adjudicar y Aprobar` : `<i class="ph-bold ph-paper-plane-tilt"></i> Guardar y Procesar`;
@@ -1597,6 +1692,12 @@ ${reqTxt}<div style="margin-top:4px;">${badgeMo}</div>
         
         payload.id = finalLicKey; payload.pid = pid; payload.cid = cid; payload.pName = pName; payload.worker_id = workerId; payload.worker_name = worker.nombre; payload.is_grafico = isGraphic; payload.is_supervision = isSupervision; payload.is_internal_assignment = isInternal; payload.is_llave_en_mano = (_licMode === 'llave_en_mano'); payload.lic_mode = _licMode || 'mo'; payload.tareas = tareas;
         if (isGraphic) { payload.mat_prices = Object.assign({}, _licMatPrices); }
+        // Participantes con porcentaje (solo si hay más de uno)
+        if (isInternal) {
+            const partToSave = getParticipantesForSave();
+            if (partToSave) payload.participantes = partToSave;
+            else delete payload.participantes;
+        }
 
         if (isSupervision) {
             let ofertaSup = parseFloat(document.getElementById('lic-oferta-supervision').value) || 0; if(ofertaSup <= 0) return alert("Ingresa tu propuesta económica por la supervisión.");
