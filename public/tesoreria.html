@@ -121,6 +121,7 @@
             <button class="tab-btn" onclick="switchMainTab('sueldos', this)"><i class="ph-bold ph-users-three"></i> Planillas</button>
             <button class="tab-btn" onclick="switchMainTab('ingresos', this)"><i class="ph-bold ph-trend-up"></i> Ingresos</button>
             <button class="tab-btn" onclick="switchMainTab('impuestos', this)"><i class="ph-bold ph-bank"></i> Impuestos</button>
+            <button class="tab-btn" onclick="switchMainTab('contratistas', this)"><i class="ph-bold ph-handshake"></i> Contratistas</button>
         </div>
     </div>
 
@@ -187,6 +188,27 @@
             </div>
             <div id="list-planillas-sup"><div class="empty-msg">Cargando supervisores...</div></div>
         </div>
+    </div>
+
+    <!-- ================================================================ -->
+    <!-- PANEL: Contratistas (Consolidado Multi-Proyecto)                  -->
+    <!-- ================================================================ -->
+    <div id="panel-contratistas" class="panel-section">
+        <div class="generic-card" style="margin-bottom:14px;">
+            <div style="font-size:14px;font-weight:900;color:var(--blue);margin-bottom:14px;display:flex;align-items:center;gap:8px;"><i class="ph-bold ph-handshake"></i> Consolidado de Contratistas</div>
+            <label class="inp-lbl">Cliente</label>
+            <select id="ct-cliente-sel" class="inp-std" onchange="cargarProyectosCT()">
+                <option value="">Seleccionar cliente...</option>
+            </select>
+            <label class="inp-lbl">Seleccionar proyectos</label>
+            <div id="ct-proyectos-list" style="background:var(--bg);border-radius:12px;padding:12px;margin-bottom:12px;min-height:40px;font-size:12px;color:var(--gray);">Selecciona un cliente primero...</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+                <button class="btn-action btn-outline" style="font-size:12px;" onclick="cargarYRenderContratistas()"><i class="ph-bold ph-arrows-clockwise"></i> Cargar</button>
+                <button class="btn-action" style="background:var(--purple);font-size:12px;" onclick="abrirExportCT()"><i class="ph-bold ph-file-pdf"></i> PDF Consolidado</button>
+            </div>
+        </div>
+        <div id="ct-kpis" style="display:none;display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:14px;text-align:center;"></div>
+        <div id="ct-lista"></div>
     </div>
 
     <!-- ================================================================ -->
@@ -303,6 +325,56 @@
                 </button>
             </div>
 
+        </div>
+    </div>
+
+    <!-- ================================================================ -->
+    <!-- MODAL: Pago a Contratista                                         -->
+    <!-- ================================================================ -->
+    <div id="mod-pago-ct" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.7);z-index:3000;backdrop-filter:blur(4px);">
+        <div style="position:absolute;bottom:0;left:0;right:0;max-height:95vh;background:var(--card);border-radius:22px 22px 0 0;display:flex;flex-direction:column;max-width:520px;margin:0 auto;">
+            <div style="padding:18px 20px 12px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;flex-shrink:0;">
+                <h3 style="margin:0;color:var(--blue);display:flex;align-items:center;gap:8px;font-size:16px;"><i class="ph-bold ph-receipt"></i> Registrar Pago</h3>
+                <div style="text-align:right;"><div id="ct-pay-name" style="font-size:12px;font-weight:900;color:var(--text);"></div><div id="ct-pay-sub" style="font-size:10px;color:var(--gray);"></div></div>
+                <button onclick="document.getElementById('mod-pago-ct').style.display='none'" style="background:var(--bg);border:none;width:32px;height:32px;border-radius:50%;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:18px;color:var(--gray);"><i class="ph-bold ph-x"></i></button>
+            </div>
+            <div style="flex:1;overflow-y:auto;padding:16px 20px;-webkit-overflow-scrolling:touch;">
+                <div style="background:var(--bg);border-radius:14px;padding:14px;margin-bottom:14px;border:1px dashed var(--border);">
+                    <div style="font-size:11px;font-weight:900;color:var(--gray);text-transform:uppercase;margin-bottom:10px;"><i class="ph-bold ph-magic-wand" style="color:var(--purple);"></i> Paso 1 — Comprobante (la IA lo lee)</div>
+                    <div style="display:flex;gap:8px;align-items:stretch;">
+                        <label for="ct-pay-foto" style="flex:1;background:var(--card);border:1px dashed var(--blue);border-radius:10px;padding:14px;text-align:center;cursor:pointer;font-size:13px;font-weight:800;color:var(--blue);display:flex;align-items:center;justify-content:center;gap:6px;"><i class="ph-bold ph-upload-simple" style="font-size:20px;"></i> Subir imagen o PDF</label>
+                        <button id="btn-ia-ct-pay" onclick="leerComprobanteCT()" style="background:var(--purple);color:white;border:none;padding:14px;border-radius:10px;font-size:12px;font-weight:900;cursor:pointer;display:none;white-space:nowrap;flex-direction:column;align-items:center;gap:4px;min-width:72px;"><i class="ph-bold ph-magic-wand" style="font-size:20px;"></i><span>Leer IA</span></button>
+                    </div>
+                    <input type="file" id="ct-pay-foto" style="display:none;" accept="image/*,application/pdf" onchange="onCTPayFoto(this)">
+                    <div id="ct-pay-foto-prev" style="display:none;margin-top:8px;background:rgba(52,199,89,0.08);border:1px solid var(--green);border-radius:8px;padding:8px;font-size:11px;font-weight:700;color:var(--green);align-items:center;gap:8px;"><i class="ph-bold ph-file-check" style="font-size:16px;"></i><span id="ct-pay-foto-name">Archivo cargado</span></div>
+                </div>
+                <div style="font-size:11px;font-weight:900;color:var(--gray);text-transform:uppercase;margin-bottom:10px;"><i class="ph-bold ph-pencil"></i> Paso 2 — Verificar / Completar datos</div>
+                <div style="display:flex;gap:10px;">
+                    <div style="flex:1;"><label class="inp-lbl">Monto (Bs)</label><input type="number" id="ct-pay-monto" class="inp-std" placeholder="0.00" style="margin-bottom:0;" inputmode="decimal"></div>
+                    <div style="flex:1;"><label class="inp-lbl">Fecha</label><input type="date" id="ct-pay-fecha" class="inp-std" style="margin-bottom:0;"></div>
+                </div>
+                <label class="inp-lbl" style="margin-top:12px;">Nota / Concepto</label>
+                <input type="text" id="ct-pay-nota" class="inp-std" placeholder="Ej: Anticipo, Pago parcial..." style="margin-bottom:0;">
+            </div>
+            <div style="padding:14px 20px;padding-bottom:max(14px,env(safe-area-inset-bottom));border-top:1px solid var(--border);flex-shrink:0;background:var(--card);">
+                <button id="btn-guardar-ct-pay" onclick="guardarPagoCT()" style="background:var(--blue);color:white;border:none;padding:16px;font-size:15px;font-weight:900;width:100%;border-radius:14px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;transition:opacity .2s;"><i class="ph-bold ph-check-circle"></i> Guardar Pago</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ================================================================ -->
+    <!-- MODAL: Exportar consolidado de contratistas                       -->
+    <!-- ================================================================ -->
+    <div id="mod-export-ct" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.7);z-index:3000;backdrop-filter:blur(4px);align-items:center;justify-content:center;">
+        <div style="background:var(--card);border-radius:20px;padding:24px;max-width:420px;width:90%;max-height:85vh;overflow-y:auto;">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;">
+                <h3 style="margin:0;color:var(--purple);font-size:16px;display:flex;align-items:center;gap:8px;"><i class="ph-bold ph-file-pdf"></i> Exportar Consolidado</h3>
+                <button onclick="document.getElementById('mod-export-ct').style.display='none'" style="background:var(--bg);border:none;width:32px;height:32px;border-radius:50%;cursor:pointer;font-size:18px;color:var(--gray);"><i class="ph-bold ph-x"></i></button>
+            </div>
+            <div style="font-size:12px;color:var(--gray);margin-bottom:14px;">Proyectos seleccionados:</div>
+            <div id="export-ct-proj-list" style="background:var(--bg);border-radius:10px;padding:12px;margin-bottom:16px;font-size:12px;"></div>
+            <div style="background:rgba(175,82,222,0.08);border:1px dashed var(--purple);border-radius:10px;padding:12px;font-size:12px;color:var(--gray);line-height:1.5;margin-bottom:16px;"><i class="ph-bold ph-info" style="color:var(--purple);"></i> El PDF incluye descripción de contratos, anticipos, tareas y anexos de comprobantes con el logo Rubik.</div>
+            <button onclick="exportarConsolidadoCT()" style="background:var(--purple);color:white;border:none;padding:16px;font-size:14px;font-weight:900;width:100%;border-radius:14px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;"><i class="ph-bold ph-file-pdf"></i> Generar PDF</button>
         </div>
     </div>
 
@@ -616,6 +688,7 @@
         document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
         document.getElementById('panel-' + tabId).classList.add('active');
         btn.classList.add('active');
+        if (tabId === 'contratistas') initContratistasTab();
     }
 
     function toggleFacturaFields(tipo) {
@@ -3129,6 +3202,497 @@
             if (btn) { btn.disabled = false; btn.innerHTML = '<i class="ph-bold ph-check-circle"></i> Guardar Anticipo'; }
         }
     };
+
+
+    // ══════════════════════════════════════════════════════════════════════════
+    // CONTRATISTAS — Consolidado Multi-Proyecto
+    // ══════════════════════════════════════════════════════════════════════════
+    let _ctPayData = null; // { cid, pid, licId, workerName }
+    let _ctPayFile = null;
+
+    // Called when Contratistas tab is first activated
+    function initContratistasTab() {
+        const sel = document.getElementById('ct-cliente-sel');
+        if (sel.options.length > 1) return; // already populated
+        // Populate client selector from proyectosData
+        const cids = Object.keys(proyectosData || {});
+        cids.forEach(cid => {
+            const opt = document.createElement('option');
+            opt.value = cid;
+            // Try to get a friendly name from first project
+            const pData = proyectosData[cid] || {};
+            const names = Object.values(pData).map(p => p && p.nombre_cliente ? p.nombre_cliente : '').filter(Boolean);
+            opt.textContent = names[0] || cid;
+            sel.appendChild(opt);
+        });
+        // Pre-select from localStorage
+        const savedCid = localStorage.getItem('rubik_client_id');
+        if (savedCid && proyectosData[savedCid]) {
+            sel.value = savedCid;
+            cargarProyectosCT();
+        }
+    }
+
+    function cargarProyectosCT() {
+        const cid = document.getElementById('ct-cliente-sel').value;
+        const container = document.getElementById('ct-proyectos-list');
+        if (!cid) { container.innerHTML = '<span style="color:var(--gray)">Selecciona un cliente primero...</span>'; return; }
+        const pData = proyectosData[cid] || {};
+        const pids = Object.keys(pData);
+        if (!pids.length) { container.innerHTML = '<span style="color:var(--gray)">Este cliente no tiene proyectos.</span>'; return; }
+        container.innerHTML = '';
+        pids.forEach(pid => {
+            const p = pData[pid];
+            if (!p) return;
+            const label = document.createElement('label');
+            label.style.cssText = 'display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px dashed var(--border);cursor:pointer;font-size:13px;font-weight:700;';
+            const cb = document.createElement('input');
+            cb.type = 'checkbox';
+            cb.value = pid;
+            cb.checked = true;
+            cb.style.cssText = 'width:16px;height:16px;accent-color:var(--blue);';
+            const span = document.createElement('span');
+            span.textContent = p.nombre || pid;
+            label.appendChild(cb);
+            label.appendChild(span);
+            container.appendChild(label);
+        });
+    }
+
+    function _ctGetSelectedPids() {
+        const cid = document.getElementById('ct-cliente-sel').value;
+        const checkboxes = document.querySelectorAll('#ct-proyectos-list input[type=checkbox]:checked');
+        return { cid, pids: Array.from(checkboxes).map(cb => cb.value) };
+    }
+
+    function cargarYRenderContratistas() {
+        const { cid, pids } = _ctGetSelectedPids();
+        if (!cid || !pids.length) { alert('Seleccioná al menos un proyecto.'); return; }
+        const container = document.getElementById('ct-lista');
+        const kpisEl = document.getElementById('ct-kpis');
+        container.innerHTML = '<div class="empty-msg">Cargando...</div>';
+
+        // Collect all non-supervisor licitaciones from selected projects
+        const allLics = []; // { cid, pid, pid_nombre, licId, lic }
+        const pData = proyectosData[cid] || {};
+        pids.forEach(pid => {
+            const proy = pData[pid] || {};
+            const lics = proy.licitaciones || {};
+            Object.entries(lics).forEach(([licId, lic]) => {
+                if (!lic || lic.is_supervision) return;
+                if (!lic.worker_name && !lic.nombre_trabajador) return;
+                allLics.push({ cid, pid, pid_nombre: proy.nombre || pid, licId, lic });
+            });
+        });
+
+        if (!allLics.length) {
+            container.innerHTML = '<div class="empty-msg">No hay contratos de contratistas en los proyectos seleccionados.</div>';
+            kpisEl.style.display = 'none';
+            return;
+        }
+
+        // Group by worker_name
+        const byWorker = {};
+        allLics.forEach(item => {
+            const name = item.lic.worker_name || item.lic.nombre_trabajador || 'Sin nombre';
+            if (!byWorker[name]) byWorker[name] = [];
+            byWorker[name].push(item);
+        });
+
+        // Compute global KPIs
+        let totalAcordado = 0, totalPagado = 0;
+        allLics.forEach(({ lic }) => {
+            totalAcordado += parseFloat(lic.precio_final || lic.precio_propuesto || 0);
+            const pagos = lic.pagos ? Object.values(lic.pagos) : [];
+            pagos.forEach(p => { totalPagado += parseFloat(p.monto || 0); });
+        });
+        const totalSaldo = totalAcordado - totalPagado;
+
+        kpisEl.style.cssText = 'display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:14px;text-align:center;';
+        kpisEl.innerHTML = `
+            <div style="background:var(--card);border-radius:12px;padding:12px;border:1px solid var(--border);">
+                <div class="b-lbl">Total Contratado</div>
+                <div class="b-val" style="color:var(--blue);">${fMoney(totalAcordado)} Bs</div>
+            </div>
+            <div style="background:var(--card);border-radius:12px;padding:12px;border:1px solid var(--border);">
+                <div class="b-lbl">Desembolsado</div>
+                <div class="b-val" style="color:var(--orange);">${fMoney(totalPagado)} Bs</div>
+            </div>
+            <div style="background:var(--card);border-radius:12px;padding:12px;border:1px solid var(--border);">
+                <div class="b-lbl">Saldo</div>
+                <div class="b-val" style="color:${totalSaldo>0?'var(--red)':'var(--green)'};">${fMoney(totalSaldo)} Bs</div>
+            </div>`;
+
+        container.innerHTML = '';
+        Object.entries(byWorker).forEach(([workerName, items]) => {
+            let wAcordado = 0, wPagado = 0;
+            items.forEach(({ lic }) => {
+                wAcordado += parseFloat(lic.precio_final || lic.precio_propuesto || 0);
+                const pg = lic.pagos ? Object.values(lic.pagos) : [];
+                pg.forEach(p => { wPagado += parseFloat(p.monto || 0); });
+            });
+            const wSaldo = wAcordado - wPagado;
+
+            const card = document.createElement('div');
+            card.className = 'generic-card';
+            card.style.marginBottom = '16px';
+
+            let contractsHtml = '';
+            items.forEach(({ pid_nombre, licId, lic, cid: lCid, pid }) => {
+                const pagos = lic.pagos ? Object.values(lic.pagos).sort((a,b)=>(a.timestamp||0)-(b.timestamp||0)) : [];
+                const licPagado = pagos.reduce((s,p) => s + parseFloat(p.monto||0), 0);
+                const licAcordado = parseFloat(lic.precio_final || lic.precio_propuesto || 0);
+                const licSaldo = licAcordado - licPagado;
+                const pct = licAcordado > 0 ? Math.round(licPagado/licAcordado*100) : 0;
+
+                // Tareas
+                const tareas = lic.tareas ? Object.values(lic.tareas) : [];
+                let tareasHtml = '';
+                if (tareas.length) {
+                    tareasHtml = `<div style="margin:10px 0 6px;font-size:10px;font-weight:900;color:var(--gray);text-transform:uppercase;">Tareas</div>
+                    <table style="width:100%;font-size:11px;border-collapse:collapse;">
+                        <thead><tr style="background:var(--bg);">
+                            <th style="text-align:left;padding:4px;font-weight:700;">Descripción</th>
+                            <th style="text-align:right;padding:4px;font-weight:700;">Cant</th>
+                            <th style="text-align:right;padding:4px;font-weight:700;">P.U.</th>
+                            <th style="text-align:right;padding:4px;font-weight:700;">Total</th>
+                        </tr></thead><tbody>` +
+                    tareas.map(t => `<tr style="border-top:1px dashed var(--border);">
+                        <td style="padding:4px;max-width:120px;">${t.task_name||t.d||'—'}</td>
+                        <td style="text-align:right;padding:4px;">${t.cant||'—'} ${t.und||''}</td>
+                        <td style="text-align:right;padding:4px;">${fMoney(t.pu||0)}</td>
+                        <td style="text-align:right;padding:4px;">${fMoney(t.subtotal||0)}</td>
+                    </tr>`).join('') + `</tbody></table>`;
+                }
+
+                // Pagos
+                let pagosHtml = '';
+                if (pagos.length) {
+                    pagosHtml = `<div style="margin:10px 0 6px;font-size:10px;font-weight:900;color:var(--gray);text-transform:uppercase;">Pagos registrados</div>`;
+                    pagos.forEach(p => {
+                        const hasFoto = !!p.comprobante;
+                        pagosHtml += `<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-top:1px dashed var(--border);font-size:12px;">
+                            <div style="flex:1;"><b>${p.fecha||'—'}</b> ${p.nota?'— '+p.nota:''}</div>
+                            <div style="font-weight:900;color:var(--text);">${fMoney(p.monto)} Bs</div>
+                            ${hasFoto?`<a href="${p.comprobante}" target="_blank" style="color:var(--blue);font-size:10px;font-weight:800;">VER</a>`:''}
+                        </div>`;
+                    });
+                }
+
+                const statusColor = licSaldo <= 0 ? 'var(--green)' : 'var(--orange)';
+                const statusLabel = licSaldo <= 0 ? '✓ LIQUIDADO' : `Saldo: ${fMoney(licSaldo)} Bs`;
+
+                const uid = `ct_${lCid}_${pid}_${licId}`.replace(/[^a-zA-Z0-9_]/g, '_');
+                contractsHtml += `<div style="border:1px solid var(--border);border-radius:12px;margin-bottom:10px;overflow:hidden;">
+                    <div style="background:var(--bg);padding:10px 12px;display:flex;justify-content:space-between;align-items:center;cursor:pointer;" onclick="toggleCTDetail('${uid}')">
+                        <div>
+                            <div style="font-size:12px;font-weight:900;color:var(--text);">${pid_nombre}</div>
+                            <div style="font-size:10px;color:var(--gray);margin-top:2px;">${lic.tareas?Object.keys(lic.tareas).length:0} tarea(s) · Acordado: ${fMoney(licAcordado)} Bs</div>
+                        </div>
+                        <div style="text-align:right;">
+                            <div style="font-size:12px;font-weight:900;color:${statusColor};">${statusLabel}</div>
+                            <div style="font-size:10px;color:var(--gray);">${pct}% desembolsado</div>
+                        </div>
+                    </div>
+                    <div style="background:var(--bg);height:6px;"><div style="height:100%;background:var(--blue);width:${Math.min(pct,100)}%;border-radius:3px;"></div></div>
+                    <div id="${uid}" style="display:none;padding:12px;">
+                        ${tareasHtml}
+                        ${pagosHtml}
+                        <button onclick="abrirPagoCT('${lCid}','${pid}','${licId}','${workerName.replace(/'/g,"\\'")}',${licAcordado},${licPagado})" style="background:var(--blue);color:#fff;border:none;border-radius:10px;padding:10px;font-size:12px;font-weight:900;width:100%;margin-top:10px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;"><i class="ph-bold ph-plus-circle"></i> Registrar Pago</button>
+                    </div>
+                </div>`;
+            });
+
+            card.innerHTML = `
+                <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px;padding-bottom:12px;border-bottom:1px solid var(--border);">
+                    <div>
+                        <div style="font-size:16px;font-weight:900;">${workerName}</div>
+                        <div style="font-size:11px;color:var(--gray);margin-top:3px;">${items.length} contrato(s) en proyectos seleccionados</div>
+                    </div>
+                    <div style="text-align:right;">
+                        <div style="font-size:11px;font-weight:700;color:var(--gray);">ACORDADO</div>
+                        <div style="font-size:17px;font-weight:900;color:var(--blue);">${fMoney(wAcordado)} Bs</div>
+                        <div style="font-size:11px;color:${wSaldo>0?'var(--red)':'var(--green)'};">${wSaldo>0?'Saldo: '+fMoney(wSaldo)+' Bs':'✓ Liquidado'}</div>
+                    </div>
+                </div>
+                ${contractsHtml}`;
+            container.appendChild(card);
+        });
+    }
+
+    function toggleCTDetail(uid) {
+        const el = document.getElementById(uid);
+        if (el) el.style.display = el.style.display === 'none' ? 'block' : 'none';
+    }
+
+    function abrirPagoCT(cid, pid, licId, workerName, acordado, pagado) {
+        _ctPayData = { cid, pid, licId, workerName };
+        _ctPayFile = null;
+        document.getElementById('ct-pay-name').textContent = workerName;
+        document.getElementById('ct-pay-sub').textContent = `Saldo: ${fMoney(acordado - pagado)} Bs`;
+        document.getElementById('ct-pay-monto').value = '';
+        document.getElementById('ct-pay-fecha').valueAsDate = new Date();
+        document.getElementById('ct-pay-nota').value = '';
+        document.getElementById('ct-pay-foto-prev').style.display = 'none';
+        document.getElementById('btn-ia-ct-pay').style.display = 'none';
+        document.getElementById('mod-pago-ct').style.display = 'block';
+    }
+
+    window.onCTPayFoto = function(input) {
+        const file = input.files[0];
+        if (!file) return;
+        _ctPayFile = file;
+        document.getElementById('ct-pay-foto-prev').style.display = 'flex';
+        document.getElementById('ct-pay-foto-name').textContent = file.name;
+        document.getElementById('btn-ia-ct-pay').style.display = 'flex';
+    };
+
+    window.leerComprobanteCT = async function() {
+        if (!_ctPayFile) return;
+        const btn = document.getElementById('btn-ia-ct-pay');
+        btn.innerHTML = '<div class="spinner" style="width:16px;height:16px;margin:0;"></div>';
+        try {
+            const reader = new FileReader();
+            const b64 = await new Promise(res => { reader.onload = e => res(e.target.result); reader.readAsDataURL(_ctPayFile); });
+            const mime = _ctPayFile.type || 'image/jpeg';
+            const token = firebase.auth().currentUser ? await firebase.auth().currentUser.getIdToken() : null;
+            const headers = { 'Content-Type': 'application/json' };
+            if (token) headers['Authorization'] = 'Bearer ' + token;
+            const resp = await fetch('/api/gemini', {
+                method: 'POST', headers,
+                body: JSON.stringify({
+                    systemInstruction: { parts: [{ text: 'Extrae del comprobante: monto (número), fecha (YYYY-MM-DD). Responde SOLO JSON: {"monto": 0, "fecha": "YYYY-MM-DD"}' }] },
+                    contents: [{ role: 'user', parts: [{ text: 'Lee este comprobante.' }, { inlineData: { mimeType: mime, data: b64.split(',')[1] } }] }]
+                })
+            });
+            const data = await resp.json();
+            let txt = data?.candidates?.[0]?.content?.parts?.[0]?.text || '{}';
+            txt = txt.replace(/```json|```/g,'').trim();
+            const parsed = JSON.parse(txt);
+            if (parsed.monto) document.getElementById('ct-pay-monto').value = parseFloat(parsed.monto);
+            if (parsed.fecha) document.getElementById('ct-pay-fecha').value = parsed.fecha;
+        } catch(e) { alert('No se pudo leer el comprobante.'); }
+        finally { btn.innerHTML = '<i class="ph-bold ph-magic-wand" style="font-size:20px;"></i><span>Leer IA</span>'; }
+    };
+
+    window.guardarPagoCT = async function() {
+        const monto = parseFloat(document.getElementById('ct-pay-monto').value);
+        const fecha = document.getElementById('ct-pay-fecha').value;
+        const nota = document.getElementById('ct-pay-nota').value.trim();
+        if (!monto || monto <= 0) return alert('Ingresá un monto válido.');
+        if (!fecha) return alert('Seleccioná una fecha.');
+        if (!_ctPayData) return;
+
+        const btn = document.getElementById('btn-guardar-ct-pay');
+        btn.disabled = true; btn.innerHTML = '<i class="ph-bold ph-spinner"></i> Guardando...';
+
+        let comprobanteUrl = null;
+        if (_ctPayFile) {
+            try {
+                const ref = storage.ref(`anticipos/${Date.now()}_${_ctPayFile.name}`);
+                await ref.put(_ctPayFile);
+                comprobanteUrl = await ref.getDownloadURL();
+            } catch(e) { console.warn('No se pudo subir comprobante:', e.message); }
+        }
+
+        try {
+            const { cid, pid, licId } = _ctPayData;
+            await db.ref(`proyectos/${cid}/${pid}/licitaciones/${licId}/pagos`).push({
+                monto, fecha, nota: nota || 'Pago contratista',
+                comprobante: comprobanteUrl,
+                timestamp: Date.now()
+            });
+            // Refresh local data
+            const snap = await db.ref(`proyectos/${cid}/${pid}/licitaciones/${licId}`).once('value');
+            if (snap.exists() && proyectosData[cid] && proyectosData[cid][pid]) {
+                proyectosData[cid][pid].licitaciones[licId] = snap.val();
+            }
+            document.getElementById('mod-pago-ct').style.display = 'none';
+            _ctPayData = null;
+            cargarYRenderContratistas();
+            alert('Pago registrado correctamente.');
+        } catch(e) {
+            alert('Error al guardar: ' + e.message);
+        } finally {
+            btn.disabled = false; btn.innerHTML = '<i class="ph-bold ph-check-circle"></i> Guardar Pago';
+        }
+    };
+
+    function abrirExportCT() {
+        const { cid, pids } = _ctGetSelectedPids();
+        if (!cid || !pids.length) { alert('Seleccioná proyectos primero.'); return; }
+        const pData = proyectosData[cid] || {};
+        const listEl = document.getElementById('export-ct-proj-list');
+        listEl.innerHTML = pids.map(pid => `<div style="padding:4px 0;border-bottom:1px dashed var(--border);">• ${(pData[pid]&&pData[pid].nombre)||pid}</div>`).join('');
+        const mod = document.getElementById('mod-export-ct');
+        mod.style.display = 'flex';
+    }
+
+    async function exportarConsolidadoCT() {
+        const { cid, pids } = _ctGetSelectedPids();
+        if (!cid || !pids.length) { alert('Seleccioná proyectos primero.'); return; }
+        document.getElementById('mod-export-ct').style.display = 'none';
+        document.getElementById('loader-txt').textContent = 'Generando PDF Consolidado...';
+        document.getElementById('global-loader').style.display = 'flex';
+
+        try {
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF({ unit: 'mm', format: 'a4' });
+            const margin = 14;
+            const pData = proyectosData[cid] || {};
+
+            // Load logo
+            let logoB64 = null;
+            try {
+                const blob = await fetch('/LOGO-IA-RUBIK.jpg').then(r => r.ok ? r.blob() : null);
+                if (blob) logoB64 = await new Promise(res => { const fr = new FileReader(); fr.onload=()=>res(fr.result); fr.readAsDataURL(blob); });
+            } catch(e) {}
+
+            const fM = n => parseFloat(n||0).toLocaleString('es-BO', {minimumFractionDigits:2, maximumFractionDigits:2});
+            const today = new Date().toLocaleDateString('es-BO');
+
+            function addPageHeader(title, sub) {
+                doc.setFillColor(0,122,255); doc.rect(0,0,210,28,'F');
+                if (logoB64) doc.addImage(logoB64,'JPEG',4,3,22,22);
+                doc.setTextColor(255,255,255); doc.setFont(undefined,'bold'); doc.setFontSize(16);
+                doc.text(title, 105, 13, {align:'center'});
+                doc.setFontSize(9); doc.setFont(undefined,'normal');
+                doc.text(sub, 105, 22, {align:'center'});
+                doc.setTextColor(0);
+                return 34;
+            }
+
+            // Collect all licitaciones grouped by worker
+            const allItems = [];
+            pids.forEach(pid => {
+                const proy = pData[pid] || {};
+                const lics = proy.licitaciones || {};
+                Object.entries(lics).forEach(([licId, lic]) => {
+                    if (!lic || lic.is_supervision) return;
+                    if (!lic.worker_name && !lic.nombre_trabajador) return;
+                    allItems.push({ pid, pid_nombre: proy.nombre||pid, licId, lic });
+                });
+            });
+
+            // Group by worker
+            const byWorker = {};
+            allItems.forEach(item => {
+                const name = item.lic.worker_name || item.lic.nombre_trabajador || 'Sin nombre';
+                if (!byWorker[name]) byWorker[name] = [];
+                byWorker[name].push(item);
+            });
+
+            let firstPage = true;
+            const anexosImgs = []; // { label, url }
+
+            for (const [workerName, items] of Object.entries(byWorker)) {
+                let wAcordado = 0, wPagado = 0;
+                items.forEach(({ lic }) => {
+                    wAcordado += parseFloat(lic.precio_final||lic.precio_propuesto||0);
+                    const pg = lic.pagos ? Object.values(lic.pagos) : [];
+                    pg.forEach(p => { wPagado += parseFloat(p.monto||0); });
+                });
+
+                if (!firstPage) doc.addPage();
+                firstPage = false;
+                let y = addPageHeader('CONSOLIDADO DE CONTRATOS', `CONTRATISTA: ${workerName}   |   ${today}`);
+
+                // Worker summary row
+                doc.setFillColor(240,240,250);
+                doc.rect(margin, y, 210-margin*2, 14, 'F');
+                doc.setFontSize(11); doc.setFont(undefined,'bold');
+                doc.text(workerName, margin+4, y+6);
+                doc.setFontSize(9); doc.setFont(undefined,'normal');
+                doc.text(`Total acordado: ${fM(wAcordado)} Bs   |   Desembolsado: ${fM(wPagado)} Bs   |   Saldo: ${fM(wAcordado-wPagado)} Bs`, margin+4, y+12);
+                y += 18;
+
+                for (const { pid_nombre, licId, lic } of items) {
+                    const pagos = lic.pagos ? Object.values(lic.pagos).sort((a,b)=>(a.timestamp||0)-(b.timestamp||0)) : [];
+                    const licPagado = pagos.reduce((s,p)=>s+parseFloat(p.monto||0),0);
+                    const licAcordado = parseFloat(lic.precio_final||lic.precio_propuesto||0);
+                    const licSaldo = licAcordado - licPagado;
+
+                    if (y > 240) { doc.addPage(); y = addPageHeader('CONSOLIDADO DE CONTRATOS (cont.)', `CONTRATISTA: ${workerName}   |   ${today}`); }
+
+                    // Project/contract header
+                    doc.setFontSize(10); doc.setFont(undefined,'bold'); doc.setTextColor(0,90,200);
+                    doc.text(`Proyecto: ${pid_nombre}`, margin, y); y += 5;
+                    doc.setTextColor(0); doc.setFont(undefined,'normal'); doc.setFontSize(8);
+                    doc.text(`Acordado: ${fM(licAcordado)} Bs   Pagado: ${fM(licPagado)} Bs   Saldo: ${fM(licSaldo)} Bs   Estado: ${licSaldo<=0?'LIQUIDADO':'PENDIENTE'}`, margin, y); y += 5;
+
+                    // Tareas table
+                    const tareas = lic.tareas ? Object.values(lic.tareas) : [];
+                    if (tareas.length) {
+                        doc.autoTable({
+                            startY: y,
+                            head: [['Tarea / Descripción','Und','Cant','P.U. (Bs)','Subtotal (Bs)']],
+                            body: tareas.map(t => [t.task_name||t.d||'—', t.und||'glb', t.cant||'', fM(t.pu||0), fM(t.subtotal||0)]),
+                            styles: { fontSize: 8, cellPadding: 2 },
+                            headStyles: { fillColor: [0,122,255], textColor: 255, fontStyle: 'bold' },
+                            columnStyles: { 0:{cellWidth:75}, 1:{cellWidth:15}, 2:{cellWidth:15}, 3:{cellWidth:35}, 4:{cellWidth:35} },
+                            margin: { left: margin, right: margin }
+                        });
+                        y = doc.lastAutoTable.finalY + 4;
+                    }
+
+                    // Pagos table
+                    if (pagos.length) {
+                        doc.setFontSize(8); doc.setFont(undefined,'bold'); doc.text('Historial de pagos:', margin, y); y += 3;
+                        doc.autoTable({
+                            startY: y,
+                            head: [['Fecha','Concepto','Monto (Bs)','Comprobante']],
+                            body: pagos.map((p, pi) => {
+                                const hasFoto = !!p.comprobante;
+                                if (hasFoto) anexosImgs.push({ label: `${workerName} / ${pid_nombre} — Pago ${pi+1} (${p.fecha||'—'}) — ${fM(p.monto)} Bs`, url: p.comprobante });
+                                return [p.fecha||'—', p.nota||'—', fM(p.monto), hasFoto?'Anexo '+anexosImgs.length:'—'];
+                            }),
+                            styles: { fontSize: 8, cellPadding: 2 },
+                            headStyles: { fillColor: [100,100,100], textColor: 255, fontStyle: 'bold' },
+                            columnStyles: { 0:{cellWidth:28}, 1:{cellWidth:80}, 2:{cellWidth:32}, 3:{cellWidth:35} },
+                            margin: { left: margin, right: margin }
+                        });
+                        y = doc.lastAutoTable.finalY + 6;
+                    }
+                    y += 3;
+                }
+            }
+
+            // ── Annexes: receipt images ──────────────────────────────────────────
+            for (const anx of anexosImgs) {
+                doc.addPage();
+                let ay = addPageHeader('ANEXO — COMPROBANTE DE PAGO', anx.label.substring(0,80));
+                try {
+                    const imgBlob = await fetch(anx.url).then(r => r.ok ? r.blob() : null);
+                    if (imgBlob) {
+                        const imgB64 = await new Promise(res => { const fr = new FileReader(); fr.onload=()=>res(fr.result); fr.readAsDataURL(imgBlob); });
+                        const mime = imgBlob.type || 'image/jpeg';
+                        const tmp = new Image();
+                        await new Promise(res => { tmp.onload = res; tmp.src = imgB64; });
+                        const ar = tmp.naturalWidth / tmp.naturalHeight;
+                        const maxW = 180, maxH = 240;
+                        let iw = maxW, ih = maxW / ar;
+                        if (ih > maxH) { ih = maxH; iw = maxH * ar; }
+                        doc.addImage(imgB64, mime.includes('png')?'PNG':'JPEG', (210-iw)/2, ay, iw, ih);
+                    }
+                } catch(e) { doc.setFontSize(9); doc.text('(Imagen no disponible)', margin, ay+10); }
+            }
+
+            const blobPdf = doc.output('blob');
+            const url = URL.createObjectURL(blobPdf);
+            const a = document.createElement('a');
+            a.href = url; a.download = `Consolidado_Contratistas_${today.replace(/\//g,'-')}.pdf`; a.click();
+            setTimeout(()=>URL.revokeObjectURL(url), 5000);
+
+        } catch(e) {
+            alert('Error al generar PDF: ' + e.message);
+            console.error(e);
+        } finally {
+            document.getElementById('global-loader').style.display = 'none';
+        }
+    }
+    // ══════════════════════════════════════════════════════════════════════════
+    // FIN CONTRATISTAS
+    // ══════════════════════════════════════════════════════════════════════════
 
     </script>
 <script src="/paste-image.js"></script>
