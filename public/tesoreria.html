@@ -3219,6 +3219,7 @@
                         <div style="font-size:10px;color:var(--gray);">${fMoneyCT(wPag)} / ${fMoneyCT(wAcord)} Bs pagado</div>
                     </div>
                 </div>
+                <button onclick="event.stopPropagation();exportarPDFContratista('${workerName.replace(/'/g,"\\'")}')" style="width:100%;margin-top:10px;padding:9px;background:rgba(0,0,0,0.06);border:1px solid var(--border);color:var(--text);border-radius:10px;font-size:12px;font-weight:800;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;"><i class="ph-bold ph-file-pdf"></i> PDF Individual</button>
                 <div id="ct-det-${uid}" style="display:none;margin-top:10px;border-top:1px solid var(--border);padding-top:10px;">${histHtml}</div>
             </div>`;
         });
@@ -3295,23 +3296,58 @@
         document.getElementById('mod-export-ct').style.display = 'flex';
     }
 
-    async function exportarConsolidadoCT() {
-        const jspdfSrc = 'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js';
-        const atSrc = 'https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js';
-        async function loadScript(src) { return new Promise((res,rej)=>{ if(document.querySelector(`script[src="${src}"]`))return res(); const s=document.createElement('script');s.src=src;s.onload=res;s.onerror=rej;document.head.appendChild(s); }); }
-        await loadScript(jspdfSrc); await loadScript(atSrc);
-        const { jsPDF } = window.jspdf;
+    // Helper: fetch image as base64 (tries fetch first, falls back to Image proxy)
+    async function _ctFetchB64(url) {
+        if (!url) return null;
+        try {
+            const resp = await fetch(url);
+            if (!resp.ok) throw new Error('fetch failed');
+            const blob = await resp.blob();
+            return await new Promise((res, rej) => { const fr = new FileReader(); fr.onload = () => res(fr.result); fr.onerror = rej; fr.readAsDataURL(blob); });
+        } catch(e) {
+            return await new Promise(res => {
+                const img = new Image(); img.crossOrigin = 'anonymous';
+                img.onload = () => { const cv = document.createElement('canvas'); cv.width=img.naturalWidth; cv.height=img.naturalHeight; cv.getContext('2d').drawImage(img,0,0); res(cv.toDataURL('image/jpeg')); };
+                img.onerror = () => res(null);
+                img.src = url;
+            });
+        }
+    }
 
-        let logoDataUrl = null;
-        try { const lb=await(await fetch('/LOGO-IA-RUBIK.jpg')).blob(); logoDataUrl=await new Promise(res=>{const r=new FileReader();r.onload=e=>res(e.target.result);r.readAsDataURL(lb);}); } catch(e) {}
+    async function _ctLoadJsPDF() {
+        async function ls(src) { return new Promise((res,rej)=>{ if(document.querySelector(`script[src="${src}"]`))return res(); const s=document.createElement('script');s.src=src;s.onload=res;s.onerror=rej;document.head.appendChild(s); }); }
+        await ls('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js');
+        await ls('https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js');
+    }
 
+    // Export a single contractor PDF  — called from the card button
+    window.exportarPDFContratista = async function(workerName) {
         const { cid, pids } = _ctGetSelectedPids();
+        if (!cid) return alert('Cargá los contratistas primero.');
         const pData = proyectosData[cid] || {};
-        const doc = new jsPDF({ unit:'mm', format:'a4' });
-        const pw = doc.internal.pageSize.getWidth();
-        let y = 0, firstPage = true;
-        const anexos = [];
+        // collect lics for this worker
+        const items = [];
+        pids.forEach(pid => {
+            const proy = pData[pid] || {};
+            Object.entries(proy.licitaciones || {}).forEach(([licId, lic]) => {
+                if (!lic || lic.is_supervision || lic.is_internal_assignment) return;
+                const name = lic.worker_name || lic.nombre_trabajador || lic.trabajador_nombre || lic.worker_id || 'Sin nombre';
+                if (name !== workerName) return;
+                items.push({ pid, pid_nombre: proy.nombre || pid, licId, lic });
+            });
+        });
+        if (!items.length) return alert('No se encontraron contratos.');
+        document.getElementById('global-loader') && (document.getElementById('global-loader').style.display = 'flex');
+        try {
+            await _ctGenerarPDFContratistaItems(workerName, items);
+        } catch(e) { alert('Error PDF: ' + e.message); console.error(e); }
+        finally { document.getElementById('global-loader') && (document.getElementById('global-loader').style.display = 'none'); }
+    };
 
+    async function exportarConsolidadoCT() {
+        const { cid, pids } = _ctGetSelectedPids();
+        if (!cid || !pids.length) { alert('Cargá los contratistas primero.'); return; }
+        const pData = proyectosData[cid] || {};
         const allLics = [];
         pids.forEach(pid => {
             const proy = pData[pid] || {};
@@ -3322,55 +3358,216 @@
         });
         const byWorker = {};
         allLics.forEach(item => {
-            const name = item.lic.worker_name || item.lic.nombre_trabajador || item.lic.worker_id || 'Sin nombre';
+            const name = item.lic.worker_name || item.lic.nombre_trabajador || item.lic.trabajador_nombre || item.lic.worker_id || 'Sin nombre';
             if (!byWorker[name]) byWorker[name] = [];
             byWorker[name].push(item);
         });
+        if (!Object.keys(byWorker).length) return alert('No hay contratos de contratistas en la selección.');
+        document.getElementById('global-loader') && (document.getElementById('global-loader').style.display = 'flex');
+        try {
+            // Generate one PDF per contractor, concatenated
+            for (const [workerName, items] of Object.entries(byWorker)) {
+                await _ctGenerarPDFContratistaItems(workerName, items);
+            }
+        } catch(e) { alert('Error PDF: ' + e.message); console.error(e); }
+        finally { document.getElementById('global-loader') && (document.getElementById('global-loader').style.display = 'none'); }
+        document.getElementById('mod-export-ct').style.display = 'none';
+    }
 
-        for (const [workerName, items] of Object.entries(byWorker)) {
+    async function _ctGenerarPDFContratistaItems(workerName, items) {
+        await _ctLoadJsPDF();
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF('p', 'mm', 'a4');
+        const margin = 14;
+        const pw = doc.internal.pageSize.getWidth();
+        const today = new Date().toLocaleDateString('es-BO');
+
+        // Load logo once
+        let logoB64 = null;
+        try {
+            const lb = await fetch('/LOGO-IA-RUBIK.jpg').then(r => { if(!r.ok) throw 0; return r.blob(); });
+            logoB64 = await new Promise((res,rej) => { const fr=new FileReader(); fr.onload=e=>res(e.target.result); fr.onerror=rej; fr.readAsDataURL(lb); });
+        } catch(e) {}
+
+        function drawHeader(doc, workerName, subtitle) {
+            // Black header strip
+            doc.setFillColor(0, 0, 0);
+            doc.rect(0, 0, pw, 28, 'F');
+            if (logoB64) doc.addImage(logoB64, 'JPEG', 4, 3, 22, 22);
+            doc.setFontSize(14); doc.setFont(undefined,'bold'); doc.setTextColor(255,255,255);
+            doc.text(workerName.toUpperCase(), pw/2, 11, {align:'center'});
+            doc.setFontSize(8); doc.setFont(undefined,'normal');
+            doc.text(subtitle || `Generado: ${today}`, pw/2, 18, {align:'center'});
+            doc.text('RUBIK BOLIVIA — CONSOLIDADO DE CONTRATOS', pw/2, 24, {align:'center'});
+            doc.setTextColor(0,0,0);
+        }
+
+        let firstPage = true;
+
+        for (const { pid_nombre, licId, lic } of items) {
             if (!firstPage) doc.addPage();
             firstPage = false;
-            doc.setFillColor(0,87,183); doc.rect(0,0,pw,28,'F');
-            if (logoDataUrl) doc.addImage(logoDataUrl,'JPEG',6,3,22,22);
-            doc.setFontSize(13); doc.setFont(undefined,'bold'); doc.setTextColor(255,255,255);
-            doc.text(`CONTRATISTA: ${workerName}`, pw/2, 12, {align:'center'});
-            doc.setFontSize(9); doc.setFont(undefined,'normal');
-            doc.text(`Generado: ${new Date().toLocaleDateString('es-BO')}`, pw/2, 22, {align:'center'});
-            doc.setTextColor(0,0,0); y = 34;
 
-            for (const { pid_nombre, licId, lic } of items) {
-                const acord = parseFloat(lic.precio_final||lic.precio_propuesto||0);
-                const pagos = Object.values(lic.pagos||{});
-                const pag = pagos.reduce((s,p)=>s+parseFloat(p.monto||0),0);
-                doc.setFillColor(240,245,255); doc.roundedRect(10,y,pw-20,20,3,3,'F');
-                doc.setFontSize(9); doc.setFont(undefined,'bold');
-                doc.text(`Proyecto: ${pid_nombre} — ${(lic.estado||'').toUpperCase()}`, 14, y+6);
-                doc.setFont(undefined,'normal'); doc.setFontSize(8);
-                doc.text(`Acordado: ${fMoneyCT(acord)} Bs`, 14, y+13);
-                doc.text(`Pagado: ${fMoneyCT(pag)} Bs`, 85, y+13);
-                doc.text(`Saldo: ${fMoneyCT(acord-pag)} Bs`, 150, y+13);
-                y += 24;
-                const tareas = Array.isArray(lic.tareas)?lic.tareas:Object.values(lic.tareas||{});
-                if (tareas.length) {
-                    doc.autoTable({ startY:y, margin:{left:10,right:10}, head:[['Tarea','Monto (Bs)']], body:tareas.map(t=>[t.task_name||t.desc||'',fMoneyCT(t.pu||t.precio||0)]), styles:{fontSize:8}, headStyles:{fillColor:[0,87,183]}, didDrawPage:(d)=>{y=d.cursor.y+4;} });
-                    y = doc.lastAutoTable.finalY + 6;
+            drawHeader(doc, workerName, `Proyecto: ${pid_nombre}  |  Fecha: ${today}`);
+            let y = 34;
+
+            // ── 1. Resumen financiero ──
+            const pagosArr = Object.values(lic.pagos || {}).sort((a,b)=>(a.fecha||'')>(b.fecha||'')?1:-1);
+            const acordado = parseFloat(lic.precio_final || lic.precio_propuesto || 0);
+            const pagado = pagosArr.reduce((s,p) => s+parseFloat(p.monto||0), 0);
+            const saldo = acordado - pagado;
+
+            doc.setFontSize(10); doc.setFont(undefined,'bold');
+            doc.text('1. RESUMEN FINANCIERO', margin, y); y += 4;
+            doc.autoTable({
+                startY: y,
+                head: [['CONCEPTO','MONTO']],
+                body: [
+                    ['ESTADO', (lic.estado||'').toUpperCase()],
+                    ['TIPO', lic.is_grafico ? 'Empresa Gráfica' : 'Contratista Obra'],
+                    ['MONTO ACORDADO', fMoneyCT(acordado) + ' Bs'],
+                    ['TOTAL PAGADO', fMoneyCT(pagado) + ' Bs'],
+                    ['SALDO PENDIENTE', fMoneyCT(saldo) + ' Bs']
+                ],
+                theme:'grid', headStyles:{fillColor:[0,0,0]}, styles:{fontSize:8},
+                columnStyles:{0:{fontStyle:'bold',cellWidth:80},1:{halign:'right'}},
+                margin:{left:margin,right:margin}
+            });
+            y = doc.lastAutoTable.finalY + 8;
+
+            // ── 2. Desglose técnico de tareas ──
+            const tareas = Array.isArray(lic.tareas) ? lic.tareas : Object.values(lic.tareas || {});
+            if (tareas.length) {
+                if (y > 240) { doc.addPage(); drawHeader(doc, workerName, `Proyecto: ${pid_nombre}  |  Desglose técnico`); y = 34; }
+                doc.setFontSize(10); doc.setFont(undefined,'bold');
+                doc.text('2. DESGLOSE TÉCNICO DE TAREAS', margin, y); y += 4;
+
+                // Group by parent (originIdx or parentDesc)
+                const groupOrder = [];
+                const groups = {};
+                tareas.forEach(t => {
+                    if (!t) return;
+                    const gk = t.originIdx !== undefined ? String(t.originIdx) : 'general';
+                    if (!groups[gk]) { groups[gk] = { parentDesc: t.parent_desc || t.parentDesc || t.desc || 'General', tasks: [] }; groupOrder.push(gk); }
+                    groups[gk].tasks.push(t);
+                });
+
+                const bodyData = [];
+                for (const gk of groupOrder) {
+                    const grp = groups[gk];
+                    bodyData.push([{ content: grp.parentDesc.toUpperCase(), colSpan: 5, styles:{fillColor:[230,240,255],fontStyle:'bold',fontSize:8,textColor:[0,80,180]} }]);
+                    for (const t of grp.tasks) {
+                        const cant = parseFloat(t.cant || 1);
+                        const pu = parseFloat(t.pu || t.precio || 0);
+                        const subtotal = parseFloat(t.subtotal || (cant * pu));
+                        // Medida si existe
+                        let medida = '';
+                        if (t.measures) {
+                            const tryM = (b,h) => (parseFloat(b)>0 && parseFloat(h)>0) ? `${parseFloat(b).toFixed(1)}×${parseFloat(h).toFixed(1)}cm` : null;
+                            if (t.measures.b) medida = tryM(t.measures.b, t.measures.h) || '';
+                            else {
+                                const ms = (Array.isArray(t.measures) ? t.measures : Object.values(t.measures)).filter(m=>m&&parseFloat(m.b)>0);
+                                if (ms.length) medida = tryM(ms[0].b, ms[0].h) || '';
+                            }
+                        }
+                        const taskLabel = (t.task_name || t.desc || '') + (medida ? `\n${medida}` : '');
+                        bodyData.push([taskLabel, cant, fMoneyCT(pu)+' Bs', fMoneyCT(subtotal)+' Bs', '']);
+                    }
                 }
-                if (pagos.length) {
-                    const rows = pagos.map(p => { if(p.comprobante) anexos.push({label:`Anexo ${anexos.length+1}`,url:p.comprobante}); return [p.fecha||'', p.concepto||'Pago', fMoneyCT(p.monto)+' Bs', p.comprobante?`Anexo ${anexos.length}`:'—']; });
-                    doc.autoTable({ startY:y, margin:{left:10,right:10}, head:[['Fecha','Concepto','Monto','Comprobante']], body:rows, styles:{fontSize:8}, headStyles:{fillColor:[52,199,89]}, didDrawPage:(d)=>{y=d.cursor.y+4;} });
-                    y = doc.lastAutoTable.finalY + 10;
+
+                // Load task images async before drawing
+                let imgIdx = 0;
+                for (const gk of groupOrder) {
+                    for (const t of groups[gk].tasks) {
+                        const imgSrc = t.img || t.imgRef || null;
+                        if (imgSrc) {
+                            const b64 = await _ctFetchB64(imgSrc);
+                            // find the corresponding body row
+                            bodyData.forEach(row => {
+                                if (Array.isArray(row) && row.length === 5 && row[4] === '' && !row[4]) {
+                                    // match by task name
+                                    const tn = t.task_name || t.desc || '';
+                                    if (row[0] && typeof row[0] === 'string' && row[0].startsWith(tn.substring(0,10))) {
+                                        row[4] = b64 || '';
+                                    }
+                                }
+                            });
+                        }
+                    }
+                }
+
+                doc.autoTable({
+                    startY: y, margin:{left:margin,right:margin},
+                    head: [['Tarea','Cant','P.U.','Subtotal','Img']],
+                    body: bodyData,
+                    theme:'grid',
+                    headStyles:{fillColor:[0,0,0],halign:'center',fontSize:8},
+                    styles:{fontSize:7,valign:'middle',overflow:'linebreak'},
+                    columnStyles:{0:{cellWidth:70},1:{cellWidth:12,halign:'center'},2:{cellWidth:28,halign:'right'},3:{cellWidth:28,halign:'right'},4:{cellWidth:28,halign:'center'}},
+                    didParseCell: d => { if(d.column.index===4 && d.cell.section==='body' && Array.isArray(d.row.raw)) { d.cell.text=''; d.cell.styles.minCellHeight=22; } },
+                    didDrawCell: d => { if(d.column.index===4 && d.cell.section==='body' && Array.isArray(d.row.raw)) { const img=d.row.raw[4]; if(img && typeof img==='string' && img.startsWith('data:image')) { const mime=img.startsWith('data:image/png')?'PNG':'JPEG'; doc.addImage(img,mime,d.cell.x+2,d.cell.y+2,24,18); } } }
+                });
+                y = doc.lastAutoTable.finalY + 8;
+
+                // Subtotal
+                const totalTareas = tareas.reduce((s,t)=>s+parseFloat(t.subtotal||t.pu||0),0);
+                if (y > 270) { doc.addPage(); drawHeader(doc,workerName,`Proyecto: ${pid_nombre}`); y=34; }
+                doc.setFontSize(9); doc.setFont(undefined,'bold');
+                doc.text(`TOTAL TAREAS: ${fMoneyCT(totalTareas)} Bs`, margin, y); y += 8;
+            }
+
+            // ── 3. Historial de pagos ──
+            if (pagosArr.length) {
+                if (y > 230) { doc.addPage(); drawHeader(doc,workerName,`Proyecto: ${pid_nombre}  |  Pagos`); y=34; }
+                doc.setFontSize(10); doc.setFont(undefined,'bold');
+                doc.text('3. HISTORIAL DE PAGOS', margin, y); y += 4;
+                doc.autoTable({
+                    startY: y, margin:{left:margin,right:margin},
+                    head: [['#','Fecha','Concepto','Monto','Comprobante']],
+                    body: pagosArr.map((p,i) => [i+1, p.fecha||'', p.concepto||p.nota||'Abono', fMoneyCT(p.monto)+' Bs', p.comprobante?'Adjunto':'—']),
+                    theme:'grid', headStyles:{fillColor:[52,199,89]}, styles:{fontSize:8},
+                    columnStyles:{0:{cellWidth:8,halign:'center'},3:{halign:'right'},4:{halign:'center'}},
+                    margin:{left:margin,right:margin}
+                });
+                y = doc.lastAutoTable.finalY + 8;
+
+                // Status line
+                if (y > 270) { doc.addPage(); drawHeader(doc,workerName,`Proyecto: ${pid_nombre}`); y=34; }
+                const ok = saldo <= 0;
+                doc.setFontSize(12); doc.setFont(undefined,'bold');
+                doc.setTextColor(...(ok?[52,199,89]:[255,149,0]));
+                doc.text(ok ? '✓ CONTRATO LIQUIDADO' : `SALDO PENDIENTE: ${fMoneyCT(saldo)} Bs`, margin, y);
+                doc.setTextColor(0,0,0); y += 10;
+
+                // ── 4. Comprobantes como imágenes ──
+                const conComp = pagosArr.filter(p => p.comprobante);
+                if (conComp.length) {
+                    doc.addPage(); drawHeader(doc,workerName,`Proyecto: ${pid_nombre}  |  Comprobantes`);
+                    doc.setFontSize(12); doc.setFont(undefined,'bold'); doc.setTextColor(52,199,89);
+                    doc.text('COMPROBANTES DE PAGO', margin, 34); doc.setTextColor(0,0,0);
+                    let cy = 42, cx = margin;
+                    const MAX_W = 85, MAX_H = 120, gap = 8;
+                    for (const p of conComp) {
+                        const b64 = await _ctFetchB64(p.comprobante);
+                        if (!b64) continue;
+                        const [natW, natH] = await new Promise(res => { const img=new Image(); img.onload=()=>res([img.naturalWidth||1,img.naturalHeight||1]); img.onerror=()=>res([1,1]); img.src=b64; });
+                        const ratio = natH/natW;
+                        let dw=MAX_W, dh=MAX_W*ratio;
+                        if (dh>MAX_H) { dh=MAX_H; dw=MAX_H/ratio; }
+                        if (cx+dw > 195) { cx=margin; cy+=MAX_H+14; }
+                        if (cy+dh+8 > 275) { doc.addPage(); drawHeader(doc,workerName,`Comprobantes`); cx=margin; cy=34; }
+                        doc.setFontSize(7); doc.setFont(undefined,'bold');
+                        doc.text(`${p.fecha||''} — ${fMoneyCT(p.monto||0)} Bs  |  ${p.concepto||'Pago'}`, cx, cy-2);
+                        const mime = b64.startsWith('data:image/png')?'PNG':'JPEG';
+                        doc.addImage(b64, mime, cx, cy, dw, dh);
+                        cx += dw+gap;
+                    }
                 }
             }
         }
-        for (const anx of anexos) {
-            doc.addPage();
-            doc.setFillColor(0,87,183); doc.rect(0,0,pw,18,'F');
-            doc.setFontSize(11); doc.setFont(undefined,'bold'); doc.setTextColor(255,255,255);
-            doc.text(anx.label, pw/2, 11, {align:'center'}); doc.setTextColor(0,0,0);
-            try { doc.addImage(anx.url,'JPEG',15,24,pw-30,150); } catch(e){}
-        }
-        document.getElementById('mod-export-ct').style.display = 'none';
-        doc.save(`Consolidado_Contratistas_${new Date().toLocaleDateString('es-BO').replace(/\//g,'-')}.pdf`);
+
+        const safeName = workerName.replace(/[^a-z0-9]/gi,'_').substring(0,30);
+        doc.save(`Contratista_${safeName}_${today.replace(/\//g,'-')}.pdf`);
     }
 
     </script>
