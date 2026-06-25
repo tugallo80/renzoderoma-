@@ -269,15 +269,16 @@
         });
 
         // Datos financieros
+        const safe = ref => db.ref(ref).once('value').catch(() => ({ val: () => null }));
         Promise.all([
-            db.ref(`proyectos/${cid}/${pid}/presupuesto`).once('value'),
-            db.ref(`proyectos/${cid}/${pid}/extras`).once('value'),
-            db.ref(`proyectos/${cid}/${pid}/licitaciones`).once('value'),
-            db.ref(`proyectos/${cid}/${pid}/gasto_total`).once('value'),
-            db.ref(`proyectos/${cid}/${pid}/monto_cierre`).once('value'),
-            db.ref(`proyectos/${cid}/${pid}/negociacion`).once('value'),
-            db.ref(`proyectos/${cid}/${pid}/factura_url`).once('value'),
-            db.ref(`caja_chica`).once('value')
+            safe(`proyectos/${cid}/${pid}/presupuesto`),
+            safe(`proyectos/${cid}/${pid}/extras`),
+            safe(`proyectos/${cid}/${pid}/licitaciones`),
+            safe(`proyectos/${cid}/${pid}/gasto_total`),
+            safe(`proyectos/${cid}/${pid}/monto_cierre`),
+            safe(`proyectos/${cid}/${pid}/negociacion`),
+            safe(`proyectos/${cid}/${pid}/factura_url`),
+            safe(`caja_chica`)
         ]).then(snaps => {
             let subtotalItems = 0; let desc = 0; let hasImp = false;
             let ppto = snaps[0].val();
