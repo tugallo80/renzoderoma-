@@ -2510,21 +2510,19 @@ LICITACIONES ACTUALES DEL PROYECTO:
     // PAGOS A CONTRATISTAS DEL PROYECTO
     // ═══════════════════════════════════════════════════════
 
-    function fMoneyL(n) { return Number(parseFloat(n)||0).toLocaleString('es-BO', {minimumFractionDigits:2,maximumFractionDigits:2}); }
-
     function renderPagosContratistas() {
         const lista = document.getElementById('ct-lista-lic');
         const kpisEl = document.getElementById('ct-kpis-lic');
         if (!lista) return;
 
-        // Filter: non-supervision, non-internal, aprobado/adjudicado/terminado
+        try {
+        // All external contractor licitaciones (any estado), excluding supervision and internal
         const lics = Object.entries(currentLics).filter(([, l]) =>
-            l && !l.is_supervision && !l.is_internal_assignment &&
-            (l.estado === 'aprobado' || l.estado === 'adjudicado' || l.estado === 'terminado')
+            l && !l.is_supervision && !l.is_internal_assignment
         );
 
         if (!lics.length) {
-            lista.innerHTML = '<div style="color:var(--gray);font-size:13px;padding:12px 0;">No hay contratos aprobados aún.</div>';
+            lista.innerHTML = '<div style="color:var(--gray);font-size:13px;padding:12px 0;">No hay contratos de contratistas en este proyecto.</div>';
             kpisEl.style.display = 'none';
             return;
         }
@@ -2547,15 +2545,15 @@ LICITACIONES ACTUALES DEL PROYECTO:
         kpisEl.innerHTML = `
             <div style="background:rgba(0,122,255,0.08);border:1px solid rgba(0,122,255,0.2);border-radius:12px;padding:12px;">
                 <div style="font-size:9px;font-weight:800;color:var(--gray);text-transform:uppercase;">Total Contratado</div>
-                <div style="font-size:15px;font-weight:900;color:var(--blue);">${fMoneyL(totAcord)} Bs</div>
+                <div style="font-size:15px;font-weight:900;color:var(--blue);">${fMoney(totAcord)} Bs</div>
             </div>
             <div style="background:rgba(255,149,0,0.08);border:1px solid rgba(255,149,0,0.2);border-radius:12px;padding:12px;">
                 <div style="font-size:9px;font-weight:800;color:var(--gray);text-transform:uppercase;">Desembolsado</div>
-                <div style="font-size:15px;font-weight:900;color:var(--orange);">${fMoneyL(totPag)} Bs</div>
+                <div style="font-size:15px;font-weight:900;color:var(--orange);">${fMoney(totPag)} Bs</div>
             </div>
             <div style="background:rgba(255,59,48,0.08);border:1px solid rgba(255,59,48,0.2);border-radius:12px;padding:12px;">
                 <div style="font-size:9px;font-weight:800;color:var(--gray);text-transform:uppercase;">Saldo</div>
-                <div style="font-size:15px;font-weight:900;color:${totAcord-totPag>0?'var(--red)':'var(--green)'};">${fMoneyL(totAcord-totPag)} Bs</div>
+                <div style="font-size:15px;font-weight:900;color:${totAcord-totPag>0?'var(--red)':'var(--green)'};">${fMoney(totAcord-totPag)} Bs</div>
             </div>`;
 
         lista.innerHTML = '';
@@ -2574,7 +2572,7 @@ LICITACIONES ACTUALES DEL PROYECTO:
                 pagos.forEach(p => {
                     histHtml += `<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px dashed var(--border);font-size:11px;">
                         <div><b>${p.concepto || 'Pago'}</b><div style="color:var(--gray);font-size:10px;">${p.fecha||''}</div></div>
-                        <div style="font-weight:900;color:var(--green);">+${fMoneyL(p.monto)} Bs</div>
+                        <div style="font-weight:900;color:var(--green);">+${fMoney(p.monto)} Bs</div>
                     </div>`;
                 });
                 // Pay button per licitacion
@@ -2588,19 +2586,23 @@ LICITACIONES ACTUALES DEL PROYECTO:
                         <div style="font-size:11px;color:var(--gray);margin-top:2px;">${items.length} contrato${items.length>1?'s':''}</div>
                     </div>
                     <div style="text-align:right;">
-                        <div style="font-size:13px;font-weight:900;color:${wSaldo>0?'var(--red)':'var(--green)'};">${wSaldo>0?'-':''}${fMoneyL(Math.abs(wSaldo))} Bs saldo</div>
-                        <div style="font-size:10px;color:var(--gray);">${fMoneyL(wPag)} / ${fMoneyL(wAcord)} Bs</div>
+                        <div style="font-size:13px;font-weight:900;color:${wSaldo>0?'var(--red)':'var(--green)'};">${wSaldo>0?'-':''}${fMoney(Math.abs(wSaldo))} Bs saldo</div>
+                        <div style="font-size:10px;color:var(--gray);">${fMoney(wPag)} / ${fMoney(wAcord)} Bs</div>
                     </div>
                 </div>
                 <div style="display:none;margin-top:12px;border-top:1px solid var(--border);padding-top:12px;">${histHtml}</div>
             </div>`;
         });
+        } catch(e) {
+            lista.innerHTML = '<div style="color:var(--red);font-size:12px;padding:8px;">Error al cargar contratos: ' + e.message + '</div>';
+            console.error('renderPagosContratistas:', e);
+        }
     }
 
     function abrirPagoLic(cidP, pidP, licId, workerName, acordado, pagado) {
         _pagoLicCtx = { cid: cidP, pid: pidP, licId, workerName };
         _pagoLicFile = null;
-        document.getElementById('pago-lic-worker-lbl').textContent = `${workerName} — Saldo: ${fMoneyL(acordado-pagado)} Bs`;
+        document.getElementById('pago-lic-worker-lbl').textContent = `${workerName} — Saldo: ${fMoney(acordado-pagado)} Bs`;
         document.getElementById('pago-lic-monto').value = '';
         document.getElementById('pago-lic-concepto').value = '';
         document.getElementById('pago-lic-fecha').value = new Date().toISOString().split('T')[0];
@@ -2687,8 +2689,7 @@ LICITACIONES ACTUALES DEL PROYECTO:
         const anexos = [];
 
         const lics = Object.entries(currentLics).filter(([, l]) =>
-            l && !l.is_supervision && !l.is_internal_assignment &&
-            (l.estado === 'aprobado' || l.estado === 'adjudicado' || l.estado === 'terminado')
+            l && !l.is_supervision && !l.is_internal_assignment
         );
         const byWorker = {};
         lics.forEach(([licId, lic]) => {
@@ -2725,9 +2726,9 @@ LICITACIONES ACTUALES DEL PROYECTO:
                 doc.setFontSize(9); doc.setFont(undefined,'bold');
                 doc.text(`Contrato ${lic.tipo||lic.lic_mode||'MO'} — Estado: ${(lic.estado||'').toUpperCase()}`, 14, y+6);
                 doc.setFont(undefined,'normal'); doc.setFontSize(8);
-                doc.text(`Acordado: ${fMoneyL(acordado)} Bs`, 14, y+12);
-                doc.text(`Pagado: ${fMoneyL(pagado)} Bs`, 75, y+12);
-                doc.text(`Saldo: ${fMoneyL(saldo)} Bs`, 135, y+12);
+                doc.text(`Acordado: ${fMoney(acordado)} Bs`, 14, y+12);
+                doc.text(`Pagado: ${fMoney(pagado)} Bs`, 75, y+12);
+                doc.text(`Saldo: ${fMoney(saldo)} Bs`, 135, y+12);
                 y += 24;
 
                 // Tareas table
@@ -2736,7 +2737,7 @@ LICITACIONES ACTUALES DEL PROYECTO:
                     doc.autoTable({
                         startY: y, margin: {left:10, right:10},
                         head: [['Tarea','Descripción','Monto (Bs)']],
-                        body: tareas.map(t => [t.task_name||t.desc||'', t.descripcion||'', fMoneyL(t.pu||t.precio||0)]),
+                        body: tareas.map(t => [t.task_name||t.desc||'', t.descripcion||'', fMoney(t.pu||t.precio||0)]),
                         styles: { fontSize: 8 },
                         headStyles: { fillColor: [0,87,183] },
                         didDrawPage: (d) => { y = d.cursor.y + 4; }
@@ -2748,7 +2749,7 @@ LICITACIONES ACTUALES DEL PROYECTO:
                 if (pagos.length) {
                     const pagoRows = pagos.map((p, i) => {
                         if (p.comprobante) anexos.push({ label: `Anexo ${anexos.length+1}`, url: p.comprobante });
-                        return [p.fecha||'', p.concepto||'Pago', fMoneyL(p.monto) + ' Bs', p.comprobante ? `Anexo ${anexos.length}` : '—'];
+                        return [p.fecha||'', p.concepto||'Pago', fMoney(p.monto) + ' Bs', p.comprobante ? `Anexo ${anexos.length}` : '—'];
                     });
                     doc.autoTable({
                         startY: y, margin: {left:10, right:10},
