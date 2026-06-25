@@ -130,6 +130,7 @@
     <div class="nav">
         <button class="btn-nav" onclick="location.href='dashboard-proyecto.html'"><i class="ph-bold ph-caret-left"></i> Atrás</button>
         <button class="btn-nav" onclick="openNewLic()"><i class="ph-bold ph-plus"></i> Nueva Asignación</button>
+        <button class="btn-nav" onclick="openAdjDirecta()" style="background:rgba(52,199,89,0.15);border-color:var(--green);color:var(--green);"><i class="ph-bold ph-check-fat"></i> Adjudicación Directa</button>
         <button class="btn-nav" style="border:none; background:transparent;" onclick="document.body.classList.toggle('dark-mode')"><i class="ph-fill ph-moon"></i></button>
     </div>
 
@@ -214,7 +215,7 @@
                     <div style="font-size:10px;color:var(--gray);margin-top:2px;">M.O. + Materiales + Gráficos — todo incluido</div>
                 </div>
             </button>
-            <button onclick="document.getElementById('mod-lic-tipo').style.display='none'" style="width:100%;padding:13px;background:var(--bg);border:1px solid var(--border);border-radius:12px;cursor:pointer;font-weight:700;color:var(--gray);">Cancelar</button>
+            <button onclick="document.getElementById('mod-lic-tipo').style.display='none'; _adjDirecta=false;" style="width:100%;padding:13px;background:var(--bg);border:1px solid var(--border);border-radius:12px;cursor:pointer;font-weight:700;color:var(--gray);">Cancelar</button>
         </div>
     </div>
 
@@ -368,6 +369,8 @@
     let isInternalWorkerActive = false; let currentWorkerSueldo = 0; let totalAcumuladoMes = 0;
     let currentReviewLicId = null; let currentReviewWorkerId = null;
     let editingLicId = null; let pendingPrefillTareas = null;
+    let _adjDirecta = false; // When true, createLicitacion() saves with estado='aprobado'
+    let _pagoLicCtx = null; let _pagoLicFile = null;
     // Artes gráficos para licitaciones
     let _licArtsData = {};   // { itemIdx: [{id,nombre,base,altura,cantidad,material,precio,imgRef,parentDesc},...] }
     let _licMatPrices = {};  // { 'Lona': 45, 'Adhesivo': 50, ... }
@@ -415,11 +418,17 @@
         document.getElementById('box-grafico-precios').style.display = 'none';
         document.getElementById('lic-oferta-supervision').value = '';
         const _licTitles = { venta: 'Obra Vendida — Propuesta Económica', llave_en_mano: 'Licitación — Llave en Mano', mo: 'Asignación Mano de Obra' };
-        document.getElementById('tit-modal-lic').innerText = _licTitles[mode] || 'Asignación Mano de Obra';
+        document.getElementById('tit-modal-lic').innerText = _adjDirecta ? ('✅ Adjudicación Directa — ' + (_licTitles[mode] || mode)) : (_licTitles[mode] || 'Asignación Mano de Obra');
         document.getElementById('lic-periodo').value = new Date().toISOString().substring(0, 7);
         _licSplitReset();
         loadWorkers();
     };
+
+    // Adjudicación Directa — opens the licitación flow but saves directly as 'aprobado'
+    function openAdjDirecta() {
+        _adjDirecta = true;
+        openNewLic();
+    }
 
     window.updateModoInterno = function() {
         if(!isInternalWorkerActive) return;
@@ -808,9 +817,9 @@
         } else {
             document.getElementById('box-modo-interno').style.display = 'none';
             document.getElementById('box-supervision-oferta').style.display = 'none';
-            document.getElementById('tit-modal-lic').innerText = editingLicId ? "Editar Licitación" : (pendingPrefillTareas ? "Duplicar a Licitación Externa" : (isGraphicWorker ? "Licitación de Impresión / Gráficos" : "Crear Licitación Externa"));
-            document.getElementById('btn-submit-lic').innerHTML = `<i class="ph-bold ph-paper-plane-tilt"></i> Guardar y Procesar`;
-            document.getElementById('btn-submit-lic').style.background = isGraphicWorker ? "var(--purple)" : "var(--blue)";
+            document.getElementById('tit-modal-lic').innerText = editingLicId ? "Editar Licitación" : (_adjDirecta ? "✅ Adjudicación Directa" : (pendingPrefillTareas ? "Duplicar a Licitación Externa" : (isGraphicWorker ? "Licitación de Impresión / Gráficos" : "Crear Licitación Externa")));
+            document.getElementById('btn-submit-lic').innerHTML = _adjDirecta ? `<i class="ph-bold ph-check-fat"></i> Adjudicar y Aprobar` : `<i class="ph-bold ph-paper-plane-tilt"></i> Guardar y Procesar`;
+            document.getElementById('btn-submit-lic').style.background = _adjDirecta ? "var(--green)" : (isGraphicWorker ? "var(--purple)" : "var(--blue)");
             document.getElementById('bat-box').style.display = 'none';
         }
 
@@ -1591,9 +1600,9 @@ ${reqTxt}<div style="margin-top:4px;">${badgeMo}</div>
 
         if (isSupervision) {
             let ofertaSup = parseFloat(document.getElementById('lic-oferta-supervision').value) || 0; if(ofertaSup <= 0) return alert("Ingresa tu propuesta económica por la supervisión.");
-            payload.precio_propuesto = ofertaSup; payload.costo_meta_general = totalMoAsignado; if (!oldLic) payload.estado = 'enviado';
+            payload.precio_propuesto = ofertaSup; payload.costo_meta_general = totalMoAsignado; if (!oldLic) payload.estado = _adjDirecta ? 'aprobado' : 'enviado';
         } else if (!oldLic) {
-            payload.estado = isInternal ? (isLicitacionInterna ? 'enviado' : 'aprobado') : 'enviado';
+            payload.estado = _adjDirecta ? 'aprobado' : (isInternal ? (isLicitacionInterna ? 'enviado' : 'aprobado') : 'enviado');
             payload.precio_propuesto = totalMoAsignado;
         } else {
             payload.precio_propuesto = totalMoAsignado;
@@ -1635,7 +1644,7 @@ ${reqTxt}<div style="margin-top:4px;">${badgeMo}</div>
             await autoAssignGantt(worker.nombre, tareas); alert("¡Asignación editada y sincronizada al Cronograma Gantt!");
         } else { alert("¡Licitación Guardada / Enviada exitosamente!"); }
 
-        document.getElementById('mod-new-lic').style.display = 'none'; editingLicId = null;
+        document.getElementById('mod-new-lic').style.display = 'none'; editingLicId = null; _adjDirecta = false;
 
         if(worker.telefono && (!isInternal || isSupervision)) { 
             const fileName = isSupervision ? 'supervisor-index.html' : (isGraphic ? 'proveedor-grafico.html' : 'contratista/index.html');
@@ -1769,6 +1778,7 @@ ${reqTxt}<div style="margin-top:4px;">${badgeMo}</div>
             document.getElementById('c-pend').innerText = cPend;
             document.getElementById('c-rev').innerText = cRev;
             document.getElementById('c-ap').innerText = cAp;
+            renderPagosContratistas();
         });
     }
 
@@ -2496,6 +2506,279 @@ LICITACIONES ACTUALES DEL PROYECTO:
         hideLoader();
     };
 
+    // ═══════════════════════════════════════════════════════
+    // PAGOS A CONTRATISTAS DEL PROYECTO
+    // ═══════════════════════════════════════════════════════
+
+    function fMoneyL(n) { return Number(parseFloat(n)||0).toLocaleString('es-BO', {minimumFractionDigits:2,maximumFractionDigits:2}); }
+
+    function renderPagosContratistas() {
+        const lista = document.getElementById('ct-lista-lic');
+        const kpisEl = document.getElementById('ct-kpis-lic');
+        if (!lista) return;
+
+        // Filter: non-supervision, non-internal, aprobado/adjudicado/terminado
+        const lics = Object.entries(currentLics).filter(([, l]) =>
+            l && !l.is_supervision && !l.is_internal_assignment &&
+            (l.estado === 'aprobado' || l.estado === 'adjudicado' || l.estado === 'terminado')
+        );
+
+        if (!lics.length) {
+            lista.innerHTML = '<div style="color:var(--gray);font-size:13px;padding:12px 0;">No hay contratos aprobados aún.</div>';
+            kpisEl.style.display = 'none';
+            return;
+        }
+
+        // Group by worker
+        const byWorker = {};
+        lics.forEach(([licId, lic]) => {
+            const name = lic.worker_name || lic.nombre_trabajador || lic.worker_id || 'Sin nombre';
+            if (!byWorker[name]) byWorker[name] = [];
+            byWorker[name].push({ licId, lic });
+        });
+
+        // Global KPIs
+        let totAcord = 0, totPag = 0;
+        lics.forEach(([, lic]) => {
+            totAcord += parseFloat(lic.precio_final || lic.precio_propuesto || 0);
+            Object.values(lic.pagos || {}).forEach(p => { totPag += parseFloat(p.monto || 0); });
+        });
+        kpisEl.style.cssText = 'display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:14px;text-align:center;';
+        kpisEl.innerHTML = `
+            <div style="background:rgba(0,122,255,0.08);border:1px solid rgba(0,122,255,0.2);border-radius:12px;padding:12px;">
+                <div style="font-size:9px;font-weight:800;color:var(--gray);text-transform:uppercase;">Total Contratado</div>
+                <div style="font-size:15px;font-weight:900;color:var(--blue);">${fMoneyL(totAcord)} Bs</div>
+            </div>
+            <div style="background:rgba(255,149,0,0.08);border:1px solid rgba(255,149,0,0.2);border-radius:12px;padding:12px;">
+                <div style="font-size:9px;font-weight:800;color:var(--gray);text-transform:uppercase;">Desembolsado</div>
+                <div style="font-size:15px;font-weight:900;color:var(--orange);">${fMoneyL(totPag)} Bs</div>
+            </div>
+            <div style="background:rgba(255,59,48,0.08);border:1px solid rgba(255,59,48,0.2);border-radius:12px;padding:12px;">
+                <div style="font-size:9px;font-weight:800;color:var(--gray);text-transform:uppercase;">Saldo</div>
+                <div style="font-size:15px;font-weight:900;color:${totAcord-totPag>0?'var(--red)':'var(--green)'};">${fMoneyL(totAcord-totPag)} Bs</div>
+            </div>`;
+
+        lista.innerHTML = '';
+        Object.entries(byWorker).forEach(([workerName, items]) => {
+            let wAcord = 0, wPag = 0;
+            items.forEach(({ lic }) => {
+                wAcord += parseFloat(lic.precio_final || lic.precio_propuesto || 0);
+                Object.values(lic.pagos || {}).forEach(p => { wPag += parseFloat(p.monto || 0); });
+            });
+            const wSaldo = wAcord - wPag;
+            const uid = workerName.replace(/\s+/g,'_');
+
+            let histHtml = '';
+            items.forEach(({ licId, lic }) => {
+                const pagos = Object.values(lic.pagos || {});
+                pagos.forEach(p => {
+                    histHtml += `<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px dashed var(--border);font-size:11px;">
+                        <div><b>${p.concepto || 'Pago'}</b><div style="color:var(--gray);font-size:10px;">${p.fecha||''}</div></div>
+                        <div style="font-weight:900;color:var(--green);">+${fMoneyL(p.monto)} Bs</div>
+                    </div>`;
+                });
+                // Pay button per licitacion
+                histHtml += `<button onclick="abrirPagoLic('${cid}','${pid}','${licId}','${workerName.replace(/'/g,"\\'")}',${wAcord},${wPag})" style="width:100%;padding:10px;background:rgba(52,199,89,0.1);border:1px solid var(--green);color:var(--green);border-radius:10px;font-size:12px;font-weight:800;cursor:pointer;margin-top:8px;"><i class="ph-bold ph-currency-circle-dollar"></i> Registrar Pago · ${lic.pName||pName}</button>`;
+            });
+
+            lista.innerHTML += `<div style="background:var(--card);border:1px solid var(--border);border-radius:16px;padding:16px;margin-bottom:12px;">
+                <div style="display:flex;justify-content:space-between;align-items:flex-start;cursor:pointer;" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='none'?'block':'none'">
+                    <div>
+                        <div style="font-size:14px;font-weight:900;">${workerName}</div>
+                        <div style="font-size:11px;color:var(--gray);margin-top:2px;">${items.length} contrato${items.length>1?'s':''}</div>
+                    </div>
+                    <div style="text-align:right;">
+                        <div style="font-size:13px;font-weight:900;color:${wSaldo>0?'var(--red)':'var(--green)'};">${wSaldo>0?'-':''}${fMoneyL(Math.abs(wSaldo))} Bs saldo</div>
+                        <div style="font-size:10px;color:var(--gray);">${fMoneyL(wPag)} / ${fMoneyL(wAcord)} Bs</div>
+                    </div>
+                </div>
+                <div style="display:none;margin-top:12px;border-top:1px solid var(--border);padding-top:12px;">${histHtml}</div>
+            </div>`;
+        });
+    }
+
+    function abrirPagoLic(cidP, pidP, licId, workerName, acordado, pagado) {
+        _pagoLicCtx = { cid: cidP, pid: pidP, licId, workerName };
+        _pagoLicFile = null;
+        document.getElementById('pago-lic-worker-lbl').textContent = `${workerName} — Saldo: ${fMoneyL(acordado-pagado)} Bs`;
+        document.getElementById('pago-lic-monto').value = '';
+        document.getElementById('pago-lic-concepto').value = '';
+        document.getElementById('pago-lic-fecha').value = new Date().toISOString().split('T')[0];
+        document.getElementById('pago-lic-foto-nombre').style.display = 'none';
+        document.getElementById('pago-lic-scan-btn').style.display = 'none';
+        document.getElementById('mod-pago-lic').style.display = 'block';
+    }
+
+    function onPagoLicFoto(input) {
+        const file = input.files[0]; if (!file) return;
+        _pagoLicFile = file;
+        document.getElementById('pago-lic-foto-nombre').textContent = file.name;
+        document.getElementById('pago-lic-foto-nombre').style.display = 'block';
+        document.getElementById('pago-lic-scan-btn').style.display = 'block';
+    }
+
+    window.leerComprobanteLic = async function() {
+        if (!_pagoLicFile) return;
+        document.getElementById('pago-lic-scan-btn').textContent = 'Leyendo...';
+        try {
+            const token = await new Promise((resolve, reject) => {
+                const unsub = firebase.auth().onAuthStateChanged(u => { unsub(); u ? u.getIdToken().then(resolve).catch(reject) : reject(new Error('No autenticado')); });
+            });
+            const b64 = await new Promise(res => {
+                const reader = new FileReader();
+                reader.onload = e => res(e.target.result.split(',')[1]);
+                reader.readAsDataURL(_pagoLicFile);
+            });
+            const resp = await fetch('/api/gemini', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+                body: JSON.stringify({ prompt: 'Lee este comprobante de pago y extrae: monto total (solo número), fecha (YYYY-MM-DD), concepto o descripción. Responde en JSON: {"monto":"...","fecha":"...","concepto":"..."}', imageBase64: b64 })
+            });
+            const data = await resp.json();
+            let txt = (data.candidates?.[0]?.content?.parts?.[0]?.text || data.text || '').replace(/```json|```/g,'').trim();
+            const parsed = JSON.parse(txt);
+            if (parsed.monto) document.getElementById('pago-lic-monto').value = parsed.monto.replace(/[^\d.]/g,'');
+            if (parsed.fecha) document.getElementById('pago-lic-fecha').value = parsed.fecha;
+            if (parsed.concepto) document.getElementById('pago-lic-concepto').value = parsed.concepto;
+        } catch(e) { alert('No se pudo leer el comprobante: ' + e.message); }
+        document.getElementById('pago-lic-scan-btn').innerHTML = '<i class="ph-bold ph-magic-wand"></i> Leer con IA';
+    };
+
+    window.guardarPagoLic = async function() {
+        if (!_pagoLicCtx) return;
+        const monto = parseFloat(document.getElementById('pago-lic-monto').value);
+        if (!monto || monto <= 0) return alert('Ingresá un monto válido.');
+        const concepto = document.getElementById('pago-lic-concepto').value || 'Pago';
+        const fecha = document.getElementById('pago-lic-fecha').value || new Date().toISOString().split('T')[0];
+        const { cid: c, pid: p, licId } = _pagoLicCtx;
+        let urlComp = null;
+        if (_pagoLicFile) {
+            try {
+                const storageRef = firebase.storage().ref(`comprobantes/${c}/${p}/${licId}/${Date.now()}_${_pagoLicFile.name}`);
+                await storageRef.put(_pagoLicFile);
+                urlComp = await storageRef.getDownloadURL();
+            } catch(e) { console.warn('No se pudo subir comprobante:', e); }
+        }
+        const pagoRef = db.ref(`proyectos/${c}/${p}/licitaciones/${licId}/pagos`).push();
+        await pagoRef.set({ monto, concepto, fecha, comprobante: urlComp || null, timestamp: new Date().toISOString() });
+        document.getElementById('mod-pago-lic').style.display = 'none';
+        _pagoLicCtx = null; _pagoLicFile = null;
+    };
+
+    async function exportarConsolidadoLic() {
+        const jspdfSrc = 'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js';
+        const autotableSrc = 'https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js';
+        async function loadScript(src) {
+            return new Promise((res, rej) => { if (document.querySelector(`script[src="${src}"]`)) return res(); const s = document.createElement('script'); s.src = src; s.onload = res; s.onerror = rej; document.head.appendChild(s); });
+        }
+        await loadScript(jspdfSrc); await loadScript(autotableSrc);
+        const { jsPDF } = window.jspdf;
+
+        let logoDataUrl = null;
+        try {
+            const logoResp = await fetch('/LOGO-IA-RUBIK.jpg');
+            const logoBlob = await logoResp.blob();
+            logoDataUrl = await new Promise(res => { const r = new FileReader(); r.onload = e => res(e.target.result); r.readAsDataURL(logoBlob); });
+        } catch(e) {}
+
+        const doc = new jsPDF({ unit: 'mm', format: 'a4' });
+        const pageW = doc.internal.pageSize.getWidth();
+        let y = 0;
+        const anexos = [];
+
+        const lics = Object.entries(currentLics).filter(([, l]) =>
+            l && !l.is_supervision && !l.is_internal_assignment &&
+            (l.estado === 'aprobado' || l.estado === 'adjudicado' || l.estado === 'terminado')
+        );
+        const byWorker = {};
+        lics.forEach(([licId, lic]) => {
+            const name = lic.worker_name || lic.nombre_trabajador || lic.worker_id || 'Sin nombre';
+            if (!byWorker[name]) byWorker[name] = [];
+            byWorker[name].push({ licId, lic });
+        });
+
+        let firstPage = true;
+        for (const [workerName, items] of Object.entries(byWorker)) {
+            if (!firstPage) { doc.addPage(); }
+            firstPage = false;
+
+            // Header
+            doc.setFillColor(0, 87, 183);
+            doc.rect(0, 0, pageW, 28, 'F');
+            if (logoDataUrl) doc.addImage(logoDataUrl, 'JPEG', 6, 3, 22, 22);
+            doc.setFontSize(13); doc.setFont(undefined,'bold'); doc.setTextColor(255,255,255);
+            doc.text(`CONTRATISTA: ${workerName}`, pageW/2, 12, {align:'center'});
+            doc.setFontSize(9); doc.setFont(undefined,'normal');
+            doc.text(`Proyecto: ${pName}`, pageW/2, 19, {align:'center'});
+            doc.text(`Generado: ${new Date().toLocaleDateString('es-BO')}`, pageW/2, 24, {align:'center'});
+            doc.setTextColor(0,0,0);
+            y = 34;
+
+            for (const { licId, lic } of items) {
+                const acordado = parseFloat(lic.precio_final || lic.precio_propuesto || 0);
+                const pagos = Object.values(lic.pagos || {});
+                const pagado = pagos.reduce((s, p) => s + parseFloat(p.monto||0), 0);
+                const saldo = acordado - pagado;
+
+                // Summary box
+                doc.setFillColor(240,245,255); doc.roundedRect(10, y, pageW-20, 20, 3, 3, 'F');
+                doc.setFontSize(9); doc.setFont(undefined,'bold');
+                doc.text(`Contrato ${lic.tipo||lic.lic_mode||'MO'} — Estado: ${(lic.estado||'').toUpperCase()}`, 14, y+6);
+                doc.setFont(undefined,'normal'); doc.setFontSize(8);
+                doc.text(`Acordado: ${fMoneyL(acordado)} Bs`, 14, y+12);
+                doc.text(`Pagado: ${fMoneyL(pagado)} Bs`, 75, y+12);
+                doc.text(`Saldo: ${fMoneyL(saldo)} Bs`, 135, y+12);
+                y += 24;
+
+                // Tareas table
+                const tareas = Array.isArray(lic.tareas) ? lic.tareas : Object.values(lic.tareas || {});
+                if (tareas.length) {
+                    doc.autoTable({
+                        startY: y, margin: {left:10, right:10},
+                        head: [['Tarea','Descripción','Monto (Bs)']],
+                        body: tareas.map(t => [t.task_name||t.desc||'', t.descripcion||'', fMoneyL(t.pu||t.precio||0)]),
+                        styles: { fontSize: 8 },
+                        headStyles: { fillColor: [0,87,183] },
+                        didDrawPage: (d) => { y = d.cursor.y + 4; }
+                    });
+                    y = doc.lastAutoTable.finalY + 6;
+                }
+
+                // Payments table
+                if (pagos.length) {
+                    const pagoRows = pagos.map((p, i) => {
+                        if (p.comprobante) anexos.push({ label: `Anexo ${anexos.length+1}`, url: p.comprobante });
+                        return [p.fecha||'', p.concepto||'Pago', fMoneyL(p.monto) + ' Bs', p.comprobante ? `Anexo ${anexos.length}` : '—'];
+                    });
+                    doc.autoTable({
+                        startY: y, margin: {left:10, right:10},
+                        head: [['Fecha','Concepto','Monto','Comprobante']],
+                        body: pagoRows,
+                        styles: { fontSize: 8 },
+                        headStyles: { fillColor: [52,199,89] },
+                        didDrawPage: (d) => { y = d.cursor.y + 4; }
+                    });
+                    y = doc.lastAutoTable.finalY + 10;
+                }
+            }
+        }
+
+        // Annexes
+        for (const anx of anexos) {
+            doc.addPage();
+            doc.setFillColor(0,87,183); doc.rect(0,0,pageW,18,'F');
+            doc.setFontSize(11); doc.setFont(undefined,'bold'); doc.setTextColor(255,255,255);
+            doc.text(anx.label + ' — Comprobante', pageW/2, 11, {align:'center'});
+            doc.setTextColor(0,0,0);
+            try {
+                doc.addImage(anx.url, 'JPEG', 15, 24, pageW-30, 150);
+            } catch(e) {}
+        }
+
+        const today = new Date().toLocaleDateString('es-BO').replace(/\//g,'-');
+        doc.save(`Contratistas_${pName.replace(/\s+/g,'_')}_${today}.pdf`);
+    }
+
 </script>
 <script src="/paste-image.js"></script>
 
@@ -2529,6 +2812,46 @@ LICITACIONES ACTUALES DEL PROYECTO:
             <label class="inp-lbl">Fecha</label>
             <input type="date" id="sup-fin-fecha" class="inp-std" style="margin-bottom:18px;">
             <button onclick="guardarFinSup()" style="width:100%;padding:14px;background:var(--purple);color:white;border:none;border-radius:14px;font-size:14px;font-weight:900;cursor:pointer;">Guardar</button>
+        </div>
+    </div>
+
+    <!-- ================================================================ -->
+    <!-- PANEL: Pagos a Contratistas del Proyecto                          -->
+    <!-- ================================================================ -->
+    <div id="panel-pagos-ct" style="background:var(--card);border:1px solid var(--border);border-radius:16px;padding:20px;margin-top:20px;margin-bottom:20px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:10px;">
+            <div>
+                <div style="font-size:16px;font-weight:900;display:flex;align-items:center;gap:8px;"><i class="ph-bold ph-handshake" style="color:var(--blue);"></i> Pagos a Contratistas</div>
+                <div style="font-size:11px;color:var(--gray);font-weight:700;margin-top:2px;">Contratos aprobados — saldos y abonos</div>
+            </div>
+            <button onclick="exportarConsolidadoLic()" style="background:var(--purple);color:white;border:none;padding:10px 16px;border-radius:10px;font-weight:800;font-size:12px;cursor:pointer;display:flex;align-items:center;gap:6px;"><i class="ph-bold ph-file-pdf"></i> PDF Consolidado</button>
+        </div>
+        <div id="ct-kpis-lic" style="display:none;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:14px;text-align:center;"></div>
+        <div id="ct-lista-lic"></div>
+    </div>
+
+    <!-- MODAL: Registrar pago a contratista -->
+    <div id="mod-pago-lic" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.7);z-index:3000;backdrop-filter:blur(4px);">
+        <div style="position:absolute;bottom:0;left:0;right:0;background:var(--card);border-radius:20px 20px 0 0;padding:24px;max-height:90vh;overflow-y:auto;">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
+                <div style="font-size:16px;font-weight:900;color:var(--green);">💳 Registrar Pago</div>
+                <button onclick="document.getElementById('mod-pago-lic').style.display='none'" style="background:var(--bg);border:none;width:32px;height:32px;border-radius:50%;cursor:pointer;font-size:18px;color:var(--gray);"><i class="ph-bold ph-x"></i></button>
+            </div>
+            <div id="pago-lic-worker-lbl" style="font-size:13px;font-weight:900;color:var(--blue);margin-bottom:16px;"></div>
+            <div style="border:2px dashed var(--border);border-radius:14px;padding:14px;text-align:center;margin-bottom:10px;cursor:pointer;background:rgba(0,122,255,0.03);" onclick="document.getElementById('pago-lic-foto-input').click()">
+                <div style="font-size:24px;">📷</div>
+                <div style="font-size:12px;font-weight:800;">Foto del comprobante (opcional)</div>
+                <div id="pago-lic-foto-nombre" style="font-size:11px;color:var(--blue);margin-top:4px;display:none;"></div>
+            </div>
+            <input type="file" id="pago-lic-foto-input" accept="image/*" style="display:none" onchange="onPagoLicFoto(this)">
+            <button id="pago-lic-scan-btn" onclick="leerComprobanteLic()" style="display:none;width:100%;padding:10px;background:rgba(0,122,255,0.1);border:1px solid var(--blue);color:var(--blue);border-radius:10px;font-size:12px;font-weight:800;cursor:pointer;margin-bottom:12px;"><i class="ph-bold ph-magic-wand"></i> Leer con IA</button>
+            <label style="font-size:11px;font-weight:800;color:var(--gray);text-transform:uppercase;letter-spacing:0.5px;">Monto (Bs) *</label>
+            <input type="number" id="pago-lic-monto" class="inp-std" placeholder="0.00" min="0" step="0.01" style="margin-bottom:10px;">
+            <label style="font-size:11px;font-weight:800;color:var(--gray);text-transform:uppercase;letter-spacing:0.5px;">Concepto</label>
+            <input type="text" id="pago-lic-concepto" class="inp-std" placeholder="Anticipo, Pago final, etc." style="margin-bottom:10px;">
+            <label style="font-size:11px;font-weight:800;color:var(--gray);text-transform:uppercase;letter-spacing:0.5px;">Fecha</label>
+            <input type="date" id="pago-lic-fecha" class="inp-std" style="margin-bottom:18px;">
+            <button onclick="guardarPagoLic()" style="width:100%;padding:14px;background:var(--green);color:white;border:none;border-radius:14px;font-size:14px;font-weight:900;cursor:pointer;">Guardar Pago</button>
         </div>
     </div>
 </body>
