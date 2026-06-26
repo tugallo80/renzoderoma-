@@ -530,9 +530,6 @@
     const db = firebase.database();
     const storage = firebase.storage();
 
-    // ── Offline support: keep critical paths synced in local cache ──
-    ['proyectos','personal','ingresos','compras_facturadas','cancheos','supervisores'].forEach(p => db.ref(p).keepSynced(true));
-    // Offline indicator
     db.ref('.info/connected').on('value', snap => {
         let badge = document.getElementById('offline-badge');
         if (!badge) {

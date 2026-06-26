@@ -233,8 +233,6 @@
 
     if(!cid || !pid) { window.location.href = 'clientes.html'; }
 
-    if (cid && pid) db.ref(`proyectos/${cid}/${pid}`).keepSynced(true);
-    db.ref('personal').keepSynced(true);
     db.ref('.info/connected').on('value', snap => {
         let badge = document.getElementById('offline-badge');
         if (!badge) {

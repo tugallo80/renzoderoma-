@@ -151,7 +151,6 @@
     document.getElementById('h-client-name').innerText = cname || '';
 
     try {
-        if (cid) db.ref(`proyectos/${cid}`).keepSynced(true);
         db.ref('.info/connected').on('value', snap => {
             let badge = document.getElementById('offline-badge');
             if (!badge) {
