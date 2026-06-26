@@ -146,21 +146,24 @@
     const db = firebase.database(); const storage = firebase.storage();
 
     const cid = localStorage.getItem('rubik_client_id');
-    if (cid) db.ref(`proyectos/${cid}`).keepSynced(true);
-    db.ref('.info/connected').on('value', snap => {
-        let badge = document.getElementById('offline-badge');
-        if (!badge) {
-            badge = document.createElement('div');
-            badge.id = 'offline-badge';
-            badge.style.cssText = 'position:fixed;top:12px;left:50%;transform:translateX(-50%);z-index:9999;background:#ff3b30;color:white;padding:6px 16px;border-radius:20px;font-size:11px;font-weight:900;box-shadow:0 2px 8px rgba(0,0,0,0.3);pointer-events:none;';
-            badge.innerHTML = '⚡ Sin conexión — mostrando datos guardados';
-            document.body.appendChild(badge);
-        }
-        badge.style.display = snap.val() ? 'none' : 'block';
-    });
     const cname = localStorage.getItem('rubik_client_name');
     if(!cid) { window.location.href = 'clientes.html'; throw new Error('sin cid'); }
     document.getElementById('h-client-name').innerText = cname || '';
+
+    try {
+        if (cid) db.ref(`proyectos/${cid}`).keepSynced(true);
+        db.ref('.info/connected').on('value', snap => {
+            let badge = document.getElementById('offline-badge');
+            if (!badge) {
+                badge = document.createElement('div');
+                badge.id = 'offline-badge';
+                badge.style.cssText = 'position:fixed;top:12px;left:50%;transform:translateX(-50%);z-index:9999;background:#ff3b30;color:white;padding:6px 16px;border-radius:20px;font-size:11px;font-weight:900;box-shadow:0 2px 8px rgba(0,0,0,0.3);pointer-events:none;';
+                badge.innerHTML = '⚡ Sin conexión — mostrando datos guardados';
+                document.body.appendChild(badge);
+            }
+            badge.style.display = snap.val() ? 'none' : 'block';
+        });
+    } catch(e) { console.warn('[proyectos] keepSynced/connected init:', e); }
 
     function abrirPortalCliente() { window.open('cliente-view.html?cid=' + cid, '_blank'); }
 
@@ -220,6 +223,20 @@
         _cargarProyectos();
     }
 
+    const _PROJ_CACHE_KEY = `rubik_proj_meta_${cid}`;
+    function _saveMetaCache(dataObj) {
+        try {
+            const slim = {};
+            Object.entries(dataObj).forEach(([pid, p]) => {
+                slim[pid] = { nombre: p.nombre, estado: p.estado, img: p.img || null, orden: p.orden ?? null, visible_cliente: p.visible_cliente ?? null };
+            });
+            localStorage.setItem(_PROJ_CACHE_KEY, JSON.stringify(slim));
+        } catch(e) {}
+    }
+    function _loadMetaCache() {
+        try { const s = localStorage.getItem(_PROJ_CACHE_KEY); return s ? JSON.parse(s) : null; } catch(e) { return null; }
+    }
+
     function _cargarProyectos() {
     const grid = document.getElementById('project-grid');
 
@@ -236,6 +253,14 @@
     let _yaRenderizado = false;
     // true once real project cards have been shown — prevents null/empty WebSocket from wiping them
     let _hadGoodData = false;
+
+    // ── VÍA 0: caché local de metadatos — muestra proyectos INMEDIATAMENTE sin red ni auth ──
+    const metaCache = _loadMetaCache();
+    if (metaCache && Object.keys(metaCache).length > 0) {
+        _hadGoodData = true;
+        _yaRenderizado = true;
+        _renderData(metaCache);
+    }
 
     function _renderData(dataObj) {
         clearTimeout(window._proyectosTimeout);
@@ -331,6 +356,7 @@
 
             // Render siempre que tengamos datos reales; si llegamos vacíos solo render si nadie lo hizo antes
             if (Object.keys(dataObj).length > 0) {
+                _saveMetaCache(dataObj);
                 _yaRenderizado = true;
                 _renderData(dataObj);
             } else if (!_yaRenderizado) {
@@ -347,6 +373,7 @@
         // Proteger grilla real contra null/vacío del WebSocket (reconexión, refresco de token, etc.)
         const isEmpty = !val || (typeof val === 'object' && Object.keys(val).length === 0);
         if (isEmpty && _hadGoodData) return;
+        if (!isEmpty) _saveMetaCache(val);
         _yaRenderizado = true;
         _renderData(val);
     };
