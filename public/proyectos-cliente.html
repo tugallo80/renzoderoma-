@@ -22,7 +22,7 @@
         };
         if (!firebase.apps.length) firebase.initializeApp(window._rubikFirebaseConfig);
     </script>
-    <script src="/js/firecache.js?v=5"></script>
+    <script src="/js/firecache.js?v=6"></script>
     <script src="/js/auth-guard.js?v=2"></script>
 
     <style>
@@ -150,8 +150,10 @@
     if(!cid) { window.location.href = 'clientes.html'; throw new Error('sin cid'); }
     document.getElementById('h-client-name').innerText = cname || '';
 
+    let _isConnected = false;
     try {
         db.ref('.info/connected').on('value', snap => {
+            _isConnected = snap.val() === true;
             let badge = document.getElementById('offline-badge');
             if (!badge) {
                 badge = document.createElement('div');
@@ -160,9 +162,9 @@
                 badge.innerHTML = '⚡ Sin conexión — mostrando datos guardados';
                 document.body.appendChild(badge);
             }
-            badge.style.display = snap.val() ? 'none' : 'block';
+            badge.style.display = _isConnected ? 'none' : 'block';
         });
-    } catch(e) { console.warn('[proyectos] keepSynced/connected init:', e); }
+    } catch(e) { console.warn('[proyectos] connected init:', e); }
 
     function abrirPortalCliente() { window.open('cliente-view.html?cid=' + cid, '_blank'); }
 
@@ -369,10 +371,14 @@
     window._proyectosOnHandler = (snap) => {
         const val = snap ? snap.val() : null;
         clearTimeout(window._proyectosTimeout);
-        // Proteger grilla real contra null/vacío del WebSocket (reconexión, refresco de token, etc.)
         const isEmpty = !val || (typeof val === 'object' && Object.keys(val).length === 0);
-        if (isEmpty && _hadGoodData) return;
-        if (!isEmpty) _saveMetaCache(val);
+        // Bloquear null/vacío si hay datos buenos Y estamos offline (reconexión / refresco de token)
+        // Cuando estamos online y llega null, es legítimo (proyectos borrados) — dejarlo pasar
+        if (isEmpty && _hadGoodData && !_isConnected) return;
+        if (!isEmpty) {
+            _hadGoodData = true;
+            _saveMetaCache(val);
+        }
         _yaRenderizado = true;
         _renderData(val);
     };

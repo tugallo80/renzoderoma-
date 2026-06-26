@@ -103,13 +103,19 @@
 
             var storageKey = CACHE_PREFIX + path;
             var cached = readCache(storageKey);
-            if (cached !== undefined) {
+            var cachedIsReal = cached !== undefined && cached !== null &&
+                !(typeof cached === 'object' && Object.keys(cached).length === 0);
+            if (cachedIsReal) {
                 setTimeout(function () {
                     try { callback(makeSnapshot(cached, null)); } catch (e) {}
                 }, 0);
             }
             var wrapped = function (snap) {
-                writeCache(storageKey, snap.val());
+                var v = snap.val();
+                // Only overwrite cache with real data — prevents offline null events from corrupting the cache
+                var isReal = v !== null && v !== undefined &&
+                    !(typeof v === 'object' && Object.keys(v).length === 0);
+                if (isReal) writeCache(storageKey, v);
                 return callback.apply(this, arguments);
             };
             var newArgs = Array.prototype.slice.call(arguments);
