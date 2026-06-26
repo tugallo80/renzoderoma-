@@ -530,6 +530,21 @@
     const db = firebase.database();
     const storage = firebase.storage();
 
+    // ── Offline support: keep critical paths synced in local cache ──
+    ['proyectos','personal','ingresos','compras_facturadas','cancheos','supervisores'].forEach(p => db.ref(p).keepSynced(true));
+    // Offline indicator
+    db.ref('.info/connected').on('value', snap => {
+        let badge = document.getElementById('offline-badge');
+        if (!badge) {
+            badge = document.createElement('div');
+            badge.id = 'offline-badge';
+            badge.style.cssText = 'position:fixed;top:12px;left:50%;transform:translateX(-50%);z-index:9999;background:#ff3b30;color:white;padding:6px 16px;border-radius:20px;font-size:11px;font-weight:900;box-shadow:0 2px 8px rgba(0,0,0,0.3);pointer-events:none;';
+            badge.innerHTML = '⚡ Sin conexión — mostrando datos guardados';
+            document.body.appendChild(badge);
+        }
+        badge.style.display = snap.val() ? 'none' : 'block';
+    });
+
     document.getElementById('filtro-mes').value = new Date().toISOString().substring(0, 7);
     document.getElementById('ing-fecha').valueAsDate = new Date();
     document.getElementById('fc-fecha').valueAsDate = new Date();

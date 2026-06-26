@@ -232,6 +232,20 @@
     const pname = localStorage.getItem('rubik_current_pname');
 
     if(!cid || !pid) { window.location.href = 'clientes.html'; }
+
+    if (cid && pid) db.ref(`proyectos/${cid}/${pid}`).keepSynced(true);
+    db.ref('personal').keepSynced(true);
+    db.ref('.info/connected').on('value', snap => {
+        let badge = document.getElementById('offline-badge');
+        if (!badge) {
+            badge = document.createElement('div');
+            badge.id = 'offline-badge';
+            badge.style.cssText = 'position:fixed;top:12px;left:50%;transform:translateX(-50%);z-index:9999;background:#ff3b30;color:white;padding:6px 16px;border-radius:20px;font-size:11px;font-weight:900;box-shadow:0 2px 8px rgba(0,0,0,0.3);pointer-events:none;';
+            badge.innerHTML = '⚡ Sin conexión — mostrando datos guardados';
+            document.body.appendChild(badge);
+        }
+        badge.style.display = snap.val() ? 'none' : 'block';
+    });
     document.getElementById('txt-pname').innerText = pname;
 
     // ── Esperar auth antes de leer Firebase ─────────────────────────
