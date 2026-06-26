@@ -146,6 +146,18 @@
     const db = firebase.database(); const storage = firebase.storage();
 
     const cid = localStorage.getItem('rubik_client_id');
+    if (cid) db.ref(`proyectos/${cid}`).keepSynced(true);
+    db.ref('.info/connected').on('value', snap => {
+        let badge = document.getElementById('offline-badge');
+        if (!badge) {
+            badge = document.createElement('div');
+            badge.id = 'offline-badge';
+            badge.style.cssText = 'position:fixed;top:12px;left:50%;transform:translateX(-50%);z-index:9999;background:#ff3b30;color:white;padding:6px 16px;border-radius:20px;font-size:11px;font-weight:900;box-shadow:0 2px 8px rgba(0,0,0,0.3);pointer-events:none;';
+            badge.innerHTML = '⚡ Sin conexión — mostrando datos guardados';
+            document.body.appendChild(badge);
+        }
+        badge.style.display = snap.val() ? 'none' : 'block';
+    });
     const cname = localStorage.getItem('rubik_client_name');
     if(!cid) { window.location.href = 'clientes.html'; throw new Error('sin cid'); }
     document.getElementById('h-client-name').innerText = cname || '';
@@ -332,8 +344,9 @@
     window._proyectosOnHandler = (snap) => {
         const val = snap ? snap.val() : null;
         clearTimeout(window._proyectosTimeout);
-        // Si WebSocket devuelve vacío/null pero REST ya mostró proyectos reales, no borrar la grilla
-        if (!val && _hadGoodData) return;
+        // Proteger grilla real contra null/vacío del WebSocket (reconexión, refresco de token, etc.)
+        const isEmpty = !val || (typeof val === 'object' && Object.keys(val).length === 0);
+        if (isEmpty && _hadGoodData) return;
         _yaRenderizado = true;
         _renderData(val);
     };
