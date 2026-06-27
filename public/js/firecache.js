@@ -91,9 +91,13 @@
         if (!proto || proto.__rubikFirecachePatched) return;
         proto.__rubikFirecachePatched = true;
 
-        var originalOn = proto.on;
+        var originalOn  = proto.on;
+        var originalOff = proto.off;
 
-        // Solo parchear .on('value') — .once() queda intacto
+        // Map de callback-original → callback-wrapped por ref path
+        // Necesario para que .off(event, originalCb) pueda quitar el wrapper correcto
+        var wrapMap = {};  // { path: Map<originalCb, wrappedCb> }
+
         proto.on = function (eventType, callback) {
             if (eventType !== 'value' || typeof callback !== 'function') {
                 return originalOn.apply(this, arguments);
@@ -112,15 +116,35 @@
             }
             var wrapped = function (snap) {
                 var v = snap.val();
-                // Only overwrite cache with real data — prevents offline null events from corrupting the cache
                 var isReal = v !== null && v !== undefined &&
                     !(typeof v === 'object' && Object.keys(v).length === 0);
                 if (isReal) writeCache(storageKey, v);
                 return callback.apply(this, arguments);
             };
+            // Registrar mapping original→wrapped para que .off() pueda resolverlo
+            if (!wrapMap[path]) wrapMap[path] = new Map();
+            wrapMap[path].set(callback, wrapped);
+
             var newArgs = Array.prototype.slice.call(arguments);
             newArgs[1] = wrapped;
             return originalOn.apply(this, newArgs);
+        };
+
+        // Parchear .off() para resolver el callback-wrapped correcto
+        proto.off = function (eventType, callback) {
+            if (eventType === 'value' && typeof callback === 'function') {
+                var path = pathFromRef(this);
+                if (!shouldSkip(path) && wrapMap[path]) {
+                    var w = wrapMap[path].get(callback);
+                    if (w) {
+                        wrapMap[path].delete(callback);
+                        var newArgs2 = Array.prototype.slice.call(arguments);
+                        newArgs2[1] = w;
+                        return originalOff.apply(this, newArgs2);
+                    }
+                }
+            }
+            return originalOff.apply(this, arguments);
         };
     }
 
