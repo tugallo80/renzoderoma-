@@ -249,6 +249,15 @@
         try { window._proyectosRef.off('value', window._proyectosOnHandler); } catch(e) {}
     }
 
+    // Limpiar entradas envenenadas con null que firecache pudo haber guardado antes de v6
+    try {
+        const _fcKey = `rubik_dbcache_proyectos/${cid}`;
+        const _fcRaw = localStorage.getItem(_fcKey);
+        if (_fcRaw === 'null' || _fcRaw === '{}' || _fcRaw === 'undefined') {
+            localStorage.removeItem(_fcKey);
+        }
+    } catch(e) {}
+
     grid.innerHTML = `<div style="grid-column:span 4;text-align:center;color:var(--gray);padding:40px;font-size:.85rem;">Cargando proyectos...</div>`;
 
     let _yaRenderizado = false;
@@ -372,9 +381,8 @@
         const val = snap ? snap.val() : null;
         clearTimeout(window._proyectosTimeout);
         const isEmpty = !val || (typeof val === 'object' && Object.keys(val).length === 0);
-        // Bloquear null/vacío si hay datos buenos Y estamos offline (reconexión / refresco de token)
-        // Cuando estamos online y llega null, es legítimo (proyectos borrados) — dejarlo pasar
-        if (isEmpty && _hadGoodData && !_isConnected) return;
+        // Si ya teníamos datos buenos, ignorar cualquier null/vacío del WebSocket
+        if (isEmpty && _hadGoodData) return;
         if (!isEmpty) {
             _hadGoodData = true;
             _saveMetaCache(val);
