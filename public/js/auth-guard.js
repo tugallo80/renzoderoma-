@@ -53,11 +53,21 @@
                 // Primer evento: resolver la sesión (puede traer user o null)
                 settle(user);
             } else if (!user && !isExempt) {
-                // Eventos posteriores: redirigir solo si sigue sin usuario tras 2s
-                // (evita falsos positivos durante token refresh de Firebase)
-                setTimeout(function () {
-                    if (!firebase.auth().currentUser) redirect();
-                }, 2000);
+                // Eventos posteriores: Firebase puede disparar null brevemente durante
+                // token refresh o al volver de background en móvil.
+                // Esperamos hasta 10 segundos antes de redirigir.
+                var _recheckCount = 0;
+                var _recheckTimer = setInterval(function () {
+                    _recheckCount++;
+                    if (firebase.auth().currentUser) {
+                        clearInterval(_recheckTimer);
+                        return;
+                    }
+                    if (_recheckCount >= 20) {
+                        clearInterval(_recheckTimer);
+                        redirect();
+                    }
+                }, 500);
             }
         });
 
