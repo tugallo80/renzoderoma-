@@ -1349,7 +1349,10 @@
                     const _pData = (_wid && personalData[_wid]) ? personalData[_wid] : null;
                     const trab = lic.worker_name || lic.trabajador_nombre || lic.asignado || lic.nombre_trabajador
                         || (_pData && (_pData.nombre || _pData.name)) || null;
-                    if(!trab) return;
+                    // Proyectos compartidos (participantes) pueden no tener trab asignado — no saltar
+                    const _rawPartApp = lic.participantes;
+                    const _tienePartApp = _rawPartApp && (Array.isArray(_rawPartApp) ? _rawPartApp.length > 1 : Object.keys(_rawPartApp).length > 1);
+                    if(!trab && !_tienePartApp) return;
 
                     // ── Prorrateo dos meses: si existe periodo_split, procesamos cada tramo por separado
                     if (lic.periodo_split && lic.periodo_split.p1 && lic.periodo_split.p2) {
@@ -1615,8 +1618,14 @@
                 const pNombre = proyecto.nombre || 'Proyecto';
                 Object.entries(proyecto.licitaciones).forEach(([licId, lic]) => {
                     if(!lic || typeof lic !== 'object') return;
-                    const trab = lic.worker_name || lic.trabajador_nombre || lic.asignado || lic.nombre_trabajador || null;
-                    if(!trab) return;
+                    const _wid2 = lic.worker_id || lic.wid || '';
+                    const _pData2 = (_wid2 && personalData[_wid2]) ? personalData[_wid2] : null;
+                    const trab = lic.worker_name || lic.trabajador_nombre || lic.asignado || lic.nombre_trabajador
+                        || (_pData2 && (_pData2.nombre || _pData2.name)) || null;
+                    // Proyectos compartidos (participantes) pueden no tener trab asignado — no saltar
+                    const rawPartCheck = lic.participantes;
+                    const tieneParticipantes = rawPartCheck && (Array.isArray(rawPartCheck) ? rawPartCheck.length > 1 : Object.keys(rawPartCheck).length > 1);
+                    if(!trab && !tieneParticipantes) return;
                     // Prorrateo dos meses en cálculo de metas
                     if (lic.periodo_split && lic.periodo_split.p1 && lic.periodo_split.p2) {
                         [lic.periodo_split.p1, lic.periodo_split.p2].forEach((_tr2, _ti2) => {
