@@ -300,7 +300,7 @@
                 if(p.estado === 'produccion') { statusIcon = '🔵'; iconColor = 'var(--blue)'; }
                 if(p.estado === 'entregado') { statusIcon = '🟢'; iconColor = 'var(--green)'; }
                 const imgSrc = p.img ? `<img src="${p.img}" loading="lazy">` : `<i class="ph-bold ph-folder" style="color:var(--gray);"></i>`;
-                const safeName = (p.nombre || "Sin nombre").replace(/'/g, "\\'"); const safeImg = p.img || '';
+                const safeName = String(p.nombre || "Sin nombre").replace(/'/g, "\\'"); const safeImg = String(p.img || '');
                 const oculto = p.visible_cliente === false;
                 const ocultoBadge = oculto ? `<div style="position:absolute;top:4px;left:4px;background:rgba(0,0,0,0.6);color:#fff;font-size:9px;font-weight:800;padding:2px 6px;border-radius:6px;">OCULTO</div>` : '';
                 const div = document.createElement('div');
