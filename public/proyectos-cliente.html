@@ -195,27 +195,31 @@
     }
 
     let tempImgFile = null; let existingImgUrl = null; let currentEditPid = null; let actionPid = null; let actionData = {}; let clientContact = { wsp: '', email: '' };
-    let globalProjectsArr = []; // Array global para el ordenamiento
+    let globalProjectsArr = [];
 
-    // Cargar datos — usar onAuthStateChanged directamente, es lo más robusto
+    // Mostrar "Cargando..." inmediatamente — visible mientras auth resuelve
+    document.getElementById('project-grid').innerHTML =
+        `<div style="grid-column:span 4;text-align:center;color:var(--gray);padding:40px;font-size:.85rem;">Cargando proyectos...</div>`;
+
+    // Arrancar carga — usa rubikAuthReady de auth-guard para no registrar un segundo listener
     (function arrancarCarga() {
         var auth = firebase.auth();
-        // Si ya hay usuario en memoria, arrancar de una
         if (auth.currentUser) {
-            console.log('[proyectos-cliente] currentUser inmediato:', auth.currentUser.email);
             _cargarDatosIniciales();
             return;
         }
-        // Si no, esperar el callback
+        // rubikAuthReady es la promesa que auth-guard.js ya resolvió/rechazó
+        if (window.rubikAuthReady) {
+            window.rubikAuthReady
+                .then(function() { _cargarDatosIniciales(); })
+                .catch(function() { /* auth-guard ya redirige a login */ });
+            return;
+        }
+        // Fallback por si auth-guard no cargó
         var unsub = auth.onAuthStateChanged(function(user) {
             unsub();
-            if (user) {
-                console.log('[proyectos-cliente] auth callback:', user.email);
-                _cargarDatosIniciales();
-            } else {
-                console.warn('[proyectos-cliente] sin sesión, redirigiendo');
-                window.location.href = 'login.html';
-            }
+            if (user) { _cargarDatosIniciales(); }
+            else { window.location.href = 'login.html'; }
         });
     })();
 
@@ -274,42 +278,51 @@
 
     function _renderData(dataObj) {
         clearTimeout(window._proyectosTimeout);
-        grid.innerHTML = '';
-        globalProjectsArr = [];
-        if (!dataObj || Object.keys(dataObj).length === 0) {
-            grid.innerHTML = `<div style="grid-column:span 4;text-align:center;color:var(--gray);padding:40px;">Este cliente no tiene proyectos.</div>`;
-            return;
+        try {
+            grid.innerHTML = '';
+            globalProjectsArr = [];
+            if (!dataObj || Object.keys(dataObj).length === 0) {
+                grid.innerHTML = `<div style="grid-column:span 4;text-align:center;color:var(--gray);padding:40px;">Este cliente no tiene proyectos.</div>`;
+                return;
+            }
+            _hadGoodData = true;
+            let tempArr = Object.entries(dataObj).map(([pid, p]) => { p = {...p}; p.pid = pid; return p; });
+            tempArr.sort((a, b) => (a.orden ?? 999999) - (b.orden ?? 999999));
+            globalProjectsArr = tempArr.map((p, i) => { p.orden = i; return p; });
+
+            const wrap = document.createElement('div');
+            wrap.className = 'proj-items';
+            wrap.style.cssText = 'grid-column:span 4;display:grid;grid-template-columns:repeat(4,1fr);gap:20px 15px;';
+
+            globalProjectsArr.forEach(p => {
+                const pid = p.pid;
+                let statusIcon = '⚪'; let iconColor = 'var(--gray)';
+                if(p.estado === 'produccion') { statusIcon = '🔵'; iconColor = 'var(--blue)'; }
+                if(p.estado === 'entregado') { statusIcon = '🟢'; iconColor = 'var(--green)'; }
+                const imgSrc = p.img ? `<img src="${p.img}" loading="lazy">` : `<i class="ph-bold ph-folder" style="color:var(--gray);"></i>`;
+                const safeName = (p.nombre || "Sin nombre").replace(/'/g, "\\'"); const safeImg = p.img || '';
+                const oculto = p.visible_cliente === false;
+                const ocultoBadge = oculto ? `<div style="position:absolute;top:4px;left:4px;background:rgba(0,0,0,0.6);color:#fff;font-size:9px;font-weight:800;padding:2px 6px;border-radius:6px;">OCULTO</div>` : '';
+                const div = document.createElement('div');
+                div.className = 'app-item';
+                if (oculto) div.style.opacity = '0.55';
+                div.innerHTML = `<div class="icon-wrap" style="position:relative;">${imgSrc}<div class="badge-status" style="color:${iconColor};">${statusIcon}</div>${ocultoBadge}</div><div class="app-name">${p.nombre}${oculto ? ' 🚫' : ''}</div>`;
+                div.addEventListener('click', () => openProject(pid, safeName));
+                div.addEventListener('contextmenu', e => { openActionMenu(pid, safeName, safeImg, p.estado); e.preventDefault(); });
+                div.addEventListener('touchstart', e => _lpStart(e, pid, safeName, safeImg, p.estado), {passive:true});
+                div.addEventListener('touchend', _lpCancel, {passive:true});
+                div.addEventListener('touchmove', _lpCancel, {passive:true});
+                wrap.appendChild(div);
+            });
+            grid.appendChild(wrap);
+        } catch(err) {
+            console.error('[proyectos] _renderData error:', err);
+            grid.innerHTML = `<div style="grid-column:span 4;text-align:center;padding:30px;">
+                <div style="color:var(--red);font-weight:900;font-size:13px;margin-bottom:8px;">Error al cargar proyectos</div>
+                <div style="color:var(--gray);font-size:11px;margin-bottom:12px;">${err && err.message ? err.message : String(err)}</div>
+                <button onclick="_cargarProyectos()" style="background:var(--blue);color:#fff;border:none;border-radius:10px;padding:10px 22px;font-size:.9rem;cursor:pointer;">Reintentar</button>
+            </div>`;
         }
-        _hadGoodData = true;
-        let tempArr = Object.entries(dataObj).map(([pid, p]) => { p = {...p}; p.pid = pid; return p; });
-        tempArr.sort((a, b) => (a.orden ?? 999999) - (b.orden ?? 999999));
-        globalProjectsArr = tempArr.map((p, i) => { p.orden = i; return p; });
-
-        const wrap = document.createElement('div');
-        wrap.className = 'proj-items';
-        wrap.style.cssText = 'grid-column:span 4;display:grid;grid-template-columns:repeat(4,1fr);gap:20px 15px;';
-
-        globalProjectsArr.forEach(p => {
-            const pid = p.pid;
-            let statusIcon = '⚪'; let iconColor = 'var(--gray)';
-            if(p.estado === 'produccion') { statusIcon = '🔵'; iconColor = 'var(--blue)'; }
-            if(p.estado === 'entregado') { statusIcon = '🟢'; iconColor = 'var(--green)'; }
-            const imgSrc = p.img ? `<img src="${p.img}" loading="lazy">` : `<i class="ph-bold ph-folder" style="color:var(--gray);"></i>`;
-            const safeName = (p.nombre || "Sin nombre").replace(/'/g, "\\'"); const safeImg = p.img || '';
-            const oculto = p.visible_cliente === false;
-            const ocultoBadge = oculto ? `<div style="position:absolute;top:4px;left:4px;background:rgba(0,0,0,0.6);color:#fff;font-size:9px;font-weight:800;padding:2px 6px;border-radius:6px;">OCULTO</div>` : '';
-            const div = document.createElement('div');
-            div.className = 'app-item';
-            if (oculto) div.style.opacity = '0.55';
-            div.innerHTML = `<div class="icon-wrap" style="position:relative;">${imgSrc}<div class="badge-status" style="color:${iconColor};">${statusIcon}</div>${ocultoBadge}</div><div class="app-name">${p.nombre}${oculto ? ' 🚫' : ''}</div>`;
-            div.addEventListener('click', () => openProject(pid, safeName));
-            div.addEventListener('contextmenu', e => { openActionMenu(pid, safeName, safeImg, p.estado); e.preventDefault(); });
-            div.addEventListener('touchstart', e => _lpStart(e, pid, safeName, safeImg, p.estado), {passive:true});
-            div.addEventListener('touchend', _lpCancel, {passive:true});
-            div.addEventListener('touchmove', _lpCancel, {passive:true});
-            wrap.appendChild(div);
-        });
-        grid.appendChild(wrap);
     }
 
     function _mostrarError() {
