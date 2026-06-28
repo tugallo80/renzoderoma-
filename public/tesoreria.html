@@ -1604,9 +1604,6 @@
         const mes = document.getElementById('filtro-mes').value;
         if(!mes) return alert('Selecciona un mes.');
         const tFiltro = (document.getElementById('filtro-trabajador')||{}).value||'';
-        const _allKeys = Object.keys(_buildPorTrabajador(mes));
-        const _filtKeys = Object.keys(calcularDatosMes(mes, tFiltro));
-        alert('=== DEBUG PDF ===\nFILTRO LEIDO: [' + tFiltro + ']\n\nTODOS EN MES:\n' + (_allKeys.join('\n')||'(ninguno)') + '\n\nCON FILTRO:\n' + (_filtKeys.join('\n')||'(ninguno)'));
         const mesAnt = mesMenos1(mes);
         const dataMes = calcularDatosMes(mes, tFiltro);
         const dataAnt = calcularDatosMes(mesAnt, tFiltro);
@@ -1697,7 +1694,8 @@
             });
             doc.setTextColor(150); doc.setFontSize(8); doc.setFont(undefined,'normal');
             doc.text('Rubik OS - rubikbolivia.com', 14, 288);
-            doc.save('Balance_'+mesAnt+'_'+mes+'.pdf');
+            const _safeTrab = tFiltro ? '_'+tFiltro.replace(/[^a-zA-Z0-9]/g,'_').substring(0,25) : '_TODOS';
+            doc.save('Balance_'+mes+_safeTrab+'.pdf');
         } catch(e) { alert('Error al generar PDF: '+e.message); console.error(e); }
     }
 
