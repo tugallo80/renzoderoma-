@@ -1604,6 +1604,7 @@
         const mes = document.getElementById('filtro-mes').value;
         if(!mes) return alert('Selecciona un mes.');
         const tFiltro = (document.getElementById('filtro-trabajador')||{}).value||'';
+        alert('DEBUG — filtro: [' + tFiltro + ']\nworkers en dataMes: ' + Object.keys(calcularDatosMes(mes, '')).join('\n'));
         const mesAnt = mesMenos1(mes);
         const dataMes = calcularDatosMes(mes, tFiltro);
         const dataAnt = calcularDatosMes(mesAnt, tFiltro);
