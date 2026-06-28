@@ -1604,7 +1604,9 @@
         const mes = document.getElementById('filtro-mes').value;
         if(!mes) return alert('Selecciona un mes.');
         const tFiltro = (document.getElementById('filtro-trabajador')||{}).value||'';
-        alert('DEBUG — filtro: [' + tFiltro + ']\nworkers en dataMes: ' + Object.keys(calcularDatosMes(mes, '')).join('\n'));
+        const _allKeys = Object.keys(_buildPorTrabajador(mes));
+        const _filtKeys = Object.keys(calcularDatosMes(mes, tFiltro));
+        alert('=== DEBUG PDF ===\nFILTRO LEIDO: [' + tFiltro + ']\n\nTODOS EN MES:\n' + (_allKeys.join('\n')||'(ninguno)') + '\n\nCON FILTRO:\n' + (_filtKeys.join('\n')||'(ninguno)'));
         const mesAnt = mesMenos1(mes);
         const dataMes = calcularDatosMes(mes, tFiltro);
         const dataAnt = calcularDatosMes(mesAnt, tFiltro);
