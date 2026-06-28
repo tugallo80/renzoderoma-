@@ -1439,7 +1439,8 @@
         if(sel) {
             const prev = sel.value;
             sel.innerHTML = '<option value="">Todos los trabajadores</option>';
-            Object.keys(porTrabajador).sort().forEach(n => { sel.innerHTML += `<option value="${n}" ${n === prev ? 'selected' : ''}>${n}</option>`; });
+            Object.keys(porTrabajador).sort().forEach(n => { sel.innerHTML += `<option value="${n}">${n}</option>`; });
+            sel.value = prev; // restaurar explícitamente — el atributo 'selected' en innerHTML no es confiable en mobile Chrome
         }
 
         const filtrados = trabajadorFiltro
