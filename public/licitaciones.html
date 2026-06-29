@@ -1876,6 +1876,28 @@ ${reqTxt}<div style="margin-top:4px;">${badgeMo}</div>
                     </div>`;
                     lRev.innerHTML += card + '</div>'; cRev++;
                 } else if(estado==='aprobado'||estado==='terminado') {
+                    if (!isSup) {
+                        const _extArr = lic.extras ? (Array.isArray(lic.extras) ? lic.extras : Object.values(lic.extras)) : [];
+                        const _extTot = _extArr.reduce((s,e)=>s+parseFloat(e.monto||0),0);
+                        const _montoBase = parseFloat(lic.precio_final||lic.precio_propuesto||0);
+                        const _montoConExt = _montoBase + _extTot;
+                        const _saldo = _montoConExt - totalPagado;
+                        const fM2 = n => parseFloat(n||0).toLocaleString('es-BO',{minimumFractionDigits:2,maximumFractionDigits:2});
+                        card += `<div style="margin-top:10px;background:rgba(255,149,0,0.06);border:1px dashed var(--orange);border-radius:12px;padding:10px;margin-bottom:8px;">`
+                              + `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:7px;">`
+                              + `<span style="font-size:11px;font-weight:900;color:var(--orange);">💼 Balance</span>`
+                              + `<button onclick="abrirExtrasLic('${key}','${cid}','${pid}')" style="font-size:10px;background:var(--orange);color:white;border:none;border-radius:6px;padding:3px 8px;cursor:pointer;font-weight:800;">➕ Extra</button>`
+                              + `</div>`
+                              + `<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:5px;text-align:center;margin-bottom:${_extArr.length?'7px':'0'};">`
+                              + `<div style="background:rgba(0,122,255,0.08);border-radius:7px;padding:5px;"><div style="font-size:8px;color:var(--gray);font-weight:800;">CONTRATO${_extTot>0?'+EXT':''}</div><div style="font-size:11px;font-weight:900;color:var(--blue);">${fM2(_montoConExt)}</div></div>`
+                              + `<div style="background:rgba(52,199,89,0.08);border-radius:7px;padding:5px;"><div style="font-size:8px;color:var(--gray);font-weight:800;">PAGADO</div><div style="font-size:11px;font-weight:900;color:var(--green);">${fM2(totalPagado)}</div></div>`
+                              + `<div style="background:rgba(255,149,0,0.08);border-radius:7px;padding:5px;"><div style="font-size:8px;color:var(--gray);font-weight:800;">SALDO</div><div style="font-size:11px;font-weight:900;color:${_saldo>0?'var(--orange)':'var(--green)'};">${fM2(_saldo)}</div></div>`
+                              + `</div>`
+                              + (_extArr.length > 0 ? `<div style="border-top:1px dashed var(--border);padding-top:5px;">`
+                                + _extArr.map(e=>`<div style="display:flex;justify-content:space-between;font-size:10px;padding:2px 0;"><span style="color:var(--gray);">${e.descripcion||'Extra'} · ${e.fecha||''}</span><span style="font-weight:900;color:var(--orange);">+${fM2(e.monto)} Bs</span></div>`).join('')
+                                + `</div>` : '')
+                              + `</div>`;
+                    }
                     card += `<button class="btn-action btn-done" onclick="editarLicitacion('${key}')"><i class="ph-bold ph-pencil-simple"></i> Ver / Editar</button>`;
                     if(estado==='aprobado') card += `<button class="btn-action btn-rev" style="margin-top:6px;background:rgba(52,199,89,0.15);color:var(--green);" onclick="marcarTerminado('${key}','${lic.worker_id}')"><i class="ph-bold ph-check-fat"></i> Marcar Terminada</button>`;
                     lAp.innerHTML += card + '</div>'; cAp++;
@@ -2886,8 +2908,61 @@ LICITACIONES ACTUALES DEL PROYECTO:
         doc.save(`Contratistas_${pName.replace(/\s+/g,'_')}_${today}.pdf`);
     }
 
+
+    // ── Extras de licitaciones (interno / externo / empresa) ──
+    let _extrasLicCtx = {};
+
+    window.abrirExtrasLic = function(licId, cid, pid) {
+        _extrasLicCtx = { licId, cid, pid };
+        document.getElementById('extras-lic-monto').value = '';
+        document.getElementById('extras-lic-desc').value = '';
+        document.getElementById('extras-lic-fecha').value = new Date().toISOString().substring(0, 10);
+        document.getElementById('mod-extras-lic').style.display = 'flex';
+    };
+
+    window.guardarExtraLic = async function() {
+        const { licId, cid, pid } = _extrasLicCtx;
+        const monto = parseFloat(document.getElementById('extras-lic-monto').value);
+        const desc  = document.getElementById('extras-lic-desc').value.trim();
+        const fecha = document.getElementById('extras-lic-fecha').value;
+        if (!monto || isNaN(monto) || monto <= 0) return alert('Ingresá un monto válido.');
+        if (!desc) return alert('Ingresá la descripción del extra.');
+        const btn = document.querySelector('#mod-extras-lic button[onclick="guardarExtraLic()"]');
+        if (btn) { btn.disabled = true; btn.textContent = 'Guardando...'; }
+        try {
+            await db.ref(`proyectos/${cid}/${pid}/licitaciones/${licId}/extras`).push({
+                descripcion: desc, monto, fecha, timestamp: Date.now()
+            });
+            document.getElementById('mod-extras-lic').style.display = 'none';
+        } catch(e) {
+            alert('Error: ' + e.message);
+        } finally {
+            if (btn) { btn.disabled = false; btn.textContent = 'Guardar Extra'; }
+        }
+    };
+
 </script>
 <script src="/paste-image.js"></script>
+
+    <!-- Modal Extras Licitación -->
+    <div id="mod-extras-lic" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.6);z-index:3000;align-items:flex-end;justify-content:center;backdrop-filter:blur(4px);">
+        <div style="background:var(--card);border-radius:24px 24px 0 0;padding:24px;width:100%;max-width:480px;max-height:90vh;overflow-y:auto;">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;">
+                <div style="font-size:16px;font-weight:900;color:var(--orange);">➕ Agregar Extra al Contrato</div>
+                <button onclick="document.getElementById('mod-extras-lic').style.display='none'" style="background:var(--bg);border:none;width:32px;height:32px;border-radius:50%;cursor:pointer;font-size:18px;color:var(--gray);">×</button>
+            </div>
+            <div style="background:rgba(255,149,0,0.08);border:1px solid var(--orange);border-radius:10px;padding:10px;margin-bottom:16px;font-size:12px;color:var(--orange);font-weight:800;">
+                Trabajo extra adjudicado directamente — se suma al contrato y se refleja en el balance de Tesorería
+            </div>
+            <label class="inp-lbl">Monto (Bs) *</label>
+            <input type="number" id="extras-lic-monto" class="inp-std" placeholder="0.00" min="0" step="0.01" style="margin-bottom:10px;">
+            <label class="inp-lbl">Descripción *</label>
+            <input type="text" id="extras-lic-desc" class="inp-std" placeholder="Ej: Instalación adicional, Materiales extra..." style="margin-bottom:10px;">
+            <label class="inp-lbl">Fecha</label>
+            <input type="date" id="extras-lic-fecha" class="inp-std" style="margin-bottom:18px;">
+            <button onclick="guardarExtraLic()" style="width:100%;padding:14px;background:var(--orange);color:white;border:none;border-radius:14px;font-size:14px;font-weight:900;cursor:pointer;">Guardar Extra</button>
+        </div>
+    </div>
 
     <!-- Modal Finanzas Supervisor -->
     <div id="mod-fin-sup" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.6);z-index:3000;align-items:flex-end;justify-content:center;backdrop-filter:blur(4px);">

@@ -1386,6 +1386,13 @@
                         if(!t) return; const name = t.task_name || t.desc || ''; if(!name) return;
                         tareasDetalle.push({ parent: t.parent_desc||'', name, cant: parseFloat(t.cant)||0, und: t.und||'', pu: parseFloat(t.pu)||0, subtotal: parseFloat(t.subtotal)||((parseFloat(t.cant)||0)*(parseFloat(t.pu)||0)), fecha_entrega: t.fecha_entrega||'' });
                     });
+                    // ── Extras del contrato — se agregan al total y aparecen en el PDF ──
+                    const _extrasRaw = lic.extras ? (Array.isArray(lic.extras) ? lic.extras : Object.values(lic.extras)) : [];
+                    const _extrasTotal = _extrasRaw.reduce((s,e) => s + parseFloat(e.monto||0), 0);
+                    _extrasRaw.forEach(e => {
+                        tareasDetalle.push({ parent: '', name: 'Extra: ' + (e.descripcion||'Trabajo extra'), cant: 1, und: '', pu: parseFloat(e.monto||0), subtotal: parseFloat(e.monto||0), fecha_entrega: e.fecha||'' });
+                    });
+                    const montoConExtras = monto + _extrasTotal;
                     const tareas = tareasDetalle.map(t => t.name);
 
                     // ── Reparto porcentual entre participantes ──
@@ -1397,12 +1404,12 @@
                             const pNom = p.nombre || (p.worker_id && personalData[p.worker_id] && (personalData[p.worker_id].nombre || personalData[p.worker_id].name)) || null;
                             if(!pNom) return;
                             const pct = parseFloat(p.porcentaje) || 0;
-                            const montoShare = monto * pct / 100;
+                            const montoShare = montoConExtras * pct / 100;
                             const anticiposShare = anticipos * pct / 100;
                             if(!porTrabajador[pNom]) porTrabajador[pNom] = { proyectos: [], totalContrato: 0, totalAnticipos: 0 };
                             let pEx2 = porTrabajador[pNom].proyectos.find(pr => pr.nombre === pNombre);
                             if(!pEx2) { pEx2 = { nombre: pNombre, contratos: [], subTotal: 0, subAnticipos: 0 }; porTrabajador[pNom].proyectos.push(pEx2); }
-                            pEx2.contratos.push({ tareas, tareasDetalle, pagosDetalle, monto: montoShare, anticipos: anticiposShare, estado: lic.estado||'aprobado', esCompartido: true, porcentaje: pct, montoTotal: monto });
+                            pEx2.contratos.push({ tareas, tareasDetalle, pagosDetalle, monto: montoShare, anticipos: anticiposShare, estado: lic.estado||'aprobado', esCompartido: true, porcentaje: pct, montoTotal: montoConExtras });
                             pEx2.subTotal += montoShare; pEx2.subAnticipos += anticiposShare;
                             porTrabajador[pNom].totalContrato += montoShare; porTrabajador[pNom].totalAnticipos += anticiposShare;
                         });
@@ -1411,9 +1418,9 @@
                         if(!porTrabajador[trab]) porTrabajador[trab] = { proyectos: [], totalContrato: 0, totalAnticipos: 0 };
                         let pEx = porTrabajador[trab].proyectos.find(p => p.nombre === pNombre);
                         if(!pEx) { pEx = { nombre: pNombre, contratos: [], subTotal: 0, subAnticipos: 0 }; porTrabajador[trab].proyectos.push(pEx); }
-                        pEx.contratos.push({ tareas, tareasDetalle, pagosDetalle, monto, anticipos, estado: lic.estado||'aprobado' });
-                        pEx.subTotal += monto; pEx.subAnticipos += anticipos;
-                        porTrabajador[trab].totalContrato += monto; porTrabajador[trab].totalAnticipos += anticipos;
+                        pEx.contratos.push({ tareas, tareasDetalle, pagosDetalle, monto: montoConExtras, anticipos, estado: lic.estado||'aprobado' });
+                        pEx.subTotal += montoConExtras; pEx.subAnticipos += anticipos;
+                        porTrabajador[trab].totalContrato += montoConExtras; porTrabajador[trab].totalAnticipos += anticipos;
                     }
                 });
             });
