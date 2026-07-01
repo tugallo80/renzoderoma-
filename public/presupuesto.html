@@ -251,10 +251,15 @@
         <button class="btn btn-sec" style="color:var(--orange); border-color:var(--orange);" onclick="syncDatabasePrices()"><i class="ph-bold ph-arrows-clockwise"></i> Actualizar Precios BD</button>
         <button class="btn btn-sec" onclick="abrirModalPDF()"><i class="ph-bold ph-file-pdf"></i> PDF</button>
         <button class="btn btn-sec" onclick="exportExcel()"><i class="ph-bold ph-file-xls"></i> Excel</button>
+        <button class="btn btn-sec" id="btn-copy-mode" style="color:var(--green);border-color:var(--green);" onclick="toggleCopyMode()"><i class="ph-bold ph-copy"></i> Copiar ítems</button>
         <button class="btn btn-sec" style="color:var(--purple); border-color:var(--purple);" onclick="abrirModalIABudget()"><i class="ph-bold ph-magic-wand"></i> Presupuesto IA</button>
         <button class="btn btn-sec" style="color:var(--blue); border-color:var(--blue);" onclick="abrirModalRender3D()"><i class="ph-bold ph-cube"></i> Render</button>
     </div>
 
+    <div id="copy-sel-bar" style="display:none;background:var(--green);color:white;padding:10px 14px;border-radius:12px;margin-bottom:10px;align-items:center;justify-content:space-between;gap:10px;">
+        <span id="copy-count-lbl" style="font-size:13px;font-weight:800;">0 ítems seleccionados</span>
+        <button id="btn-ejecutar-copia" onclick="abrirModalCopiar()" disabled style="background:white;color:var(--green);border:none;padding:7px 14px;border-radius:8px;font-weight:900;font-size:12px;cursor:pointer;opacity:0.5;">Copiar a proyecto →</button>
+    </div>
     <div id="budget-list"></div>
     <div style="height:120px;"></div>
 
@@ -423,6 +428,7 @@
     if(!pid || !cid) { alert("Error de sesión: Cliente o Proyecto no identificado."); window.location.href="index.html"; }
     
     let data = []; let activeMod = null; let targetIdx = null; let sortableInstance;
+    let _copyMode = false; let _copySelected = new Set();
     let dbMats = {}; let dbItems = {}; let dbMo = {}; let dbOtros = {};
     let saveTimeout;
     let _ctxPanelOpen = new Set();
@@ -698,6 +704,7 @@
                 
                 const iconColor = hasImg ? 'var(--green)' : 'var(--gray)';
                 const displayStyle = isCollapsed ? 'display:none;' : '';
+                const copySelStyle = _copyMode && _copySelected.has(i) ? 'outline:2px solid var(--green);background:rgba(52,199,89,0.06);' : '';
                 const inactiveStyle = activo ? '' : 'opacity:0.4; background:rgba(128,128,128,0.07);';
                 const eyeIcon = activo ? 'ph-eye' : 'ph-eye-slash';
                 const eyeColor = activo ? 'var(--blue)' : 'var(--gray)';
@@ -705,7 +712,7 @@
                 
                 let visualCant = c.toString(); let visualPu = p.toString();
                 
-                htmlBuffer += `<div class="item" data-id="${i}" style="${displayStyle}${inactiveStyle}"><i class="ph-bold ph-dots-six-vertical item-handle"></i><div class="item-content"><div class="grid-desc"><input id="desc-${i}" class="inp-desc" value="${item.desc || ''}" placeholder="Descripción..." onkeyup="searchGlobal(this, ${i})" onchange="upd(${i}, 'desc', this.value)" onblur="setTimeout(()=>document.getElementById('sugg-${i}').style.display='none', 150)" style="${descStyle}"><div id="sugg-${i}" class="suggestions"></div><input list="dl-unds" id="und-${i}" class="sel-und" value="${item.und || 'glb'}" onchange="upd(${i}, 'und', this.value); saveUnitToDB(this.value);" style="width:60px; text-align:center;"></div><div class="grid-vals"><div class="val-box"><span class="lbl">CANT</span><input id="cant-${i}" class="inp-num" type="number" step="any" value="${visualCant}" oninput="upd(${i}, 'cant', this.value)">
+                htmlBuffer += `<div class="item" data-id="${i}" style="${displayStyle}${inactiveStyle}${copySelStyle}"><i class="ph-bold ph-dots-six-vertical item-handle"></i><div class="item-content"><div class="grid-desc"><input id="desc-${i}" class="inp-desc" value="${item.desc || ''}" placeholder="Descripción..." onkeyup="searchGlobal(this, ${i})" onchange="upd(${i}, 'desc', this.value)" onblur="setTimeout(()=>document.getElementById('sugg-${i}').style.display='none', 150)" style="${descStyle}"><div id="sugg-${i}" class="suggestions"></div><input list="dl-unds" id="und-${i}" class="sel-und" value="${item.und || 'glb'}" onchange="upd(${i}, 'und', this.value); saveUnitToDB(this.value);" style="width:60px; text-align:center;"></div><div class="grid-vals"><div class="val-box"><span class="lbl">CANT</span><input id="cant-${i}" class="inp-num" type="number" step="any" value="${visualCant}" oninput="upd(${i}, 'cant', this.value)">
                 
                 <button class="btn-mini btn-blue" onclick="irAComputo(${i})">CÓMPUTO</button>
                 <div style="display:flex; gap:2px; margin-top:2px;">
@@ -713,7 +720,7 @@
                     <button class="btn-mini" style="background:#af52de; flex:1; padding:4px;" onclick="pasteComputo(${i}, null, null)" title="Pegar Cómputo">PEGAR</button>
                 </div>
 
-                </div><div class="val-box"><span class="lbl">P.UNIT</span><input id="pu-${i}" class="inp-num" type="number" step="any" value="${visualPu}" oninput="upd(${i}, 'pu', this.value)"><button class="btn-mini btn-orange" onclick="openApu(${i})">APU</button></div><div class="val-box"><span class="lbl">CARACTERÍSTICAS</span><textarea id="feat-${i}" class="feat-area" onchange="upd(${i}, 'feat', this.value)">${item.feat || ''}</textarea></div></div><div class="item-foot"><div class="total-lbl" id="tot-lbl-${i}" style="${activo ? '' : 'text-decoration:line-through; color:var(--gray);'}">TOTAL: ${fMoney(sub)}</div><i class="ph-bold ${eyeIcon} icon-btn" style="color:${eyeColor}" onclick="toggleActivo(${i})" title="${activo ? 'Desactivar ítem' : 'Activar ítem'}"></i><i class="ph-bold ph-image-square icon-btn" style="color:${iconColor}" onclick="openPhotoOpt(${i})"></i><i class="ph-bold ph-cube icon-btn" style="color:var(--blue)" onclick="abrirRenderItem(${i})" title="Render Axonométrico IA"></i>${item.iaPrompt ? `<i class="ph-bold ph-magic-wand icon-btn" style="color:var(--purple)" onclick="abrirRegenIA(${i})" title="Re-generar con IA"></i>` : ''}<i class="ph-bold ph-brain icon-btn" style="color:${(item.ctx_img||item.ctx_mat||item.ctx_est)?'var(--blue)':'var(--gray)'}" onclick="toggleCtxPanel(${i})" title="Contexto IA"></i><i class="ph-bold ph-copy icon-btn" onclick="dup(${i})"></i><i class="ph-bold ph-trash icon-btn" style="color:var(--red)" onclick="del(${i})"></i></div></div>${_buildCtxPanel(i, item)}</div>`;
+                </div><div class="val-box"><span class="lbl">P.UNIT</span><input id="pu-${i}" class="inp-num" type="number" step="any" value="${visualPu}" oninput="upd(${i}, 'pu', this.value)"><button class="btn-mini btn-orange" onclick="openApu(${i})">APU</button></div><div class="val-box"><span class="lbl">CARACTERÍSTICAS</span><textarea id="feat-${i}" class="feat-area" onchange="upd(${i}, 'feat', this.value)">${item.feat || ''}</textarea></div></div><div class="item-foot"><div class="total-lbl" id="tot-lbl-${i}" style="${activo ? '' : 'text-decoration:line-through; color:var(--gray);'}">TOTAL: ${fMoney(sub)}</div><i class="ph-bold ${eyeIcon} icon-btn" style="color:${eyeColor}" onclick="toggleActivo(${i})" title="${activo ? 'Desactivar ítem' : 'Activar ítem'}"></i><i class="ph-bold ph-image-square icon-btn" style="color:${iconColor}" onclick="openPhotoOpt(${i})"></i><i class="ph-bold ph-cube icon-btn" style="color:var(--blue)" onclick="abrirRenderItem(${i})" title="Render Axonométrico IA"></i>${item.iaPrompt ? `<i class="ph-bold ph-magic-wand icon-btn" style="color:var(--purple)" onclick="abrirRegenIA(${i})" title="Re-generar con IA"></i>` : ''}<i class="ph-bold ph-brain icon-btn" style="color:${(item.ctx_img||item.ctx_mat||item.ctx_est)?'var(--blue)':'var(--gray)'}" onclick="toggleCtxPanel(${i})" title="Contexto IA"></i><i class="ph-bold ph-copy icon-btn" onclick="dup(${i})"></i>${_copyMode ? `<i id="copy-chk-${i}" class="ph-bold ${_copySelected.has(i)?'ph-check-square':'ph-square'} icon-btn" style="color:${_copySelected.has(i)?'var(--green)':'var(--gray)'};font-size:17px;" onclick="toggleCopySelect(${i})" title="Seleccionar para copiar"></i>` : ''}<i class="ph-bold ph-trash icon-btn" style="color:var(--red)" onclick="del(${i})"></i></div></div>${_buildCtxPanel(i, item)}</div>`;
             }
         });
         
@@ -5134,6 +5141,109 @@ Genera UN ítem de presupuesto detallado con APU completo (materiales con precio
         }
     };
 })();
+
+// ── Copiar ítems a otro presupuesto ─────────────────────────────────────────
+
+function toggleCopyMode() {
+    _copyMode = !_copyMode;
+    _copySelected.clear();
+    const btn = document.getElementById('btn-copy-mode');
+    const bar = document.getElementById('copy-sel-bar');
+    if (_copyMode) {
+        btn.innerHTML = '<i class="ph-bold ph-x"></i> Cancelar';
+        btn.style.color = 'var(--red)'; btn.style.borderColor = 'var(--red)';
+        bar.style.display = 'flex';
+    } else {
+        btn.innerHTML = '<i class="ph-bold ph-copy"></i> Copiar ítems';
+        btn.style.color = 'var(--green)'; btn.style.borderColor = 'var(--green)';
+        bar.style.display = 'none';
+    }
+    render();
+}
+
+function toggleCopySelect(i) {
+    if (_copySelected.has(i)) { _copySelected.delete(i); } else { _copySelected.add(i); }
+    const n = _copySelected.size;
+    document.getElementById('copy-count-lbl').textContent = n + ' ítem' + (n !== 1 ? 's' : '') + ' seleccionado' + (n !== 1 ? 's' : '');
+    const execBtn = document.getElementById('btn-ejecutar-copia');
+    execBtn.disabled = n === 0;
+    execBtn.style.opacity = n === 0 ? '0.5' : '1';
+    // Actualizar visual del ítem sin re-render completo
+    const itemEl = document.querySelector(`.item[data-id="${i}"]`);
+    if (itemEl) {
+        itemEl.style.outline = _copySelected.has(i) ? '2px solid var(--green)' : '';
+        itemEl.style.background = _copySelected.has(i) ? 'rgba(52,199,89,0.06)' : '';
+    }
+    const chkEl = document.getElementById('copy-chk-' + i);
+    if (chkEl) {
+        const sel = _copySelected.has(i);
+        chkEl.className = 'ph-bold ' + (sel ? 'ph-check-square' : 'ph-square') + ' icon-btn';
+        chkEl.style.color = sel ? 'var(--green)' : 'var(--gray)';
+    }
+}
+
+async function abrirModalCopiar() {
+    if (_copySelected.size === 0) return;
+    const modal = document.getElementById('mod-copiar-pres');
+    const lista = document.getElementById('copiar-pres-lista');
+    document.getElementById('copiar-pres-subtit').textContent = _copySelected.size + ' ítem' + (_copySelected.size !== 1 ? 's' : '') + ' seleccionado' + (_copySelected.size !== 1 ? 's' : '');
+    lista.innerHTML = '<div style="color:var(--gray);font-size:13px;text-align:center;padding:20px;">Cargando proyectos...</div>';
+    modal.style.display = 'flex';
+    try {
+        const snap = await db.ref('proyectos/' + cid).once('value');
+        const allProy = snap.val() || {};
+        const arr = Object.entries(allProy)
+            .filter(([p, v]) => p !== pid && v && typeof v === 'object' && v.nombre)
+            .map(([p, v]) => ({ pid: p, nombre: v.nombre, estado: v.estado || '' }))
+            .sort((a, b) => a.nombre.localeCompare(b.nombre));
+        if (arr.length === 0) {
+            lista.innerHTML = '<div style="color:var(--gray);font-size:13px;text-align:center;padding:20px;">No hay otros proyectos en este cliente.</div>';
+            return;
+        }
+        lista.innerHTML = arr.map(p =>
+            `<div onclick="ejecutarCopia('${p.pid}','${p.nombre.replace(/'/g,"\\'")}',this)"
+                  style="padding:14px;border:1px solid var(--border);border-radius:10px;cursor:pointer;margin-bottom:8px;background:var(--bg);transition:background 0.15s;">
+                <div style="font-weight:800;font-size:14px;color:var(--text);">${p.nombre}</div>
+                ${p.estado ? `<div style="font-size:11px;color:var(--gray);margin-top:2px;text-transform:uppercase;">${p.estado}</div>` : ''}
+             </div>`
+        ).join('');
+    } catch(e) {
+        lista.innerHTML = `<div style="color:var(--red);font-size:13px;">${e.message}</div>`;
+    }
+}
+
+async function ejecutarCopia(targetPid, targetPname, el) {
+    const n = _copySelected.size;
+    if (!confirm(`¿Copiar ${n} ítem${n>1?'s':''} al presupuesto de "${targetPname}"?\nSe agregarán al final.`)) return;
+    if (el) { el.style.opacity = '0.5'; el.style.pointerEvents = 'none'; }
+    try {
+        const itemsToCopy = [..._copySelected].sort((a,b)=>a-b).map(i => JSON.parse(JSON.stringify(data[i])));
+        const snap = await db.ref('proyectos/' + cid + '/' + targetPid + '/presupuesto/items').once('value');
+        const existingItems = snap.val() || [];
+        const newItems = Array.isArray(existingItems) ? [...existingItems, ...itemsToCopy] : [...Object.values(existingItems), ...itemsToCopy];
+        await db.ref('proyectos/' + cid + '/' + targetPid + '/presupuesto/items').set(newItems);
+        document.getElementById('mod-copiar-pres').style.display = 'none';
+        toggleCopyMode();
+        alert(`✅ ${n} ítem${n>1?'s':''} copiado${n>1?'s':''} a "${targetPname}".`);
+    } catch(e) {
+        alert('Error: ' + e.message);
+        if (el) { el.style.opacity = ''; el.style.pointerEvents = ''; }
+    }
+}
 </script>
+
+<!-- Modal: Copiar ítems a otro presupuesto -->
+<div id="mod-copiar-pres" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9999;align-items:flex-end;justify-content:center;">
+  <div style="background:var(--card);border-radius:20px 20px 0 0;width:100%;max-width:520px;padding:22px 18px 34px;max-height:80vh;display:flex;flex-direction:column;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+      <div>
+        <div style="font-weight:900;font-size:16px;color:var(--text);">Copiar a proyecto</div>
+        <div id="copiar-pres-subtit" style="font-size:12px;color:var(--gray);margin-top:2px;"></div>
+      </div>
+      <button onclick="document.getElementById('mod-copiar-pres').style.display='none'" style="background:none;border:none;font-size:22px;cursor:pointer;color:var(--gray);">✕</button>
+    </div>
+    <div id="copiar-pres-lista" style="overflow-y:auto;flex:1;margin-top:10px;"></div>
+  </div>
+</div>
 </body>
 </html>
