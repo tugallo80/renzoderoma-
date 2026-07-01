@@ -233,13 +233,35 @@
         try {
             const slim = {};
             Object.entries(dataObj).forEach(([pid, p]) => {
-                slim[pid] = { nombre: p.nombre, estado: p.estado, img: p.img || null, orden: p.orden ?? null, visible_cliente: p.visible_cliente ?? null };
+                // Descartar entradas shallow (shallow=true devuelve objetos como true)
+                if (typeof p !== 'object' || p === null) return;
+                const nombre = typeof p.nombre === 'string' ? p.nombre : null;
+                if (!nombre) return; // ignorar proyectos sin nombre válido
+                slim[pid] = {
+                    nombre,
+                    estado: typeof p.estado === 'string' ? p.estado : null,
+                    img: typeof p.img === 'string' ? p.img : null,
+                    orden: typeof p.orden === 'number' ? p.orden : null,
+                    visible_cliente: p.visible_cliente === false ? false : null
+                };
             });
-            localStorage.setItem(_PROJ_CACHE_KEY, JSON.stringify(slim));
+            if (Object.keys(slim).length > 0) {
+                localStorage.setItem(_PROJ_CACHE_KEY, JSON.stringify(slim));
+            }
         } catch(e) {}
     }
     function _loadMetaCache() {
-        try { const s = localStorage.getItem(_PROJ_CACHE_KEY); return s ? JSON.parse(s) : null; } catch(e) { return null; }
+        try {
+            const s = localStorage.getItem(_PROJ_CACHE_KEY);
+            if (!s) return null;
+            const data = JSON.parse(s);
+            // Invalidar cache si los nombres no son strings (datos corruptos de shallow)
+            if (data && typeof data === 'object') {
+                const valid = Object.values(data).every(p => p && typeof p.nombre === 'string');
+                if (!valid) { localStorage.removeItem(_PROJ_CACHE_KEY); return null; }
+            }
+            return data;
+        } catch(e) { return null; }
     }
 
     function _cargarProyectos() {
@@ -299,14 +321,16 @@
                 let statusIcon = '⚪'; let iconColor = 'var(--gray)';
                 if(p.estado === 'produccion') { statusIcon = '🔵'; iconColor = 'var(--blue)'; }
                 if(p.estado === 'entregado') { statusIcon = '🟢'; iconColor = 'var(--green)'; }
-                const imgSrc = p.img ? `<img src="${p.img}" loading="lazy">` : `<i class="ph-bold ph-folder" style="color:var(--gray);"></i>`;
-                const safeName = String(p.nombre || "Sin nombre").replace(/'/g, "\\'"); const safeImg = String(p.img || '');
+                const imgUrl = typeof p.img === 'string' && p.img ? p.img : null;
+                const imgSrc = imgUrl ? `<img src="${imgUrl}" loading="lazy">` : `<i class="ph-bold ph-folder" style="color:var(--gray);"></i>`;
+                const displayNombre = typeof p.nombre === 'string' && p.nombre ? p.nombre : 'Sin nombre';
+                const safeName = displayNombre.replace(/'/g, "\\'"); const safeImg = imgUrl ? imgUrl.replace(/'/g, "\\'") : '';
                 const oculto = p.visible_cliente === false;
                 const ocultoBadge = oculto ? `<div style="position:absolute;top:4px;left:4px;background:rgba(0,0,0,0.6);color:#fff;font-size:9px;font-weight:800;padding:2px 6px;border-radius:6px;">OCULTO</div>` : '';
                 const div = document.createElement('div');
                 div.className = 'app-item';
                 if (oculto) div.style.opacity = '0.55';
-                div.innerHTML = `<div class="icon-wrap" style="position:relative;">${imgSrc}<div class="badge-status" style="color:${iconColor};">${statusIcon}</div>${ocultoBadge}</div><div class="app-name">${p.nombre}${oculto ? ' 🚫' : ''}</div>`;
+                div.innerHTML = `<div class="icon-wrap" style="position:relative;">${imgSrc}<div class="badge-status" style="color:${iconColor};">${statusIcon}</div>${ocultoBadge}</div><div class="app-name">${displayNombre}${oculto ? ' 🚫' : ''}</div>`;
                 div.addEventListener('click', () => openProject(pid, safeName));
                 div.addEventListener('contextmenu', e => { openActionMenu(pid, safeName, safeImg, p.estado); e.preventDefault(); });
                 div.addEventListener('touchstart', e => _lpStart(e, pid, safeName, safeImg, p.estado), {passive:true});
