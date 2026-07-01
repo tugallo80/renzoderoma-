@@ -5182,27 +5182,71 @@ function toggleCopySelect(i) {
     }
 }
 
+let _copiarTargetCid = null;
+
 async function abrirModalCopiar() {
     if (_copySelected.size === 0) return;
+    _copiarTargetCid = null;
     const modal = document.getElementById('mod-copiar-pres');
+    const subtit = document.getElementById('copiar-pres-subtit');
     const lista = document.getElementById('copiar-pres-lista');
-    document.getElementById('copiar-pres-subtit').textContent = _copySelected.size + ' ítem' + (_copySelected.size !== 1 ? 's' : '') + ' seleccionado' + (_copySelected.size !== 1 ? 's' : '');
-    lista.innerHTML = '<div style="color:var(--gray);font-size:13px;text-align:center;padding:20px;">Cargando proyectos...</div>';
+    const backBtn = document.getElementById('copiar-pres-back');
+    const title = document.getElementById('copiar-pres-title');
+    const n = _copySelected.size;
+    subtit.textContent = n + ' ítem' + (n !== 1 ? 's' : '') + ' seleccionado' + (n !== 1 ? 's' : '');
+    backBtn.style.display = 'none';
+    title.textContent = 'Elegir cliente';
+    lista.innerHTML = '<div style="color:var(--gray);font-size:13px;text-align:center;padding:20px;">Cargando clientes...</div>';
     modal.style.display = 'flex';
     try {
-        const snap = await db.ref('proyectos/' + cid).once('value');
+        const snap = await db.ref('clientes').once('value');
+        const clientes = snap.val() || {};
+        const arr = Object.entries(clientes)
+            .filter(([k, v]) => v && (v.empresa || v.nombre))
+            .map(([k, v]) => ({ cid: k, nombre: v.empresa || v.nombre }))
+            .sort((a, b) => {
+                if (a.cid === cid) return -1;
+                if (b.cid === cid) return 1;
+                return a.nombre.localeCompare(b.nombre);
+            });
+        lista.innerHTML = arr.map(c =>
+            `<div onclick="abrirProyectosCliente('${c.cid}','${c.nombre.replace(/'/g,"\\'")}')"
+                  style="padding:14px;border:1px solid ${c.cid===cid?'var(--green)':'var(--border)'};border-radius:10px;cursor:pointer;margin-bottom:8px;background:var(--bg);display:flex;align-items:center;gap:10px;">
+                <i class="ph-bold ph-buildings" style="font-size:18px;color:${c.cid===cid?'var(--green)':'var(--gray)'};flex-shrink:0;"></i>
+                <div>
+                    <div style="font-weight:800;font-size:14px;color:var(--text);">${c.nombre}</div>
+                    ${c.cid===cid ? '<div style="font-size:11px;color:var(--green);font-weight:700;">Cliente actual</div>' : ''}
+                </div>
+                <i class="ph-bold ph-caret-right" style="margin-left:auto;color:var(--gray);"></i>
+             </div>`
+        ).join('') || '<div style="color:var(--gray);font-size:13px;text-align:center;padding:20px;">No se encontraron clientes.</div>';
+    } catch(e) {
+        lista.innerHTML = `<div style="color:var(--red);font-size:13px;">${e.message}</div>`;
+    }
+}
+
+async function abrirProyectosCliente(targetCid, clienteNombre) {
+    _copiarTargetCid = targetCid;
+    const lista = document.getElementById('copiar-pres-lista');
+    const backBtn = document.getElementById('copiar-pres-back');
+    const title = document.getElementById('copiar-pres-title');
+    backBtn.style.display = 'flex';
+    title.textContent = clienteNombre;
+    lista.innerHTML = '<div style="color:var(--gray);font-size:13px;text-align:center;padding:20px;">Cargando proyectos...</div>';
+    try {
+        const snap = await db.ref('proyectos/' + targetCid).once('value');
         const allProy = snap.val() || {};
         const arr = Object.entries(allProy)
-            .filter(([p, v]) => p !== pid && v && typeof v === 'object' && v.nombre)
+            .filter(([p, v]) => !(targetCid === cid && p === pid) && v && typeof v === 'object' && v.nombre)
             .map(([p, v]) => ({ pid: p, nombre: v.nombre, estado: v.estado || '' }))
             .sort((a, b) => a.nombre.localeCompare(b.nombre));
         if (arr.length === 0) {
-            lista.innerHTML = '<div style="color:var(--gray);font-size:13px;text-align:center;padding:20px;">No hay otros proyectos en este cliente.</div>';
+            lista.innerHTML = '<div style="color:var(--gray);font-size:13px;text-align:center;padding:20px;">No hay proyectos disponibles.</div>';
             return;
         }
         lista.innerHTML = arr.map(p =>
             `<div onclick="ejecutarCopia('${p.pid}','${p.nombre.replace(/'/g,"\\'")}',this)"
-                  style="padding:14px;border:1px solid var(--border);border-radius:10px;cursor:pointer;margin-bottom:8px;background:var(--bg);transition:background 0.15s;">
+                  style="padding:14px;border:1px solid var(--border);border-radius:10px;cursor:pointer;margin-bottom:8px;background:var(--bg);">
                 <div style="font-weight:800;font-size:14px;color:var(--text);">${p.nombre}</div>
                 ${p.estado ? `<div style="font-size:11px;color:var(--gray);margin-top:2px;text-transform:uppercase;">${p.estado}</div>` : ''}
              </div>`
@@ -5214,14 +5258,15 @@ async function abrirModalCopiar() {
 
 async function ejecutarCopia(targetPid, targetPname, el) {
     const n = _copySelected.size;
+    const destCid = _copiarTargetCid || cid;
     if (!confirm(`¿Copiar ${n} ítem${n>1?'s':''} al presupuesto de "${targetPname}"?\nSe agregarán al final.`)) return;
     if (el) { el.style.opacity = '0.5'; el.style.pointerEvents = 'none'; }
     try {
         const itemsToCopy = [..._copySelected].sort((a,b)=>a-b).map(i => JSON.parse(JSON.stringify(data[i])));
-        const snap = await db.ref('proyectos/' + cid + '/' + targetPid + '/presupuesto/items').once('value');
+        const snap = await db.ref('proyectos/' + destCid + '/' + targetPid + '/presupuesto/items').once('value');
         const existingItems = snap.val() || [];
         const newItems = Array.isArray(existingItems) ? [...existingItems, ...itemsToCopy] : [...Object.values(existingItems), ...itemsToCopy];
-        await db.ref('proyectos/' + cid + '/' + targetPid + '/presupuesto/items').set(newItems);
+        await db.ref('proyectos/' + destCid + '/' + targetPid + '/presupuesto/items').set(newItems);
         document.getElementById('mod-copiar-pres').style.display = 'none';
         toggleCopyMode();
         alert(`✅ ${n} ítem${n>1?'s':''} copiado${n>1?'s':''} a "${targetPname}".`);
@@ -5235,9 +5280,10 @@ async function ejecutarCopia(targetPid, targetPname, el) {
 <!-- Modal: Copiar ítems a otro presupuesto -->
 <div id="mod-copiar-pres" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9999;align-items:flex-end;justify-content:center;">
   <div style="background:var(--card);border-radius:20px 20px 0 0;width:100%;max-width:520px;padding:22px 18px 34px;max-height:80vh;display:flex;flex-direction:column;">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
-      <div>
-        <div style="font-weight:900;font-size:16px;color:var(--text);">Copiar a proyecto</div>
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:4px;">
+      <button id="copiar-pres-back" onclick="abrirModalCopiar()" style="display:none;background:none;border:none;cursor:pointer;color:var(--green);font-size:20px;padding:0;align-items:center;"><i class="ph-bold ph-caret-left"></i></button>
+      <div style="flex:1;">
+        <div id="copiar-pres-title" style="font-weight:900;font-size:16px;color:var(--text);">Elegir cliente</div>
         <div id="copiar-pres-subtit" style="font-size:12px;color:var(--gray);margin-top:2px;"></div>
       </div>
       <button onclick="document.getElementById('mod-copiar-pres').style.display='none'" style="background:none;border:none;font-size:22px;cursor:pointer;color:var(--gray);">✕</button>
