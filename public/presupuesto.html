@@ -2402,10 +2402,16 @@ EJEMPLO VÁLIDO:
             const resp = await fetch(_geminiUrl, { method: 'POST', headers, body: _reqBody });
 
             if (!resp.ok) {
+                let _errMsg = `HTTP ${resp.status}`;
+                try {
+                    const _errBody = await resp.json();
+                    if (_errBody.detalle) _errMsg += ': ' + _errBody.detalle;
+                    else if (_errBody.error) _errMsg += ': ' + _errBody.error;
+                } catch(_) {}
                 if (resp.status === 502) {
                     throw new Error(`Error de servidor (502) — el payload pesa ${_payloadKB} KB. Intentá con menos imágenes o un prompt más corto.`);
                 }
-                throw new Error(`HTTP ${resp.status}`);
+                throw new Error(_errMsg);
             }
             const respData = await resp.json();
 

@@ -284,7 +284,10 @@ exports.geminiProxy = onRequest(GEMINI_PROXY_OPTS, async (req, res) => {
                     msg.includes("high demand") || msg.includes("Service Unavailable") ||
                     msg.includes("500") || msg.includes("Internal") || msg.includes("overloaded");
                 if (!isRetriable) throw err;
-                console.warn(`geminiProxy: ${modelName} falló (${msg.slice(0,80)}), probando siguiente…`);
+                const attemptIdx = modelsToTry.indexOf(modelName);
+                const delay = (attemptIdx + 1) * 3000;
+                console.warn(`geminiProxy: ${modelName} falló (${msg.slice(0,80)}), esperando ${delay}ms…`);
+                await new Promise(r => setTimeout(r, delay));
             }
         }
         if (!result) throw lastErr || new Error("Todos los modelos fallaron");
