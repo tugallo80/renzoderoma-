@@ -4,1539 +4,1988 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>Rubik CAD</title>
-<script src="https://unpkg.com/@phosphor-icons/web" defer></script>
 <script src="https://www.gstatic.com/firebasejs/9.1.3/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.1.3/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.1.3/firebase-database-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.1.3/firebase-storage-compat.js"></script>
-<script>
-if(!firebase.apps.length) firebase.initializeApp({
-  apiKey:"AIzaSyDXYlofy31cDP14xVAVxWo_7TqXdSgsIjA",
-  authDomain:"rubik-bolivia.firebaseapp.com",
-  databaseURL:"https://rubik-bolivia-default-rtdb.firebaseio.com",
-  projectId:"rubik-bolivia",
-  storageBucket:"rubik-bolivia.firebasestorage.app",
-  messagingSenderId:"4153087958",
-  appId:"1:4153087958:web:cf2dd16106580ed6437677"
-});
-</script>
+<script src="https://unpkg.com/@phosphor-icons/web" defer></script>
 <script src="/js/auth-guard.js?v=3"></script>
 <style>
-*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
-:root{--bg:#f4f4f7;--card:#fff;--text:#1a1a1a;--blue:#007aff;--green:#34c759;--red:#ff3b30;--orange:#ff9500;--purple:#af52de;--gray:#8e8e93;--border:#d1d1d6;--topH:52px;--botH:68px;}
-body.dark-mode{--bg:#000;--card:#1c1c1e;--text:#fff;--border:#333;--canvas-bg:#111;}
-body{font-family:-apple-system,sans-serif;background:var(--bg);color:var(--text);overflow:hidden;height:100dvh;display:flex;flex-direction:column;}
+:root {
+  --bg: #f4f4f7;
+  --card: #fff;
+  --text: #1a1a1a;
+  --blue: #007aff;
+  --green: #34c759;
+  --red: #ff3b30;
+  --orange: #ff9500;
+  --purple: #af52de;
+  --gray: #8e8e93;
+  --border: #d1d1d6;
+}
+body.dark-mode {
+  --bg: #000;
+  --card: #1c1c1e;
+  --text: #fff;
+  --border: #333;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  height: 100vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
 
 /* TOP BAR */
-#top-bar{height:var(--topH);background:var(--card);border-bottom:1px solid var(--border);display:flex;align-items:center;gap:6px;padding:0 10px;overflow-x:auto;overflow-y:hidden;scrollbar-width:none;flex-shrink:0;z-index:100;}
-#top-bar::-webkit-scrollbar{display:none;}
-.tb-btn{flex-shrink:0;display:flex;align-items:center;gap:4px;padding:7px 11px;border-radius:10px;border:1px solid var(--border);background:var(--card);color:var(--text);font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;}
-.tb-btn.active{background:var(--blue);color:#fff;border-color:var(--blue);}
-.tb-btn.danger{color:var(--red);border-color:var(--red);}
-.tb-sep{width:1px;height:28px;background:var(--border);flex-shrink:0;margin:0 2px;}
-#grid-size-inp{width:56px;padding:6px 8px;border:1px solid var(--border);border-radius:8px;font-size:12px;font-weight:700;background:var(--card);color:var(--text);}
-.seg-ctrl{display:flex;border:1px solid var(--border);border-radius:10px;overflow:hidden;flex-shrink:0;}
-.seg-btn{padding:7px 10px;border:none;background:var(--card);color:var(--gray);font-size:11px;font-weight:800;cursor:pointer;border-right:1px solid var(--border);}
-.seg-btn:last-child{border-right:none;}
-.seg-btn.active{background:var(--blue);color:#fff;}
-
-/* CANVAS AREA */
-#canvas-wrap{flex:1;position:relative;overflow:hidden;background:var(--canvas-bg,var(--bg));}
-#main-canvas{position:absolute;top:0;left:0;touch-action:none;cursor:crosshair;}
-#main-canvas.tool-select{cursor:default;}
-#main-canvas.tool-move{cursor:grab;}
-#main-canvas.tool-move.dragging{cursor:grabbing;}
+#top-bar {
+  position: fixed;
+  top: 0; left: 0; right: 0;
+  height: 52px;
+  background: var(--card);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 8px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  z-index: 100;
+  white-space: nowrap;
+  scrollbar-width: none;
+}
+#top-bar::-webkit-scrollbar { display: none; }
 
 /* BOTTOM BAR */
-#bot-bar{height:var(--botH);background:var(--card);border-top:1px solid var(--border);display:flex;align-items:center;gap:5px;padding:0 10px;overflow-x:auto;overflow-y:hidden;scrollbar-width:none;flex-shrink:0;z-index:100;}
-#bot-bar::-webkit-scrollbar{display:none;}
-.tool-btn{flex-shrink:0;display:flex;flex-direction:column;align-items:center;gap:2px;padding:7px 10px;border-radius:12px;border:none;background:transparent;color:var(--gray);font-size:10px;font-weight:700;cursor:pointer;min-width:52px;}
-.tool-btn i{font-size:22px;}
-.tool-btn.active{background:rgba(0,122,255,0.12);color:var(--blue);}
-.tool-btn.action{color:var(--purple);}
-.tool-btn.action.active{background:rgba(175,82,222,0.12);color:var(--purple);}
-.bot-sep{width:1px;height:40px;background:var(--border);flex-shrink:0;}
-#stroke-color-inp{width:32px;height:32px;border-radius:8px;border:2px solid var(--border);cursor:pointer;padding:0;flex-shrink:0;}
-#stroke-w-inp{width:52px;padding:6px 8px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-weight:700;background:var(--card);color:var(--text);flex-shrink:0;}
-.snap-btn{flex-shrink:0;display:flex;align-items:center;gap:4px;padding:6px 10px;border-radius:10px;border:1px solid var(--border);background:var(--card);color:var(--gray);font-size:11px;font-weight:800;cursor:pointer;}
-.snap-btn.active{background:rgba(255,149,0,0.12);color:var(--orange);border-color:var(--orange);}
+#bottom-bar {
+  position: fixed;
+  bottom: 0; left: 0; right: 0;
+  height: 64px;
+  background: var(--card);
+  border-top: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 8px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  z-index: 100;
+  white-space: nowrap;
+  scrollbar-width: none;
+}
+#bottom-bar::-webkit-scrollbar { display: none; }
+
+/* CANVAS AREA */
+#canvas-container {
+  position: fixed;
+  top: 52px;
+  bottom: 64px;
+  left: 0;
+  right: 0;
+  overflow: hidden;
+  background: #f8f8f8;
+}
+body.dark-mode #canvas-container { background: #1a1a1a; }
+#cad-canvas {
+  display: block;
+  touch-action: none;
+  cursor: crosshair;
+}
+#cad-canvas.cursor-default { cursor: default; }
+#cad-canvas.cursor-move { cursor: move; }
+#cad-canvas.cursor-grab { cursor: grab; }
+#cad-canvas.cursor-grabbing { cursor: grabbing; }
+#cad-canvas.cursor-crosshair { cursor: crosshair; }
+
+/* BUTTONS */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--card);
+  color: var(--text);
+  font-size: 13px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s;
+  flex-shrink: 0;
+}
+.btn:hover { background: var(--bg); }
+.btn.active { background: var(--blue); color: #fff; border-color: var(--blue); }
+.btn.icon-only { padding: 6px 8px; font-size: 16px; }
+.btn-back {
+  font-size: 13px;
+  font-weight: 600;
+  padding: 6px 12px;
+  color: var(--blue);
+  background: none;
+  border: none;
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+/* SEGMENTED CONTROL */
+.seg-ctrl {
+  display: inline-flex;
+  background: var(--bg);
+  border-radius: 8px;
+  padding: 2px;
+  gap: 1px;
+  border: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.seg-ctrl button {
+  padding: 4px 10px;
+  border-radius: 6px;
+  border: none;
+  background: none;
+  color: var(--text);
+  font-size: 12px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.seg-ctrl button.active {
+  background: var(--blue);
+  color: #fff;
+}
+
+/* GRID CONTROLS */
+#grid-spacing-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+.small-input {
+  width: 52px;
+  padding: 4px 6px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 12px;
+  text-align: center;
+}
+.small-label { font-size: 11px; color: var(--gray); }
+
+/* DIVIDER */
+.bar-div {
+  width: 1px;
+  height: 28px;
+  background: var(--border);
+  flex-shrink: 0;
+}
+
+/* TOOL BUTTONS */
+.tool-btn {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  padding: 4px 8px;
+  border-radius: 10px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text);
+  font-size: 10px;
+  cursor: pointer;
+  min-width: 52px;
+  transition: background 0.15s;
+  flex-shrink: 0;
+}
+.tool-btn i { font-size: 20px; }
+.tool-btn:hover { background: var(--bg); }
+.tool-btn.active { background: var(--blue); color: #fff; border-color: var(--blue); }
 
 /* LAYER PANEL */
-#layer-panel{position:fixed;top:0;right:-300px;width:280px;height:100dvh;background:var(--card);border-left:1px solid var(--border);z-index:200;transition:right 0.28s cubic-bezier(.4,0,.2,1);display:flex;flex-direction:column;padding-top:var(--topH);}
-#layer-panel.open{right:0;}
-#layer-panel-head{padding:14px 16px;font-weight:900;font-size:15px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;}
-#layer-list{flex:1;overflow-y:auto;padding:8px;}
-.layer-row{display:flex;align-items:center;gap:8px;padding:10px 10px;border-radius:10px;cursor:pointer;margin-bottom:4px;border:1px solid transparent;}
-.layer-row.selected{background:rgba(0,122,255,0.08);border-color:var(--blue);}
-.layer-row:hover{background:rgba(0,0,0,0.03);}
-.layer-name{flex:1;font-size:12px;font-weight:700;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-.layer-icon-btn{background:none;border:none;cursor:pointer;color:var(--gray);font-size:16px;padding:2px;}
-.layer-icon-btn.active{color:var(--blue);}
+#layer-panel {
+  position: fixed;
+  top: 52px;
+  right: -300px;
+  width: 280px;
+  bottom: 64px;
+  background: var(--card);
+  border-left: 1px solid var(--border);
+  z-index: 150;
+  transition: right 0.25s ease;
+  display: flex;
+  flex-direction: column;
+}
+#layer-panel.open { right: 0; }
+#layer-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+  font-weight: 600;
+  font-size: 15px;
+}
+#layer-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px;
+}
+.layer-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px;
+  border-radius: 8px;
+  cursor: pointer;
+  margin-bottom: 4px;
+  border: 2px solid transparent;
+}
+.layer-row:hover { background: var(--bg); }
+.layer-row.active { border-color: var(--blue); background: rgba(0,122,255,0.08); }
+.layer-icon-btn {
+  width: 26px;
+  height: 26px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  color: var(--text);
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  flex-shrink: 0;
+}
+.layer-icon-btn:hover { background: var(--bg); }
+.layer-icon-btn.muted { color: var(--gray); }
+.layer-name-inp {
+  flex: 1;
+  background: none;
+  border: none;
+  font-size: 13px;
+  color: var(--text);
+  cursor: text;
+  padding: 2px 4px;
+  border-radius: 4px;
+  font-family: inherit;
+}
+.layer-name-inp:focus {
+  outline: 1px solid var(--blue);
+  background: var(--bg);
+}
+.layer-del-btn {
+  width: 24px;
+  height: 24px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  color: var(--red);
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  flex-shrink: 0;
+}
+#add-layer-btn {
+  margin: 8px;
+  padding: 8px;
+  border-radius: 8px;
+  border: 1px dashed var(--border);
+  background: none;
+  color: var(--blue);
+  font-size: 13px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  justify-content: center;
+}
 
-/* MODALS */
-.modal-bg{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:500;align-items:center;justify-content:center;}
-.modal-bg.open{display:flex;}
-.modal-box{background:var(--card);border-radius:22px;padding:24px 20px;width:90%;max-width:340px;max-height:85dvh;overflow-y:auto;}
-.modal-title{font-size:17px;font-weight:900;color:var(--text);margin-bottom:18px;}
-.form-row{margin-bottom:14px;}
-.form-row label{display:block;font-size:11px;font-weight:800;color:var(--gray);margin-bottom:5px;text-transform:uppercase;}
-.form-row input,.form-row select{width:100%;padding:11px 12px;border:1px solid var(--border);border-radius:10px;font-size:15px;font-weight:700;background:var(--card);color:var(--text);}
-.form-row .unit-hint{font-size:10px;color:var(--gray);margin-top:3px;}
-.modal-actions{display:flex;gap:10px;margin-top:20px;}
-.btn-primary{flex:1;padding:13px;background:var(--blue);color:#fff;border:none;border-radius:12px;font-size:15px;font-weight:900;cursor:pointer;}
-.btn-sec-modal{flex:1;padding:13px;background:var(--card);color:var(--text);border:1px solid var(--border);border-radius:12px;font-size:15px;font-weight:700;cursor:pointer;}
-.radio-group{display:flex;flex-direction:column;gap:8px;}
-.radio-opt{display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;font-weight:700;}
+/* MODAL */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.4);
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+.modal-overlay.hidden { display: none; }
+.modal {
+  background: var(--card);
+  border-radius: 16px;
+  padding: 24px;
+  width: 100%;
+  max-width: 360px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+}
+.modal h3 {
+  font-size: 17px;
+  font-weight: 600;
+  margin-bottom: 16px;
+}
+.modal-field {
+  margin-bottom: 14px;
+}
+.modal-field label {
+  display: block;
+  font-size: 12px;
+  color: var(--gray);
+  margin-bottom: 4px;
+}
+.modal-field input[type=number],
+.modal-field input[type=text],
+.modal-field select {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 15px;
+  font-family: inherit;
+}
+.modal-field input[type=number]:focus,
+.modal-field input[type=text]:focus,
+.modal-field select:focus { outline: 2px solid var(--blue); }
+.modal-radio-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.modal-radio-group label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  cursor: pointer;
+}
+.modal-btns {
+  display: flex;
+  gap: 8px;
+  margin-top: 20px;
+}
+.modal-btn {
+  flex: 1;
+  padding: 12px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  font-size: 15px;
+  cursor: pointer;
+  font-weight: 500;
+  font-family: inherit;
+}
+.modal-btn.primary {
+  background: var(--blue);
+  color: #fff;
+  border-color: var(--blue);
+}
 
-/* FLOATING SHAPE TOOLBAR */
-#float-tb{display:none;position:absolute;z-index:150;background:var(--card);border:1px solid var(--border);border-radius:14px;padding:6px;box-shadow:0 4px 20px rgba(0,0,0,0.15);gap:4px;align-items:center;}
-.float-btn{padding:7px 10px;border-radius:8px;border:none;font-size:11px;font-weight:800;cursor:pointer;background:transparent;color:var(--text);display:flex;align-items:center;gap:4px;}
-.float-btn:hover{background:rgba(0,0,0,0.06);}
-.float-btn.del{color:var(--red);}
+/* POPOVER */
+.popover {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  margin-top: 6px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+  z-index: 300;
+  min-width: 180px;
+  overflow: hidden;
+}
+.popover.hidden { display: none; }
+.popover-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: background 0.1s;
+}
+.popover-item:hover { background: var(--bg); }
+.save-wrap { position: relative; }
 
 /* TOAST */
-#toast{position:fixed;bottom:calc(var(--botH) + 16px);left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.8);color:#fff;padding:10px 20px;border-radius:20px;font-size:13px;font-weight:700;z-index:600;pointer-events:none;opacity:0;transition:opacity 0.3s;}
-#toast.show{opacity:1;}
+#toast {
+  position: fixed;
+  bottom: 80px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(0,0,0,0.75);
+  color: #fff;
+  padding: 8px 18px;
+  border-radius: 20px;
+  font-size: 14px;
+  z-index: 999;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.3s;
+  white-space: nowrap;
+}
+#toast.show { opacity: 1; }
 
-/* SAVE POPOVER */
-#save-pop{display:none;position:absolute;top:calc(var(--topH) + 4px);right:10px;background:var(--card);border:1px solid var(--border);border-radius:14px;padding:8px;box-shadow:0 4px 20px rgba(0,0,0,0.15);z-index:300;min-width:180px;}
-.save-opt{padding:11px 14px;border-radius:10px;cursor:pointer;font-size:13px;font-weight:700;display:flex;align-items:center;gap:8px;}
-.save-opt:hover{background:rgba(0,0,0,0.05);}
+/* STYLE CONTROLS */
+.style-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 4px;
+  flex-shrink: 0;
+}
+.style-wrap label { font-size: 11px; color: var(--gray); }
+input[type=color].color-pick {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  padding: 2px;
+  cursor: pointer;
+  background: none;
+}
+input[type=number].stroke-inp {
+  width: 46px;
+  padding: 4px 6px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 12px;
+  text-align: center;
+  font-family: inherit;
+}
+
+/* FLOATING SHAPE ACTION BAR */
+#shape-actions {
+  position: fixed;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.15);
+  display: flex;
+  gap: 2px;
+  padding: 4px;
+  z-index: 120;
+}
+#shape-actions button {
+  padding: 6px 10px;
+  border-radius: 6px;
+  border: none;
+  background: none;
+  color: var(--text);
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+  font-family: inherit;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+#shape-actions button:hover { background: var(--bg); }
+#shape-actions button.danger { color: var(--red); }
+
+/* COORDS DISPLAY */
+#coords-display {
+  position: fixed;
+  bottom: 70px;
+  left: 8px;
+  font-size: 11px;
+  color: var(--gray);
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 2px 8px;
+  pointer-events: none;
+  z-index: 90;
+}
 </style>
 </head>
 <body>
 
 <!-- TOP BAR -->
 <div id="top-bar">
-  <button class="tb-btn" onclick="goBack()"><i class="ph-bold ph-arrow-left"></i> Diseños</button>
-  <div class="tb-sep"></div>
+  <button class="btn-back" onclick="goBack()">&#8592; Diseños</button>
+  <div class="bar-div"></div>
   <div class="seg-ctrl" id="unit-ctrl">
-    <button class="seg-btn active" onclick="setUnit('cm',this)">cm</button>
-    <button class="seg-btn" onclick="setUnit('m',this)">m</button>
+    <button onclick="setUnit('cm')" id="unit-cm" class="active">cm</button>
+    <button onclick="setUnit('m')" id="unit-m">m</button>
   </div>
-  <button class="tb-btn" id="grid-btn" onclick="toggleGrid()"><i class="ph-bold ph-grid-four"></i> Grilla</button>
-  <input id="grid-size-inp" type="number" min="1" max="1000" value="10" title="Espaciado de grilla" style="display:none;" onchange="setGridSize(this.value)">
-  <span id="grid-unit-lbl" style="font-size:11px;color:var(--gray);display:none;">cm</span>
-  <div class="tb-sep"></div>
-  <button class="tb-btn" onclick="undo()" title="Deshacer"><i class="ph-bold ph-arrow-counter-clockwise"></i></button>
-  <button class="tb-btn" onclick="redo()" title="Rehacer"><i class="ph-bold ph-arrow-clockwise"></i></button>
-  <div class="tb-sep"></div>
+  <div class="bar-div"></div>
+  <button class="btn icon-only" id="grid-btn" onclick="toggleGrid()" title="Cuadrícula">
+    <i class="ph ph-grid-four"></i>
+  </button>
+  <div id="grid-spacing-wrap" style="display:none">
+    <input type="number" class="small-input" id="grid-size-inp" value="10" min="1" max="1000" onchange="setGridSize(this.value)">
+    <span class="small-label" id="grid-unit-lbl">cm</span>
+  </div>
+  <div class="bar-div"></div>
+  <button class="btn icon-only" onclick="undo()" title="Deshacer"><i class="ph ph-arrow-counter-clockwise"></i></button>
+  <button class="btn icon-only" onclick="redo()" title="Rehacer"><i class="ph ph-arrow-clockwise"></i></button>
+  <div class="bar-div"></div>
   <div class="seg-ctrl" id="view-ctrl">
-    <button class="seg-btn active" onclick="setView('planta',this)">Planta</button>
-    <button class="seg-btn" onclick="setView('frontal',this)">Frontal</button>
-    <button class="seg-btn" onclick="setView('lateral',this)">Lateral</button>
+    <button onclick="setView('planta')" id="view-planta" class="active">Planta</button>
+    <button onclick="setView('frontal')" id="view-frontal">Frontal</button>
+    <button onclick="setView('lateral')" id="view-lateral">Lateral</button>
   </div>
-  <button class="tb-btn" id="axo-btn" onclick="toggleAxo()"><i class="ph-bold ph-cube"></i> Axo</button>
-  <div class="tb-sep"></div>
-  <button class="tb-btn" id="night-btn" onclick="toggleNight()"><i class="ph-bold ph-moon"></i></button>
-  <button class="tb-btn" onclick="toggleLayerPanel()"><i class="ph-bold ph-stack"></i> Capas</button>
-  <button class="tb-btn" id="save-btn" onclick="toggleSavePop()"><i class="ph-bold ph-floppy-disk"></i> Guardar</button>
+  <button class="btn" id="axo-btn" onclick="toggleAxo()">Axo</button>
+  <div class="bar-div"></div>
+  <button class="btn icon-only" id="darkmode-btn" onclick="toggleDark()" title="Modo oscuro">
+    <i class="ph ph-moon"></i>
+  </button>
+  <button class="btn icon-only" id="layers-btn" onclick="toggleLayerPanel()" title="Capas">
+    <i class="ph ph-stack"></i>
+  </button>
+  <div class="bar-div"></div>
+  <div class="save-wrap">
+    <button class="btn" id="save-btn" onclick="toggleSavePopover()">
+      <i class="ph ph-floppy-disk"></i> Guardar
+    </button>
+    <div class="popover hidden" id="save-popover">
+      <div class="popover-item" onclick="saveAsImage()">
+        <i class="ph ph-image"></i> Guardar como imagen
+      </div>
+      <div class="popover-item" onclick="saveToProject()">
+        <i class="ph ph-cloud-arrow-up"></i> Guardar en proyecto
+      </div>
+    </div>
+  </div>
 </div>
 
-<!-- SAVE POPOVER -->
-<div id="save-pop">
-  <div class="save-opt" onclick="saveAsImage()"><i class="ph-bold ph-image" style="color:var(--blue)"></i> Guardar como imagen</div>
-  <div class="save-opt" onclick="saveToFirebase()"><i class="ph-bold ph-cloud-arrow-up" style="color:var(--green)"></i> Guardar en proyecto</div>
-  <div class="save-opt" onclick="loadFromFirebase()"><i class="ph-bold ph-cloud-arrow-down" style="color:var(--orange)"></i> Cargar último guardado</div>
-</div>
-
-<!-- CANVAS -->
-<div id="canvas-wrap">
-  <canvas id="main-canvas"></canvas>
-  <div id="float-tb">
-    <button class="float-btn" onclick="editSelected()"><i class="ph-bold ph-pencil"></i> Editar</button>
-    <button class="float-btn" onclick="sectionSelected()"><i class="ph-bold ph-scissors"></i> Seccionar</button>
-    <button class="float-btn" onclick="extrudeSelected()"><i class="ph-bold ph-cube"></i> Extruir</button>
-    <button class="float-btn" onclick="autoDimSelected()"><i class="ph-bold ph-ruler"></i> Acotar</button>
-    <button class="float-btn del" onclick="deleteSelected()"><i class="ph-bold ph-trash"></i></button>
-  </div>
+<!-- CANVAS AREA -->
+<div id="canvas-container">
+  <canvas id="cad-canvas"></canvas>
 </div>
 
 <!-- BOTTOM BAR -->
-<div id="bot-bar">
-  <button class="tool-btn" id="tool-rect" onclick="setTool('rect')"><i class="ph-bold ph-rectangle"></i>Rectángulo</button>
-  <button class="tool-btn" id="tool-circle" onclick="setTool('circle')"><i class="ph-bold ph-circle"></i>Círculo</button>
-  <button class="tool-btn" id="tool-oval" onclick="setTool('oval')"><i class="ph-bold ph-circle-dashed"></i>Óvalo</button>
-  <button class="tool-btn" id="tool-polygon-free" onclick="setTool('polygon-free')"><i class="ph-bold ph-polygon"></i>Polígono libre</button>
-  <button class="tool-btn" id="tool-polygon-sym" onclick="setTool('polygon-sym')"><i class="ph-bold ph-hexagon"></i>Pol. simétrico</button>
-  <button class="tool-btn" id="tool-triangle" onclick="setTool('triangle')"><i class="ph-bold ph-triangle"></i>Triángulo</button>
-  <button class="tool-btn" id="tool-line" onclick="setTool('line')"><i class="ph-bold ph-line-segment"></i>Línea</button>
-  <div class="bot-sep"></div>
-  <button class="tool-btn action" id="tool-select" onclick="setTool('select')"><i class="ph-bold ph-cursor"></i>Seleccionar</button>
-  <button class="tool-btn action" id="tool-move" onclick="setTool('move')"><i class="ph-bold ph-arrows-out-cardinal"></i>Mover</button>
-  <button class="tool-btn action" id="tool-dimension" onclick="setTool('dimension')"><i class="ph-bold ph-ruler"></i>Acotar</button>
-  <div class="bot-sep"></div>
-  <button class="snap-btn" id="snap-grid-btn" onclick="toggleSnapGrid()"><i class="ph-bold ph-magnet"></i> Grilla</button>
-  <button class="snap-btn" id="snap-vertex-btn" onclick="toggleSnapVertex()"><i class="ph-bold ph-magnet"></i> Imán</button>
-  <div class="bot-sep"></div>
-  <input type="color" id="stroke-color-inp" value="#000000" onchange="setStrokeColor(this.value)" title="Color de línea">
-  <input type="number" id="stroke-w-inp" value="2" min="0.5" max="20" step="0.5" title="Grosor de línea" onchange="setStrokeWidth(parseFloat(this.value))">
+<div id="bottom-bar">
+  <button class="tool-btn" data-tool="rect" onclick="selectTool('rect')">
+    <i class="ph ph-rectangle"></i><span>Rect&#225;ngulo</span>
+  </button>
+  <button class="tool-btn" data-tool="circle" onclick="selectTool('circle')">
+    <i class="ph ph-circle"></i><span>C&#237;rculo</span>
+  </button>
+  <button class="tool-btn" data-tool="oval" onclick="selectTool('oval')">
+    <i class="ph ph-circle-dashed"></i><span>&#211;valo</span>
+  </button>
+  <button class="tool-btn" data-tool="polygon-free" onclick="selectTool('polygon-free')">
+    <i class="ph ph-polygon"></i><span>Pol&#237;gono libre</span>
+  </button>
+  <button class="tool-btn" data-tool="polygon-sym" onclick="selectTool('polygon-sym')">
+    <i class="ph ph-hexagon"></i><span>Pol&#237;gono sim.</span>
+  </button>
+  <button class="tool-btn" data-tool="triangle" onclick="selectTool('triangle')">
+    <i class="ph ph-triangle"></i><span>Tri&#225;ngulo</span>
+  </button>
+  <button class="tool-btn" data-tool="line" onclick="selectTool('line')">
+    <i class="ph ph-line-segment"></i><span>L&#237;nea</span>
+  </button>
+  <div class="bar-div"></div>
+  <button class="tool-btn" data-tool="select" onclick="selectTool('select')">
+    <i class="ph ph-cursor"></i><span>Seleccionar</span>
+  </button>
+  <button class="tool-btn" data-tool="move" onclick="selectTool('move')">
+    <i class="ph ph-arrows-out-cardinal"></i><span>Mover</span>
+  </button>
+  <button class="tool-btn" data-tool="section" onclick="selectTool('section')">
+    <i class="ph ph-scissors"></i><span>Seccionar</span>
+  </button>
+  <button class="tool-btn" data-tool="extrude" onclick="selectTool('extrude')">
+    <i class="ph ph-cube"></i><span>Extruir</span>
+  </button>
+  <button class="tool-btn" data-tool="dimension" onclick="selectTool('dimension')">
+    <i class="ph ph-ruler"></i><span>Acotar</span>
+  </button>
+  <div class="bar-div"></div>
+  <div class="style-wrap">
+    <label>Grosor</label>
+    <input type="number" class="stroke-inp" id="stroke-width-inp" value="2" min="1" max="10" onchange="setStrokeWidth(this.value)">
+  </div>
+  <div class="style-wrap">
+    <label>Color</label>
+    <input type="color" class="color-pick" id="stroke-color-inp" value="#000000" onchange="setStrokeColor(this.value)">
+  </div>
 </div>
 
 <!-- LAYER PANEL -->
 <div id="layer-panel">
-  <div id="layer-panel-head">
+  <div id="layer-panel-header">
     <span>Capas</span>
-    <button class="layer-icon-btn" onclick="toggleLayerPanel()"><i class="ph-bold ph-x"></i></button>
+    <button class="btn icon-only" onclick="toggleLayerPanel()" style="border:none;background:none;font-size:18px;">
+      <i class="ph ph-x"></i>
+    </button>
   </div>
   <div id="layer-list"></div>
+  <button id="add-layer-btn" onclick="addLayer()">
+    <i class="ph ph-plus"></i> Nueva capa
+  </button>
 </div>
 
-<!-- MODALS -->
-<!-- Shape config modal -->
-<div class="modal-bg" id="shape-modal">
-  <div class="modal-box">
-    <div class="modal-title" id="shape-modal-title">Nueva figura</div>
-    <div id="shape-modal-body"></div>
-    <div class="modal-actions">
-      <button class="btn-sec-modal" onclick="closeShapeModal()">Cancelar</button>
-      <button class="btn-primary" onclick="confirmShape()">Crear</button>
-    </div>
-  </div>
+<!-- SHAPE ACTIONS FLOATING BAR -->
+<div id="shape-actions" style="display:none">
+  <button onclick="editSelectedShape()"><i class="ph ph-pencil"></i> Editar</button>
+  <button onclick="sectionSelectedShape()"><i class="ph ph-scissors"></i> Seccionar</button>
+  <button onclick="extrudeSelectedShape()"><i class="ph ph-cube"></i> Extruir</button>
+  <button onclick="deleteSelectedShape()" class="danger"><i class="ph ph-trash"></i> Eliminar</button>
 </div>
 
-<!-- Edit modal (reuses shape modal logic, confirm button says Guardar) -->
-<div class="modal-bg" id="edit-modal">
-  <div class="modal-box">
-    <div class="modal-title" id="edit-modal-title">Editar figura</div>
-    <div id="edit-modal-body"></div>
-    <div class="modal-actions">
-      <button class="btn-sec-modal" onclick="closeEditModal()">Cancelar</button>
-      <button class="btn-primary" onclick="confirmEdit()">Guardar</button>
-    </div>
-  </div>
+<!-- MODAL OVERLAY -->
+<div class="modal-overlay hidden" id="modal-overlay">
+  <div class="modal" id="modal-content"></div>
 </div>
 
-<!-- Section modal -->
-<div class="modal-bg" id="section-modal">
-  <div class="modal-box">
-    <div class="modal-title">Seccionar figura</div>
-    <div id="section-modal-body"></div>
-    <div class="modal-actions">
-      <button class="btn-sec-modal" onclick="document.getElementById('section-modal').classList.remove('open')">Cancelar</button>
-      <button class="btn-primary" onclick="confirmSection()">Aplicar</button>
-    </div>
-  </div>
-</div>
-
-<!-- Extrude modal -->
-<div class="modal-bg" id="extrude-modal">
-  <div class="modal-box">
-    <div class="modal-title">Extruir figura</div>
-    <div class="form-row">
-      <label>Altura de extrusión</label>
-      <input type="number" id="extrude-h-inp" min="1" value="100" step="1">
-      <div class="unit-hint" id="extrude-unit-lbl">cm</div>
-    </div>
-    <div class="modal-actions">
-      <button class="btn-sec-modal" onclick="document.getElementById('extrude-modal').classList.remove('open')">Cancelar</button>
-      <button class="btn-primary" onclick="confirmExtrude()">Extruir</button>
-    </div>
-  </div>
-</div>
-
-<!-- Dimension manual instruction overlay (shown briefly) -->
+<!-- TOAST -->
 <div id="toast"></div>
 
+<!-- COORDS DISPLAY -->
+<div id="coords-display">0, 0 cm</div>
+
 <script>
-// ─── UTILS ────────────────────────────────────────────────────────────────────
-const urlP = new URLSearchParams(location.search);
-const cid = urlP.get('cid') || localStorage.getItem('rubik_client_id') || '';
-const pid = urlP.get('pid') || '';
-const db = firebase.database();
+// ============================================================
+//  FIREBASE INIT
+// ============================================================
+const firebaseConfig = {
+  apiKey: "AIzaSyDXYlofy31cDP14xVAVxWo_7TqXdSgsIjA",
+  authDomain: "rubik-bolivia.firebaseapp.com",
+  databaseURL: "https://rubik-bolivia-default-rtdb.firebaseio.com",
+  projectId: "rubik-bolivia",
+  storageBucket: "rubik-bolivia.firebasestorage.app",
+  messagingSenderId: "4153087958",
+  appId: "1:4153087958:web:cf2dd16106580ed6437677"
+};
+let fbDb = null;
+try {
+  firebase.initializeApp(firebaseConfig);
+  fbDb = firebase.database();
+} catch(e) { console.warn('Firebase init error', e); }
 
-function uid() { return Date.now().toString(36) + Math.random().toString(36).substr(2,5); }
+// ============================================================
+//  URL PARAMS
+// ============================================================
+const urlParams = new URLSearchParams(location.search);
+const CLIENT_ID = urlParams.get('cid') || '';
+const PROJECT_ID = urlParams.get('pid') || '';
 
-function toast(msg, dur=2500) {
-  const el = document.getElementById('toast');
-  el.textContent = msg; el.classList.add('show');
-  clearTimeout(el._t); el._t = setTimeout(() => el.classList.remove('show'), dur);
+// ============================================================
+//  UUID
+// ============================================================
+function genUUID() {
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID();
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+    var r = Math.random()*16|0, v = c==='x'?r:(r&0x3|0x8);
+    return v.toString(16);
+  });
 }
 
-function goBack() {
-  if (history.length > 1) history.back();
-  else location.href = `disenos.html?cid=${cid}&pid=${pid}`;
-}
-
-// ─── STATE ────────────────────────────────────────────────────────────────────
-const S = {
+// ============================================================
+//  STATE
+// ============================================================
+var state = {
+  tool: 'select',
+  view: 'planta',
+  axo: false,
   unit: 'cm',
-  gridEnabled: false,
-  gridSize: 100,       // mm
-  view: 'planta',      // planta | frontal | lateral | axo
-  darkMode: false,
-  scale: 2,            // px per mm
-  originX: 0, originY: 0,  // canvas px offset for world (0,0)
-  tool: null,
-  layers: [],          // array of shape objects
+  gridOn: false,
+  gridSize: 100,
+  scale: 2,
+  origin: { x: 0, y: 0 },
+  layers: [],
+  activeLayerIdx: 0,
   selectedId: null,
-  snapGrid: false,
-  snapVertex: false,
   strokeColor: '#000000',
   strokeWidth: 2,
-  history: [], histIdx: -1,
-  // temp drawing state
+  darkMode: false,
   drawing: false,
-  drawPoints: [],      // for polygon-free
-  dimStep: 0, dimP1: null,  // for manual dimension
-  dragging: false, dragShapeId: null, dragOfsX: 0, dragOfsY: 0,
-  pointers: {},        // active pointer events for pinch
-  lastPinchDist: null,
+  drawPoints: [],
+  drawStart: null,
+  drawCurrent: null,
+  panning: false,
+  panStart: null,
+  originStart: null,
+  dimP1: null,
+  lastTouchDist: null,
+  lastTouchMid: null,
+  moveDragStart: null,
 };
 
-let pendingShapePos = { x: 0, y: 0 }; // world coords where shape dialog was triggered
-let pendingEditId = null;
+// ============================================================
+//  HISTORY
+// ============================================================
+var hist = { snaps: [], idx: -1, MAX: 50 };
 
-// ─── CANVAS SETUP ─────────────────────────────────────────────────────────────
-const wrap = document.getElementById('canvas-wrap');
-const canvas = document.getElementById('main-canvas');
-const ctx = canvas.getContext('2d');
-let rafId = null;
-let dirty = true;
-
-function resizeCanvas() {
-  canvas.width = wrap.clientWidth;
-  canvas.height = wrap.clientHeight;
-  if (S.originX === 0 && S.originY === 0) {
-    S.originX = wrap.clientWidth / 2;
-    S.originY = wrap.clientHeight / 2;
-  }
-  dirty = true;
+function pushHistory() {
+  var snap = JSON.parse(JSON.stringify(state.layers));
+  if (hist.idx < hist.snaps.length - 1) hist.snaps.splice(hist.idx + 1);
+  hist.snaps.push(snap);
+  if (hist.snaps.length > hist.MAX) hist.snaps.shift();
+  hist.idx = hist.snaps.length - 1;
 }
 
-window.addEventListener('resize', resizeCanvas);
-resizeCanvas();
-
-function markDirty() { dirty = true; }
-
-// ─── COORDINATE TRANSFORMS ────────────────────────────────────────────────────
-const COS30 = Math.cos(Math.PI / 6);
-const SIN30 = Math.sin(Math.PI / 6);
-
-function worldToScreen(wx, wy, wz = 0) {
-  const v = S.view;
-  let sx, sy;
-  if (v === 'axo') {
-    sx = S.originX + (wx + wy * COS30 * 0.5) * S.scale;
-    sy = S.originY - (wz + wy * SIN30 * 0.5) * S.scale;
-  } else if (v === 'planta') {
-    sx = S.originX + wx * S.scale;
-    sy = S.originY - wy * S.scale;
-  } else if (v === 'frontal') {
-    sx = S.originX + wx * S.scale;
-    sy = S.originY - wz * S.scale;
-  } else { // lateral
-    sx = S.originX + wy * S.scale;
-    sy = S.originY - wz * S.scale;
+function undo() {
+  if (hist.idx > 0) {
+    hist.idx--;
+    state.layers = JSON.parse(JSON.stringify(hist.snaps[hist.idx]));
+    state.selectedId = null;
+    setDirty(); renderLayerPanel(); showToast('Deshacer');
   }
-  return { x: sx, y: sy };
+}
+
+function redo() {
+  if (hist.idx < hist.snaps.length - 1) {
+    hist.idx++;
+    state.layers = JSON.parse(JSON.stringify(hist.snaps[hist.idx]));
+    state.selectedId = null;
+    setDirty(); renderLayerPanel(); showToast('Rehacer');
+  }
+}
+
+// ============================================================
+//  CANVAS
+// ============================================================
+var canvas = document.getElementById('cad-canvas');
+var ctx = canvas.getContext('2d');
+var dirty = true;
+function setDirty() { dirty = true; }
+
+function resizeCanvas() {
+  var container = document.getElementById('canvas-container');
+  canvas.width = container.clientWidth;
+  canvas.height = container.clientHeight;
+  setDirty();
+}
+window.addEventListener('resize', resizeCanvas);
+
+// ============================================================
+//  COORDINATE TRANSFORMS
+// ============================================================
+function worldToScreen(wx, wy) {
+  var o = state.origin, sc = state.scale;
+  if (state.axo) {
+    var cos30 = 0.866, sin30 = 0.5;
+    var sx = o.x + (wx + wy * cos30 * 0.5) * sc;
+    var sy = o.y - (0  + wy * sin30 * 0.5) * sc;
+    return { x: sx, y: sy };
+  }
+  return { x: o.x + wx * sc, y: o.y - wy * sc };
 }
 
 function screenToWorld(sx, sy) {
-  const v = S.view;
-  if (v === 'planta') {
-    return { x: (sx - S.originX) / S.scale, y: -(sy - S.originY) / S.scale };
-  } else if (v === 'frontal') {
-    return { x: (sx - S.originX) / S.scale, y: 0, z: -(sy - S.originY) / S.scale };
-  } else if (v === 'lateral') {
-    return { x: 0, y: (sx - S.originX) / S.scale, z: -(sy - S.originY) / S.scale };
-  }
-  // axo inverse (approximate, ignoring y component)
-  return { x: (sx - S.originX) / S.scale, y: 0, z: -(sy - S.originY) / S.scale };
+  return { x: (sx - state.origin.x) / state.scale, y: (state.origin.y - sy) / state.scale };
 }
 
-function applySnap(wx, wy) {
-  let rx = wx, ry = wy;
-  if (S.snapGrid && S.gridEnabled) {
-    const g = S.gridSize;
-    rx = Math.round(wx / g) * g;
-    ry = Math.round(wy / g) * g;
-  }
-  if (S.snapVertex) {
-    let bestD = 15 / S.scale, bestX = null, bestY = null;
-    for (const sh of S.layers) {
-      if (sh.id === S.dragShapeId) continue;
-      const verts = getVertices(sh);
-      for (const v of verts) {
-        const d = Math.hypot(v.x - wx, v.y - wy);
-        if (d < bestD) { bestD = d; bestX = v.x; bestY = v.y; }
+// ============================================================
+//  SNAP
+// ============================================================
+function snapToGrid(v) {
+  if (!state.gridOn) return v;
+  return Math.round(v / state.gridSize) * state.gridSize;
+}
+
+function snapPoint(wx, wy) {
+  var x = snapToGrid(wx), y = snapToGrid(wy);
+  var threshold = 15 / state.scale;
+  var layer = state.layers[state.activeLayerIdx];
+  if (!layer) return { x: x, y: y };
+  for (var li = 0; li < state.layers.length; li++) {
+    var lyr = state.layers[li];
+    for (var si = 0; si < lyr.shapes.length; si++) {
+      var verts = getShapeVertices(lyr.shapes[si]);
+      for (var vi = 0; vi < verts.length; vi++) {
+        var v = verts[vi];
+        if (Math.abs(v.x - wx) < threshold && Math.abs(v.y - wy) < threshold) return { x: v.x, y: v.y };
       }
     }
-    if (bestX !== null) { rx = bestX; ry = bestY; }
   }
-  return { x: rx, y: ry };
+  return { x: x, y: y };
 }
 
-function getVertices(sh) {
-  const pts = [];
-  if (sh.type === 'rect') {
-    pts.push({x:sh.x,y:sh.y},{x:sh.x+sh.w,y:sh.y},{x:sh.x+sh.w,y:sh.y+sh.h},{x:sh.x,y:sh.y+sh.h});
-    pts.push({x:sh.x+sh.w/2,y:sh.y},{x:sh.x+sh.w,y:sh.y+sh.h/2},{x:sh.x+sh.w/2,y:sh.y+sh.h},{x:sh.x,y:sh.y+sh.h/2});
-  } else if (sh.type === 'circle') {
-    pts.push({x:sh.cx,y:sh.cy},{x:sh.cx+sh.r,y:sh.cy},{x:sh.cx-sh.r,y:sh.cy},{x:sh.cx,y:sh.cy+sh.r},{x:sh.cx,y:sh.cy-sh.r});
-  } else if (sh.type === 'oval') {
-    pts.push({x:sh.cx,y:sh.cy},{x:sh.cx+sh.rx,y:sh.cy},{x:sh.cx-sh.rx,y:sh.cy},{x:sh.cx,y:sh.cy+sh.ry},{x:sh.cx,y:sh.cy-sh.ry});
-  } else if (sh.type === 'polygon-sym') {
-    const n = sh.sides, r = sh.radius, a0 = sh.rotation || 0;
-    for (let i = 0; i < n; i++) { const a = a0 + (2*Math.PI*i/n); pts.push({x:sh.cx+r*Math.cos(a),y:sh.cy+r*Math.sin(a)}); }
-  } else if (sh.type === 'triangle') {
-    pts.push(...trianglePoints(sh));
-  } else if (sh.type === 'polygon-free') {
-    pts.push(...sh.points);
-  } else if (sh.type === 'line') {
-    pts.push({x:sh.x1,y:sh.y1},{x:sh.x2,y:sh.y2});
+function getShapeVertices(sh) {
+  switch(sh.type) {
+    case 'rect': return [{x:sh.x,y:sh.y},{x:sh.x+sh.w,y:sh.y},{x:sh.x+sh.w,y:sh.y+sh.h},{x:sh.x,y:sh.y+sh.h}];
+    case 'line': return [{x:sh.x1,y:sh.y1},{x:sh.x2,y:sh.y2}];
+    case 'polygon-free': return sh.points || [];
+    case 'circle': return [{x:sh.cx,y:sh.cy}];
+    case 'oval': return [{x:sh.cx,y:sh.cy}];
+    case 'triangle': return getTriangleVerts(sh);
+    case 'polygon-sym': return [{x:sh.cx,y:sh.cy}];
+    default: return [];
   }
-  return pts;
 }
 
-function trianglePoints(sh) {
-  if (sh.variant === 'equilateral') {
-    const h = sh.base * Math.sqrt(3) / 2;
-    return [{x:sh.x,y:sh.y},{x:sh.x+sh.base,y:sh.y},{x:sh.x+sh.base/2,y:sh.y+h}];
-  } else if (sh.variant === 'right') {
-    return [{x:sh.x,y:sh.y},{x:sh.x+sh.base,y:sh.y},{x:sh.x,y:sh.y+sh.height}];
+function getTriangleVerts(sh) {
+  var variant = sh.variant || 'equilateral';
+  var x = sh.x || 0, y = sh.y || 0, base = sh.base || 100, height = sh.height || 100;
+  if (variant === 'equilateral') {
+    var h = base * Math.sqrt(3) / 2;
+    return [{x:x,y:y},{x:x+base,y:y},{x:x+base/2,y:y+h}];
+  } else if (variant === 'right') {
+    return [{x:x,y:y},{x:x+base,y:y},{x:x,y:y+height}];
   } else {
-    return [{x:sh.x,y:sh.y},{x:sh.x+sh.base,y:sh.y},{x:sh.x+sh.base/2,y:sh.y+sh.height}];
+    return [{x:x,y:y},{x:x+base,y:y},{x:x+base/2,y:y+height}];
   }
 }
 
-// ─── RENDER ───────────────────────────────────────────────────────────────────
-function renderLoop() {
-  if (dirty) { dirty = false; render(); }
-  rafId = requestAnimationFrame(renderLoop);
-}
-
-function render() {
-  const W = canvas.width, H = canvas.height;
-  ctx.clearRect(0, 0, W, H);
-
-  // Background
-  ctx.fillStyle = S.darkMode ? '#111' : '#f4f4f7';
-  ctx.fillRect(0, 0, W, H);
-
-  // Grid
-  if (S.gridEnabled) drawGrid();
-
-  // Axes
-  drawAxes();
-
-  // Shapes
-  for (const sh of S.layers) {
-    if (!sh.visible) continue;
-    drawShape(sh, sh.id === S.selectedId);
-  }
-
-  // Active drawing preview
-  drawPreview();
-
-  // Snap indicator
-  if (S._snapIndicator) {
-    const sp = worldToScreen(S._snapIndicator.x, S._snapIndicator.y);
-    ctx.beginPath(); ctx.arc(sp.x, sp.y, 7, 0, Math.PI*2);
-    ctx.strokeStyle = '#ff9500'; ctx.lineWidth = 2; ctx.stroke();
-    ctx.fillStyle = 'rgba(255,149,0,0.2)'; ctx.fill();
-  }
-}
-
-function drawAxes() {
-  const W = canvas.width, H = canvas.height;
-  const origin = worldToScreen(0, 0, 0);
-  ctx.strokeStyle = S.darkMode ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.12)';
-  ctx.lineWidth = 1;
-  // X axis
-  ctx.beginPath(); ctx.moveTo(0, origin.y); ctx.lineTo(W, origin.y); ctx.stroke();
-  // Y axis
-  ctx.beginPath(); ctx.moveTo(origin.x, 0); ctx.lineTo(origin.x, H); ctx.stroke();
-}
-
+// ============================================================
+//  GRID
+// ============================================================
 function drawGrid() {
-  const W = canvas.width, H = canvas.height;
-  const g = S.gridSize * S.scale;
-  if (g < 4) return;
+  if (!state.gridOn) return;
+  var sc = state.scale, o = state.origin, gs = state.gridSize;
+  var W = canvas.width, H = canvas.height;
+  var subDiv = 5, subSize = gs / subDiv;
+  var dm = state.darkMode;
+  var mainColor = dm ? 'rgba(255,255,255,0.10)' : 'rgba(0,0,0,0.10)';
+  var subColor  = dm ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.04)';
+  var axisColor = dm ? 'rgba(255,255,255,0.22)' : 'rgba(0,0,0,0.20)';
 
-  // Sub-grid (1/5)
-  if (g >= 20) {
-    const sg = g / 5;
-    ctx.beginPath(); ctx.strokeStyle = S.darkMode ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.04)';
-    ctx.lineWidth = 0.5;
-    const startX = S.originX % sg; const startY = S.originY % sg;
-    for (let x = startX; x < W; x += sg) { ctx.moveTo(x, 0); ctx.lineTo(x, H); }
-    for (let y = startY; y < H; y += sg) { ctx.moveTo(0, y); ctx.lineTo(W, y); }
-    ctx.stroke();
-  }
+  var worldLeft   = -o.x / sc;
+  var worldRight  = (W - o.x) / sc;
+  var worldTop    = (o.y - H) / sc;
+  var worldBottom = o.y / sc;
 
-  // Main grid
-  ctx.beginPath(); ctx.strokeStyle = S.darkMode ? 'rgba(255,255,255,0.09)' : 'rgba(0,0,0,0.09)';
-  ctx.lineWidth = 1;
-  const startX = ((S.originX % g) + g) % g; const startY = ((S.originY % g) + g) % g;
-  for (let x = startX; x < W; x += g) { ctx.moveTo(x, 0); ctx.lineTo(x, H); }
-  for (let y = startY; y < H; y += g) { ctx.moveTo(0, y); ctx.lineTo(W, y); }
+  // sub grid
+  ctx.strokeStyle = subColor; ctx.lineWidth = 0.5;
+  var startX = Math.floor(worldLeft / subSize) * subSize;
+  var startY = Math.floor(worldTop  / subSize) * subSize;
+  ctx.beginPath();
+  for (var wx = startX; wx <= worldRight; wx += subSize) { var sx = o.x+wx*sc; ctx.moveTo(sx,0); ctx.lineTo(sx,H); }
+  for (var wy = startY; wy <= worldBottom; wy += subSize) { var sy = o.y-wy*sc; ctx.moveTo(0,sy); ctx.lineTo(W,sy); }
+  ctx.stroke();
+
+  // main grid
+  ctx.strokeStyle = mainColor; ctx.lineWidth = 1;
+  startX = Math.floor(worldLeft / gs) * gs;
+  startY = Math.floor(worldTop  / gs) * gs;
+  ctx.beginPath();
+  for (var wx2 = startX; wx2 <= worldRight; wx2 += gs) { var sx2 = o.x+wx2*sc; ctx.moveTo(sx2,0); ctx.lineTo(sx2,H); }
+  for (var wy2 = startY; wy2 <= worldBottom; wy2 += gs) { var sy2 = o.y-wy2*sc; ctx.moveTo(0,sy2); ctx.lineTo(W,sy2); }
+  ctx.stroke();
+
+  // axes
+  ctx.strokeStyle = axisColor; ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.moveTo(o.x,0); ctx.lineTo(o.x,H);
+  ctx.moveTo(0,o.y); ctx.lineTo(W,o.y);
   ctx.stroke();
 }
 
-function applyShapeStyle(sh) {
+// ============================================================
+//  SHAPE PATH BUILDER
+// ============================================================
+function buildPath(sh) {
+  ctx.beginPath();
+  switch(sh.type) {
+    case 'rect': {
+      var p1 = worldToScreen(sh.x, sh.y);
+      var p2 = worldToScreen(sh.x+sh.w, sh.y+sh.h);
+      ctx.rect(Math.min(p1.x,p2.x), Math.min(p1.y,p2.y), Math.abs(p2.x-p1.x), Math.abs(p2.y-p1.y));
+      break;
+    }
+    case 'circle': {
+      var c = worldToScreen(sh.cx, sh.cy);
+      ctx.arc(c.x, c.y, sh.r * state.scale, 0, Math.PI*2);
+      break;
+    }
+    case 'oval': {
+      var c2 = worldToScreen(sh.cx, sh.cy);
+      ctx.ellipse(c2.x, c2.y, sh.rx*state.scale, sh.ry*state.scale, 0, 0, Math.PI*2);
+      break;
+    }
+    case 'polygon-sym': {
+      var c3 = worldToScreen(sh.cx, sh.cy);
+      var r = sh.radius * state.scale;
+      var sides = sh.sides || 6;
+      var rot = (sh.rotation || 0) * Math.PI / 180;
+      for (var i = 0; i <= sides; i++) {
+        var ang = 2*Math.PI*i/sides + rot;
+        var px = c3.x + r*Math.cos(ang), py = c3.y + r*Math.sin(ang);
+        i===0 ? ctx.moveTo(px,py) : ctx.lineTo(px,py);
+      }
+      ctx.closePath();
+      break;
+    }
+    case 'polygon-free': {
+      var pts = sh.points || [];
+      if (pts.length < 2) break;
+      for (var j = 0; j < pts.length; j++) {
+        var s = worldToScreen(pts[j].x, pts[j].y);
+        j===0 ? ctx.moveTo(s.x,s.y) : ctx.lineTo(s.x,s.y);
+      }
+      ctx.closePath();
+      break;
+    }
+    case 'triangle': {
+      var verts = getTriangleVerts(sh);
+      for (var k = 0; k < verts.length; k++) {
+        var sv = worldToScreen(verts[k].x, verts[k].y);
+        k===0 ? ctx.moveTo(sv.x,sv.y) : ctx.lineTo(sv.x,sv.y);
+      }
+      ctx.closePath();
+      break;
+    }
+    case 'line': {
+      var lp1 = worldToScreen(sh.x1, sh.y1);
+      var lp2 = worldToScreen(sh.x2, sh.y2);
+      ctx.moveTo(lp1.x, lp1.y); ctx.lineTo(lp2.x, lp2.y);
+      break;
+    }
+    default: break;
+  }
+}
+
+function drawDimension(sh) {
+  var p1 = worldToScreen(sh.x1, sh.y1);
+  var p2 = worldToScreen(sh.x2, sh.y2);
+  var offset = sh.offset || 30;
+  var dx = p2.x-p1.x, dy = p2.y-p1.y;
+  var len = Math.sqrt(dx*dx+dy*dy) || 1;
+  var nx = -dy/len, ny = dx/len;
+  var ox = nx*offset, oy = ny*offset;
+  ctx.save();
+  ctx.strokeStyle = '#007aff'; ctx.lineWidth = 1;
+  ctx.setLineDash([4,3]);
+  ctx.beginPath(); ctx.moveTo(p1.x+ox,p1.y+oy); ctx.lineTo(p2.x+ox,p2.y+oy); ctx.stroke();
+  ctx.setLineDash([]);
+  drawArrowHead(p1.x+ox,p1.y+oy, p2.x+ox,p2.y+oy);
+  drawArrowHead(p2.x+ox,p2.y+oy, p1.x+ox,p1.y+oy);
+  ctx.beginPath();
+  ctx.moveTo(p1.x,p1.y); ctx.lineTo(p1.x+ox,p1.y+oy);
+  ctx.moveTo(p2.x,p2.y); ctx.lineTo(p2.x+ox,p2.y+oy);
+  ctx.stroke();
+  var d = Math.sqrt((sh.x2-sh.x1)**2+(sh.y2-sh.y1)**2);
+  var lbl = state.unit==='cm' ? (d/10).toFixed(1)+'cm' : (d/1000).toFixed(3)+'m';
+  ctx.fillStyle = '#007aff';
+  ctx.font = '11px -apple-system,sans-serif';
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText(lbl, (p1.x+p2.x)/2+ox, (p1.y+p2.y)/2+oy-10);
+  ctx.restore();
+}
+
+function drawArrowHead(fromX, fromY, toX, toY) {
+  var ang = Math.atan2(toY-fromY, toX-fromX);
+  var sz = 7;
+  ctx.beginPath();
+  ctx.moveTo(fromX, fromY);
+  ctx.lineTo(fromX+sz*Math.cos(ang+Math.PI*0.8), fromY+sz*Math.sin(ang+Math.PI*0.8));
+  ctx.moveTo(fromX, fromY);
+  ctx.lineTo(fromX+sz*Math.cos(ang-Math.PI*0.8), fromY+sz*Math.sin(ang-Math.PI*0.8));
+  ctx.stroke();
+}
+
+function drawShape(sh) {
+  if (!sh.visible) return;
+  ctx.save();
   ctx.strokeStyle = sh.strokeColor || '#000';
   ctx.lineWidth = sh.strokeWidth || 2;
-  ctx.fillStyle = sh.fillColor && sh.fillColor !== 'none' ? sh.fillColor : 'transparent';
-}
-
-function drawShape(sh, selected) {
-  ctx.save();
-  applyShapeStyle(sh);
-
-  const view = S.view;
-
-  if (sh.type === 'rect') {
-    if (view === 'planta' || view === 'axo') {
-      const p = worldToScreen(sh.x, sh.y);
-      const p2 = worldToScreen(sh.x + sh.w, sh.y + sh.h);
-      const sx = Math.min(p.x, p2.x), sy = Math.min(p.y, p2.y);
-      const sw = Math.abs(p2.x - p.x), sh2 = Math.abs(p2.y - p.y);
-      if (sh.fillColor && sh.fillColor !== 'none') { ctx.fillRect(sx, sy, sw, sh2); }
-      ctx.strokeRect(sx, sy, sw, sh2);
-      drawSections(sh, sx, sy, sw, sh2);
-      if (sh.extruded && view === 'axo') drawExtrusion(sh);
-    } else if (view === 'frontal') {
-      const p = worldToScreen(sh.x, 0, 0);
-      const p2 = worldToScreen(sh.x + sh.w, 0, sh.extruded ? sh.extrudeH : 0);
-      const sx = Math.min(p.x, p2.x), sy = Math.min(p.y, p2.y);
-      const sw = Math.abs(p2.x - p.x), sh2 = sh.extruded ? Math.abs(p2.y - p.y) : 20;
-      ctx.strokeRect(sx, sy, sw, sh2);
-    } else if (view === 'lateral') {
-      const p = worldToScreen(sh.y, 0, 0);
-      const p2 = worldToScreen(sh.y + sh.h, 0, sh.extruded ? sh.extrudeH : 0);
-      const sx = Math.min(p.x, p2.x), sy = Math.min(p.y, p2.y);
-      const sw = Math.abs(p2.x - p.x), sh2 = sh.extruded ? Math.abs(p2.y - p.y) : 20;
-      ctx.strokeRect(sx, sy, sw, sh2);
-    }
-  } else if (sh.type === 'circle') {
-    if (view === 'planta') {
-      const c = worldToScreen(sh.cx, sh.cy);
-      const r = sh.r * S.scale;
-      ctx.beginPath(); ctx.arc(c.x, c.y, r, 0, Math.PI*2);
-      if (sh.fillColor && sh.fillColor !== 'none') ctx.fill();
-      ctx.stroke();
-      drawCircleSections(sh, c.x, c.y, r);
-    } else {
-      const p = worldToScreen(sh.cx - sh.r, 0, 0);
-      const p2 = worldToScreen(sh.cx + sh.r, 0, sh.extruded ? sh.extrudeH : sh.r * 2);
-      const sx = Math.min(p.x, p2.x), sy = Math.min(p.y, p2.y);
-      const sw = Math.abs(p2.x - p.x), sh2 = Math.abs(p2.y - p.y);
-      ctx.strokeRect(sx, sy, sw, sh2);
-    }
-  } else if (sh.type === 'oval') {
-    if (view === 'planta') {
-      const c = worldToScreen(sh.cx, sh.cy);
-      const rx = sh.rx * S.scale, ry = sh.ry * S.scale;
-      ctx.beginPath(); ctx.ellipse(c.x, c.y, rx, ry, 0, 0, Math.PI*2);
-      if (sh.fillColor && sh.fillColor !== 'none') ctx.fill();
-      ctx.stroke();
-    }
-  } else if (sh.type === 'polygon-sym') {
-    const pts = getVertices(sh).map(v => worldToScreen(v.x, v.y));
-    drawPolyPath(pts, sh);
-    if (view === 'planta') drawPolySections(sh, pts);
-  } else if (sh.type === 'triangle') {
-    const pts = trianglePoints(sh).map(v => worldToScreen(v.x, v.y));
-    drawPolyPath(pts, sh);
-  } else if (sh.type === 'polygon-free') {
-    if (!sh.points || sh.points.length < 2) { ctx.restore(); return; }
-    const pts = sh.points.map(v => worldToScreen(v.x, v.y));
-    drawPolyPath(pts, sh);
-  } else if (sh.type === 'line') {
-    const p1 = worldToScreen(sh.x1, sh.y1);
-    const p2 = worldToScreen(sh.x2, sh.y2);
-    ctx.beginPath(); ctx.moveTo(p1.x, p1.y); ctx.lineTo(p2.x, p2.y); ctx.stroke();
-  } else if (sh.type === 'dimension') {
-    drawDimension(sh);
-    ctx.restore(); return;
-  }
-
-  // Selection highlight
-  if (selected) {
-    ctx.save();
-    ctx.strokeStyle = '#007aff'; ctx.lineWidth = 2;
-    ctx.setLineDash([5, 4]);
-    const bb = getBoundingBox(sh);
-    if (bb) {
-      const p1 = worldToScreen(bb.minX - 5/S.scale, bb.minY - 5/S.scale);
-      const p2 = worldToScreen(bb.maxX + 5/S.scale, bb.maxY + 5/S.scale);
-      ctx.strokeRect(Math.min(p1.x,p2.x), Math.min(p1.y,p2.y), Math.abs(p2.x-p1.x), Math.abs(p2.y-p1.y));
-    }
-    ctx.restore();
-    // Selection handles
-    const verts = getVertices(sh).slice(0, 4);
-    for (const v of verts) {
-      const sp = worldToScreen(v.x, v.y);
-      ctx.beginPath(); ctx.arc(sp.x, sp.y, 5, 0, Math.PI*2);
-      ctx.fillStyle = '#fff'; ctx.fill();
-      ctx.strokeStyle = '#007aff'; ctx.lineWidth = 2; ctx.stroke();
-    }
-  }
-
-  ctx.restore();
-}
-
-function drawPolyPath(pts, sh) {
-  ctx.beginPath();
-  ctx.moveTo(pts[0].x, pts[0].y);
-  for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
-  ctx.closePath();
-  if (sh.fillColor && sh.fillColor !== 'none') ctx.fill();
+  if (sh.type === 'dimension') { ctx.restore(); drawDimension(sh); return; }
+  buildPath(sh);
+  if (sh.fillColor && sh.fillColor !== 'none') { ctx.fillStyle = sh.fillColor; ctx.fill(); }
   ctx.stroke();
-}
-
-function drawSections(sh, sx, sy, sw, sh2) {
-  if (!sh.sectionsV && !sh.sectionsH) return;
-  ctx.save();
-  ctx.strokeStyle = lightenColor(sh.strokeColor || '#000', 0.5);
-  ctx.lineWidth = Math.max(0.5, (sh.strokeWidth || 2) * 0.5);
-  ctx.setLineDash([4, 3]);
-  if (sh.sectionsV > 1) {
-    const step = sw / sh.sectionsV;
-    for (let i = 1; i < sh.sectionsV; i++) {
-      ctx.beginPath(); ctx.moveTo(sx + step*i, sy); ctx.lineTo(sx + step*i, sy+sh2); ctx.stroke();
-    }
-  }
-  if (sh.sectionsH > 1) {
-    const step = sh2 / sh.sectionsH;
-    for (let i = 1; i < sh.sectionsH; i++) {
-      ctx.beginPath(); ctx.moveTo(sx, sy+step*i); ctx.lineTo(sx+sw, sy+step*i); ctx.stroke();
-    }
-  }
+  if (sh.sectionsH > 0 || sh.sectionsV > 0 || sh.sectionsAngular > 0) drawSections(sh);
+  if (sh.extruded && sh.extrudeH > 0) drawExtrusion(sh);
+  if (sh.autoDim) drawAutoDim(sh);
   ctx.restore();
 }
 
-function drawCircleSections(sh, cx, cy, r) {
-  if (!sh.sectionsAngular) return;
-  ctx.save();
-  ctx.strokeStyle = lightenColor(sh.strokeColor || '#000', 0.5);
-  ctx.lineWidth = Math.max(0.5, (sh.strokeWidth||2)*0.5);
-  ctx.setLineDash([4,3]);
-  const n = sh.sectionsAngular;
-  for (let i = 0; i < n; i++) {
-    const a = (2*Math.PI*i/n) - Math.PI/2;
-    ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(cx+r*Math.cos(a), cy+r*Math.sin(a)); ctx.stroke();
+function getShapeBBox(sh) {
+  switch(sh.type) {
+    case 'rect': return {minX:sh.x,maxX:sh.x+sh.w,minY:sh.y,maxY:sh.y+sh.h};
+    case 'circle': return {minX:sh.cx-sh.r,maxX:sh.cx+sh.r,minY:sh.cy-sh.r,maxY:sh.cy+sh.r};
+    case 'oval': return {minX:sh.cx-sh.rx,maxX:sh.cx+sh.rx,minY:sh.cy-sh.ry,maxY:sh.cy+sh.ry};
+    case 'line': return {minX:Math.min(sh.x1,sh.x2),maxX:Math.max(sh.x1,sh.x2),minY:Math.min(sh.y1,sh.y2),maxY:Math.max(sh.y1,sh.y2)};
+    case 'polygon-free': {
+      var pts=sh.points||[]; if(!pts.length) return null;
+      return {minX:Math.min.apply(null,pts.map(function(p){return p.x;})),maxX:Math.max.apply(null,pts.map(function(p){return p.x;})),minY:Math.min.apply(null,pts.map(function(p){return p.y;})),maxY:Math.max.apply(null,pts.map(function(p){return p.y;}))};
+    }
+    case 'triangle': {
+      var v=getTriangleVerts(sh);
+      return {minX:Math.min.apply(null,v.map(function(p){return p.x;})),maxX:Math.max.apply(null,v.map(function(p){return p.x;})),minY:Math.min.apply(null,v.map(function(p){return p.y;})),maxY:Math.max.apply(null,v.map(function(p){return p.y;}))};
+    }
+    case 'polygon-sym': return {minX:sh.cx-sh.radius,maxX:sh.cx+sh.radius,minY:sh.cy-sh.radius,maxY:sh.cy+sh.radius};
+    case 'dimension': return {minX:Math.min(sh.x1,sh.x2),maxX:Math.max(sh.x1,sh.x2),minY:Math.min(sh.y1,sh.y2),maxY:Math.max(sh.y1,sh.y2)};
+    default: return null;
   }
-  ctx.restore();
 }
 
-function drawPolySections(sh, pts) {
-  if (!sh.sectionsAngular) return;
-  const cx = worldToScreen(sh.cx, sh.cy);
+function drawSections(sh) {
   ctx.save();
-  ctx.strokeStyle = lightenColor(sh.strokeColor || '#000', 0.5);
-  ctx.lineWidth = Math.max(0.5, (sh.strokeWidth||2)*0.5);
-  ctx.setLineDash([4,3]);
-  for (let i = 0; i < pts.length; i++) {
-    const mid = { x: (pts[i].x + pts[(i+1)%pts.length].x)/2, y: (pts[i].y + pts[(i+1)%pts.length].y)/2 };
-    ctx.beginPath(); ctx.moveTo(cx.x, cx.y); ctx.lineTo(mid.x, mid.y); ctx.stroke();
+  ctx.strokeStyle = sh.strokeColor || '#000';
+  ctx.lineWidth = 1;
+  ctx.setLineDash([5,4]);
+  var bb = getShapeBBox(sh);
+  if (!bb) { ctx.restore(); return; }
+  for (var i = 1; i <= sh.sectionsH; i++) {
+    var wy = bb.minY + (bb.maxY-bb.minY)*i/(sh.sectionsH+1);
+    var p1 = worldToScreen(bb.minX,wy), p2 = worldToScreen(bb.maxX,wy);
+    ctx.beginPath(); ctx.moveTo(p1.x,p1.y); ctx.lineTo(p2.x,p2.y); ctx.stroke();
+  }
+  for (var j = 1; j <= sh.sectionsV; j++) {
+    var wx = bb.minX + (bb.maxX-bb.minX)*j/(sh.sectionsV+1);
+    var p3 = worldToScreen(wx,bb.minY), p4 = worldToScreen(wx,bb.maxY);
+    ctx.beginPath(); ctx.moveTo(p3.x,p3.y); ctx.lineTo(p4.x,p4.y); ctx.stroke();
+  }
+  if (sh.sectionsAngular > 0 && (sh.type==='circle'||sh.type==='oval')) {
+    var c = worldToScreen(sh.cx,sh.cy);
+    var rPx = (sh.r||sh.rx||50)*state.scale;
+    for (var k = 0; k < sh.sectionsAngular; k++) {
+      var ang = Math.PI*k/sh.sectionsAngular;
+      ctx.beginPath();
+      ctx.moveTo(c.x+rPx*Math.cos(ang), c.y+rPx*Math.sin(ang));
+      ctx.lineTo(c.x-rPx*Math.cos(ang), c.y-rPx*Math.sin(ang));
+      ctx.stroke();
+    }
   }
   ctx.restore();
 }
 
 function drawExtrusion(sh) {
-  if (!sh.extruded || S.view !== 'axo') return;
   ctx.save();
   ctx.strokeStyle = sh.strokeColor || '#000';
   ctx.lineWidth = sh.strokeWidth || 2;
-  ctx.setLineDash([6,3]);
-  const corners = [
-    {x:sh.x,y:sh.y},{x:sh.x+sh.w,y:sh.y},{x:sh.x+sh.w,y:sh.y+sh.h},{x:sh.x,y:sh.y+sh.h}
-  ];
-  for (const c of corners) {
-    const b = worldToScreen(c.x, c.y, 0);
-    const t = worldToScreen(c.x, c.y, sh.extrudeH);
-    ctx.beginPath(); ctx.moveTo(b.x,b.y); ctx.lineTo(t.x,t.y); ctx.stroke();
+  ctx.globalAlpha = 0.5;
+  var verts = getShapeVertices(sh);
+  var eh = sh.extrudeH;
+  for (var i = 0; i < verts.length; i++) {
+    var bot = worldToScreen(verts[i].x, verts[i].y);
+    var top = worldToScreen(verts[i].x, verts[i].y + eh);
+    ctx.beginPath(); ctx.moveTo(bot.x,bot.y); ctx.lineTo(top.x,top.y); ctx.stroke();
   }
-  // Top face
-  ctx.setLineDash([]);
-  ctx.beginPath();
-  const top = corners.map(c => worldToScreen(c.x, c.y, sh.extrudeH));
-  ctx.moveTo(top[0].x, top[0].y);
-  for (let i = 1; i < top.length; i++) ctx.lineTo(top[i].x, top[i].y);
-  ctx.closePath(); ctx.stroke();
+  if (verts.length >= 2) {
+    ctx.beginPath();
+    for (var j = 0; j < verts.length; j++) {
+      var s = worldToScreen(verts[j].x, verts[j].y+eh);
+      j===0 ? ctx.moveTo(s.x,s.y) : ctx.lineTo(s.x,s.y);
+    }
+    if (sh.type !== 'line') ctx.closePath();
+    ctx.stroke();
+  }
   ctx.restore();
 }
 
-function drawDimension(sh) {
-  const p1 = worldToScreen(sh.x1, sh.y1);
-  const p2 = worldToScreen(sh.x2, sh.y2);
-  const dist = Math.hypot(sh.x2-sh.x1, sh.y2-sh.y1);
-  const label = formatDist(dist);
-  const ox = -(p2.y-p1.y)/Math.hypot(p2.x-p1.x,p2.y-p1.y)*14;
-  const oy = (p2.x-p1.x)/Math.hypot(p2.x-p1.x,p2.y-p1.y)*14;
-
-  ctx.strokeStyle = '#007aff'; ctx.lineWidth = 1;
-  // Extension lines
-  ctx.beginPath(); ctx.moveTo(p1.x,p1.y); ctx.lineTo(p1.x+ox,p1.y+oy); ctx.stroke();
-  ctx.beginPath(); ctx.moveTo(p2.x,p2.y); ctx.lineTo(p2.x+ox,p2.y+oy); ctx.stroke();
-  // Dimension line
-  ctx.beginPath(); ctx.moveTo(p1.x+ox,p1.y+oy); ctx.lineTo(p2.x+ox,p2.y+oy); ctx.stroke();
-  // Arrows
-  drawArrow(ctx, p1.x+ox, p1.y+oy, p2.x+ox, p2.y+oy, true);
-  drawArrow(ctx, p2.x+ox, p2.y+oy, p1.x+ox, p1.y+oy, true);
-  // Label
-  const mx = (p1.x+p2.x)/2+ox, my = (p1.y+p2.y)/2+oy;
-  ctx.fillStyle = '#007aff'; ctx.font = 'bold 11px -apple-system,sans-serif';
-  ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
-  ctx.fillText(label, mx, my-2);
+function drawAutoDim(sh) {
+  var bb = getShapeBBox(sh); if (!bb) return;
+  var off = 28;
+  ctx.save();
+  ctx.strokeStyle = '#007aff'; ctx.fillStyle = '#007aff';
+  ctx.lineWidth = 1; ctx.font = '11px -apple-system,sans-serif';
+  var wW = bb.maxX-bb.minX;
+  var wD = state.unit==='cm' ? (wW/10).toFixed(1)+'cm' : (wW/1000).toFixed(3)+'m';
+  var p1s = worldToScreen(bb.minX,bb.minY), p2s = worldToScreen(bb.maxX,bb.minY);
+  ctx.setLineDash([3,3]);
+  ctx.beginPath(); ctx.moveTo(p1s.x,p1s.y+off); ctx.lineTo(p2s.x,p2s.y+off); ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.textAlign='center'; ctx.textBaseline='top';
+  ctx.fillText(wD,(p1s.x+p2s.x)/2,Math.max(p1s.y,p2s.y)+off+2);
+  var hW = bb.maxY-bb.minY;
+  var hD = state.unit==='cm' ? (hW/10).toFixed(1)+'cm' : (hW/1000).toFixed(3)+'m';
+  var p3s = worldToScreen(bb.maxX,bb.minY), p4s = worldToScreen(bb.maxX,bb.maxY);
+  ctx.setLineDash([3,3]);
+  ctx.beginPath(); ctx.moveTo(p3s.x+off,p3s.y); ctx.lineTo(p4s.x+off,p4s.y); ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.textAlign='left'; ctx.textBaseline='middle';
+  ctx.fillText(hD, p3s.x+off+2, (p3s.y+p4s.y)/2);
+  ctx.restore();
 }
 
-function drawArrow(ctx, fx, fy, tx, ty, small) {
-  const angle = Math.atan2(ty-fy, tx-fx);
-  const size = small ? 7 : 10;
-  ctx.beginPath();
-  ctx.moveTo(fx, fy);
-  ctx.lineTo(fx + size*Math.cos(angle+0.4), fy + size*Math.sin(angle+0.4));
-  ctx.moveTo(fx, fy);
-  ctx.lineTo(fx + size*Math.cos(angle-0.4), fy + size*Math.sin(angle-0.4));
+function drawSelectionHandles(sh) {
+  if (!sh) return;
+  ctx.save();
+  ctx.strokeStyle = '#007aff'; ctx.lineWidth = 1.5;
+  ctx.setLineDash([5,3]);
+  buildPath(sh);
   ctx.stroke();
+  ctx.setLineDash([]);
+  var bb = getShapeBBox(sh); if (!bb) { ctx.restore(); return; }
+  var corners = [
+    worldToScreen(bb.minX,bb.minY), worldToScreen(bb.maxX,bb.minY),
+    worldToScreen(bb.maxX,bb.maxY), worldToScreen(bb.minX,bb.maxY)
+  ];
+  ctx.fillStyle = '#fff'; ctx.strokeStyle = '#007aff'; ctx.lineWidth = 1.5;
+  for (var i = 0; i < corners.length; i++) {
+    ctx.beginPath(); ctx.arc(corners[i].x,corners[i].y,5,0,Math.PI*2); ctx.fill(); ctx.stroke();
+  }
+  ctx.restore();
 }
 
-function drawPreview() {
-  if (S.tool === 'polygon-free' && S.drawPoints.length > 0) {
-    const pts = S.drawPoints.map(v => worldToScreen(v.x, v.y));
-    ctx.save(); ctx.strokeStyle = S.strokeColor; ctx.lineWidth = S.strokeWidth;
-    ctx.setLineDash([5,4]);
-    ctx.beginPath(); ctx.moveTo(pts[0].x, pts[0].y);
-    for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
-    if (S._cursorWorld) {
-      const cp = worldToScreen(S._cursorWorld.x, S._cursorWorld.y);
-      ctx.lineTo(cp.x, cp.y);
+function drawInProgress() {
+  var cur = state.drawCurrent;
+  if (state.tool === 'polygon-free' && state.drawPoints.length > 0) {
+    ctx.save();
+    ctx.strokeStyle = state.strokeColor; ctx.lineWidth = state.strokeWidth;
+    ctx.setLineDash([5,3]);
+    ctx.beginPath();
+    var s0 = worldToScreen(state.drawPoints[0].x, state.drawPoints[0].y);
+    ctx.moveTo(s0.x, s0.y);
+    for (var i = 1; i < state.drawPoints.length; i++) {
+      var si = worldToScreen(state.drawPoints[i].x, state.drawPoints[i].y);
+      ctx.lineTo(si.x, si.y);
     }
+    if (cur) { var sc2 = worldToScreen(cur.x,cur.y); ctx.lineTo(sc2.x,sc2.y); }
     ctx.stroke();
-    for (const p of pts) { ctx.beginPath(); ctx.arc(p.x, p.y, 4, 0, Math.PI*2); ctx.fillStyle='#007aff'; ctx.fill(); }
+    ctx.setLineDash([]);
+    ctx.fillStyle = '#007aff';
+    for (var j = 0; j < state.drawPoints.length; j++) {
+      var sp = worldToScreen(state.drawPoints[j].x, state.drawPoints[j].y);
+      ctx.beginPath(); ctx.arc(sp.x,sp.y,4,0,Math.PI*2); ctx.fill();
+    }
     ctx.restore();
+    return;
   }
-  if (S.tool === 'line' && S.drawing && S.lineStart) {
-    const p1 = worldToScreen(S.lineStart.x, S.lineStart.y);
-    if (S._cursorWorld) {
-      const p2 = worldToScreen(S._cursorWorld.x, S._cursorWorld.y);
-      ctx.save(); ctx.strokeStyle = S.strokeColor; ctx.lineWidth = S.strokeWidth;
-      ctx.beginPath(); ctx.moveTo(p1.x,p1.y); ctx.lineTo(p2.x,p2.y); ctx.stroke();
-      const dist = Math.hypot(S._cursorWorld.x - S.lineStart.x, S._cursorWorld.y - S.lineStart.y);
-      ctx.fillStyle = 'rgba(0,0,0,0.7)'; ctx.font = 'bold 11px sans-serif';
-      ctx.fillText(formatDist(dist), p2.x+8, p2.y-4);
+  if (!state.drawing && !state.dimP1) return;
+  if (!cur) return;
+  ctx.save();
+  ctx.strokeStyle = state.strokeColor; ctx.lineWidth = state.strokeWidth;
+  ctx.setLineDash([5,3]);
+  if (state.tool === 'line' && state.drawStart) {
+    var lp1 = worldToScreen(state.drawStart.x, state.drawStart.y);
+    var lp2 = worldToScreen(cur.x, cur.y);
+    ctx.beginPath(); ctx.moveTo(lp1.x,lp1.y); ctx.lineTo(lp2.x,lp2.y); ctx.stroke();
+  } else if (state.tool === 'dimension' && state.dimP1) {
+    var dp1 = worldToScreen(state.dimP1.x, state.dimP1.y);
+    var dp2 = worldToScreen(cur.x, cur.y);
+    ctx.strokeStyle = '#007aff';
+    ctx.beginPath(); ctx.moveTo(dp1.x,dp1.y); ctx.lineTo(dp2.x,dp2.y); ctx.stroke();
+  }
+  ctx.restore();
+}
+
+// ============================================================
+//  MAIN RENDER LOOP
+// ============================================================
+function render() {
+  if (dirty) {
+    dirty = false;
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+    ctx.fillStyle = state.darkMode ? '#1a1a1a' : '#f8f8f8';
+    ctx.fillRect(0,0,canvas.width,canvas.height);
+    drawGrid();
+    for (var li = 0; li < state.layers.length; li++) {
+      var layer = state.layers[li];
+      if (!layer.visible) continue;
+      ctx.save();
+      ctx.globalAlpha = typeof layer.opacity === 'number' ? layer.opacity : 1;
+      for (var si = 0; si < layer.shapes.length; si++) drawShape(layer.shapes[si]);
       ctx.restore();
     }
+    var sel = getSelectedShape();
+    if (sel) drawSelectionHandles(sel);
+    drawInProgress();
+    updateShapeActionsPos();
   }
-  if (S.tool === 'dimension' && S.dimStep === 1 && S.dimP1) {
-    const p1 = worldToScreen(S.dimP1.x, S.dimP1.y);
-    if (S._cursorWorld) {
-      const p2 = worldToScreen(S._cursorWorld.x, S._cursorWorld.y);
-      ctx.save(); ctx.strokeStyle='#007aff'; ctx.lineWidth=1; ctx.setLineDash([4,3]);
-      ctx.beginPath(); ctx.moveTo(p1.x,p1.y); ctx.lineTo(p2.x,p2.y); ctx.stroke();
-      ctx.restore();
+  requestAnimationFrame(render);
+}
+
+function getSelectedShape() {
+  if (!state.selectedId) return null;
+  for (var li = 0; li < state.layers.length; li++) {
+    for (var si = 0; si < state.layers[li].shapes.length; si++) {
+      if (state.layers[li].shapes[si].id === state.selectedId) return state.layers[li].shapes[si];
     }
   }
+  return null;
 }
 
-function lightenColor(hex, amount) {
-  const c = parseInt(hex.slice(1),16);
-  const r = Math.min(255, (c>>16) + amount*255 | 0);
-  const g = Math.min(255, ((c>>8)&0xff) + amount*255 | 0);
-  const b = Math.min(255, (c&0xff) + amount*255 | 0);
-  return `rgb(${r},${g},${b})`;
-}
-
-function getBoundingBox(sh) {
-  const verts = getVertices(sh);
-  if (!verts.length) return null;
-  const xs = verts.map(v=>v.x), ys = verts.map(v=>v.y);
-  return { minX: Math.min(...xs), maxX: Math.max(...xs), minY: Math.min(...ys), maxY: Math.max(...ys) };
-}
-
-function formatDist(mm) {
-  if (S.unit === 'm') return (mm/1000).toFixed(3) + ' m';
-  return (mm/10).toFixed(1) + ' cm';
-}
-
-// ─── UNIT CONVERSION ──────────────────────────────────────────────────────────
-function toMM(val) {
-  const v = parseFloat(val) || 0;
-  return S.unit === 'm' ? v * 1000 : v * 10;
-}
-function fromMM(mm) {
-  return S.unit === 'm' ? mm / 1000 : mm / 10;
-}
-
-// ─── TOOLBAR ACTIONS ─────────────────────────────────────────────────────────
-function setUnit(u, btn) {
-  S.unit = u;
-  document.querySelectorAll('#unit-ctrl .seg-btn').forEach(b => b.classList.remove('active'));
-  btn.classList.add('active');
-  document.getElementById('grid-unit-lbl').textContent = u;
-  document.getElementById('extrude-unit-lbl').textContent = u;
-  markDirty();
-}
-
-function toggleGrid() {
-  S.gridEnabled = !S.gridEnabled;
-  const btn = document.getElementById('grid-btn');
-  const inp = document.getElementById('grid-size-inp');
-  const lbl = document.getElementById('grid-unit-lbl');
-  btn.classList.toggle('active', S.gridEnabled);
-  inp.style.display = S.gridEnabled ? '' : 'none';
-  lbl.style.display = S.gridEnabled ? '' : 'none';
-  markDirty();
-}
-
-function setGridSize(v) {
-  S.gridSize = toMM(v);
-  markDirty();
-}
-
-function setView(v, btn) {
-  S.view = v;
-  S._axo = false;
-  document.getElementById('axo-btn').classList.remove('active');
-  document.querySelectorAll('#view-ctrl .seg-btn').forEach(b => b.classList.remove('active'));
-  btn.classList.add('active');
-  markDirty();
-}
-
-function toggleAxo() {
-  S._axo = !S._axo;
-  S.view = S._axo ? 'axo' : 'planta';
-  document.getElementById('axo-btn').classList.toggle('active', S._axo);
-  if (S._axo) {
-    document.querySelectorAll('#view-ctrl .seg-btn').forEach(b => b.classList.remove('active'));
-  } else {
-    document.querySelectorAll('#view-ctrl .seg-btn')[0].classList.add('active');
+function findShapeAt(sx, sy) {
+  for (var li = state.layers.length-1; li >= 0; li--) {
+    var layer = state.layers[li];
+    if (!layer.visible) continue;
+    for (var si = layer.shapes.length-1; si >= 0; si--) {
+      if (isPointInShape(sx, sy, layer.shapes[si])) return layer.shapes[si];
+    }
   }
-  markDirty();
+  return null;
 }
 
-function toggleNight() {
-  S.darkMode = !S.darkMode;
-  document.body.classList.toggle('dark-mode', S.darkMode);
-  const btn = document.getElementById('night-btn');
-  btn.innerHTML = S.darkMode ? '<i class="ph-bold ph-sun"></i>' : '<i class="ph-bold ph-moon"></i>';
-  markDirty();
+function isPointInShape(sx, sy, sh) {
+  var thr = Math.max(8, (sh.strokeWidth||2) * 0.5 + 6);
+  switch(sh.type) {
+    case 'rect': {
+      var p1=worldToScreen(sh.x,sh.y), p2=worldToScreen(sh.x+sh.w,sh.y+sh.h);
+      return sx>=Math.min(p1.x,p2.x)-thr && sx<=Math.max(p1.x,p2.x)+thr && sy>=Math.min(p1.y,p2.y)-thr && sy<=Math.max(p1.y,p2.y)+thr;
+    }
+    case 'circle': {
+      var c=worldToScreen(sh.cx,sh.cy); var r=sh.r*state.scale;
+      return Math.sqrt((sx-c.x)**2+(sy-c.y)**2) <= r+thr;
+    }
+    case 'oval': {
+      var c2=worldToScreen(sh.cx,sh.cy); var rx=sh.rx*state.scale, ry=sh.ry*state.scale;
+      return ((sx-c2.x)/rx)**2+((sy-c2.y)/ry)**2 <= 1.4;
+    }
+    case 'line': {
+      var lp1=worldToScreen(sh.x1,sh.y1), lp2=worldToScreen(sh.x2,sh.y2);
+      return distSeg(sx,sy,lp1.x,lp1.y,lp2.x,lp2.y) < thr;
+    }
+    case 'polygon-free': {
+      var pts=sh.points||[]; if(pts.length<2) return false;
+      for (var i=0;i<pts.length-1;i++) {
+        var a=worldToScreen(pts[i].x,pts[i].y), b=worldToScreen(pts[i+1].x,pts[i+1].y);
+        if (distSeg(sx,sy,a.x,a.y,b.x,b.y)<thr) return true;
+      }
+      if (pts.length>2) {
+        var a2=worldToScreen(pts[pts.length-1].x,pts[pts.length-1].y), b2=worldToScreen(pts[0].x,pts[0].y);
+        if (distSeg(sx,sy,a2.x,a2.y,b2.x,b2.y)<thr) return true;
+      }
+      return false;
+    }
+    case 'triangle': case 'polygon-sym': {
+      var bb=getShapeBBox(sh); if(!bb) return false;
+      var p1b=worldToScreen(bb.minX,bb.minY), p2b=worldToScreen(bb.maxX,bb.maxY);
+      return sx>=Math.min(p1b.x,p2b.x)-thr && sx<=Math.max(p1b.x,p2b.x)+thr && sy>=Math.min(p1b.y,p2b.y)-thr && sy<=Math.max(p1b.y,p2b.y)+thr;
+    }
+    case 'dimension': {
+      var dp1=worldToScreen(sh.x1,sh.y1), dp2=worldToScreen(sh.x2,sh.y2);
+      return distSeg(sx,sy,dp1.x,dp1.y,dp2.x,dp2.y) < thr+10;
+    }
+    default: return false;
+  }
 }
 
-function toggleLayerPanel() {
-  document.getElementById('layer-panel').classList.toggle('open');
+function distSeg(px,py,ax,ay,bx,by) {
+  var dx=bx-ax, dy=by-ay;
+  var len2=dx*dx+dy*dy;
+  if (len2===0) return Math.sqrt((px-ax)**2+(py-ay)**2);
+  var t=Math.max(0,Math.min(1,((px-ax)*dx+(py-ay)*dy)/len2));
+  return Math.sqrt((px-(ax+t*dx))**2+(py-(ay+t*dy))**2);
 }
 
-function toggleSavePop() {
-  const pop = document.getElementById('save-pop');
-  pop.style.display = pop.style.display === 'block' ? 'none' : 'block';
-}
-document.addEventListener('click', e => {
-  if (!e.target.closest('#save-btn') && !e.target.closest('#save-pop')) {
-    document.getElementById('save-pop').style.display = 'none';
+// ============================================================
+//  POINTER EVENTS
+// ============================================================
+var spaceDown = false;
+var activePointers = {};
+
+document.addEventListener('keydown', function(e) {
+  if (e.code==='Space' && e.target===document.body) { e.preventDefault(); spaceDown=true; canvas.classList.add('cursor-grab'); }
+  if (e.code==='KeyZ' && (e.metaKey||e.ctrlKey)) { e.preventDefault(); e.shiftKey?redo():undo(); }
+  if (e.code==='Escape') {
+    if (state.tool==='polygon-free' && state.drawPoints.length>=3) finalizePolygonFree();
+    else { state.drawPoints=[]; state.drawCurrent=null; }
+    state.selectedId=null; state.drawing=false; state.drawStart=null; state.dimP1=null;
+    hideShapeActions(); setDirty();
+  }
+  if ((e.code==='Delete'||e.code==='Backspace') && e.target===document.body) {
+    if (state.selectedId) { e.preventDefault(); deleteSelectedShape(); }
   }
 });
+document.addEventListener('keyup', function(e) {
+  if (e.code==='Space') { spaceDown=false; canvas.classList.remove('cursor-grab'); canvas.classList.remove('cursor-grabbing'); }
+});
 
-function setStrokeColor(v) { S.strokeColor = v; }
-function setStrokeWidth(v) { S.strokeWidth = v; }
-function toggleSnapGrid() {
-  S.snapGrid = !S.snapGrid;
-  document.getElementById('snap-grid-btn').classList.toggle('active', S.snapGrid);
-}
-function toggleSnapVertex() {
-  S.snapVertex = !S.snapVertex;
-  document.getElementById('snap-vertex-btn').classList.toggle('active', S.snapVertex);
-}
-
-// ─── TOOL SELECTION ───────────────────────────────────────────────────────────
-function setTool(t) {
-  // Cancel any active drawing
-  S.drawPoints = []; S.drawing = false; S.lineStart = null;
-  S.dimStep = 0; S.dimP1 = null;
-  S.selectedId = null;
-  hideFloatTb();
-
-  S.tool = t;
-  document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('active'));
-  const btn = document.getElementById('tool-' + t);
-  if (btn) btn.classList.add('active');
-
-  canvas.className = 'tool-' + (t === 'select' ? 'select' : t === 'move' ? 'move' : 'draw');
-  markDirty();
-
-  if (t === 'dimension') {
-    toast('Toca dos puntos para acotar manualmente', 3500);
-  }
-  if (t === 'polygon-free') {
-    toast('Toca para agregar vértices. Doble toque para cerrar.', 3500);
-  }
-}
-
-// ─── POINTER EVENTS ──────────────────────────────────────────────────────────
-let _lastTap = 0;
-
-canvas.addEventListener('pointerdown', onPointerDown);
-canvas.addEventListener('pointermove', onPointerMove);
+canvas.addEventListener('pointerdown', onPointerDown, {passive:false});
+canvas.addEventListener('pointermove', onPointerMove, {passive:false});
 canvas.addEventListener('pointerup', onPointerUp);
 canvas.addEventListener('pointercancel', onPointerUp);
-canvas.addEventListener('wheel', onWheel, { passive: false });
+canvas.addEventListener('wheel', onWheel, {passive:false});
+canvas.addEventListener('dblclick', onDblClick);
+canvas.addEventListener('contextmenu', function(e){ e.preventDefault(); });
 
-function getCanvasPos(e) {
-  const r = canvas.getBoundingClientRect();
-  return { x: e.clientX - r.left, y: e.clientY - r.top };
+function getCanvasXY(e) {
+  var rect = canvas.getBoundingClientRect();
+  return { x: e.clientX - rect.left, y: e.clientY - rect.top };
 }
 
 function onPointerDown(e) {
   e.preventDefault();
-  S.pointers[e.pointerId] = { x: e.clientX, y: e.clientY };
   canvas.setPointerCapture(e.pointerId);
-
-  const pCount = Object.keys(S.pointers).length;
-  if (pCount === 2) {
-    // Pinch zoom start
-    const pts = Object.values(S.pointers);
-    S.lastPinchDist = Math.hypot(pts[1].x-pts[0].x, pts[1].y-pts[0].y);
-    S._pinchMidX = (pts[0].x+pts[1].x)/2;
-    S._pinchMidY = (pts[0].y+pts[1].y)/2;
-    return;
+  activePointers[e.pointerId] = { x: e.clientX, y: e.clientY };
+  var pCount = Object.keys(activePointers).length;
+  if (pCount >= 2) {
+    var pts = Object.values(activePointers);
+    state.lastTouchDist = Math.hypot(pts[1].x-pts[0].x, pts[1].y-pts[0].y);
+    state.lastTouchMid = { x:(pts[0].x+pts[1].x)/2, y:(pts[0].y+pts[1].y)/2 };
+    state.panning = false; return;
   }
-  if (pCount > 1) return;
-
-  const cp = getCanvasPos(e);
-  const wpt = screenToWorld(cp.x, cp.y);
-  const snapped = applySnap(wpt.x, wpt.y);
-
-  // Double tap detection
-  const now = Date.now();
-  const dblTap = (now - _lastTap) < 350;
-  _lastTap = now;
-
-  if (S.tool === 'polygon-free') {
-    if (dblTap && S.drawPoints.length >= 3) {
-      // Close polygon
-      S.drawPoints.pop(); // remove last (which is double-tapped duplicate)
-      finishFreePolygon();
-      return;
-    }
-    S.drawPoints.push(snapped);
-    markDirty(); return;
+  var cxy = getCanvasXY(e);
+  var wp = screenToWorld(cxy.x, cxy.y);
+  if (spaceDown || e.button===1) {
+    state.panning=true; state.panStart={x:e.clientX,y:e.clientY}; state.originStart={...state.origin};
+    canvas.classList.add('cursor-grabbing'); return;
   }
-
-  if (S.tool === 'line') {
-    if (!S.drawing) { S.lineStart = snapped; S.drawing = true; }
+  var tool = state.tool;
+  var snapped = snapPoint(wp.x, wp.y);
+  if (tool==='select') {
+    var sh = findShapeAt(cxy.x, cxy.y);
+    if (sh) { state.selectedId=sh.id; showShapeActions(); }
+    else { state.selectedId=null; hideShapeActions(); }
+    setDirty(); return;
+  }
+  if (tool==='move') {
+    var sh2 = findShapeAt(cxy.x, cxy.y);
+    if (sh2 && !sh2.locked) { state.selectedId=sh2.id; state.drawing=true; state.moveDragStart=snapped; }
+    setDirty(); return;
+  }
+  if (tool==='line') {
+    state.drawing=true; state.drawStart=snapped; state.drawCurrent=snapped; setDirty(); return;
+  }
+  if (tool==='dimension') {
+    if (!state.dimP1) { state.dimP1=snapped; }
     else {
       pushHistory();
-      addShape({ type:'line', x1:S.lineStart.x, y1:S.lineStart.y, x2:snapped.x, y2:snapped.y });
-      S.drawing = false; S.lineStart = null;
+      addShapeToActiveLayer({
+        id:genUUID(),type:'dimension',name:'Cota',visible:true,locked:false,
+        strokeColor:'#007aff',strokeWidth:1,fillColor:'none',
+        x1:state.dimP1.x,y1:state.dimP1.y,x2:snapped.x,y2:snapped.y,offset:30,
+        extruded:false,extrudeH:0,sectionsH:0,sectionsV:0,sectionsAngular:0,autoDim:false
+      });
+      state.dimP1=null; state.drawCurrent=null;
     }
-    markDirty(); return;
+    setDirty(); return;
   }
-
-  if (S.tool === 'dimension') {
-    if (S.dimStep === 0) { S.dimP1 = snapped; S.dimStep = 1; toast('Toca el segundo punto', 2000); }
-    else {
-      pushHistory();
-      addShape({ type:'dimension', x1:S.dimP1.x, y1:S.dimP1.y, x2:snapped.x, y2:snapped.y, name:'Cota' });
-      S.dimStep = 0; S.dimP1 = null;
-    }
-    markDirty(); return;
+  if (tool==='polygon-free') {
+    state.drawPoints.push(snapped); state.drawCurrent=snapped; setDirty(); return;
   }
-
-  if (S.tool === 'select') {
-    const hit = hitTest(cp.x, cp.y);
-    if (hit) {
-      S.selectedId = hit.id;
-      showFloatTb(cp.x, cp.y);
-    } else {
-      S.selectedId = null; hideFloatTb();
-    }
-    renderLayerPanel(); markDirty(); return;
+  if (['rect','circle','oval','polygon-sym','triangle'].includes(tool)) {
+    openShapeDialog(tool, snapped); return;
   }
-
-  if (S.tool === 'move') {
-    const hit = hitTest(cp.x, cp.y);
-    if (hit) {
-      S.dragShapeId = hit.id; S.selectedId = hit.id;
-      S.dragging = true;
-      const sh = S.layers.find(l=>l.id===hit.id);
-      const bb = getBoundingBox(sh);
-      S.dragOfsX = (bb.minX + bb.maxX)/2 - snapped.x;
-      S.dragOfsY = (bb.minY + bb.maxY)/2 - snapped.y;
-      canvas.classList.add('dragging');
-    }
-    return;
+  if (tool==='section') {
+    var sh3=findShapeAt(cxy.x,cxy.y);
+    if (sh3) { state.selectedId=sh3.id; openSectionDialog(); } return;
   }
-
-  // Shape tools — show dialog
-  if (['rect','circle','oval','polygon-sym','triangle'].includes(S.tool)) {
-    pendingShapePos = snapped;
-    openShapeModal(S.tool);
+  if (tool==='extrude') {
+    var sh4=findShapeAt(cxy.x,cxy.y);
+    if (sh4) { state.selectedId=sh4.id; openExtrudeDialog(); } return;
   }
 }
 
 function onPointerMove(e) {
-  S.pointers[e.pointerId] = { x: e.clientX, y: e.clientY };
-  const pCount = Object.keys(S.pointers).length;
-
-  if (pCount === 2) {
-    // Pinch zoom
-    const pts = Object.values(S.pointers);
-    const dist = Math.hypot(pts[1].x-pts[0].x, pts[1].y-pts[0].y);
-    if (S.lastPinchDist) {
-      const ratio = dist / S.lastPinchDist;
-      const midX = (pts[0].x+pts[1].x)/2, midY = (pts[0].y+pts[1].y)/2;
-      zoomAt(midX, midY, ratio);
-      // Also pan
-      const dx = midX - S._pinchMidX, dy = midY - S._pinchMidY;
-      S.originX += dx; S.originY += dy;
-      S._pinchMidX = midX; S._pinchMidY = midY;
+  e.preventDefault();
+  activePointers[e.pointerId] = {x:e.clientX,y:e.clientY};
+  var pCount = Object.keys(activePointers).length;
+  var cxy = getCanvasXY(e);
+  var wp = screenToWorld(cxy.x, cxy.y);
+  var displayX = state.unit==='cm' ? (wp.x/10).toFixed(1) : (wp.x/1000).toFixed(3);
+  var displayY = state.unit==='cm' ? (wp.y/10).toFixed(1) : (wp.y/1000).toFixed(3);
+  document.getElementById('coords-display').textContent = displayX+', '+displayY+' '+state.unit;
+  if (pCount>=2) {
+    var pts=Object.values(activePointers);
+    var dist=Math.hypot(pts[1].x-pts[0].x,pts[1].y-pts[0].y);
+    var mid={x:(pts[0].x+pts[1].x)/2,y:(pts[0].y+pts[1].y)/2};
+    if (state.lastTouchDist!==null) {
+      var ratio=dist/state.lastTouchDist;
+      var rect=canvas.getBoundingClientRect();
+      zoomAround(mid.x-rect.left,mid.y-rect.top,ratio);
+      if (state.lastTouchMid) { state.origin.x+=mid.x-state.lastTouchMid.x; state.origin.y+=mid.y-state.lastTouchMid.y; }
     }
-    S.lastPinchDist = dist;
-    markDirty(); return;
+    state.lastTouchDist=dist; state.lastTouchMid=mid; setDirty(); return;
   }
-
-  const cp = getCanvasPos(e);
-  const wpt = screenToWorld(cp.x, cp.y);
-  const snapped = applySnap(wpt.x, wpt.y);
-  S._cursorWorld = snapped;
-
-  // Snap indicator
-  S._snapIndicator = null;
-  if (S.snapVertex && (S.tool === 'move' || S.drawPoints.length > 0)) {
-    let bestD = 15 / S.scale, bestV = null;
-    for (const sh of S.layers) {
-      if (sh.id === S.dragShapeId) continue;
-      for (const v of getVertices(sh)) {
-        const d = Math.hypot(v.x - wpt.x, v.y - wpt.y);
-        if (d < bestD) { bestD = d; bestV = v; }
-      }
-    }
-    if (bestV) S._snapIndicator = bestV;
+  if (state.panning) {
+    state.origin.x=state.originStart.x+(e.clientX-state.panStart.x);
+    state.origin.y=state.originStart.y+(e.clientY-state.panStart.y);
+    setDirty(); return;
   }
-
-  if (S.dragging && S.dragShapeId) {
-    const sh = S.layers.find(l=>l.id===S.dragShapeId);
-    if (!sh) return;
-    const nx = snapped.x + S.dragOfsX, ny = snapped.y + S.dragOfsY;
-    const bb = getBoundingBox(sh);
-    const cx = (bb.minX+bb.maxX)/2, cy = (bb.minY+bb.maxY)/2;
-    moveShape(sh, nx-cx, ny-cy);
-    markDirty(); return;
+  var snapped=snapPoint(wp.x,wp.y);
+  state.drawCurrent=snapped;
+  if (state.tool==='move' && state.drawing && state.selectedId) {
+    var sh=getSelectedShape(); if(!sh||sh.locked) return;
+    var dx=snapped.x-state.moveDragStart.x, dy=snapped.y-state.moveDragStart.y;
+    moveShape(sh,dx,dy); state.moveDragStart=snapped;
   }
-
-  if (S.drawPoints.length > 0 || S.drawing || (S.tool==='dimension'&&S.dimStep===1)) {
-    markDirty();
-  }
+  setDirty();
 }
 
 function onPointerUp(e) {
-  delete S.pointers[e.pointerId];
-  S.lastPinchDist = null;
-  if (S.dragging) {
-    S.dragging = false; S.dragShapeId = null;
-    canvas.classList.remove('dragging');
-    pushHistory(); // save after drag
+  delete activePointers[e.pointerId];
+  var pCount=Object.keys(activePointers).length;
+  if (pCount<2) { state.lastTouchDist=null; state.lastTouchMid=null; }
+  if (state.panning) { state.panning=false; canvas.classList.remove('cursor-grabbing'); return; }
+  var tool=state.tool;
+  if (tool==='line' && state.drawing) {
+    var s=state.drawStart, c=state.drawCurrent;
+    if (s&&c&&(Math.abs(c.x-s.x)>0.5||Math.abs(c.y-s.y)>0.5)) {
+      pushHistory();
+      addShapeToActiveLayer({
+        id:genUUID(),type:'line',name:'Línea '+(countShapes()+1),
+        visible:true,locked:false,strokeColor:state.strokeColor,strokeWidth:state.strokeWidth,fillColor:'none',
+        x1:s.x,y1:s.y,x2:c.x,y2:c.y,
+        extruded:false,extrudeH:0,sectionsH:0,sectionsV:0,sectionsAngular:0,autoDim:false
+      });
+    }
+    state.drawing=false; state.drawStart=null; setDirty(); return;
   }
+  if (tool==='move' && state.drawing) { state.drawing=false; pushHistory(); setDirty(); return; }
+}
+
+function onDblClick(e) {
+  if (state.tool==='polygon-free' && state.drawPoints.length>=3) finalizePolygonFree();
+}
+
+function finalizePolygonFree() {
+  if (state.drawPoints.length<3) { state.drawPoints=[]; state.drawCurrent=null; setDirty(); return; }
+  pushHistory();
+  addShapeToActiveLayer({
+    id:genUUID(),type:'polygon-free',name:'Polígono '+(countShapes()+1),
+    visible:true,locked:false,strokeColor:state.strokeColor,strokeWidth:state.strokeWidth,fillColor:'none',
+    points:state.drawPoints.slice(),
+    extruded:false,extrudeH:0,sectionsH:0,sectionsV:0,sectionsAngular:0,autoDim:false
+  });
+  state.drawPoints=[]; state.drawCurrent=null; setDirty();
 }
 
 function onWheel(e) {
   e.preventDefault();
-  const cp = getCanvasPos(e);
-  const delta = e.deltaY > 0 ? 0.9 : 1.1;
-  zoomAt(cp.x, cp.y, delta);
+  var cxy=getCanvasXY(e);
+  zoomAround(cxy.x, cxy.y, e.deltaY<0?1.12:1/1.12);
 }
 
-function zoomAt(sx, sy, ratio) {
-  const newScale = Math.min(Math.max(S.scale * ratio, 0.2), 50);
-  const factor = newScale / S.scale;
-  S.originX = sx + (S.originX - sx) * factor;
-  S.originY = sy + (S.originY - sy) * factor;
-  S.scale = newScale;
-  markDirty();
+function zoomAround(sx, sy, factor) {
+  var newSc=Math.min(20,Math.max(0.5,state.scale*factor));
+  var af=newSc/state.scale;
+  state.origin.x=sx+(state.origin.x-sx)*af;
+  state.origin.y=sy+(state.origin.y-sy)*af;
+  state.scale=newSc; setDirty();
 }
 
-// Middle-click / space+drag for pan
-let _spaceDown = false;
-let _panStart = null;
-document.addEventListener('keydown', e => {
-  if (e.code === 'Space') { _spaceDown = true; e.preventDefault(); }
-  if (e.code === 'KeyZ' && (e.ctrlKey || e.metaKey)) { e.shiftKey ? redo() : undo(); e.preventDefault(); }
-  if (e.code === 'Escape') { setTool('select'); }
-  if (e.code === 'Delete' || e.code === 'Backspace') { if (S.selectedId) deleteSelected(); }
-});
-document.addEventListener('keyup', e => { if (e.code === 'Space') _spaceDown = false; });
-
-canvas.addEventListener('mousedown', e => {
-  if (e.button === 1 || _spaceDown) {
-    _panStart = { x: e.clientX, y: e.clientY, ox: S.originX, oy: S.originY };
-    canvas.style.cursor = 'grabbing';
-  }
-});
-canvas.addEventListener('mousemove', e => {
-  if (_panStart) {
-    S.originX = _panStart.ox + e.clientX - _panStart.x;
-    S.originY = _panStart.oy + e.clientY - _panStart.y;
-    markDirty();
-  }
-});
-canvas.addEventListener('mouseup', e => { if (_panStart) { _panStart = null; canvas.style.cursor = ''; } });
-
-// ─── HIT TEST ────────────────────────────────────────────────────────────────
-function hitTest(sx, sy) {
-  for (let i = S.layers.length - 1; i >= 0; i--) {
-    const sh = S.layers[i];
-    if (!sh.visible || sh.locked) continue;
-    if (shapeHit(sh, sx, sy)) return sh;
-  }
-  return null;
+// ============================================================
+//  SHAPE HELPERS
+// ============================================================
+function addShapeToActiveLayer(sh) {
+  ensureLayer();
+  state.layers[state.activeLayerIdx].shapes.push(sh);
+  setDirty(); renderLayerPanel();
 }
 
-function shapeHit(sh, sx, sy) {
-  const tol = 8;
-  if (sh.type === 'rect') {
-    const p1 = worldToScreen(sh.x, sh.y), p2 = worldToScreen(sh.x+sh.w, sh.y+sh.h);
-    const l=Math.min(p1.x,p2.x), r=Math.max(p1.x,p2.x), t=Math.min(p1.y,p2.y), b=Math.max(p1.y,p2.y);
-    return sx>=l-tol && sx<=r+tol && sy>=t-tol && sy<=b+tol;
+function ensureLayer() {
+  if (!state.layers.length) {
+    state.layers.push({id:genUUID(),name:'Capa 1',visible:true,locked:false,opacity:1,shapes:[]});
+    state.activeLayerIdx=0;
   }
-  if (sh.type === 'circle') {
-    const c = worldToScreen(sh.cx, sh.cy);
-    return Math.hypot(sx-c.x, sy-c.y) <= sh.r*S.scale + tol;
-  }
-  if (sh.type === 'oval') {
-    const c = worldToScreen(sh.cx, sh.cy);
-    const rx = sh.rx*S.scale+tol, ry = sh.ry*S.scale+tol;
-    return ((sx-c.x)/rx)**2 + ((sy-c.y)/ry)**2 <= 1;
-  }
-  const bb = getBoundingBox(sh);
-  if (!bb) return false;
-  const p1 = worldToScreen(bb.minX, bb.minY), p2 = worldToScreen(bb.maxX, bb.maxY);
-  return sx>=Math.min(p1.x,p2.x)-tol && sx<=Math.max(p1.x,p2.x)+tol && sy>=Math.min(p1.y,p2.y)-tol && sy<=Math.max(p1.y,p2.y)+tol;
 }
 
-// ─── SHAPE MANAGEMENT ────────────────────────────────────────────────────────
-let shapeCounters = {};
-
-function nextName(type) {
-  shapeCounters[type] = (shapeCounters[type] || 0) + 1;
-  const names = { rect:'Rectángulo', circle:'Círculo', oval:'Óvalo', 'polygon-sym':'Polígono',
-    'polygon-free':'Polígono libre', triangle:'Triángulo', line:'Línea', dimension:'Cota' };
-  return (names[type] || type) + ' ' + shapeCounters[type];
-}
-
-function addShape(data) {
-  const sh = Object.assign({
-    id: uid(), visible: true, locked: false,
-    strokeColor: S.strokeColor, strokeWidth: S.strokeWidth, fillColor: 'none',
-    extruded: false, extrudeH: 0, sectionsH: 0, sectionsV: 0, sectionsAngular: 0,
-    name: nextName(data.type)
-  }, data);
-  S.layers.push(sh);
-  S.selectedId = sh.id;
-  renderLayerPanel();
-  markDirty();
-  return sh;
+function countShapes() {
+  var c=0; for (var i=0;i<state.layers.length;i++) c+=state.layers[i].shapes.length; return c;
 }
 
 function moveShape(sh, dx, dy) {
-  if (sh.type === 'rect') { sh.x += dx; sh.y += dy; }
-  else if (sh.type === 'circle') { sh.cx += dx; sh.cy += dy; }
-  else if (sh.type === 'oval') { sh.cx += dx; sh.cy += dy; }
-  else if (sh.type === 'polygon-sym') { sh.cx += dx; sh.cy += dy; }
-  else if (sh.type === 'triangle') { sh.x += dx; sh.y += dy; }
-  else if (sh.type === 'polygon-free') { sh.points = sh.points.map(p => ({x:p.x+dx,y:p.y+dy})); }
-  else if (sh.type === 'line') { sh.x1+=dx; sh.y1+=dy; sh.x2+=dx; sh.y2+=dy; }
-  else if (sh.type === 'dimension') { sh.x1+=dx; sh.y1+=dy; sh.x2+=dx; sh.y2+=dy; }
+  switch(sh.type) {
+    case 'rect': sh.x+=dx; sh.y+=dy; break;
+    case 'circle': sh.cx+=dx; sh.cy+=dy; break;
+    case 'oval': sh.cx+=dx; sh.cy+=dy; break;
+    case 'polygon-sym': sh.cx+=dx; sh.cy+=dy; break;
+    case 'polygon-free': sh.points=sh.points.map(function(p){return{x:p.x+dx,y:p.y+dy};}); break;
+    case 'triangle': sh.x+=dx; sh.y+=dy; break;
+    case 'line': sh.x1+=dx;sh.y1+=dy;sh.x2+=dx;sh.y2+=dy; break;
+    case 'dimension': sh.x1+=dx;sh.y1+=dy;sh.x2+=dx;sh.y2+=dy; break;
+  }
 }
 
-function deleteSelected() {
-  if (!S.selectedId) return;
+// ============================================================
+//  TOOL SELECTION
+// ============================================================
+function selectTool(tool) {
+  if (state.tool==='polygon-free' && tool!=='polygon-free' && state.drawPoints.length>=3) finalizePolygonFree();
+  state.tool=tool; state.drawing=false; state.drawStart=null; state.drawCurrent=null;
+  state.drawPoints=[]; state.dimP1=null;
+  document.querySelectorAll('.tool-btn').forEach(function(btn){ btn.classList.toggle('active',btn.dataset.tool===tool); });
+  canvas.className='';
+  if (tool==='move') canvas.classList.add('cursor-move');
+  else if (tool==='select') canvas.classList.add('cursor-default');
+  else canvas.classList.add('cursor-crosshair');
+  setDirty();
+}
+
+// ============================================================
+//  SHAPE DIALOGS
+// ============================================================
+function openShapeDialog(tool, pos) {
+  var u=state.unit, ul=u==='cm'?'cm':'m';
+  var content=document.getElementById('modal-content');
+  var posStr='('+pos.x+','+pos.y+')';
+  var html='';
+  if (tool==='rect') {
+    html='<h3>Rectángulo</h3>'+
+      '<div class="modal-field"><label>Base ('+ul+')</label><input type="number" id="d-base" value="100" min="1" step="1"></div>'+
+      '<div class="modal-field"><label>Altura ('+ul+')</label><input type="number" id="d-height" value="100" min="1" step="1"></div>'+
+      '<div class="modal-btns"><button class="modal-btn" onclick="closeModal()">Cancelar</button>'+
+      '<button class="modal-btn primary" onclick="confirmRect('+pos.x+','+pos.y+')">Crear</button></div>';
+  } else if (tool==='circle') {
+    html='<h3>Círculo</h3>'+
+      '<div class="modal-field"><div style="display:flex;gap:12px;margin-bottom:8px">'+
+      '<label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;"><input type="radio" name="cmode" value="diameter" checked onchange="updateCircleLabel(this.value)"> Diámetro</label>'+
+      '<label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;"><input type="radio" name="cmode" value="radius" onchange="updateCircleLabel(this.value)"> Radio</label></div>'+
+      '<label id="circle-val-lbl">Diámetro ('+ul+')</label>'+
+      '<input type="number" id="d-circle-val" value="100" min="1" step="1"></div>'+
+      '<div class="modal-btns"><button class="modal-btn" onclick="closeModal()">Cancelar</button>'+
+      '<button class="modal-btn primary" onclick="confirmCircle('+pos.x+','+pos.y+')">Crear</button></div>';
+  } else if (tool==='oval') {
+    html='<h3>Óvalo</h3>'+
+      '<div class="modal-field"><label>Base ('+ul+')</label><input type="number" id="d-oval-base" value="120" min="1" step="1"></div>'+
+      '<div class="modal-field"><label>Altura ('+ul+')</label><input type="number" id="d-oval-height" value="80" min="1" step="1"></div>'+
+      '<div class="modal-btns"><button class="modal-btn" onclick="closeModal()">Cancelar</button>'+
+      '<button class="modal-btn primary" onclick="confirmOval('+pos.x+','+pos.y+')">Crear</button></div>';
+  } else if (tool==='polygon-sym') {
+    var opts=[3,4,5,6,7,8,9,10,11,12].map(function(n){return'<option value="'+n+'"'+(n===6?' selected':'')+'>'+n+'</option>';}).join('');
+    html='<h3>Polígono Simétrico</h3>'+
+      '<div class="modal-field"><label>Lados</label><select id="d-poly-sides">'+opts+'</select></div>'+
+      '<div class="modal-field"><label>Radio ('+ul+')</label><input type="number" id="d-poly-radius" value="60" min="1" step="1"></div>'+
+      '<div class="modal-btns"><button class="modal-btn" onclick="closeModal()">Cancelar</button>'+
+      '<button class="modal-btn primary" onclick="confirmPolySymm('+pos.x+','+pos.y+')">Crear</button></div>';
+  } else if (tool==='triangle') {
+    html='<h3>Triángulo</h3>'+
+      '<div class="modal-radio-group">'+
+      '<label><input type="radio" name="trivar" value="equilateral" checked onchange="updateTriFields()"> Equilátero</label>'+
+      '<label><input type="radio" name="trivar" value="base-height" onchange="updateTriFields()"> Base × Altura</label>'+
+      '<label><input type="radio" name="trivar" value="right" onchange="updateTriFields()"> Triángulo rectángulo</label></div>'+
+      '<div class="modal-field"><label>Base ('+ul+')</label><input type="number" id="d-tri-base" value="100" min="1" step="1"></div>'+
+      '<div class="modal-field" id="d-tri-height-wrap" style="display:none"><label>Altura ('+ul+')</label><input type="number" id="d-tri-height" value="100" min="1" step="1"></div>'+
+      '<div class="modal-btns"><button class="modal-btn" onclick="closeModal()">Cancelar</button>'+
+      '<button class="modal-btn primary" onclick="confirmTriangle('+pos.x+','+pos.y+')">Crear</button></div>';
+  }
+  content.innerHTML=html;
+  document.getElementById('modal-overlay').classList.remove('hidden');
+  var firstInp=content.querySelector('input[type=number]');
+  if (firstInp) setTimeout(function(){firstInp.focus();firstInp.select();},60);
+}
+
+function updateCircleLabel(val) {
+  var el=document.getElementById('circle-val-lbl');
+  if (el) el.textContent=(val==='diameter'?'Diámetro':'Radio')+' ('+(state.unit==='cm'?'cm':'m')+')';
+}
+
+function updateTriFields() {
+  var v=document.querySelector('input[name="trivar"]:checked');
+  var wrap=document.getElementById('d-tri-height-wrap');
+  if (wrap) wrap.style.display=(v&&v.value==='equilateral')?'none':'';
+}
+
+function toMM(val) {
+  return state.unit==='cm' ? parseFloat(val)*10 : parseFloat(val)*1000;
+}
+
+function confirmRect(px,py) {
+  var base=toMM(document.getElementById('d-base').value);
+  var height=toMM(document.getElementById('d-height').value);
+  if (!base||!height) return;
   pushHistory();
-  S.layers = S.layers.filter(l => l.id !== S.selectedId);
-  S.selectedId = null; hideFloatTb();
-  renderLayerPanel(); markDirty();
+  addShapeToActiveLayer({
+    id:genUUID(),type:'rect',name:'Rectángulo '+(countShapes()+1),
+    visible:true,locked:false,strokeColor:state.strokeColor,strokeWidth:state.strokeWidth,fillColor:'none',
+    x:px-base/2,y:py-height/2,w:base,h:height,
+    extruded:false,extrudeH:0,sectionsH:0,sectionsV:0,sectionsAngular:0,autoDim:false
+  });
+  closeModal();
 }
 
-function finishFreePolygon() {
-  if (S.drawPoints.length < 3) { S.drawPoints = []; return; }
+function confirmCircle(px,py) {
+  var mode=document.querySelector('input[name="cmode"]:checked');
+  var val=toMM(document.getElementById('d-circle-val').value);
+  var r=(!mode||mode.value==='diameter')?val/2:val;
+  if (!r) return;
   pushHistory();
-  addShape({ type:'polygon-free', points: [...S.drawPoints] });
-  S.drawPoints = [];
-  setTool('select');
+  addShapeToActiveLayer({
+    id:genUUID(),type:'circle',name:'Círculo '+(countShapes()+1),
+    visible:true,locked:false,strokeColor:state.strokeColor,strokeWidth:state.strokeWidth,fillColor:'none',
+    cx:px,cy:py,r:r,
+    extruded:false,extrudeH:0,sectionsH:0,sectionsV:0,sectionsAngular:0,autoDim:false
+  });
+  closeModal();
 }
 
-// ─── FLOAT TOOLBAR ───────────────────────────────────────────────────────────
-function showFloatTb(sx, sy) {
-  const ftb = document.getElementById('float-tb');
-  ftb.style.display = 'flex';
-  const wr = wrap.getBoundingClientRect();
-  let tx = sx - wr.left;
-  let ty = sy - wr.top - 60;
-  if (ty < 10) ty = sy - wr.top + 20;
-  ftb.style.left = Math.max(0, Math.min(tx, wrap.clientWidth - 260)) + 'px';
-  ftb.style.top = Math.max(0, ty) + 'px';
-}
-
-function hideFloatTb() {
-  document.getElementById('float-tb').style.display = 'none';
-}
-
-// ─── SHAPE DIALOGS ────────────────────────────────────────────────────────────
-function openShapeModal(type) {
-  const modal = document.getElementById('shape-modal');
-  document.getElementById('shape-modal-title').textContent = {
-    rect:'Nuevo Rectángulo', circle:'Nuevo Círculo', oval:'Nuevo Óvalo',
-    'polygon-sym':'Polígono Simétrico', triangle:'Nuevo Triángulo'
-  }[type] || 'Nueva figura';
-
-  document.getElementById('shape-modal-body').innerHTML = buildShapeForm(type, null);
-  modal.classList.add('open');
-  modal._type = type;
-  modal._editing = false;
-  setTimeout(() => modal.querySelector('input,select') && modal.querySelector('input,select').focus(), 100);
-}
-
-function buildShapeForm(type, sh) {
-  const u = S.unit;
-  if (type === 'rect') {
-    const bVal = sh ? fromMM(sh.w).toFixed(2) : '';
-    const hVal = sh ? fromMM(sh.h).toFixed(2) : '';
-    return `<div class="form-row"><label>Base (${u})</label><input type="number" id="sh-base" value="${bVal}" min="0.01" step="any" placeholder="ej: 120"></div>
-            <div class="form-row"><label>Altura (${u})</label><input type="number" id="sh-height" value="${hVal}" min="0.01" step="any" placeholder="ej: 60"></div>`;
-  }
-  if (type === 'circle') {
-    const dVal = sh ? fromMM(sh.r*2).toFixed(2) : '';
-    return `<div class="form-row"><label>Diámetro (${u})</label><input type="number" id="sh-diam" value="${dVal}" min="0.01" step="any" placeholder="ej: 50"></div>`;
-  }
-  if (type === 'oval') {
-    const bVal = sh ? fromMM(sh.rx*2).toFixed(2) : '';
-    const hVal = sh ? fromMM(sh.ry*2).toFixed(2) : '';
-    return `<div class="form-row"><label>Ancho (${u})</label><input type="number" id="sh-base" value="${bVal}" min="0.01" step="any" placeholder="ej: 80"></div>
-            <div class="form-row"><label>Alto (${u})</label><input type="number" id="sh-height" value="${hVal}" min="0.01" step="any" placeholder="ej: 50"></div>`;
-  }
-  if (type === 'polygon-sym') {
-    const sidesVal = sh ? sh.sides : 6;
-    const rVal = sh ? fromMM(sh.radius).toFixed(2) : '';
-    return `<div class="form-row"><label>Número de lados</label><input type="number" id="sh-sides" value="${sidesVal}" min="3" max="24" step="1"></div>
-            <div class="form-row"><label>Radio (${u})</label><input type="number" id="sh-radius" value="${rVal}" min="0.01" step="any" placeholder="ej: 40"></div>`;
-  }
-  if (type === 'triangle') {
-    const vr = sh ? sh.variant : 'base-height';
-    const bVal = sh ? fromMM(sh.base).toFixed(2) : '';
-    const hVal = sh ? (sh.variant!=='equilateral' ? fromMM(sh.height).toFixed(2) : '') : '';
-    return `<div class="form-row"><label>Tipo</label>
-              <div class="radio-group">
-                <label class="radio-opt"><input type="radio" name="tri-type" value="equilateral" ${vr==='equilateral'?'checked':''}> Equilátero (solo base)</label>
-                <label class="radio-opt"><input type="radio" name="tri-type" value="base-height" ${vr==='base-height'?'checked':''}> Base × Altura</label>
-                <label class="radio-opt"><input type="radio" name="tri-type" value="right" ${vr==='right'?'checked':''}> Triángulo rectángulo</label>
-              </div></div>
-            <div class="form-row"><label>Base (${u})</label><input type="number" id="sh-base" value="${bVal}" min="0.01" step="any"></div>
-            <div class="form-row" id="sh-height-row" ${vr==='equilateral'?'style="display:none"':''}><label>Altura (${u})</label><input type="number" id="sh-height" value="${hVal}" min="0.01" step="any"></div>`;
-  }
-  return '';
-}
-
-function closeShapeModal() { document.getElementById('shape-modal').classList.remove('open'); }
-function closeEditModal() { document.getElementById('edit-modal').classList.remove('open'); }
-
-function confirmShape() {
-  const type = document.getElementById('shape-modal')._type;
-  const data = readShapeForm(type, pendingShapePos);
-  if (!data) return;
+function confirmOval(px,py) {
+  var rx=toMM(document.getElementById('d-oval-base').value)/2;
+  var ry=toMM(document.getElementById('d-oval-height').value)/2;
+  if (!rx||!ry) return;
   pushHistory();
-  addShape(data);
-  closeShapeModal();
-  setTool('select');
-  markDirty();
+  addShapeToActiveLayer({
+    id:genUUID(),type:'oval',name:'Óvalo '+(countShapes()+1),
+    visible:true,locked:false,strokeColor:state.strokeColor,strokeWidth:state.strokeWidth,fillColor:'none',
+    cx:px,cy:py,rx:rx,ry:ry,
+    extruded:false,extrudeH:0,sectionsH:0,sectionsV:0,sectionsAngular:0,autoDim:false
+  });
+  closeModal();
 }
 
-function readShapeForm(type, pos) {
-  if (type === 'rect') {
-    const w = toMM(document.getElementById('sh-base').value);
-    const h = toMM(document.getElementById('sh-height').value);
-    if (!w || !h) { toast('Ingresa base y altura'); return null; }
-    return { type:'rect', x: pos.x - w/2, y: pos.y - h/2, w, h };
-  }
-  if (type === 'circle') {
-    const d = toMM(document.getElementById('sh-diam').value);
-    if (!d) { toast('Ingresa el diámetro'); return null; }
-    return { type:'circle', cx: pos.x, cy: pos.y, r: d/2 };
-  }
-  if (type === 'oval') {
-    const w = toMM(document.getElementById('sh-base').value);
-    const h = toMM(document.getElementById('sh-height').value);
-    if (!w || !h) { toast('Ingresa ancho y alto'); return null; }
-    return { type:'oval', cx: pos.x, cy: pos.y, rx: w/2, ry: h/2 };
-  }
-  if (type === 'polygon-sym') {
-    const sides = parseInt(document.getElementById('sh-sides').value) || 6;
-    const r = toMM(document.getElementById('sh-radius').value);
-    if (!r) { toast('Ingresa el radio'); return null; }
-    return { type:'polygon-sym', cx: pos.x, cy: pos.y, sides, radius: r, rotation: -Math.PI/2 };
-  }
-  if (type === 'triangle') {
-    const vr = document.querySelector('input[name="tri-type"]:checked')?.value || 'base-height';
-    const base = toMM(document.getElementById('sh-base').value);
-    const height = vr === 'equilateral' ? base * Math.sqrt(3)/2 : toMM(document.getElementById('sh-height')?.value || 0);
-    if (!base) { toast('Ingresa la base'); return null; }
-    return { type:'triangle', variant: vr, x: pos.x - base/2, y: pos.y - height/2, base, height };
-  }
-  return null;
-}
-
-// Edit modal
-function editSelected() {
-  if (!S.selectedId) return;
-  const sh = S.layers.find(l => l.id === S.selectedId);
-  if (!sh || sh.type === 'dimension' || sh.type === 'line') return;
-  pendingEditId = sh.id;
-  document.getElementById('edit-modal-title').textContent = 'Editar ' + sh.name;
-  document.getElementById('edit-modal-body').innerHTML =
-    buildShapeForm(sh.type, sh) +
-    `<div class="form-row"><label>Nombre</label><input type="text" id="sh-name" value="${sh.name}"></div>
-     <div class="form-row"><label>Color de línea</label><input type="color" id="sh-color" value="${sh.strokeColor||'#000000'}" style="width:48px;height:36px;border-radius:8px;border:1px solid var(--border);cursor:pointer;padding:0;"></div>
-     <div class="form-row"><label>Grosor</label><input type="number" id="sh-sw" value="${sh.strokeWidth||2}" min="0.5" max="20" step="0.5"></div>`;
-  document.getElementById('edit-modal')._sh = sh;
-  document.getElementById('edit-modal').classList.add('open');
-}
-
-function confirmEdit() {
-  const sh = document.getElementById('edit-modal')._sh;
-  if (!sh) return;
+function confirmPolySymm(px,py) {
+  var sides=parseInt(document.getElementById('d-poly-sides').value)||6;
+  var radius=toMM(document.getElementById('d-poly-radius').value);
+  if (!radius) return;
   pushHistory();
-  const pos = { x: sh.cx || sh.x || sh.x1 || 0, y: sh.cy || sh.y || sh.y1 || 0 };
-  const data = readShapeForm(sh.type, pos);
-  if (data) {
-    Object.assign(sh, data);
-    const nameEl = document.getElementById('sh-name');
-    if (nameEl) sh.name = nameEl.value || sh.name;
-    const colorEl = document.getElementById('sh-color');
-    if (colorEl) sh.strokeColor = colorEl.value;
-    const swEl = document.getElementById('sh-sw');
-    if (swEl) sh.strokeWidth = parseFloat(swEl.value) || 2;
-  }
-  closeEditModal();
-  renderLayerPanel(); markDirty();
+  addShapeToActiveLayer({
+    id:genUUID(),type:'polygon-sym',name:'Polígono '+(countShapes()+1),
+    visible:true,locked:false,strokeColor:state.strokeColor,strokeWidth:state.strokeWidth,fillColor:'none',
+    cx:px,cy:py,sides:sides,radius:radius,rotation:0,
+    extruded:false,extrudeH:0,sectionsH:0,sectionsV:0,sectionsAngular:0,autoDim:false
+  });
+  closeModal();
 }
 
-// Section modal
-function sectionSelected() {
-  const sh = S.layers.find(l => l.id === S.selectedId);
-  if (!sh) return;
-  const isCircular = ['circle','oval','polygon-sym','triangle','polygon-free'].includes(sh.type);
-  let body = '';
-  if (!isCircular) {
-    body = `<div class="form-row"><label>Divisiones verticales</label><input type="number" id="sec-v" value="${sh.sectionsV||1}" min="1" max="50"></div>
-            <div class="form-row"><label>Divisiones horizontales</label><input type="number" id="sec-h" value="${sh.sectionsH||1}" min="1" max="50"></div>`;
-  }
-  body += `<div class="form-row"><label>Divisiones angulares / radiales</label><input type="number" id="sec-a" value="${sh.sectionsAngular||0}" min="0" max="36"></div>`;
-  if (sh.extruded) {
-    body += `<div class="form-row"><label>Divisiones en altura</label><input type="number" id="sec-z" value="${sh.sectionsZ||0}" min="0" max="20"></div>`;
-  }
-  document.getElementById('section-modal-body').innerHTML = body;
-  document.getElementById('section-modal').classList.add('open');
+function confirmTriangle(px,py) {
+  var v=document.querySelector('input[name="trivar"]:checked');
+  var variant=v?v.value:'equilateral';
+  var base=toMM(document.getElementById('d-tri-base').value);
+  var height=(variant==='equilateral')?base*Math.sqrt(3)/2:toMM(document.getElementById('d-tri-height').value);
+  if (!base) return;
+  pushHistory();
+  addShapeToActiveLayer({
+    id:genUUID(),type:'triangle',name:'Triángulo '+(countShapes()+1),
+    visible:true,locked:false,strokeColor:state.strokeColor,strokeWidth:state.strokeWidth,fillColor:'none',
+    variant:variant,x:px-base/2,y:py-height/2,base:base,height:height,
+    extruded:false,extrudeH:0,sectionsH:0,sectionsV:0,sectionsAngular:0,autoDim:false
+  });
+  closeModal();
+}
+
+function closeModal() {
+  document.getElementById('modal-overlay').classList.add('hidden');
+}
+
+document.getElementById('modal-overlay').addEventListener('click', function(e) {
+  if (e.target===this) closeModal();
+});
+
+// ============================================================
+//  SECTION DIALOG
+// ============================================================
+function openSectionDialog() {
+  var sh=getSelectedShape(); if (!sh) return;
+  var isCirc=sh.type==='circle'||sh.type==='oval';
+  var content=document.getElementById('modal-content');
+  content.innerHTML='<h3>Seccionar</h3>'+
+    '<div class="modal-field"><label>Divisiones horizontales</label>'+
+    '<input type="number" id="d-sec-h" value="'+(sh.sectionsH||0)+'" min="0" max="20"></div>'+
+    '<div class="modal-field"><label>Divisiones verticales</label>'+
+    '<input type="number" id="d-sec-v" value="'+(sh.sectionsV||0)+'" min="0" max="20"></div>'+
+    (isCirc?'<div class="modal-field"><label>Divisiones angulares</label>'+
+    '<input type="number" id="d-sec-ang" value="'+(sh.sectionsAngular||0)+'" min="0" max="36"></div>':'')+
+    '<div class="modal-btns"><button class="modal-btn" onclick="closeModal()">Cancelar</button>'+
+    '<button class="modal-btn primary" onclick="confirmSection()">Aplicar</button></div>';
+  document.getElementById('modal-overlay').classList.remove('hidden');
 }
 
 function confirmSection() {
-  const sh = S.layers.find(l => l.id === S.selectedId);
-  if (!sh) return;
+  var sh=getSelectedShape(); if (!sh) { closeModal(); return; }
   pushHistory();
-  const sv = document.getElementById('sec-v'), sh2 = document.getElementById('sec-h'), sa = document.getElementById('sec-a');
-  if (sv) sh.sectionsV = parseInt(sv.value) || 1;
-  if (sh2) sh.sectionsH = parseInt(sh2.value) || 1;
-  if (sa) sh.sectionsAngular = parseInt(sa.value) || 0;
-  const sz = document.getElementById('sec-z'); if (sz) sh.sectionsZ = parseInt(sz.value) || 0;
-  document.getElementById('section-modal').classList.remove('open');
-  markDirty();
+  sh.sectionsH=parseInt(document.getElementById('d-sec-h').value)||0;
+  sh.sectionsV=parseInt(document.getElementById('d-sec-v').value)||0;
+  var ai=document.getElementById('d-sec-ang'); if (ai) sh.sectionsAngular=parseInt(ai.value)||0;
+  closeModal(); setDirty(); showToast('Secciones aplicadas');
 }
 
-// Extrude modal
-function extrudeSelected() {
-  const sh = S.layers.find(l => l.id === S.selectedId);
-  if (!sh) return;
-  document.getElementById('extrude-h-inp').value = sh.extruded ? fromMM(sh.extrudeH).toFixed(1) : 100;
-  document.getElementById('extrude-modal').classList.add('open');
+function sectionSelectedShape() { openSectionDialog(); }
+
+// ============================================================
+//  EXTRUDE DIALOG
+// ============================================================
+function openExtrudeDialog() {
+  var sh=getSelectedShape(); if (!sh) return;
+  var ul=state.unit==='cm'?'cm':'m';
+  var curH=sh.extrudeH?(state.unit==='cm'?sh.extrudeH/10:sh.extrudeH/1000):0;
+  var content=document.getElementById('modal-content');
+  content.innerHTML='<h3>Extruir</h3>'+
+    '<div class="modal-field"><label>Altura de extrusión ('+ul+')</label>'+
+    '<input type="number" id="d-ext-h" value="'+(curH||100)+'" min="1" step="1"></div>'+
+    '<div class="modal-btns"><button class="modal-btn" onclick="closeModal()">Cancelar</button>'+
+    '<button class="modal-btn primary" onclick="confirmExtrude()">Aplicar</button></div>';
+  document.getElementById('modal-overlay').classList.remove('hidden');
 }
 
 function confirmExtrude() {
-  const sh = S.layers.find(l => l.id === S.selectedId);
-  if (!sh) return;
-  pushHistory();
-  const h = toMM(document.getElementById('extrude-h-inp').value);
-  if (!h) { toast('Ingresa la altura'); return; }
-  sh.extruded = true; sh.extrudeH = h;
-  if (!sh.name.startsWith('Vol:')) sh.name = 'Vol: ' + sh.name;
-  document.getElementById('extrude-modal').classList.remove('open');
-  renderLayerPanel(); markDirty();
+  var sh=getSelectedShape(); if (!sh) { closeModal(); return; }
+  pushHistory(); sh.extruded=true; sh.extrudeH=toMM(document.getElementById('d-ext-h').value);
+  closeModal(); setDirty(); showToast('Extrusión aplicada');
 }
 
-// Auto dimension
-function autoDimSelected() {
-  const sh = S.layers.find(l => l.id === S.selectedId);
-  if (!sh) return;
-  pushHistory();
-  if (sh.type === 'rect') {
-    const u = S.unit;
-    const offset = 120; // mm
-    // Bottom (width)
-    addShape({ type:'dimension', x1:sh.x, y1:sh.y-offset, x2:sh.x+sh.w, y2:sh.y-offset, name:'Cota' });
-    // Right (height)
-    addShape({ type:'dimension', x1:sh.x+sh.w+offset, y1:sh.y, x2:sh.x+sh.w+offset, y2:sh.y+sh.h, name:'Cota' });
-    // Section dims
-    if (sh.sectionsV > 1) {
-      const step = sh.w / sh.sectionsV;
-      for (let i = 0; i < sh.sectionsV; i++) {
-        addShape({ type:'dimension', x1:sh.x+step*i, y1:sh.y-offset*1.6, x2:sh.x+step*(i+1), y2:sh.y-offset*1.6, name:'Cota' });
-      }
-    }
-    if (sh.sectionsH > 1) {
-      const step = sh.h / sh.sectionsH;
-      for (let i = 0; i < sh.sectionsH; i++) {
-        addShape({ type:'dimension', x1:sh.x+sh.w+offset*1.6, y1:sh.y+step*i, x2:sh.x+sh.w+offset*1.6, y2:sh.y+step*(i+1), name:'Cota' });
-      }
-    }
-  } else {
-    const bb = getBoundingBox(sh);
-    if (!bb) return;
-    const off = 80;
-    addShape({ type:'dimension', x1:bb.minX, y1:bb.minY-off, x2:bb.maxX, y2:bb.minY-off, name:'Cota' });
-    addShape({ type:'dimension', x1:bb.maxX+off, y1:bb.minY, x2:bb.maxX+off, y2:bb.maxY, name:'Cota' });
+function extrudeSelectedShape() { openExtrudeDialog(); }
+
+// ============================================================
+//  EDIT DIALOG
+// ============================================================
+function editSelectedShape() {
+  var sh=getSelectedShape(); if (!sh) return;
+  var ul=state.unit==='cm'?'cm':'m';
+  var toU=function(v){ return state.unit==='cm'?(v/10).toFixed(2):(v/1000).toFixed(4); };
+  var content=document.getElementById('modal-content');
+  var html='<h3>Editar: '+sh.name+'</h3>';
+  if (sh.type==='rect') {
+    html+='<div class="modal-field"><label>Base ('+ul+')</label><input type="number" id="e-w" value="'+toU(sh.w)+'" min="0.1" step="0.1"></div>'+
+      '<div class="modal-field"><label>Altura ('+ul+')</label><input type="number" id="e-h" value="'+toU(sh.h)+'" min="0.1" step="0.1"></div>';
+  } else if (sh.type==='circle') {
+    html+='<div class="modal-field"><label>Radio ('+ul+')</label><input type="number" id="e-r" value="'+toU(sh.r)+'" min="0.1" step="0.1"></div>';
+  } else if (sh.type==='oval') {
+    html+='<div class="modal-field"><label>Radio X ('+ul+')</label><input type="number" id="e-rx" value="'+toU(sh.rx)+'" min="0.1" step="0.1"></div>'+
+      '<div class="modal-field"><label>Radio Y ('+ul+')</label><input type="number" id="e-ry" value="'+toU(sh.ry)+'" min="0.1" step="0.1"></div>';
+  } else if (sh.type==='polygon-sym') {
+    var opts=[3,4,5,6,7,8,9,10,11,12].map(function(n){return'<option value="'+n+'"'+(n===sh.sides?' selected':'')+'>'+n+'</option>';}).join('');
+    html+='<div class="modal-field"><label>Lados</label><select id="e-sides">'+opts+'</select></div>'+
+      '<div class="modal-field"><label>Radio ('+ul+')</label><input type="number" id="e-radius" value="'+toU(sh.radius)+'" min="0.1" step="0.1"></div>'+
+      '<div class="modal-field"><label>Rotación (°)</label><input type="number" id="e-rot" value="'+(sh.rotation||0)+'" step="1"></div>';
+  } else if (sh.type==='triangle') {
+    html+='<div class="modal-field"><label>Base ('+ul+')</label><input type="number" id="e-base" value="'+toU(sh.base)+'" min="0.1" step="0.1"></div>'+
+      '<div class="modal-field"><label>Altura ('+ul+')</label><input type="number" id="e-height" value="'+toU(sh.height)+'" min="0.1" step="0.1"></div>';
   }
-  toast('Cotas aplicadas');
-  renderLayerPanel(); markDirty();
+  html+='<div class="modal-field"><label>Nombre</label><input type="text" id="e-name" value="'+sh.name+'"></div>'+
+    '<div class="modal-field"><label>Color de trazo</label>'+
+    '<input type="color" id="e-color" value="'+(sh.strokeColor||'#000000')+'" style="width:100%;height:36px;border-radius:8px;border:1px solid var(--border);cursor:pointer;"></div>'+
+    '<div class="modal-field"><label>Grosor</label><input type="number" id="e-stroke" value="'+(sh.strokeWidth||2)+'" min="1" max="20"></div>'+
+    '<div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">'+
+    '<input type="checkbox" id="e-autodim"'+(sh.autoDim?' checked':'')+'>'+
+    '<label for="e-autodim" style="font-size:13px;cursor:pointer;">Acotar automáticamente</label></div>'+
+    '<div class="modal-btns"><button class="modal-btn" onclick="closeModal()">Cancelar</button>'+
+    '<button class="modal-btn primary" onclick="applyEdit(\''+sh.id+'\')">Aplicar</button></div>';
+  content.innerHTML=html;
+  document.getElementById('modal-overlay').classList.remove('hidden');
 }
 
-// ─── LAYER PANEL ─────────────────────────────────────────────────────────────
+function applyEdit(shId) {
+  var sh=null;
+  for (var li=0;li<state.layers.length;li++) for (var si=0;si<state.layers[li].shapes.length;si++) if (state.layers[li].shapes[si].id===shId) sh=state.layers[li].shapes[si];
+  if (!sh) { closeModal(); return; }
+  pushHistory();
+  var ni=document.getElementById('e-name'); if(ni) sh.name=ni.value;
+  var ci=document.getElementById('e-color'); if(ci) sh.strokeColor=ci.value;
+  var sti=document.getElementById('e-stroke'); if(sti) sh.strokeWidth=parseInt(sti.value)||2;
+  var adi=document.getElementById('e-autodim'); if(adi) sh.autoDim=adi.checked;
+  if (sh.type==='rect') { sh.w=toMM(document.getElementById('e-w').value); sh.h=toMM(document.getElementById('e-h').value); }
+  else if (sh.type==='circle') { sh.r=toMM(document.getElementById('e-r').value); }
+  else if (sh.type==='oval') { sh.rx=toMM(document.getElementById('e-rx').value); sh.ry=toMM(document.getElementById('e-ry').value); }
+  else if (sh.type==='polygon-sym') { sh.sides=parseInt(document.getElementById('e-sides').value); sh.radius=toMM(document.getElementById('e-radius').value); sh.rotation=parseFloat(document.getElementById('e-rot').value)||0; }
+  else if (sh.type==='triangle') { sh.base=toMM(document.getElementById('e-base').value); sh.height=toMM(document.getElementById('e-height').value); }
+  closeModal(); setDirty(); showToast('Forma actualizada');
+}
+
+// ============================================================
+//  SHAPE ACTIONS
+// ============================================================
+function showShapeActions() {
+  var bar=document.getElementById('shape-actions');
+  bar.style.display='flex'; updateShapeActionsPos();
+}
+
+function hideShapeActions() {
+  document.getElementById('shape-actions').style.display='none';
+}
+
+function updateShapeActionsPos() {
+  var bar=document.getElementById('shape-actions');
+  if (bar.style.display==='none'||!state.selectedId) return;
+  var sh=getSelectedShape(); if (!sh) { hideShapeActions(); return; }
+  var bb=getShapeBBox(sh); if (!bb) return;
+  var topSc=worldToScreen(bb.minX, bb.maxY);
+  var barW=bar.offsetWidth||240;
+  var container=document.getElementById('canvas-container');
+  var cw=container.clientWidth;
+  var left=Math.max(8,topSc.x-barW/2);
+  var top=Math.max(60,topSc.y-52);
+  if (left+barW>cw-8) left=cw-barW-8;
+  bar.style.left=left+'px'; bar.style.top=top+'px';
+}
+
+function deleteSelectedShape() {
+  if (!state.selectedId) return;
+  pushHistory();
+  for (var li=0;li<state.layers.length;li++) {
+    var idx=state.layers[li].shapes.findIndex(function(s){return s.id===state.selectedId;});
+    if (idx!==-1) { state.layers[li].shapes.splice(idx,1); break; }
+  }
+  state.selectedId=null; hideShapeActions(); setDirty(); renderLayerPanel(); showToast('Figura eliminada');
+}
+
+// ============================================================
+//  LAYER PANEL
+// ============================================================
+function toggleLayerPanel() {
+  document.getElementById('layer-panel').classList.toggle('open');
+}
+
+function addLayer() {
+  ensureLayer();
+  var idx=state.layers.length;
+  state.layers.push({id:genUUID(),name:'Capa '+(idx+1),visible:true,locked:false,opacity:1,shapes:[]});
+  state.activeLayerIdx=idx; renderLayerPanel(); setDirty();
+}
+
 function renderLayerPanel() {
-  const list = document.getElementById('layer-list');
-  if (!S.layers.length) { list.innerHTML = '<div style="text-align:center;color:var(--gray);font-size:12px;padding:30px;">Sin capas todavía</div>'; return; }
-  list.innerHTML = [...S.layers].reverse().map((sh, ri) => {
-    const i = S.layers.length - 1 - ri;
-    const sel = sh.id === S.selectedId;
-    const ico = { rect:'ph-rectangle', circle:'ph-circle', oval:'ph-circle-dashed', 'polygon-sym':'ph-hexagon',
-      'polygon-free':'ph-polygon', triangle:'ph-triangle', line:'ph-line-segment', dimension:'ph-ruler' }[sh.type] || 'ph-shapes';
-    return `<div class="layer-row ${sel?'selected':''}" onclick="selectLayerById('${sh.id}')">
-      <button class="layer-icon-btn ${sh.visible?'':'active'}" onclick="event.stopPropagation();toggleLayerVisible('${sh.id}')" title="Visibilidad">
-        <i class="ph-bold ${sh.visible?'ph-eye':'ph-eye-slash'}"></i>
-      </button>
-      <button class="layer-icon-btn ${sh.locked?'active':''}" onclick="event.stopPropagation();toggleLayerLock('${sh.id}')" title="Bloquear">
-        <i class="ph-bold ${sh.locked?'ph-lock-simple':'ph-lock-simple-open'}"></i>
-      </button>
-      <i class="ph-bold ${ico}" style="font-size:14px;color:var(--gray);flex-shrink:0;"></i>
-      <div class="layer-name" ondblclick="renameLayer('${sh.id}',this)">${sh.name}</div>
-      <button class="layer-icon-btn" onclick="event.stopPropagation();moveLayerUp(${i})" title="Subir"><i class="ph-bold ph-caret-up"></i></button>
-      <button class="layer-icon-btn" onclick="event.stopPropagation();moveLayerDown(${i})" title="Bajar"><i class="ph-bold ph-caret-down"></i></button>
-      <button class="layer-icon-btn" onclick="event.stopPropagation();deleteLayerById('${sh.id}')" style="color:var(--red)"><i class="ph-bold ph-trash"></i></button>
-    </div>`;
-  }).join('');
-}
-
-function selectLayerById(id) {
-  S.selectedId = id; markDirty(); renderLayerPanel();
-}
-
-function toggleLayerVisible(id) {
-  const sh = S.layers.find(l=>l.id===id);
-  if (sh) { sh.visible = !sh.visible; markDirty(); renderLayerPanel(); }
-}
-function toggleLayerLock(id) {
-  const sh = S.layers.find(l=>l.id===id);
-  if (sh) { sh.locked = !sh.locked; renderLayerPanel(); }
-}
-function deleteLayerById(id) {
-  pushHistory();
-  S.layers = S.layers.filter(l=>l.id!==id);
-  if (S.selectedId===id) { S.selectedId=null; hideFloatTb(); }
-  renderLayerPanel(); markDirty();
-}
-function moveLayerUp(i) {
-  if (i < S.layers.length-1) { [S.layers[i],S.layers[i+1]] = [S.layers[i+1],S.layers[i]]; markDirty(); renderLayerPanel(); }
-}
-function moveLayerDown(i) {
-  if (i > 0) { [S.layers[i],S.layers[i-1]] = [S.layers[i-1],S.layers[i]]; markDirty(); renderLayerPanel(); }
-}
-function renameLayer(id, el) {
-  const sh = S.layers.find(l=>l.id===id);
-  if (!sh) return;
-  const newName = prompt('Nuevo nombre:', sh.name);
-  if (newName) { sh.name = newName; renderLayerPanel(); }
-}
-
-// ─── UNDO / REDO ─────────────────────────────────────────────────────────────
-function pushHistory() {
-  const snap = JSON.stringify(S.layers);
-  if (S.histIdx < S.history.length-1) S.history = S.history.slice(0, S.histIdx+1);
-  S.history.push(snap);
-  if (S.history.length > 50) S.history.shift();
-  S.histIdx = S.history.length - 1;
-}
-
-function undo() {
-  if (S.histIdx <= 0) { toast('Sin más acciones para deshacer'); return; }
-  S.histIdx--;
-  S.layers = JSON.parse(S.history[S.histIdx]);
-  S.selectedId = null; hideFloatTb();
-  renderLayerPanel(); markDirty();
-}
-
-function redo() {
-  if (S.histIdx >= S.history.length-1) { toast('Sin más acciones para rehacer'); return; }
-  S.histIdx++;
-  S.layers = JSON.parse(S.history[S.histIdx]);
-  renderLayerPanel(); markDirty();
-}
-
-// ─── SAVE / LOAD ─────────────────────────────────────────────────────────────
-function saveAsImage() {
-  document.getElementById('save-pop').style.display = 'none';
-  const a = document.createElement('a');
-  a.href = canvas.toDataURL('image/png');
-  a.download = `Plano_${S.view}_${Date.now()}.png`;
-  a.click();
-  toast('Imagen guardada');
-}
-
-async function saveToFirebase() {
-  document.getElementById('save-pop').style.display = 'none';
-  if (!cid || !pid) { toast('Sin proyecto vinculado'); return; }
-  try {
-    const user = firebase.auth().currentUser;
-    if (!user) { toast('No autenticado'); return; }
-    const data = { layers: S.layers, view: S.view, unit: S.unit, scale: S.scale,
-      originX: S.originX, originY: S.originY, savedAt: Date.now() };
-    await db.ref(`proyectos/${cid}/${pid}/cad/drawings`).push(data);
-    toast('✅ Plano guardado en el proyecto');
-  } catch(e) { toast('Error: ' + e.message); }
-}
-
-async function loadFromFirebase() {
-  document.getElementById('save-pop').style.display = 'none';
-  if (!cid || !pid) { toast('Sin proyecto vinculado'); return; }
-  try {
-    const snap = await db.ref(`proyectos/${cid}/${pid}/cad/drawings`).limitToLast(1).once('value');
-    if (!snap.exists()) { toast('No hay planos guardados'); return; }
-    const val = Object.values(snap.val())[0];
-    pushHistory();
-    S.layers = val.layers || [];
-    if (val.view) S.view = val.view;
-    if (val.unit) S.unit = val.unit;
-    if (val.scale) S.scale = val.scale;
-    if (val.originX) S.originX = val.originX;
-    if (val.originY) S.originY = val.originY;
-    renderLayerPanel(); markDirty();
-    toast('✅ Plano cargado');
-  } catch(e) { toast('Error: ' + e.message); }
-}
-
-// Radio buttons in triangle dialog
-document.getElementById('shape-modal').addEventListener('change', e => {
-  if (e.target.name === 'tri-type') {
-    const hr = document.getElementById('sh-height-row');
-    if (hr) hr.style.display = e.target.value === 'equilateral' ? 'none' : '';
+  var list=document.getElementById('layer-list');
+  list.innerHTML='';
+  for (var i=state.layers.length-1;i>=0;i--) {
+    (function(idx){
+      var layer=state.layers[idx];
+      var row=document.createElement('div');
+      row.className='layer-row'+(idx===state.activeLayerIdx?' active':'');
+      row.onclick=function(){ state.activeLayerIdx=idx; renderLayerPanel(); };
+      row.innerHTML=
+        '<button class="layer-icon-btn'+(layer.visible?'':' muted')+'" title="'+(layer.visible?'Ocultar':'Mostrar')+'" onclick="event.stopPropagation();toggleLayerVisible('+idx+')">'+
+        '<i class="ph '+(layer.visible?'ph-eye':'ph-eye-slash')+'"></i></button>'+
+        '<button class="layer-icon-btn'+(layer.locked?' muted':'')+'" title="'+(layer.locked?'Desbloquear':'Bloquear')+'" onclick="event.stopPropagation();toggleLayerLock('+idx+')">'+
+        '<i class="ph '+(layer.locked?'ph-lock':'ph-lock-open')+'"></i></button>'+
+        '<input class="layer-name-inp" value="'+layer.name+'" onclick="event.stopPropagation()" '+
+        'onchange="renameLayer('+idx+',this.value)" onblur="renameLayer('+idx+',this.value)">'+
+        '<button class="layer-del-btn" title="Eliminar" onclick="event.stopPropagation();deleteLayer('+idx+')">'+
+        '<i class="ph ph-trash"></i></button>';
+      list.appendChild(row);
+    })(i);
   }
+}
+
+function toggleLayerVisible(i) { state.layers[i].visible=!state.layers[i].visible; renderLayerPanel(); setDirty(); }
+function toggleLayerLock(i) { state.layers[i].locked=!state.layers[i].locked; renderLayerPanel(); }
+function renameLayer(i,name) { state.layers[i].name=name; }
+
+function deleteLayer(i) {
+  if (state.layers.length<=1) { showToast('Debe haber al menos una capa'); return; }
+  pushHistory(); state.layers.splice(i,1);
+  if (state.activeLayerIdx>=state.layers.length) state.activeLayerIdx=state.layers.length-1;
+  renderLayerPanel(); setDirty();
+}
+
+// ============================================================
+//  UNIT TOGGLE
+// ============================================================
+function setUnit(unit) {
+  state.unit=unit;
+  document.getElementById('unit-cm').classList.toggle('active',unit==='cm');
+  document.getElementById('unit-m').classList.toggle('active',unit==='m');
+  document.getElementById('grid-unit-lbl').textContent=unit;
+  setDirty();
+}
+
+// ============================================================
+//  GRID
+// ============================================================
+function toggleGrid() {
+  state.gridOn=!state.gridOn;
+  document.getElementById('grid-btn').classList.toggle('active',state.gridOn);
+  document.getElementById('grid-spacing-wrap').style.display=state.gridOn?'inline-flex':'none';
+  setDirty();
+}
+
+function setGridSize(val) {
+  var mm=state.unit==='cm'?parseFloat(val)*10:parseFloat(val)*1000;
+  if (mm>0) state.gridSize=mm; setDirty();
+}
+
+// ============================================================
+//  VIEWS
+// ============================================================
+function setView(view) {
+  state.view=view; state.axo=false;
+  document.getElementById('axo-btn').classList.remove('active');
+  ['planta','frontal','lateral'].forEach(function(v){
+    document.getElementById('view-'+v).classList.toggle('active',v===view);
+  });
+  setDirty();
+}
+
+function toggleAxo() {
+  state.axo=!state.axo;
+  document.getElementById('axo-btn').classList.toggle('active',state.axo);
+  setDirty();
+}
+
+// ============================================================
+//  DARK MODE
+// ============================================================
+function toggleDark() {
+  state.darkMode=!state.darkMode;
+  document.body.classList.toggle('dark-mode',state.darkMode);
+  var icon=document.querySelector('#darkmode-btn i');
+  if (icon) icon.className=state.darkMode?'ph ph-sun':'ph ph-moon';
+  document.getElementById('canvas-container').style.background=state.darkMode?'#1a1a1a':'#f8f8f8';
+  setDirty();
+}
+
+// ============================================================
+//  STYLE
+// ============================================================
+function setStrokeWidth(val) { state.strokeWidth=Math.max(1,Math.min(10,parseInt(val)||2)); }
+function setStrokeColor(val) { state.strokeColor=val; }
+
+// ============================================================
+//  SAVE POPOVER
+// ============================================================
+function toggleSavePopover() {
+  document.getElementById('save-popover').classList.toggle('hidden');
+}
+document.addEventListener('click', function(e) {
+  var wrap=document.querySelector('.save-wrap');
+  if (wrap&&!wrap.contains(e.target)) document.getElementById('save-popover').classList.add('hidden');
 });
 
-// Close modals on background click
-document.querySelectorAll('.modal-bg').forEach(m => {
-  m.addEventListener('click', e => { if (e.target === m) m.classList.remove('open'); });
-});
+function saveAsImage() {
+  document.getElementById('save-popover').classList.add('hidden');
+  var a=document.createElement('a');
+  a.download='rubik-cad.png'; a.href=canvas.toDataURL('image/png'); a.click();
+  showToast('Imagen descargada');
+}
 
-// ─── INIT ─────────────────────────────────────────────────────────────────────
-pushHistory(); // initial empty state
-renderLayerPanel();
-renderLoop();
+function saveToProject() {
+  document.getElementById('save-popover').classList.add('hidden');
+  if (!fbDb||!CLIENT_ID||!PROJECT_ID) { showToast('Configura el proyecto primero'); return; }
+  try {
+    fbDb.ref('proyectos/'+CLIENT_ID+'/'+PROJECT_ID+'/cad/drawings').push({
+      layers:state.layers, view:state.view, unit:state.unit,
+      scale:state.scale, origin:state.origin, savedAt:Date.now()
+    }).then(function(){ showToast('Guardado en proyecto ✓'); })
+      .catch(function(err){ console.error(err); showToast('Error al guardar'); });
+  } catch(e) { showToast('Error al guardar'); }
+}
+
+function loadFromProject() {
+  if (!fbDb||!CLIENT_ID||!PROJECT_ID) return;
+  try {
+    fbDb.ref('proyectos/'+CLIENT_ID+'/'+PROJECT_ID+'/cad/drawings')
+      .orderByChild('savedAt').limitToLast(1).once('value')
+      .then(function(snap){
+        if (!snap.exists()) return;
+        snap.forEach(function(child){
+          var data=child.val();
+          if (data.layers) state.layers=data.layers;
+          if (data.view) state.view=data.view;
+          if (data.unit) { state.unit=data.unit; setUnit(data.unit); }
+          if (data.scale) state.scale=data.scale;
+          if (data.origin) state.origin=data.origin;
+          pushHistory(); renderLayerPanel(); setDirty(); showToast('Diseño cargado');
+        });
+      }).catch(function(err){ console.warn('Load error',err); });
+  } catch(e) { console.warn('Load error',e); }
+}
+
+// ============================================================
+//  NAVIGATION
+// ============================================================
+function goBack() {
+  if (window.history.length>1) window.history.back();
+  else window.location.href='disenos.html'+(CLIENT_ID?'?cid='+CLIENT_ID+'&pid='+PROJECT_ID:'');
+}
+
+// ============================================================
+//  TOAST
+// ============================================================
+var toastTimer=null;
+function showToast(msg) {
+  var el=document.getElementById('toast');
+  el.textContent=msg; el.classList.add('show');
+  if (toastTimer) clearTimeout(toastTimer);
+  toastTimer=setTimeout(function(){ el.classList.remove('show'); },3000);
+}
+
+// ============================================================
+//  INIT
+// ============================================================
+function init() {
+  resizeCanvas();
+  state.origin.x=canvas.width/2;
+  state.origin.y=canvas.height/2;
+  ensureLayer();
+  pushHistory();
+  renderLayerPanel();
+  loadFromProject();
+  requestAnimationFrame(render);
+  selectTool('select');
+  showToast('Rubik CAD listo');
+}
+
+init();
 </script>
 </body>
 </html>
