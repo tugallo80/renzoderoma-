@@ -1656,7 +1656,11 @@ CÁLCULO DE ÁREAS — REGLA CRÍTICA:
 Cuando el usuario describe MÚLTIPLES PIEZAS con dimensiones, calculá CADA grupo por separado:
   "2 piezas de 11m×1.2m y 2 de 9m×1.2m" → (2×11×1.2) + (2×9×1.2) = 26.4 + 21.6 = 48 m2
 NUNCA uses solo el ancho de una pieza cuando hay varias — multiplicá siempre por la cantidad de cada grupo.
-Mostrá el desglose en feat: "- Área: (2×11×1.2) + (2×9×1.2) = 48 m2 + 8% merma tensado = 51.8 m2"`;
+Mostrá el desglose en feat: "- Área: (2×11×1.2) + (2×9×1.2) = 48 m2 + 8% merma tensado = 51.8 m2"
+
+⚠️ UNIDADES EN IMÁGENES DE SKETCHUP/CAD:
+Las imágenes de Rubik Bolivia están en CENTÍMETROS. Convertí: valor ÷ 100 = metros.
+Ejemplo: imagen muestra "974.6" → 9.746 m. Un arco transitable mide entre 2 m y 5 m de alto — si el resultado da menos de 1 m, revisá la conversión.`;
 
 
             // Obtener nombre del ítem desde el input oculto
@@ -2015,6 +2019,13 @@ Para cada ítem, antes de generar el JSON, ejecutá mentalmente este proceso:
 PASO 1 — LEER Y ENTENDER:
   Analizá el nombre del ítem, el prompt del usuario y todas las imágenes adjuntas.
   Identificá: ¿Qué es el ítem? ¿Cuáles son sus dimensiones? ¿De qué materiales está hecho?
+
+  ⚠️ REGLA CRÍTICA DE UNIDADES EN IMÁGENES:
+  Las imágenes de SketchUp, planos CAD o volumetrías de Rubik Bolivia usan CENTÍMETROS (cm).
+  Convertí siempre: valor_imagen ÷ 100 = metros.
+  Ejemplo: imagen muestra "974.6" → son 974.6 cm = 9.746 m. NO son mm ni metros directos.
+  Si el usuario dice "medidas en la imagen" o "imagen de apoyo" → aplicá esta conversión.
+  Un arco transitable tiene entre 2.0 m y 5.0 m de altura — si el resultado da menos de 1m de alto, revisá la conversión.
 
 PASO 2 — GEOMETRÍA (calcular cantidades reales):
   Aplicá los BLOQUEs A-G de más abajo según corresponda.
