@@ -1659,8 +1659,9 @@ NUNCA uses solo el ancho de una pieza cuando hay varias — multiplicá siempre 
 Mostrá el desglose en feat: "- Área: (2×11×1.2) + (2×9×1.2) = 48 m2 + 8% merma tensado = 51.8 m2"
 
 ⚠️ UNIDADES EN IMÁGENES DE SKETCHUP/CAD:
-Las imágenes de Rubik Bolivia están en CENTÍMETROS. Convertí: valor ÷ 100 = metros.
-Ejemplo: imagen muestra "974.6" → 9.746 m. Un arco transitable mide entre 2 m y 5 m de alto — si el resultado da menos de 1 m, revisá la conversión.`;
+Si el usuario especifica la unidad en su prompt (ej: "medidas en cm", "está en metros") → usá ESA.
+Si no especifica → inferí por sentido común: un arco transitable mide 2-5 m de alto. Si el valor directo no es coherente, probá ÷100 (cm) o ÷1000 (mm).
+Indicá siempre en feat qué unidad interpretaste: "- Imagen leída en cm: 409.7 cm = 4.10 m de alto"`;
 
 
             // Obtener nombre del ítem desde el input oculto
@@ -2021,11 +2022,14 @@ PASO 1 — LEER Y ENTENDER:
   Identificá: ¿Qué es el ítem? ¿Cuáles son sus dimensiones? ¿De qué materiales está hecho?
 
   ⚠️ REGLA CRÍTICA DE UNIDADES EN IMÁGENES:
-  Las imágenes de SketchUp, planos CAD o volumetrías de Rubik Bolivia usan CENTÍMETROS (cm).
-  Convertí siempre: valor_imagen ÷ 100 = metros.
-  Ejemplo: imagen muestra "974.6" → son 974.6 cm = 9.746 m. NO son mm ni metros directos.
-  Si el usuario dice "medidas en la imagen" o "imagen de apoyo" → aplicá esta conversión.
-  Un arco transitable tiene entre 2.0 m y 5.0 m de altura — si el resultado da menos de 1m de alto, revisá la conversión.
+  Cuando el usuario adjunta una imagen con medidas (SketchUp, CAD, plano):
+  → Si el usuario especifica la unidad en su prompt (ej: "medidas en cm", "está en metros", "son mm") → usá ESA unidad.
+  → Si NO especifica → inferí por sentido común según el objeto:
+      • Un arco/puerta transitable: altura entre 2.0 m y 5.0 m
+      • Una mesa/mostrador: altura entre 0.70 m y 1.10 m
+      • Un letrero de pared: entre 0.30 m y 3.0 m de ancho
+    Si el valor numérico de la imagen NO da un resultado coherente asumiendo metros → probá dividir por 100 (cm) o por 1000 (mm).
+  Siempre indicá en feat qué unidad interpretaste: "- Dimensiones leídas de imagen: 974.6 cm = 9.75 m de ancho"
 
 PASO 2 — GEOMETRÍA (calcular cantidades reales):
   Aplicá los BLOQUEs A-G de más abajo según corresponda.
