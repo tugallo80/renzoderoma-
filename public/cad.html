@@ -1349,6 +1349,13 @@ function onPointerDown(e) {
   activePointers[e.pointerId] = { x: e.clientX, y: e.clientY };
   var pCount = Object.keys(activePointers).length;
   if (pCount >= 2) {
+    // Cancelar cualquier acción pendiente del primer dedo
+    clearTimeout(window._shapeTapTimer); window._shapeTapTimer = null;
+    state.drawing = false; state.drawStart = null; state.dimP1 = null;
+    // Revertir punto polygon-free que el primer dedo pudo haber añadido
+    if (state.tool === 'polygon-free' && state.drawPoints.length > 0) {
+      state.drawPoints.pop(); state.drawCurrent = null; setDirty();
+    }
     var pts = Object.values(activePointers);
     state.lastTouchDist = Math.hypot(pts[1].x-pts[0].x, pts[1].y-pts[0].y);
     state.lastTouchMid = { x:(pts[0].x+pts[1].x)/2, y:(pts[0].y+pts[1].y)/2 };
@@ -1394,15 +1401,37 @@ function onPointerDown(e) {
     state.drawPoints.push(snapped); state.drawCurrent=snapped; setDirty(); return;
   }
   if (['rect','circle','oval','polygon-sym','triangle'].includes(tool)) {
-    openShapeDialog(tool, snapped); return;
+    var _tl=tool, _tp={x:snapped.x,y:snapped.y};
+    clearTimeout(window._shapeTapTimer);
+    window._shapeTapTimer = setTimeout(function() {
+      window._shapeTapTimer = null;
+      openShapeDialog(_tl, _tp);
+    }, 90);
+    return;
   }
   if (tool==='section') {
     var sh3=findShapeAt(cxy.x,cxy.y);
-    if (sh3) { state.selectedId=sh3.id; openSectionDialog(); } return;
+    if (sh3) {
+      var _s3id=sh3.id;
+      clearTimeout(window._shapeTapTimer);
+      window._shapeTapTimer = setTimeout(function() {
+        window._shapeTapTimer = null;
+        state.selectedId=_s3id; openSectionDialog();
+      }, 90);
+    }
+    return;
   }
   if (tool==='extrude') {
     var sh4=findShapeAt(cxy.x,cxy.y);
-    if (sh4) { state.selectedId=sh4.id; openExtrudeDialog(); } return;
+    if (sh4) {
+      var _s4id=sh4.id;
+      clearTimeout(window._shapeTapTimer);
+      window._shapeTapTimer = setTimeout(function() {
+        window._shapeTapTimer = null;
+        state.selectedId=_s4id; openExtrudeDialog();
+      }, 90);
+    }
+    return;
   }
 }
 
@@ -1490,7 +1519,7 @@ function onWheel(e) {
 }
 
 function zoomAround(sx, sy, factor) {
-  var newSc=Math.min(20,Math.max(0.5,state.scale*factor));
+  var newSc=Math.min(50,Math.max(0.02,state.scale*factor));
   var af=newSc/state.scale;
   state.origin.x=sx+(state.origin.x-sx)*af;
   state.origin.y=sy+(state.origin.y-sy)*af;
