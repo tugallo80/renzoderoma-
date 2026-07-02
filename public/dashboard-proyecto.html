@@ -233,6 +233,20 @@
 
     if(!cid || !pid) { window.location.href = 'clientes.html'; }
 
+    // Caché de resumen financiero para mostrar inmediatamente
+    var _DASH_CACHE_KEY = `rubik_dash_fin_${cid}_${pid}`;
+    function _saveDashCache(vals) { try { localStorage.setItem(_DASH_CACHE_KEY, JSON.stringify(vals)); } catch(e){} }
+    function _loadDashCache() { try { var s=localStorage.getItem(_DASH_CACHE_KEY); return s?JSON.parse(s):null; } catch(e){return null;} }
+    (function _mostrarCacheFinanciero() {
+        var c = _loadDashCache();
+        if (!c) return;
+        var el = function(id){ return document.getElementById(id); };
+        if (el('val-venta') && c.venta != null) el('val-venta').innerText = c.venta;
+        if (el('val-final') && c.final != null) el('val-final').innerText = c.final;
+        if (el('val-gasto') && c.gasto != null) el('val-gasto').innerText = c.gasto;
+        if (el('val-utilidad') && c.utilidad != null) el('val-utilidad').innerText = c.utilidad;
+    })();
+
     db.ref('.info/connected').on('value', snap => {
         let badge = document.getElementById('offline-badge');
         if (!badge) {
@@ -317,6 +331,7 @@
             let gastoReal = gastoTotalBase + gastoLicitaciones + gastoCajaChica;
             document.getElementById('val-gasto').innerText = fMoney(gastoReal);
             document.getElementById('val-utilidad').innerText = fMoney(valorFinal - gastoReal);
+            _saveDashCache({ venta:fMoney(totalVentaBase), final:fMoney(valorFinal), gasto:fMoney(gastoReal), utilidad:fMoney(valorFinal-gastoReal) });
             let nego = snaps[5].val();
             if(nego && nego.propuesta && !montoCierre) {
                 document.getElementById('negociacion-alerta').style.display = 'block'; document.getElementById('txt-oferta').innerText = fMoney(nego.propuesta) + ' Bs';

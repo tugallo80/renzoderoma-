@@ -269,18 +269,27 @@
 
     // Cancelar timeout anterior
     clearTimeout(window._proyectosTimeout);
+    _lastRenderSig = ''; // Permitir re-render cuando se recarga explícitamente
 
     // Limpiar listener WebSocket anterior
     if (window._proyectosRef && window._proyectosOnHandler) {
         try { window._proyectosRef.off('value', window._proyectosOnHandler); } catch(e) {}
     }
 
-    // Limpiar entradas envenenadas con null que firecache pudo haber guardado antes de v6
+    // Limpiar firecache si tiene datos shallow ({pid:true}), nulos, o proyectos sin nombre string
     try {
         const _fcKey = `rubik_dbcache_proyectos/${cid}`;
         const _fcRaw = localStorage.getItem(_fcKey);
         if (_fcRaw === 'null' || _fcRaw === '{}' || _fcRaw === 'undefined') {
             localStorage.removeItem(_fcKey);
+        } else if (_fcRaw) {
+            const _fcData = JSON.parse(_fcRaw);
+            if (_fcData && typeof _fcData === 'object') {
+                const hasInvalid = Object.values(_fcData).some(
+                    v => !v || typeof v !== 'object' || typeof v.nombre !== 'string' || !v.nombre
+                );
+                if (hasInvalid) { localStorage.removeItem(_fcKey); }
+            }
         }
     } catch(e) {}
 
@@ -289,6 +298,15 @@
     let _yaRenderizado = false;
     // true once real project cards have been shown — prevents null/empty WebSocket from wiping them
     let _hadGoodData = false;
+    // Firma del último render para evitar re-renders con la misma data (causa el flash)
+    let _lastRenderSig = '';
+    function _dataSig(dataObj) {
+        if (!dataObj || typeof dataObj !== 'object') return '';
+        return Object.entries(dataObj)
+            .filter(([, p]) => p && typeof p === 'object' && typeof p.nombre === 'string')
+            .map(([pid, p]) => `${pid}:${p.nombre}:${p.estado||''}:${p.img||''}`)
+            .sort().join('|');
+    }
 
     // ── VÍA 0: caché local de metadatos — muestra proyectos INMEDIATAMENTE sin red ni auth ──
     const metaCache = _loadMetaCache();
@@ -300,6 +318,10 @@
 
     function _renderData(dataObj) {
         clearTimeout(window._proyectosTimeout);
+        // Evitar re-render cuando la data es idéntica al último render
+        const sig = _dataSig(dataObj);
+        if (sig && sig === _lastRenderSig) return;
+        _lastRenderSig = sig;
         try {
             grid.innerHTML = '';
             globalProjectsArr = [];
@@ -308,7 +330,9 @@
                 return;
             }
             _hadGoodData = true;
-            let tempArr = Object.entries(dataObj).map(([pid, p]) => { p = {...p}; p.pid = pid; return p; });
+            let tempArr = Object.entries(dataObj)
+                .filter(([pid, p]) => p && typeof p === 'object')
+                .map(([pid, p]) => { p = {...p}; p.pid = pid; return p; });
             tempArr.sort((a, b) => (a.orden ?? 999999) - (b.orden ?? 999999));
             globalProjectsArr = tempArr.map((p, i) => { p.orden = i; return p; });
 
@@ -388,12 +412,15 @@
             const proyectos = await Promise.all(pids.map(async pid => {
                 try {
                     const ctrl = new AbortController();
-                    const tid = setTimeout(() => ctrl.abort(), 10000);
+                    const tid = setTimeout(() => ctrl.abort(), 15000);
                     const r = await fetch(`${base}/proyectos/${cid}/${pid}.json?shallow=true&auth=${token}`, { signal: ctrl.signal });
                     clearTimeout(tid);
                     if (!r.ok) return null;
                     const p = await r.json();
-                    if (p && typeof p === 'object') { p.pid = pid; return p; }
+                    // Validar que sea objeto con nombre string (no shallow corrupto)
+                    if (p && typeof p === 'object' && typeof p.nombre === 'string' && p.nombre) {
+                        p.pid = pid; return p;
+                    }
                     return null;
                 } catch(e2) { return null; }
             }));
@@ -420,6 +447,20 @@
         const isEmpty = !val || (typeof val === 'object' && Object.keys(val).length === 0);
         // Si ya teníamos datos buenos, ignorar cualquier null/vacío del WebSocket
         if (isEmpty && _hadGoodData) return;
+        // Rechazar datos shallow donde todos los proyectos son `true` o primitivos
+        if (val && typeof val === 'object') {
+            const vals = Object.values(val);
+            const allShallow = vals.length > 0 && vals.every(v => typeof v !== 'object' || v === null);
+            if (allShallow) {
+                // Datos shallow corruptos — no renderizar, esperar datos reales
+                if (!_yaRenderizado) {
+                    window._proyectosTimeout = setTimeout(() => {
+                        if (!_yaRenderizado) _mostrarError();
+                    }, 15000);
+                }
+                return;
+            }
+        }
         if (!isEmpty) {
             _hadGoodData = true;
             _saveMetaCache(val);
@@ -432,10 +473,10 @@
         if (!_yaRenderizado) _mostrarError();
     });
 
-    // ── Timeout 12s: si ninguna vía respondió, mostrar reintento ──
+    // ── Timeout 20s (conexión lenta): si ninguna vía respondió, mostrar reintento ──
     window._proyectosTimeout = setTimeout(() => {
         if (!_yaRenderizado) _mostrarError();
-    }, 12000);
+    }, 20000);
 
     } // fin _cargarProyectos
 

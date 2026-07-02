@@ -272,23 +272,57 @@
         document.getElementById('pin-status').style.color = 'var(--green)';
     }
 
+    // Cache local de clientes para mostrar instantáneamente
+    var _CLIENTS_CACHE_KEY = 'rubik_clients_meta';
+    function _saveClientsCache(arr) {
+        try {
+            var slim = arr.filter(function(c){ return c.id && typeof c.nombre === 'string' && c.nombre; })
+                .map(function(c){ return { id:c.id, nombre:c.nombre, rubro:c.rubro||'', logo:c.logo||'', wsp:c.wsp||'', email:c.email||'', pin_hash:c.pin_hash||null, fecha_mod:c.fecha_mod||c.fecha_creacion||null }; });
+            localStorage.setItem(_CLIENTS_CACHE_KEY, JSON.stringify(slim));
+        } catch(e){}
+    }
+    function _loadClientsCache() {
+        try {
+            var s = localStorage.getItem(_CLIENTS_CACHE_KEY);
+            if (!s) return null;
+            var data = JSON.parse(s);
+            if (!Array.isArray(data) || !data.every(function(c){ return c.id && typeof c.nombre === 'string'; })) {
+                localStorage.removeItem(_CLIENTS_CACHE_KEY); return null;
+            }
+            return data;
+        } catch(e){ return null; }
+    }
+
+    // Mostrar desde caché local sin esperar auth ni red
+    var _cachedClients = _loadClientsCache();
+    if (_cachedClients && _cachedClients.length > 0) {
+        clients = _cachedClients;
+        renderClients(clients);
+    }
+
     (function arrancarCarga() {
         var auth = firebase.auth();
+        var _cargado = false;
         function cargar() {
-            db.ref('clientes').once('value', function(snap) {
-                clients = [];
-                if (snap.exists()) { snap.forEach(function(child) { clients.push(Object.assign({ id: child.key }, child.val())); }); }
+            if (_cargado) return; _cargado = true;
+            // on('value') en lugar de once() para que firecache sirva datos inmediatamente
+            db.ref('clientes').on('value', function(snap) {
+                var arr = [];
+                if (snap.exists()) { snap.forEach(function(child) {
+                    var v = child.val();
+                    if (v && typeof v === 'object' && typeof v.nombre === 'string' && v.nombre)
+                        arr.push(Object.assign({ id: child.key }, v));
+                }); }
+                if (arr.length > 0) { clients = arr; _saveClientsCache(arr); }
+                else if (clients.length === 0) { clients = arr; }
                 renderClients(clients);
-            }).catch(function(e) {
-                console.error('[clientes] error:', e.message);
-                document.getElementById('clients-list').innerHTML = '<div style="text-align:center;color:var(--red);padding:40px;">Error al cargar: ' + e.message + '</div>';
             });
         }
         if (auth.currentUser) { cargar(); return; }
         var unsub = auth.onAuthStateChanged(function(user) {
             unsub();
             if (user) { cargar(); }
-            else { document.getElementById('clients-list').innerHTML = '<div style="text-align:center;color:var(--red);padding:40px;font-weight:600;">Sesión no detectada. <a href="/login.html" style="color:var(--blue)">Volver a ingresar</a></div>'; }
+            else if (!_cachedClients) { document.getElementById('clients-list').innerHTML = '<div style="text-align:center;color:var(--red);padding:40px;font-weight:600;">Sesión no detectada. <a href="/login.html" style="color:var(--blue)">Volver a ingresar</a></div>'; }
         });
     })();
 

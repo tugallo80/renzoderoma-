@@ -7,6 +7,19 @@
 <script src="https://www.gstatic.com/firebasejs/9.1.3/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.1.3/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.1.3/firebase-database-compat.js"></script>
+<script>
+  // Inicializar Firebase ANTES de auth-guard.js para que auth funcione correctamente
+  window._rubikFirebaseConfig = {
+    apiKey: "AIzaSyDXYlofy31cDP14xVAVxWo_7TqXdSgsIjA",
+    authDomain: "rubik-bolivia.firebaseapp.com",
+    databaseURL: "https://rubik-bolivia-default-rtdb.firebaseio.com",
+    projectId: "rubik-bolivia",
+    storageBucket: "rubik-bolivia.firebasestorage.app",
+    messagingSenderId: "4153087958",
+    appId: "1:4153087958:web:cf2dd16106580ed6437677"
+  };
+  if (!firebase.apps.length) firebase.initializeApp(window._rubikFirebaseConfig);
+</script>
 <script src="https://unpkg.com/@phosphor-icons/web" defer></script>
 <script src="/js/auth-guard.js?v=3"></script>
 <style>
@@ -559,6 +572,9 @@ input[type=number].stroke-inp {
       <div class="popover-item" onclick="saveToProject()">
         <i class="ph ph-cloud-arrow-up"></i> Guardar en proyecto
       </div>
+      <div class="popover-item" onclick="exportDXF()">
+        <i class="ph ph-file-arrow-down"></i> Exportar DXF (Vectorworks)
+      </div>
     </div>
   </div>
 </div>
@@ -637,6 +653,9 @@ input[type=number].stroke-inp {
   <button onclick="editSelectedShape()"><i class="ph ph-pencil"></i> Editar</button>
   <button onclick="sectionSelectedShape()"><i class="ph ph-scissors"></i> Seccionar</button>
   <button onclick="extrudeSelectedShape()"><i class="ph ph-cube"></i> Extruir</button>
+  <button class="sa-rotate" onclick="rotateSelected(-15)" style="display:none"><i class="ph ph-arrow-counter-clockwise"></i> -15°</button>
+  <button class="sa-rotate" onclick="rotateSelected(15)" style="display:none"><i class="ph ph-arrow-clockwise"></i> +15°</button>
+  <button onclick="toggleAutoDim()"><i class="ph ph-ruler"></i> Auto-cota</button>
   <button onclick="deleteSelectedShape()" class="danger"><i class="ph ph-trash"></i> Eliminar</button>
 </div>
 
@@ -653,22 +672,12 @@ input[type=number].stroke-inp {
 
 <script>
 // ============================================================
-//  FIREBASE INIT
+//  FIREBASE INIT (Firebase was already initialized in <head>)
 // ============================================================
-const firebaseConfig = {
-  apiKey: "AIzaSyDXYlofy31cDP14xVAVxWo_7TqXdSgsIjA",
-  authDomain: "rubik-bolivia.firebaseapp.com",
-  databaseURL: "https://rubik-bolivia-default-rtdb.firebaseio.com",
-  projectId: "rubik-bolivia",
-  storageBucket: "rubik-bolivia.firebasestorage.app",
-  messagingSenderId: "4153087958",
-  appId: "1:4153087958:web:cf2dd16106580ed6437677"
-};
 let fbDb = null;
 try {
-  firebase.initializeApp(firebaseConfig);
   fbDb = firebase.database();
-} catch(e) { console.warn('Firebase init error', e); }
+} catch(e) { console.warn('Firebase database error', e); }
 
 // ============================================================
 //  URL PARAMS
@@ -720,6 +729,20 @@ var state = {
 };
 
 // ============================================================
+//  ACTION SHAPE (fallback para evitar que el diálogo se cierre)
+// ============================================================
+var _actionShapeId = null;
+function _getActionShape() {
+  var sh = getSelectedShape();
+  if (sh) { _actionShapeId = sh.id; return sh; }
+  if (!_actionShapeId) return null;
+  for (var _li=0;_li<state.layers.length;_li++)
+    for (var _si=0;_si<state.layers[_li].shapes.length;_si++)
+      if (state.layers[_li].shapes[_si].id===_actionShapeId) return state.layers[_li].shapes[_si];
+  return null;
+}
+
+// ============================================================
 //  HISTORY
 // ============================================================
 var hist = { snaps: [], idx: -1, MAX: 50 };
@@ -769,14 +792,18 @@ window.addEventListener('resize', resizeCanvas);
 // ============================================================
 //  COORDINATE TRANSFORMS
 // ============================================================
-function worldToScreen(wx, wy) {
+function worldToScreen(wx, wy, wz) {
+  wz = wz || 0;
   var o = state.origin, sc = state.scale;
   if (state.axo) {
     var cos30 = 0.866, sin30 = 0.5;
+    // Cabinet oblique 30°: X horizontal, Y at 30° foreshortened 50%, Z vertical
     var sx = o.x + (wx + wy * cos30 * 0.5) * sc;
-    var sy = o.y - (0  + wy * sin30 * 0.5) * sc;
+    var sy = o.y - (wz + wy * sin30 * 0.5) * sc;
     return { x: sx, y: sy };
   }
+  if (state.view === 'frontal') return { x: o.x + wx * sc, y: o.y - wz * sc };
+  if (state.view === 'lateral') return { x: o.x + wy * sc, y: o.y - wz * sc };
   return { x: o.x + wx * sc, y: o.y - wy * sc };
 }
 
@@ -818,7 +845,14 @@ function getShapeVertices(sh) {
     case 'circle': return [{x:sh.cx,y:sh.cy}];
     case 'oval': return [{x:sh.cx,y:sh.cy}];
     case 'triangle': return getTriangleVerts(sh);
-    case 'polygon-sym': return [{x:sh.cx,y:sh.cy}];
+    case 'polygon-sym': {
+      var polyVerts = [], polyRot = (sh.rotation||0)*Math.PI/180;
+      for (var vi2=0;vi2<sh.sides;vi2++) {
+        var va = 2*Math.PI*vi2/sh.sides + polyRot;
+        polyVerts.push({x:sh.cx+sh.radius*Math.cos(va), y:sh.cy+sh.radius*Math.sin(va)});
+      }
+      return polyVerts;
+    }
     default: return [];
   }
 }
@@ -843,12 +877,36 @@ function drawGrid() {
   if (!state.gridOn) return;
   var sc = state.scale, o = state.origin, gs = state.gridSize;
   var W = canvas.width, H = canvas.height;
-  var subDiv = 5, subSize = gs / subDiv;
   var dm = state.darkMode;
   var mainColor = dm ? 'rgba(255,255,255,0.10)' : 'rgba(0,0,0,0.10)';
   var subColor  = dm ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.04)';
   var axisColor = dm ? 'rgba(255,255,255,0.22)' : 'rgba(0,0,0,0.20)';
 
+  if (state.axo) {
+    var pad = (Math.max(W,H) + Math.max(Math.abs(o.x), Math.abs(o.y))) / sc + gs*2;
+    var gMin = Math.floor(-pad/gs)*gs, gMax = Math.ceil(pad/gs)*gs;
+    ctx.strokeStyle = mainColor; ctx.lineWidth = 1;
+    ctx.beginPath();
+    for (var gy = gMin; gy <= gMax; gy += gs) {
+      var wl = worldToScreen(gMin,gy), wr = worldToScreen(gMax,gy);
+      ctx.moveTo(wl.x,wl.y); ctx.lineTo(wr.x,wr.y);
+    }
+    for (var gx = gMin; gx <= gMax; gx += gs) {
+      var wb = worldToScreen(gx,gMin), wt = worldToScreen(gx,gMax);
+      ctx.moveTo(wb.x,wb.y); ctx.lineTo(wt.x,wt.y);
+    }
+    ctx.stroke();
+    ctx.strokeStyle = axisColor; ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    var xa1=worldToScreen(gMin,0),xa2=worldToScreen(gMax,0);
+    var ya1=worldToScreen(0,gMin),ya2=worldToScreen(0,gMax);
+    ctx.moveTo(xa1.x,xa1.y); ctx.lineTo(xa2.x,xa2.y);
+    ctx.moveTo(ya1.x,ya1.y); ctx.lineTo(ya2.x,ya2.y);
+    ctx.stroke();
+    return;
+  }
+
+  var subDiv = 5, subSize = gs / subDiv;
   var worldLeft   = -o.x / sc;
   var worldRight  = (W - o.x) / sc;
   var worldTop    = (o.y - H) / sc;
@@ -887,9 +945,12 @@ function buildPath(sh) {
   ctx.beginPath();
   switch(sh.type) {
     case 'rect': {
-      var p1 = worldToScreen(sh.x, sh.y);
-      var p2 = worldToScreen(sh.x+sh.w, sh.y+sh.h);
-      ctx.rect(Math.min(p1.x,p2.x), Math.min(p1.y,p2.y), Math.abs(p2.x-p1.x), Math.abs(p2.y-p1.y));
+      var c1 = worldToScreen(sh.x, sh.y);
+      var c2 = worldToScreen(sh.x+sh.w, sh.y);
+      var c3 = worldToScreen(sh.x+sh.w, sh.y+sh.h);
+      var c4 = worldToScreen(sh.x, sh.y+sh.h);
+      ctx.moveTo(c1.x,c1.y); ctx.lineTo(c2.x,c2.y); ctx.lineTo(c3.x,c3.y); ctx.lineTo(c4.x,c4.y);
+      ctx.closePath();
       break;
     }
     case 'circle': {
@@ -1020,29 +1081,33 @@ function getShapeBBox(sh) {
 
 function drawSections(sh) {
   ctx.save();
+  buildPath(sh);
+  ctx.clip();
   ctx.strokeStyle = sh.strokeColor || '#000';
   ctx.lineWidth = 1;
   ctx.setLineDash([5,4]);
   var bb = getShapeBBox(sh);
   if (!bb) { ctx.restore(); return; }
+  var padX = (bb.maxX-bb.minX)*0.5, padY = (bb.maxY-bb.minY)*0.5;
   for (var i = 1; i <= sh.sectionsH; i++) {
     var wy = bb.minY + (bb.maxY-bb.minY)*i/(sh.sectionsH+1);
-    var p1 = worldToScreen(bb.minX,wy), p2 = worldToScreen(bb.maxX,wy);
+    var p1 = worldToScreen(bb.minX-padX,wy), p2 = worldToScreen(bb.maxX+padX,wy);
     ctx.beginPath(); ctx.moveTo(p1.x,p1.y); ctx.lineTo(p2.x,p2.y); ctx.stroke();
   }
   for (var j = 1; j <= sh.sectionsV; j++) {
     var wx = bb.minX + (bb.maxX-bb.minX)*j/(sh.sectionsV+1);
-    var p3 = worldToScreen(wx,bb.minY), p4 = worldToScreen(wx,bb.maxY);
+    var p3 = worldToScreen(wx,bb.minY-padY), p4 = worldToScreen(wx,bb.maxY+padY);
     ctx.beginPath(); ctx.moveTo(p3.x,p3.y); ctx.lineTo(p4.x,p4.y); ctx.stroke();
   }
-  if (sh.sectionsAngular > 0 && (sh.type==='circle'||sh.type==='oval')) {
-    var c = worldToScreen(sh.cx,sh.cy);
-    var rPx = (sh.r||sh.rx||50)*state.scale;
+  if (sh.sectionsAngular > 0 && (sh.type==='circle'||sh.type==='oval'||sh.type==='polygon-sym')) {
+    var cx = sh.cx, cy = sh.cy;
+    var rPx = (sh.r||sh.rx||sh.radius||50)*state.scale*1.5;
+    var cScr = worldToScreen(cx,cy);
     for (var k = 0; k < sh.sectionsAngular; k++) {
       var ang = Math.PI*k/sh.sectionsAngular;
       ctx.beginPath();
-      ctx.moveTo(c.x+rPx*Math.cos(ang), c.y+rPx*Math.sin(ang));
-      ctx.lineTo(c.x-rPx*Math.cos(ang), c.y-rPx*Math.sin(ang));
+      ctx.moveTo(cScr.x+rPx*Math.cos(ang), cScr.y+rPx*Math.sin(ang));
+      ctx.lineTo(cScr.x-rPx*Math.cos(ang), cScr.y-rPx*Math.sin(ang));
       ctx.stroke();
     }
   }
@@ -1057,14 +1122,14 @@ function drawExtrusion(sh) {
   var verts = getShapeVertices(sh);
   var eh = sh.extrudeH;
   for (var i = 0; i < verts.length; i++) {
-    var bot = worldToScreen(verts[i].x, verts[i].y);
-    var top = worldToScreen(verts[i].x, verts[i].y + eh);
+    var bot = worldToScreen(verts[i].x, verts[i].y, 0);
+    var top = worldToScreen(verts[i].x, verts[i].y, eh);
     ctx.beginPath(); ctx.moveTo(bot.x,bot.y); ctx.lineTo(top.x,top.y); ctx.stroke();
   }
   if (verts.length >= 2) {
     ctx.beginPath();
     for (var j = 0; j < verts.length; j++) {
-      var s = worldToScreen(verts[j].x, verts[j].y+eh);
+      var s = worldToScreen(verts[j].x, verts[j].y, eh);
       j===0 ? ctx.moveTo(s.x,s.y) : ctx.lineTo(s.x,s.y);
     }
     if (sh.type !== 'line') ctx.closePath();
@@ -1301,6 +1366,13 @@ function onPointerDown(e) {
   activePointers[e.pointerId] = { x: e.clientX, y: e.clientY };
   var pCount = Object.keys(activePointers).length;
   if (pCount >= 2) {
+    // Cancelar cualquier acción pendiente del primer dedo
+    clearTimeout(window._shapeTapTimer); window._shapeTapTimer = null;
+    state.drawing = false; state.drawStart = null; state.dimP1 = null;
+    // Revertir punto polygon-free que el primer dedo pudo haber añadido
+    if (state.tool === 'polygon-free' && state.drawPoints.length > 0) {
+      state.drawPoints.pop(); state.drawCurrent = null; setDirty();
+    }
     var pts = Object.values(activePointers);
     state.lastTouchDist = Math.hypot(pts[1].x-pts[0].x, pts[1].y-pts[0].y);
     state.lastTouchMid = { x:(pts[0].x+pts[1].x)/2, y:(pts[0].y+pts[1].y)/2 };
@@ -1346,15 +1418,37 @@ function onPointerDown(e) {
     state.drawPoints.push(snapped); state.drawCurrent=snapped; setDirty(); return;
   }
   if (['rect','circle','oval','polygon-sym','triangle'].includes(tool)) {
-    openShapeDialog(tool, snapped); return;
+    var _tl=tool, _tp={x:snapped.x,y:snapped.y};
+    clearTimeout(window._shapeTapTimer);
+    window._shapeTapTimer = setTimeout(function() {
+      window._shapeTapTimer = null;
+      openShapeDialog(_tl, _tp);
+    }, 90);
+    return;
   }
   if (tool==='section') {
     var sh3=findShapeAt(cxy.x,cxy.y);
-    if (sh3) { state.selectedId=sh3.id; openSectionDialog(); } return;
+    if (sh3) {
+      var _s3id=sh3.id;
+      clearTimeout(window._shapeTapTimer);
+      window._shapeTapTimer = setTimeout(function() {
+        window._shapeTapTimer = null;
+        state.selectedId=_s3id; openSectionDialog();
+      }, 90);
+    }
+    return;
   }
   if (tool==='extrude') {
     var sh4=findShapeAt(cxy.x,cxy.y);
-    if (sh4) { state.selectedId=sh4.id; openExtrudeDialog(); } return;
+    if (sh4) {
+      var _s4id=sh4.id;
+      clearTimeout(window._shapeTapTimer);
+      window._shapeTapTimer = setTimeout(function() {
+        window._shapeTapTimer = null;
+        state.selectedId=_s4id; openExtrudeDialog();
+      }, 90);
+    }
+    return;
   }
 }
 
@@ -1395,6 +1489,7 @@ function onPointerMove(e) {
 }
 
 function onPointerUp(e) {
+  try { canvas.releasePointerCapture(e.pointerId); } catch(_){}
   delete activePointers[e.pointerId];
   var pCount=Object.keys(activePointers).length;
   if (pCount<2) { state.lastTouchDist=null; state.lastTouchMid=null; }
@@ -1434,12 +1529,15 @@ function finalizePolygonFree() {
 
 function onWheel(e) {
   e.preventDefault();
+  var delta = e.deltaY;
+  if (e.deltaMode === 1) delta *= 20;
+  else if (e.deltaMode === 2) delta *= 400;
   var cxy=getCanvasXY(e);
-  zoomAround(cxy.x, cxy.y, e.deltaY<0?1.12:1/1.12);
+  zoomAround(cxy.x, cxy.y, delta<0?1.12:1/1.12);
 }
 
 function zoomAround(sx, sy, factor) {
-  var newSc=Math.min(20,Math.max(0.5,state.scale*factor));
+  var newSc=Math.min(50,Math.max(0.01,state.scale*factor));
   var af=newSc/state.scale;
   state.origin.x=sx+(state.origin.x-sx)*af;
   state.origin.y=sy+(state.origin.y-sy)*af;
@@ -1613,7 +1711,7 @@ function confirmPolySymm(px,py) {
   addShapeToActiveLayer({
     id:genUUID(),type:'polygon-sym',name:'Polígono '+(countShapes()+1),
     visible:true,locked:false,strokeColor:state.strokeColor,strokeWidth:state.strokeWidth,fillColor:'none',
-    cx:px,cy:py,sides:sides,radius:radius,rotation:0,
+    cx:px,cy:py,sides:sides,radius:radius,rotation:-90,
     extruded:false,extrudeH:0,sectionsH:0,sectionsV:0,sectionsAngular:0,autoDim:false
   });
   closeModal();
@@ -1642,20 +1740,23 @@ function closeModal() {
 document.getElementById('modal-overlay').addEventListener('click', function(e) {
   if (e.target===this) closeModal();
 });
+document.getElementById('shape-actions').addEventListener('pointerdown', function(e) {
+  e.stopPropagation();
+});
 
 // ============================================================
 //  SECTION DIALOG
 // ============================================================
 function openSectionDialog() {
-  var sh=getSelectedShape(); if (!sh) return;
-  var isCirc=sh.type==='circle'||sh.type==='oval';
+  var sh=_getActionShape(); if (!sh) return;
+  var isCirc=sh.type==='circle'||sh.type==='oval'||sh.type==='polygon-sym';
   var content=document.getElementById('modal-content');
   content.innerHTML='<h3>Seccionar</h3>'+
     '<div class="modal-field"><label>Divisiones horizontales</label>'+
     '<input type="number" id="d-sec-h" value="'+(sh.sectionsH||0)+'" min="0" max="20"></div>'+
     '<div class="modal-field"><label>Divisiones verticales</label>'+
     '<input type="number" id="d-sec-v" value="'+(sh.sectionsV||0)+'" min="0" max="20"></div>'+
-    (isCirc?'<div class="modal-field"><label>Divisiones angulares</label>'+
+    (isCirc?'<div class="modal-field"><label>Divisiones radiales</label>'+
     '<input type="number" id="d-sec-ang" value="'+(sh.sectionsAngular||0)+'" min="0" max="36"></div>':'')+
     '<div class="modal-btns"><button class="modal-btn" onclick="closeModal()">Cancelar</button>'+
     '<button class="modal-btn primary" onclick="confirmSection()">Aplicar</button></div>';
@@ -1663,7 +1764,7 @@ function openSectionDialog() {
 }
 
 function confirmSection() {
-  var sh=getSelectedShape(); if (!sh) { closeModal(); return; }
+  var sh=_getActionShape(); if (!sh) { closeModal(); return; }
   pushHistory();
   sh.sectionsH=parseInt(document.getElementById('d-sec-h').value)||0;
   sh.sectionsV=parseInt(document.getElementById('d-sec-v').value)||0;
@@ -1677,7 +1778,7 @@ function sectionSelectedShape() { openSectionDialog(); }
 //  EXTRUDE DIALOG
 // ============================================================
 function openExtrudeDialog() {
-  var sh=getSelectedShape(); if (!sh) return;
+  var sh=_getActionShape(); if (!sh) return;
   var ul=state.unit==='cm'?'cm':'m';
   var curH=sh.extrudeH?(state.unit==='cm'?sh.extrudeH/10:sh.extrudeH/1000):0;
   var content=document.getElementById('modal-content');
@@ -1690,7 +1791,7 @@ function openExtrudeDialog() {
 }
 
 function confirmExtrude() {
-  var sh=getSelectedShape(); if (!sh) { closeModal(); return; }
+  var sh=_getActionShape(); if (!sh) { closeModal(); return; }
   pushHistory(); sh.extruded=true; sh.extrudeH=toMM(document.getElementById('d-ext-h').value);
   closeModal(); setDirty(); showToast('Extrusión aplicada');
 }
@@ -1701,7 +1802,7 @@ function extrudeSelectedShape() { openExtrudeDialog(); }
 //  EDIT DIALOG
 // ============================================================
 function editSelectedShape() {
-  var sh=getSelectedShape(); if (!sh) return;
+  var sh=_getActionShape(); if (!sh) return;
   var ul=state.unit==='cm'?'cm':'m';
   var toU=function(v){ return state.unit==='cm'?(v/10).toFixed(2):(v/1000).toFixed(4); };
   var content=document.getElementById('modal-content');
@@ -1758,6 +1859,10 @@ function applyEdit(shId) {
 // ============================================================
 function showShapeActions() {
   var bar=document.getElementById('shape-actions');
+  var sh=getSelectedShape();
+  if (sh) _actionShapeId = sh.id;
+  var canRotate = sh && (sh.type==='polygon-sym'||sh.type==='triangle');
+  document.querySelectorAll('.sa-rotate').forEach(function(b){ b.style.display=canRotate?'':'none'; });
   bar.style.display='flex'; updateShapeActionsPos();
 }
 
@@ -1932,22 +2037,25 @@ function saveToProject() {
 
 function loadFromProject() {
   if (!fbDb||!CLIENT_ID||!PROJECT_ID) return;
-  try {
-    fbDb.ref('proyectos/'+CLIENT_ID+'/'+PROJECT_ID+'/cad/drawings')
-      .orderByChild('savedAt').limitToLast(1).once('value')
-      .then(function(snap){
-        if (!snap.exists()) return;
-        snap.forEach(function(child){
-          var data=child.val();
-          if (data.layers) state.layers=data.layers;
-          if (data.view) state.view=data.view;
-          if (data.unit) { state.unit=data.unit; setUnit(data.unit); }
-          if (data.scale) state.scale=data.scale;
-          if (data.origin) state.origin=data.origin;
-          pushHistory(); renderLayerPanel(); setDirty(); showToast('Diseño cargado');
-        });
-      }).catch(function(err){ console.warn('Load error',err); });
-  } catch(e) { console.warn('Load error',e); }
+  firebase.auth().onAuthStateChanged(function(user) {
+    if (!user) return;
+    try {
+      fbDb.ref('proyectos/'+CLIENT_ID+'/'+PROJECT_ID+'/cad/drawings')
+        .orderByChild('savedAt').limitToLast(1).once('value')
+        .then(function(snap){
+          if (!snap.exists()) return;
+          snap.forEach(function(child){
+            var data=child.val();
+            if (data.layers) state.layers=data.layers;
+            if (data.view) state.view=data.view;
+            if (data.unit) { state.unit=data.unit; setUnit(data.unit); }
+            if (data.scale) state.scale=data.scale;
+            if (data.origin) state.origin=data.origin;
+            pushHistory(); renderLayerPanel(); setDirty(); showToast('Diseño cargado');
+          });
+        }).catch(function(err){ console.warn('Load error',err); });
+    } catch(e) { console.warn('Load error',e); }
+  });
 }
 
 // ============================================================
@@ -1967,6 +2075,97 @@ function showToast(msg) {
   el.textContent=msg; el.classList.add('show');
   if (toastTimer) clearTimeout(toastTimer);
   toastTimer=setTimeout(function(){ el.classList.remove('show'); },3000);
+}
+
+// ============================================================
+//  ROTATE / AUTO-DIM
+// ============================================================
+function rotateSelected(deg) {
+  var sh=_getActionShape(); if (!sh) return;
+  if (sh.type==='polygon-sym') {
+    pushHistory();
+    sh.rotation = ((sh.rotation||0)+deg+360)%360;
+    setDirty(); showToast('Rotación: '+sh.rotation+'°');
+  } else {
+    showToast('Rotación no disponible para este tipo');
+  }
+}
+
+function toggleAutoDim() {
+  var sh=_getActionShape(); if (!sh) return;
+  pushHistory();
+  sh.autoDim=!sh.autoDim;
+  setDirty(); showToast(sh.autoDim?'Acotado automático activado':'Acotado automático desactivado');
+}
+
+// ============================================================
+//  DXF EXPORT
+// ============================================================
+function polylineDXF(verts, layerName, closed) {
+  var lines=[];
+  lines.push('0\nLWPOLYLINE');
+  lines.push('8\n'+layerName);
+  lines.push('70\n'+(closed?1:0));
+  lines.push('90\n'+verts.length);
+  for (var i=0;i<verts.length;i++) {
+    lines.push('10\n'+verts[i].x.toFixed(4));
+    lines.push('20\n'+verts[i].y.toFixed(4));
+  }
+  return lines.join('\n');
+}
+
+function shapeToDXF(sh, layerName) {
+  var lyr=layerName||'0';
+  switch(sh.type) {
+    case 'rect': {
+      var rv=[{x:sh.x,y:sh.y},{x:sh.x+sh.w,y:sh.y},{x:sh.x+sh.w,y:sh.y+sh.h},{x:sh.x,y:sh.y+sh.h}];
+      return polylineDXF(rv,lyr,true);
+    }
+    case 'circle':
+      return '0\nCIRCLE\n8\n'+lyr+'\n10\n'+sh.cx.toFixed(4)+'\n20\n'+sh.cy.toFixed(4)+'\n30\n0\n40\n'+sh.r.toFixed(4);
+    case 'oval':
+      return '0\nELLIPSE\n8\n'+lyr+'\n10\n'+sh.cx.toFixed(4)+'\n20\n'+sh.cy.toFixed(4)+'\n30\n0\n11\n'+sh.rx.toFixed(4)+'\n21\n0\n31\n0\n40\n'+(sh.ry/sh.rx).toFixed(6)+'\n41\n0\n42\n6.2831853';
+    case 'line':
+      return '0\nLINE\n8\n'+lyr+'\n10\n'+sh.x1.toFixed(4)+'\n20\n'+sh.y1.toFixed(4)+'\n30\n0\n11\n'+sh.x2.toFixed(4)+'\n21\n'+sh.y2.toFixed(4)+'\n31\n0';
+    case 'polygon-free':
+      if (sh.points&&sh.points.length>=2) return polylineDXF(sh.points,lyr,true);
+      return '';
+    case 'triangle':
+      return polylineDXF(getTriangleVerts(sh),lyr,true);
+    case 'polygon-sym': {
+      var pv=[], rot2=(sh.rotation||0)*Math.PI/180;
+      for (var i=0;i<sh.sides;i++) {
+        var ang=2*Math.PI*i/sh.sides+rot2;
+        pv.push({x:sh.cx+sh.radius*Math.cos(ang),y:sh.cy+sh.radius*Math.sin(ang)});
+      }
+      return polylineDXF(pv,lyr,true);
+    }
+    default: return '';
+  }
+}
+
+function exportDXF() {
+  document.getElementById('save-popover').classList.add('hidden');
+  var lines=[];
+  lines.push('0\nSECTION\n2\nHEADER\n9\n$INSUNITS\n70\n4\n0\nENDSEC');
+  lines.push('0\nSECTION\n2\nENTITIES');
+  for (var li=0;li<state.layers.length;li++) {
+    var lyr=state.layers[li];
+    if (!lyr.visible) continue;
+    for (var si=0;si<lyr.shapes.length;si++) {
+      var sh=lyr.shapes[si];
+      if (!sh.visible||sh.type==='dimension') continue;
+      var entity=shapeToDXF(sh,lyr.name);
+      if (entity) lines.push(entity);
+    }
+  }
+  lines.push('0\nENDSEC\n0\nEOF');
+  var blob=new Blob([lines.join('\n')],{type:'text/plain'});
+  var url=URL.createObjectURL(blob);
+  var a=document.createElement('a');
+  a.download='rubik-cad.dxf'; a.href=url; a.click();
+  setTimeout(function(){URL.revokeObjectURL(url);},1000);
+  showToast('DXF exportado');
 }
 
 // ============================================================
