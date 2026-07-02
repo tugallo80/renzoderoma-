@@ -7,6 +7,19 @@
 <script src="https://www.gstatic.com/firebasejs/9.1.3/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.1.3/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.1.3/firebase-database-compat.js"></script>
+<script>
+  // Inicializar Firebase ANTES de auth-guard.js para que auth funcione correctamente
+  window._rubikFirebaseConfig = {
+    apiKey: "AIzaSyDXYlofy31cDP14xVAVxWo_7TqXdSgsIjA",
+    authDomain: "rubik-bolivia.firebaseapp.com",
+    databaseURL: "https://rubik-bolivia-default-rtdb.firebaseio.com",
+    projectId: "rubik-bolivia",
+    storageBucket: "rubik-bolivia.firebasestorage.app",
+    messagingSenderId: "4153087958",
+    appId: "1:4153087958:web:cf2dd16106580ed6437677"
+  };
+  if (!firebase.apps.length) firebase.initializeApp(window._rubikFirebaseConfig);
+</script>
 <script src="https://unpkg.com/@phosphor-icons/web" defer></script>
 <script src="/js/auth-guard.js?v=3"></script>
 <style>
@@ -659,22 +672,12 @@ input[type=number].stroke-inp {
 
 <script>
 // ============================================================
-//  FIREBASE INIT
+//  FIREBASE INIT (Firebase was already initialized in <head>)
 // ============================================================
-const firebaseConfig = {
-  apiKey: "AIzaSyDXYlofy31cDP14xVAVxWo_7TqXdSgsIjA",
-  authDomain: "rubik-bolivia.firebaseapp.com",
-  databaseURL: "https://rubik-bolivia-default-rtdb.firebaseio.com",
-  projectId: "rubik-bolivia",
-  storageBucket: "rubik-bolivia.firebasestorage.app",
-  messagingSenderId: "4153087958",
-  appId: "1:4153087958:web:cf2dd16106580ed6437677"
-};
 let fbDb = null;
 try {
-  firebase.initializeApp(firebaseConfig);
   fbDb = firebase.database();
-} catch(e) { console.warn('Firebase init error', e); }
+} catch(e) { console.warn('Firebase database error', e); }
 
 // ============================================================
 //  URL PARAMS
@@ -724,6 +727,20 @@ var state = {
   lastTouchMid: null,
   moveDragStart: null,
 };
+
+// ============================================================
+//  ACTION SHAPE (fallback para evitar que el diálogo se cierre)
+// ============================================================
+var _actionShapeId = null;
+function _getActionShape() {
+  var sh = getSelectedShape();
+  if (sh) { _actionShapeId = sh.id; return sh; }
+  if (!_actionShapeId) return null;
+  for (var _li=0;_li<state.layers.length;_li++)
+    for (var _si=0;_si<state.layers[_li].shapes.length;_si++)
+      if (state.layers[_li].shapes[_si].id===_actionShapeId) return state.layers[_li].shapes[_si];
+  return null;
+}
 
 // ============================================================
 //  HISTORY
@@ -1472,6 +1489,7 @@ function onPointerMove(e) {
 }
 
 function onPointerUp(e) {
+  try { canvas.releasePointerCapture(e.pointerId); } catch(_){}
   delete activePointers[e.pointerId];
   var pCount=Object.keys(activePointers).length;
   if (pCount<2) { state.lastTouchDist=null; state.lastTouchMid=null; }
@@ -1519,7 +1537,7 @@ function onWheel(e) {
 }
 
 function zoomAround(sx, sy, factor) {
-  var newSc=Math.min(50,Math.max(0.02,state.scale*factor));
+  var newSc=Math.min(50,Math.max(0.01,state.scale*factor));
   var af=newSc/state.scale;
   state.origin.x=sx+(state.origin.x-sx)*af;
   state.origin.y=sy+(state.origin.y-sy)*af;
@@ -1730,7 +1748,7 @@ document.getElementById('shape-actions').addEventListener('pointerdown', functio
 //  SECTION DIALOG
 // ============================================================
 function openSectionDialog() {
-  var sh=getSelectedShape(); if (!sh) return;
+  var sh=_getActionShape(); if (!sh) return;
   var isCirc=sh.type==='circle'||sh.type==='oval'||sh.type==='polygon-sym';
   var content=document.getElementById('modal-content');
   content.innerHTML='<h3>Seccionar</h3>'+
@@ -1746,7 +1764,7 @@ function openSectionDialog() {
 }
 
 function confirmSection() {
-  var sh=getSelectedShape(); if (!sh) { closeModal(); return; }
+  var sh=_getActionShape(); if (!sh) { closeModal(); return; }
   pushHistory();
   sh.sectionsH=parseInt(document.getElementById('d-sec-h').value)||0;
   sh.sectionsV=parseInt(document.getElementById('d-sec-v').value)||0;
@@ -1760,7 +1778,7 @@ function sectionSelectedShape() { openSectionDialog(); }
 //  EXTRUDE DIALOG
 // ============================================================
 function openExtrudeDialog() {
-  var sh=getSelectedShape(); if (!sh) return;
+  var sh=_getActionShape(); if (!sh) return;
   var ul=state.unit==='cm'?'cm':'m';
   var curH=sh.extrudeH?(state.unit==='cm'?sh.extrudeH/10:sh.extrudeH/1000):0;
   var content=document.getElementById('modal-content');
@@ -1773,7 +1791,7 @@ function openExtrudeDialog() {
 }
 
 function confirmExtrude() {
-  var sh=getSelectedShape(); if (!sh) { closeModal(); return; }
+  var sh=_getActionShape(); if (!sh) { closeModal(); return; }
   pushHistory(); sh.extruded=true; sh.extrudeH=toMM(document.getElementById('d-ext-h').value);
   closeModal(); setDirty(); showToast('Extrusión aplicada');
 }
@@ -1784,7 +1802,7 @@ function extrudeSelectedShape() { openExtrudeDialog(); }
 //  EDIT DIALOG
 // ============================================================
 function editSelectedShape() {
-  var sh=getSelectedShape(); if (!sh) return;
+  var sh=_getActionShape(); if (!sh) return;
   var ul=state.unit==='cm'?'cm':'m';
   var toU=function(v){ return state.unit==='cm'?(v/10).toFixed(2):(v/1000).toFixed(4); };
   var content=document.getElementById('modal-content');
@@ -1842,6 +1860,7 @@ function applyEdit(shId) {
 function showShapeActions() {
   var bar=document.getElementById('shape-actions');
   var sh=getSelectedShape();
+  if (sh) _actionShapeId = sh.id;
   var canRotate = sh && (sh.type==='polygon-sym'||sh.type==='triangle');
   document.querySelectorAll('.sa-rotate').forEach(function(b){ b.style.display=canRotate?'':'none'; });
   bar.style.display='flex'; updateShapeActionsPos();
@@ -2018,22 +2037,25 @@ function saveToProject() {
 
 function loadFromProject() {
   if (!fbDb||!CLIENT_ID||!PROJECT_ID) return;
-  try {
-    fbDb.ref('proyectos/'+CLIENT_ID+'/'+PROJECT_ID+'/cad/drawings')
-      .orderByChild('savedAt').limitToLast(1).once('value')
-      .then(function(snap){
-        if (!snap.exists()) return;
-        snap.forEach(function(child){
-          var data=child.val();
-          if (data.layers) state.layers=data.layers;
-          if (data.view) state.view=data.view;
-          if (data.unit) { state.unit=data.unit; setUnit(data.unit); }
-          if (data.scale) state.scale=data.scale;
-          if (data.origin) state.origin=data.origin;
-          pushHistory(); renderLayerPanel(); setDirty(); showToast('Diseño cargado');
-        });
-      }).catch(function(err){ console.warn('Load error',err); });
-  } catch(e) { console.warn('Load error',e); }
+  firebase.auth().onAuthStateChanged(function(user) {
+    if (!user) return;
+    try {
+      fbDb.ref('proyectos/'+CLIENT_ID+'/'+PROJECT_ID+'/cad/drawings')
+        .orderByChild('savedAt').limitToLast(1).once('value')
+        .then(function(snap){
+          if (!snap.exists()) return;
+          snap.forEach(function(child){
+            var data=child.val();
+            if (data.layers) state.layers=data.layers;
+            if (data.view) state.view=data.view;
+            if (data.unit) { state.unit=data.unit; setUnit(data.unit); }
+            if (data.scale) state.scale=data.scale;
+            if (data.origin) state.origin=data.origin;
+            pushHistory(); renderLayerPanel(); setDirty(); showToast('Diseño cargado');
+          });
+        }).catch(function(err){ console.warn('Load error',err); });
+    } catch(e) { console.warn('Load error',e); }
+  });
 }
 
 // ============================================================
@@ -2059,7 +2081,7 @@ function showToast(msg) {
 //  ROTATE / AUTO-DIM
 // ============================================================
 function rotateSelected(deg) {
-  var sh=getSelectedShape(); if (!sh) return;
+  var sh=_getActionShape(); if (!sh) return;
   if (sh.type==='polygon-sym') {
     pushHistory();
     sh.rotation = ((sh.rotation||0)+deg+360)%360;
@@ -2070,7 +2092,7 @@ function rotateSelected(deg) {
 }
 
 function toggleAutoDim() {
-  var sh=getSelectedShape(); if (!sh) return;
+  var sh=_getActionShape(); if (!sh) return;
   pushHistory();
   sh.autoDim=!sh.autoDim;
   setDirty(); showToast(sh.autoDim?'Acotado automático activado':'Acotado automático desactivado');
