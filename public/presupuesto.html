@@ -971,24 +971,48 @@
         saveDB(true); document.getElementById('mod-apu').style.display = 'none'; activeMod=null; 
     }
 
-    function openPhotoOpt(i) { 
+    function openPhotoOpt(i) {
         targetIdx = i; const item = data[i]; const pList = document.getElementById('photo-preview-list'); pList.innerHTML = '';
         let imgs = [];
-        if(item.img) imgs.push({ src: item.img, title: 'Foto Ppal', delArgs: `'main', null, null` });
-        if(item.cortes && Array.isArray(item.cortes)) item.cortes.forEach((c, idx) => imgs.push({ src: c, title: `Corte Ppal ${idx+1}`, delArgs: `'cortes', ${idx}, null` }));
-        if(item.apu) { ['mat', 'sub', 'mo', 'eq'].forEach(t => { if(item.apu[t] && Array.isArray(item.apu[t])) { item.apu[t].forEach((mat, mIdx) => { if(mat.corte_url) imgs.push({ src: mat.corte_url, title: `${mat.d||'Plano'}`, delArgs: `'apu', '${t}', ${mIdx}` }); }); } }); }
+        if(item.img) imgs.push({ src: item.img, title: 'Foto Ppal', del: ['main', null, null] });
+        if(item.cortes && Array.isArray(item.cortes)) item.cortes.forEach((c, idx) => imgs.push({ src: c, title: `Corte Ppal ${idx+1}`, del: ['cortes', idx, null] }));
+        if(item.apu) { ['mat', 'sub', 'mo', 'eq'].forEach(t => { if(item.apu[t] && Array.isArray(item.apu[t])) { item.apu[t].forEach((mat, mIdx) => { if(mat.corte_url) imgs.push({ src: mat.corte_url, title: `${mat.d||'Plano'}`, del: ['apu', t, mIdx] }); }); } }); }
 
         if(imgs.length > 0) {
-            imgs.forEach(im => { 
-                pList.innerHTML += `
-                <div style="position:relative; flex-shrink:0; text-align:center; width:80px;">
-                    <i class="ph-fill ph-x-circle" style="position:absolute; top:-5px; right:-5px; color:var(--red); font-size:20px; cursor:pointer; background:#fff; border-radius:50%; z-index:10;" onclick="deletePhoto(${i}, ${im.delArgs})"></i>
-                    <img loading="lazy" decoding="async" src="${im.src}" style="width:100%; height:80px; object-fit:cover; border-radius:8px; border:1px solid var(--border); cursor:pointer;" onclick="window.open('${im.src}','_blank')">
-                    <div style="font-size:9px; font-weight:700; margin-top:4px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="${im.title}">${im.title}</div>
-                </div>`; 
+            imgs.forEach(im => {
+                const wrap = document.createElement('div');
+                wrap.style.cssText = 'position:relative; flex-shrink:0; text-align:center; width:80px;';
+
+                const delIcon = document.createElement('i');
+                delIcon.className = 'ph-fill ph-x-circle';
+                delIcon.style.cssText = 'position:absolute; top:-5px; right:-5px; color:var(--red); font-size:20px; cursor:pointer; background:#fff; border-radius:50%; z-index:10;';
+                delIcon.addEventListener('click', function() { deletePhoto(i, im.del[0], im.del[1], im.del[2]); });
+
+                const anchor = document.createElement('a');
+                anchor.href = im.src;
+                anchor.target = '_blank';
+                anchor.rel = 'noopener noreferrer';
+                anchor.style.display = 'block';
+
+                const img = document.createElement('img');
+                img.loading = 'lazy';
+                img.src = im.src;
+                img.style.cssText = 'width:100%; height:80px; object-fit:cover; border-radius:8px; border:1px solid var(--border);';
+
+                anchor.appendChild(img);
+
+                const lbl = document.createElement('div');
+                lbl.style.cssText = 'font-size:9px; font-weight:700; margin-top:4px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;';
+                lbl.title = im.title;
+                lbl.textContent = im.title;
+
+                wrap.appendChild(delIcon);
+                wrap.appendChild(anchor);
+                wrap.appendChild(lbl);
+                pList.appendChild(wrap);
             });
         } else { pList.innerHTML = '<div style="font-size:11px; color:var(--gray); width:100%; text-align:center;">No hay imágenes adjuntas.</div>'; }
-        document.getElementById('mod-photo').style.display='flex'; 
+        document.getElementById('mod-photo').style.display='flex';
     }
 
     function deletePhoto(itemIdx, type, idx1, idx2) {

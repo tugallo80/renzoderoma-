@@ -269,13 +269,14 @@
 
     // Cancelar timeout anterior
     clearTimeout(window._proyectosTimeout);
+    _lastRenderSig = ''; // Permitir re-render cuando se recarga explícitamente
 
     // Limpiar listener WebSocket anterior
     if (window._proyectosRef && window._proyectosOnHandler) {
         try { window._proyectosRef.off('value', window._proyectosOnHandler); } catch(e) {}
     }
 
-    // Limpiar firecache si tiene datos shallow ({pid:true}) o nulos
+    // Limpiar firecache si tiene datos shallow ({pid:true}), nulos, o proyectos sin nombre string
     try {
         const _fcKey = `rubik_dbcache_proyectos/${cid}`;
         const _fcRaw = localStorage.getItem(_fcKey);
@@ -284,10 +285,10 @@
         } else if (_fcRaw) {
             const _fcData = JSON.parse(_fcRaw);
             if (_fcData && typeof _fcData === 'object') {
-                const hasShallow = Object.values(_fcData).some(
-                    v => v === true || v === null || (v !== undefined && typeof v !== 'object')
+                const hasInvalid = Object.values(_fcData).some(
+                    v => !v || typeof v !== 'object' || typeof v.nombre !== 'string' || !v.nombre
                 );
-                if (hasShallow) { localStorage.removeItem(_fcKey); }
+                if (hasInvalid) { localStorage.removeItem(_fcKey); }
             }
         }
     } catch(e) {}
@@ -297,6 +298,15 @@
     let _yaRenderizado = false;
     // true once real project cards have been shown — prevents null/empty WebSocket from wiping them
     let _hadGoodData = false;
+    // Firma del último render para evitar re-renders con la misma data (causa el flash)
+    let _lastRenderSig = '';
+    function _dataSig(dataObj) {
+        if (!dataObj || typeof dataObj !== 'object') return '';
+        return Object.entries(dataObj)
+            .filter(([, p]) => p && typeof p === 'object' && typeof p.nombre === 'string')
+            .map(([pid, p]) => `${pid}:${p.nombre}:${p.estado||''}:${p.img||''}`)
+            .sort().join('|');
+    }
 
     // ── VÍA 0: caché local de metadatos — muestra proyectos INMEDIATAMENTE sin red ni auth ──
     const metaCache = _loadMetaCache();
@@ -308,6 +318,10 @@
 
     function _renderData(dataObj) {
         clearTimeout(window._proyectosTimeout);
+        // Evitar re-render cuando la data es idéntica al último render
+        const sig = _dataSig(dataObj);
+        if (sig && sig === _lastRenderSig) return;
+        _lastRenderSig = sig;
         try {
             grid.innerHTML = '';
             globalProjectsArr = [];
