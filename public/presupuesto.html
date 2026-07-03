@@ -1738,10 +1738,16 @@ Cuando el usuario describe MÚLTIPLES PIEZAS con dimensiones, calculá CADA grup
 NUNCA uses solo el ancho de una pieza cuando hay varias — multiplicá siempre por la cantidad de cada grupo.
 Mostrá el desglose en feat: "- Área: (2×11×1.2) + (2×9×1.2) = 48 m2 + 8% merma tensado = 51.8 m2"
 
-⚠️ UNIDADES EN IMÁGENES DE SKETCHUP/CAD:
-Si el usuario especifica la unidad en su prompt (ej: "medidas en cm", "está en metros") → usá ESA.
-Si no especifica → inferí por sentido común: un arco transitable mide 2-5 m de alto. Si el valor directo no es coherente, probá ÷100 (cm) o ÷1000 (mm).
-Indicá siempre en feat qué unidad interpretaste: "- Imagen leída en cm: 409.7 cm = 4.10 m de alto"`;
+⚠️ IMÁGENES CAD/SKETCHUP — LECTURA DE DIMENSIONES:
+Las etiquetas numéricas en las imágenes CAD adjuntas son la fuente de verdad. Léélas con atención — pueden ser cotas en cm o metros.
+Si el usuario especifica la unidad (ej: "medidas en cm") → convertí a metros antes de calcular.
+Si no especifica → inferí por sentido: alturas típicas de muros son 2.4–3.2 m, locales 3–6 m. Si el valor directo no es coherente, probá ÷100.
+CALCULA CADA CARA Y SEGMENTO DE MURO POR SEPARADO. No sumes solo un lado si hay múltiples tramos.
+En feat: describí las dimensiones finales en metros de forma natural. Ej: "- Muro doble cara: 5.60m × 2.40m = 13.44 m²".
+NUNCA escribas en feat "dimensiones leídas de imagen" ni "imagen leída en cm" — eso no es información para el cliente.
+
+⚠️ COTIZACIONES DE PROVEEDOR ADJUNTAS:
+Si hay imágenes de cotizaciones o listas de precios adjuntas, extraé los precios exactos de ahí y usalos en el APU para esos materiales específicos (tienen prioridad sobre el catálogo Rubik).`;
 
 
             // Obtener nombre del ítem desde el input oculto
@@ -1793,15 +1799,38 @@ Devolvé exactamente este formato (sin texto adicional):
                 if (data[idx].ctx_mat) _regenFullPrompt += `\nMateriales: ${data[idx].ctx_mat}`;
                 if (data[idx].ctx_est) _regenFullPrompt += `\nEstructura/Acabado: ${data[idx].ctx_est}`;
             }
-            if (data[idx].ctx_img) _regenFullPrompt += '\n\nFOTO DE REFERENCIA ADJUNTA: ver imagen del ítem para identificar materiales, geometría y acabado.';
 
-            const _regenParts = [{ text: _regenFullPrompt }];
-            if (data[idx].ctx_img && data[idx].ctx_img.startsWith('data:')) {
-                try {
-                    const _ctxComp = await _compressB64(data[idx].ctx_img, 512, 0.45);
-                    _regenParts.push({ inlineData: { data: _ctxComp.split(',')[1], mimeType: 'image/jpeg' } });
-                } catch(_ce) {}
+            // Collect images to send: fotos del ítem (planos CAD, etc.) + ctx_img (cotización, referencia)
+            const _regenImgParts = [];
+
+            // Fotos del ítem (guardadas desde CAD u otras fuentes) — hasta 3, más recientes primero
+            const _itemFotos = Array.isArray(data[idx].fotos) ? data[idx].fotos : (data[idx].fotos ? Object.values(data[idx].fotos) : []);
+            const _fotosToSend = _itemFotos.slice(-3);
+            if (_fotosToSend.length > 0) {
+                _regenFullPrompt += `\n\nPLANOS/FOTOS DEL ÍTEM ADJUNTAS (${_fotosToSend.length} imagen${_fotosToSend.length>1?'s':''}): planos CAD exportados o fotos de referencia vinculadas a este ítem. Leé las cotas numéricas de las imágenes para calcular dimensiones y m².`;
+                for (const _f of _fotosToSend) {
+                    const _fUrl = _f.url || _f;
+                    if (_fUrl && _fUrl.startsWith('data:')) {
+                        try {
+                            const _fComp = await _compressB64(_fUrl, 600, 0.5);
+                            _regenImgParts.push({ inlineData: { data: _fComp.split(',')[1], mimeType: 'image/jpeg' } });
+                        } catch(_fe) {}
+                    }
+                }
             }
+
+            // Imagen de contexto (cotización de proveedor, foto adicional)
+            if (data[idx].ctx_img) {
+                _regenFullPrompt += '\n\nIMAGEN DE CONTEXTO ADJUNTA: puede ser una cotización de proveedor con precios (extraé y usá esos precios en el APU) o foto de referencia del ítem.';
+                if (data[idx].ctx_img.startsWith('data:')) {
+                    try {
+                        const _ctxComp = await _compressB64(data[idx].ctx_img, 512, 0.45);
+                        _regenImgParts.push({ inlineData: { data: _ctxComp.split(',')[1], mimeType: 'image/jpeg' } });
+                    } catch(_ce) {}
+                }
+            }
+
+            const _regenParts = [{ text: _regenFullPrompt }, ..._regenImgParts];
 
             const token = firebase.auth().currentUser ? await firebase.auth().currentUser.getIdToken() : null;
             const headers = { 'Content-Type': 'application/json' };
