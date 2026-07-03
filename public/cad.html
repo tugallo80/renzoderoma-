@@ -1124,7 +1124,7 @@ function drawShape(sh) {
   if (sh.fillColor && sh.fillColor !== 'none') { ctx.fillStyle = sh.fillColor; ctx.fill(); }
   ctx.stroke();
   if (sh.sectionsH > 0 || sh.sectionsV > 0 || sh.sectionsAngular > 0) drawSections(sh);
-  if (sh.extruded && sh.extrudeH > 0) drawExtrusion(sh);
+  if (sh.extruded && sh.extrudeH > 0) { drawExtrusion(sh); drawExtrudedSections(sh); }
   if (sh.autoDim) drawAutoDim(sh);
   ctx.restore();
 }
@@ -1208,72 +1208,138 @@ function drawExtrusion(sh) {
   ctx.restore();
 }
 
+// Draw section dividers on the visible vertical faces of an extruded shape
+function drawExtrudedSections(sh) {
+  if (!sh.extruded || sh.extrudeH <= 0) return;
+  if (sh.sectionsV <= 0 && sh.sectionsH <= 0) return;
+  if (sh.type !== 'rect') return;
+  var eh = sh.extrudeH;
+  ctx.save();
+  ctx.strokeStyle = sh.strokeColor || '#000';
+  ctx.lineWidth = Math.max(0.8, (sh.strokeWidth||2) * 0.5);
+  ctx.setLineDash([5, 4]);
+  ctx.globalAlpha = 0.65;
+
+  // Vertical column dividers → vertical lines on front face (y=sh.y) and right face (x=sh.x+sh.w)
+  if (sh.sectionsV > 0) {
+    var colW = sh.w / (sh.sectionsV + 1);
+    for (var j = 1; j <= sh.sectionsV; j++) {
+      var xDiv = sh.x + colW * j;
+      // Front face edge (y = sh.y)
+      var b1 = worldToScreen(xDiv, sh.y, 0), t1 = worldToScreen(xDiv, sh.y, eh);
+      ctx.beginPath(); ctx.moveTo(b1.x,b1.y); ctx.lineTo(t1.x,t1.y); ctx.stroke();
+      // Back face edge (y = sh.y+sh.h)
+      var b2 = worldToScreen(xDiv, sh.y+sh.h, 0), t2 = worldToScreen(xDiv, sh.y+sh.h, eh);
+      ctx.beginPath(); ctx.moveTo(b2.x,b2.y); ctx.lineTo(t2.x,t2.y); ctx.stroke();
+    }
+  }
+
+  // Horizontal row dividers on the base → horizontal bands on the vertical faces
+  // Interpreted as height-divisions: dividers at z = eh * i/(sectionsH+1)
+  if (sh.sectionsH > 0) {
+    for (var i = 1; i <= sh.sectionsH; i++) {
+      var zDiv = eh * i / (sh.sectionsH + 1);
+      // Front face (y = sh.y): horizontal line at height zDiv
+      var fL = worldToScreen(sh.x,       sh.y, zDiv);
+      var fR = worldToScreen(sh.x+sh.w,  sh.y, zDiv);
+      ctx.beginPath(); ctx.moveTo(fL.x,fL.y); ctx.lineTo(fR.x,fR.y); ctx.stroke();
+      // Right face (x = sh.x+sh.w): horizontal line at height zDiv
+      var rF = worldToScreen(sh.x+sh.w, sh.y,       zDiv);
+      var rB = worldToScreen(sh.x+sh.w, sh.y+sh.h,  zDiv);
+      ctx.beginPath(); ctx.moveTo(rF.x,rF.y); ctx.lineTo(rB.x,rB.y); ctx.stroke();
+    }
+  }
+
+  ctx.setLineDash([]);
+  ctx.restore();
+}
+
 function drawAutoDim(sh) {
   var bb = getShapeBBox(sh); if (!bb) return;
-  var off = 28;
   ctx.save();
   ctx.strokeStyle = '#007aff'; ctx.fillStyle = '#007aff';
   ctx.lineWidth = 1; ctx.font = '11px -apple-system,sans-serif';
   function fmtW(w) { return state.unit==='cm' ? (w/10).toFixed(1)+'cm' : (w/1000).toFixed(3)+'m'; }
+  function dimTick(x1,y1,x2,y2){ ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke(); }
 
-  var totalW = bb.maxX-bb.minX, totalH = bb.maxY-bb.minY;
+  var totalW = bb.maxX - bb.minX, totalH = bb.maxY - bb.minY;
 
-  // ── Overall width (below) ──
-  var p1s = worldToScreen(bb.minX,bb.minY), p2s = worldToScreen(bb.maxX,bb.minY);
-  var dimYBase = Math.max(worldToScreen(bb.minX,bb.maxY).y, worldToScreen(bb.maxX,bb.maxY).y) + off;
-  ctx.setLineDash([3,3]);
-  ctx.beginPath(); ctx.moveTo(p1s.x,dimYBase); ctx.lineTo(p2s.x,dimYBase); ctx.stroke();
-  ctx.setLineDash([]);
-  ctx.textAlign='center'; ctx.textBaseline='top';
-  ctx.fillText(fmtW(totalW), (p1s.x+p2s.x)/2, dimYBase+2);
+  // Screen coords of the four bottom/top edges
+  // worldToScreen negates Y, so bb.minY → largest screen Y = visual bottom of figure
+  var sL0 = worldToScreen(bb.minX, bb.minY);  // bottom-left of figure in screen
+  var sR0 = worldToScreen(bb.maxX, bb.minY);  // bottom-right
+  var sL1 = worldToScreen(bb.minX, bb.maxY);  // top-left
+  var sR1 = worldToScreen(bb.maxX, bb.maxY);  // top-right
 
-  // ── Column widths (below overall, one label per column) ──
+  // Visual bottom and right edges in screen space
+  var figBottom = Math.max(sL0.y, sR0.y);     // largest screen-Y = bottom
+  var figRight  = Math.max(sR0.x, sR1.x);     // largest screen-X = right
+
+  var SEC_OFF = 22;   // section dim lines this far outside the figure
+  var GEN_OFF = 54;   // overall (general) dim lines further out
+
+  // ════ HORIZONTAL (width axis, drawn below figure) ════
+
+  // 1. Section column widths (just outside bottom)
   if (sh.sectionsV > 0) {
-    var colW = totalW/(sh.sectionsV+1);
-    var secLineY = dimYBase+18;
+    var colW = totalW / (sh.sectionsV + 1);
+    var secY = figBottom + SEC_OFF;
     ctx.font = '10px -apple-system,sans-serif';
-    for (var j=0; j<=sh.sectionsV; j++) {
-      var cxL = bb.minX + colW*j, cxR = cxL + colW;
-      var csL = worldToScreen(cxL,bb.maxY), csR = worldToScreen(cxR,bb.maxY);
+    for (var j = 0; j <= sh.sectionsV; j++) {
+      var cxL = bb.minX + colW * j, cxR = cxL + colW;
+      var scL = worldToScreen(cxL, bb.minY), scR = worldToScreen(cxR, bb.minY);
       ctx.setLineDash([2,2]);
-      ctx.beginPath(); ctx.moveTo(csL.x,secLineY-2); ctx.lineTo(csR.x,secLineY-2); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(scL.x, secY); ctx.lineTo(scR.x, secY); ctx.stroke();
       ctx.setLineDash([]);
-      // tick marks at edges
-      ctx.beginPath(); ctx.moveTo(csL.x,secLineY-5); ctx.lineTo(csL.x,secLineY+1); ctx.stroke();
-      ctx.beginPath(); ctx.moveTo(csR.x,secLineY-5); ctx.lineTo(csR.x,secLineY+1); ctx.stroke();
+      dimTick(scL.x, secY-4, scL.x, secY+4);
+      dimTick(scR.x, secY-4, scR.x, secY+4);
       ctx.textAlign='center'; ctx.textBaseline='top';
-      ctx.fillText(fmtW(colW), (csL.x+csR.x)/2, secLineY+2);
+      ctx.fillText(fmtW(colW), (scL.x+scR.x)/2, secY+5);
     }
     ctx.font = '11px -apple-system,sans-serif';
   }
 
-  // ── Overall height (right) ──
-  var p3s = worldToScreen(bb.maxX,bb.minY), p4s = worldToScreen(bb.maxX,bb.maxY);
-  var dimXBase = Math.max(p3s.x,p4s.x) + off;
+  // 2. Overall width (further below)
+  var genY = figBottom + GEN_OFF;
   ctx.setLineDash([3,3]);
-  ctx.beginPath(); ctx.moveTo(dimXBase,p3s.y); ctx.lineTo(dimXBase,p4s.y); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(sL0.x, genY); ctx.lineTo(sR0.x, genY); ctx.stroke();
   ctx.setLineDash([]);
-  ctx.textAlign='left'; ctx.textBaseline='middle';
-  ctx.fillText(fmtW(totalH), dimXBase+2, (p3s.y+p4s.y)/2);
+  dimTick(sL0.x, genY-5, sL0.x, genY+5);
+  dimTick(sR0.x, genY-5, sR0.x, genY+5);
+  ctx.textAlign='center'; ctx.textBaseline='top';
+  ctx.fillText(fmtW(totalW), (sL0.x+sR0.x)/2, genY+6);
 
-  // ── Row heights (right of overall, one label per row) ──
+  // ════ VERTICAL (height axis, drawn to the right of figure) ════
+
+  // 3. Section row heights (just outside right edge)
   if (sh.sectionsH > 0) {
-    var rowH = totalH/(sh.sectionsH+1);
-    var secLineX = dimXBase+48;
+    var rowH = totalH / (sh.sectionsH + 1);
+    var secX = figRight + SEC_OFF;
     ctx.font = '10px -apple-system,sans-serif';
-    for (var i=0; i<=sh.sectionsH; i++) {
-      var ryT = bb.minY + rowH*i, ryB = ryT + rowH;
-      var rsT = worldToScreen(bb.maxX,ryT), rsB = worldToScreen(bb.maxX,ryB);
+    for (var i = 0; i <= sh.sectionsH; i++) {
+      var ryB = bb.minY + rowH * i, ryT = ryB + rowH;  // minY=visual-bottom, grows upward
+      var srB = worldToScreen(bb.maxX, ryB), srT = worldToScreen(bb.maxX, ryT);
+      // srB.y > srT.y because lower world Y → larger screen Y
       ctx.setLineDash([2,2]);
-      ctx.beginPath(); ctx.moveTo(secLineX-2,rsT.y); ctx.lineTo(secLineX-2,rsB.y); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(secX, srB.y); ctx.lineTo(secX, srT.y); ctx.stroke();
       ctx.setLineDash([]);
-      ctx.beginPath(); ctx.moveTo(secLineX-5,rsT.y); ctx.lineTo(secLineX+1,rsT.y); ctx.stroke();
-      ctx.beginPath(); ctx.moveTo(secLineX-5,rsB.y); ctx.lineTo(secLineX+1,rsB.y); ctx.stroke();
+      dimTick(secX-4, srB.y, secX+4, srB.y);
+      dimTick(secX-4, srT.y, secX+4, srT.y);
       ctx.textAlign='left'; ctx.textBaseline='middle';
-      ctx.fillText(fmtW(rowH), secLineX+2, (rsT.y+rsB.y)/2);
+      ctx.fillText(fmtW(rowH), secX+5, (srB.y+srT.y)/2);
     }
     ctx.font = '11px -apple-system,sans-serif';
   }
+
+  // 4. Overall height (further right)
+  var genX = figRight + GEN_OFF;
+  ctx.setLineDash([3,3]);
+  ctx.beginPath(); ctx.moveTo(genX, sL0.y); ctx.lineTo(genX, sL1.y); ctx.stroke();
+  ctx.setLineDash([]);
+  dimTick(genX-5, sL0.y, genX+5, sL0.y);
+  dimTick(genX-5, sL1.y, genX+5, sL1.y);
+  ctx.textAlign='left'; ctx.textBaseline='middle';
+  ctx.fillText(fmtW(totalH), genX+6, (sL0.y+sL1.y)/2);
 
   ctx.restore();
 }
@@ -2190,10 +2256,24 @@ function _drawCleanCanvas() {
 function saveAsImageClean() {
   document.getElementById('save-popover').classList.add('hidden');
   var dataUrl = _drawCleanCanvas();
-  var a = document.createElement('a');
-  a.href = dataUrl; a.download = 'rubik-cad.png';
-  document.body.appendChild(a); a.click(); document.body.removeChild(a);
-  showToast('Imagen guardada ✓');
+  // Lightbox: mobile users long-press the image → "Save to Photos"
+  var overlay = document.createElement('div');
+  overlay.style.cssText = 'position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,0.93);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:16px;box-sizing:border-box;';
+  var img = document.createElement('img');
+  img.src = dataUrl;
+  img.style.cssText = 'max-width:94vw;max-height:74vh;object-fit:contain;border-radius:8px;box-shadow:0 4px 24px rgba(0,0,0,0.6);';
+  var hint = document.createElement('div');
+  hint.style.cssText = 'color:#fff;font-size:13px;opacity:0.8;text-align:center;';
+  hint.textContent = 'Mantén presionada la imagen → Guardar en fotos';
+  var closeBtn = document.createElement('button');
+  closeBtn.style.cssText = 'position:absolute;top:14px;right:14px;background:rgba(255,255,255,0.15);color:#fff;border:none;border-radius:50%;width:36px;height:36px;font-size:22px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;';
+  closeBtn.textContent = '×';
+  closeBtn.onclick = function() { document.body.removeChild(overlay); };
+  overlay.appendChild(closeBtn);
+  overlay.appendChild(img);
+  overlay.appendChild(hint);
+  overlay.onclick = function(e) { if (e.target===overlay) document.body.removeChild(overlay); };
+  document.body.appendChild(overlay);
 }
 
 function saveToProduccion() {
