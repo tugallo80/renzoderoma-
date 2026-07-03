@@ -406,16 +406,13 @@ body.dark-mode #canvas-container { background: #1a1a1a; }
 
 /* POPOVER */
 .popover {
-  position: absolute;
-  top: 100%;
-  right: 0;
-  margin-top: 6px;
+  position: fixed;
   background: var(--card);
   border: 1px solid var(--border);
   border-radius: 12px;
-  box-shadow: 0 4px 20px rgba(0,0,0,0.15);
-  z-index: 300;
-  min-width: 180px;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.2);
+  z-index: 10000;
+  min-width: 200px;
   overflow: hidden;
 }
 .popover.hidden { display: none; }
@@ -491,7 +488,12 @@ input[type=number].stroke-inp {
   gap: 2px;
   padding: 4px;
   z-index: 120;
+  max-width: calc(100vw - 16px);
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
 }
+#shape-actions::-webkit-scrollbar { display: none; }
 #shape-actions button {
   padding: 6px 10px;
   border-radius: 6px;
@@ -811,7 +813,16 @@ function worldToScreen(wx, wy, wz) {
 }
 
 function screenToWorld(sx, sy) {
-  return { x: (sx - state.origin.x) / state.scale, y: (state.origin.y - sy) / state.scale };
+  var o = state.origin, sc = state.scale;
+  if (state.axo) {
+    var sin30 = 0.5, cos30 = Math.sqrt(3) / 2;
+    var wy = (o.y - sy) / (sin30 * 0.5 * sc);
+    var wx = (sx - o.x) / sc - wy * cos30 * 0.5;
+    return { x: wx, y: wy };
+  }
+  if (state.view === 'frontal') return { x: (sx - o.x) / sc, y: 0 };
+  if (state.view === 'lateral') return { x: 0, y: (sx - o.x) / sc };
+  return { x: (sx - o.x) / sc, y: (o.y - sy) / sc };
 }
 
 // ============================================================
@@ -1034,14 +1045,12 @@ function buildPath(sh) {
       break;
     }
     case 'polygon-sym': {
-      var c3 = worldToScreen(sh.cx, sh.cy);
-      var r = sh.radius * state.scale;
       var sides = sh.sides || 6;
       var rot = (sh.rotation || 0) * Math.PI / 180;
       for (var i = 0; i <= sides; i++) {
         var ang = 2*Math.PI*i/sides + rot;
-        var px = c3.x + r*Math.cos(ang), py = c3.y + r*Math.sin(ang);
-        i===0 ? ctx.moveTo(px,py) : ctx.lineTo(px,py);
+        var vp = worldToScreen(sh.cx + sh.radius*Math.cos(ang), sh.cy + sh.radius*Math.sin(ang));
+        i===0 ? ctx.moveTo(vp.x,vp.y) : ctx.lineTo(vp.x,vp.y);
       }
       ctx.closePath();
       break;
@@ -2229,11 +2238,18 @@ function setStrokeColor(val) { state.strokeColor=val; }
 //  SAVE POPOVER
 // ============================================================
 function toggleSavePopover() {
-  document.getElementById('save-popover').classList.toggle('hidden');
+  var pop = document.getElementById('save-popover');
+  if (!pop.classList.contains('hidden')) { pop.classList.add('hidden'); return; }
+  var btn = document.getElementById('save-btn');
+  var r = btn.getBoundingClientRect();
+  pop.style.top  = (r.bottom + 4) + 'px';
+  pop.style.right = (window.innerWidth - r.right) + 'px';
+  pop.classList.remove('hidden');
 }
 document.addEventListener('click', function(e) {
-  var wrap=document.querySelector('.save-wrap');
-  if (wrap&&!wrap.contains(e.target)) document.getElementById('save-popover').classList.add('hidden');
+  var pop = document.getElementById('save-popover');
+  var btn = document.getElementById('save-btn');
+  if (btn && !btn.contains(e.target) && pop && !pop.contains(e.target)) pop.classList.add('hidden');
 });
 
 function _drawCleanCanvas() {
