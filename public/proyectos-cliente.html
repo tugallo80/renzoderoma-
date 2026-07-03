@@ -151,6 +151,7 @@
     document.getElementById('h-client-name').innerText = cname || '';
 
     let _isConnected = false;
+    let _offlineTimer = null;
     try {
         db.ref('.info/connected').on('value', snap => {
             _isConnected = snap.val() === true;
@@ -163,6 +164,17 @@
                 document.body.appendChild(badge);
             }
             badge.style.display = _isConnected ? 'none' : 'block';
+            // Si se detecta offline y no hay datos cargados aún, mostrar error en 3s
+            if (!_isConnected) {
+                clearTimeout(_offlineTimer);
+                _offlineTimer = setTimeout(() => {
+                    if (typeof _yaRenderizado !== 'undefined' && !_yaRenderizado) {
+                        _mostrarError();
+                    }
+                }, 3000);
+            } else {
+                clearTimeout(_offlineTimer);
+            }
         });
     } catch(e) { console.warn('[proyectos] connected init:', e); }
 
@@ -476,7 +488,7 @@
     // ── Timeout 20s (conexión lenta): si ninguna vía respondió, mostrar reintento ──
     window._proyectosTimeout = setTimeout(() => {
         if (!_yaRenderizado) _mostrarError();
-    }, 20000);
+    }, 8000);
 
     } // fin _cargarProyectos
 
