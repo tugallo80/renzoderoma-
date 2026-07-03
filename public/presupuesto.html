@@ -410,6 +410,15 @@
     </div>
 
     <input type="file" id="file-up" style="display:none" accept="image/*" onchange="processPhotoUpload(this)">
+
+    <!-- Lightbox visor de imagen -->
+    <div id="mod-lightbox" style="display:none; position:fixed; inset:0; z-index:99999; background:rgba(0,0,0,0.92); flex-direction:column; align-items:center; justify-content:center;">
+        <button onclick="document.getElementById('mod-lightbox').style.display='none'" style="position:absolute; top:16px; right:16px; background:rgba(255,255,255,0.15); border:none; color:#fff; border-radius:50%; width:40px; height:40px; font-size:22px; cursor:pointer; line-height:1;">×</button>
+        <img id="lightbox-img" src="" style="max-width:95vw; max-height:80vh; object-fit:contain; border-radius:8px;">
+        <button id="lightbox-save-btn" onclick="guardarImagenGaleria()" style="margin-top:18px; background:#30d158; color:#fff; border:none; border-radius:12px; padding:12px 28px; font-size:15px; font-weight:800; cursor:pointer; display:flex; align-items:center; gap:8px;">
+            <i class="ph-bold ph-download-simple"></i> Guardar en Galería
+        </button>
+    </div>
     <img loading="lazy" decoding="async" src="logo.jpg" id="logo-hidden" style="display:none;" crossorigin="anonymous">
 
 <script>
@@ -442,10 +451,57 @@
     document.getElementById('h-cli').innerText = localStorage.getItem('rubik_client_name') || "CLIENTE";
     document.getElementById('h-pro').innerText = localStorage.getItem('rubik_current_pname') || "PROYECTO";
 
+    // ── Caché localStorage del presupuesto ──────────────────────────
+    const _PRES_CACHE_KEY = `rubik_pres_${cid}_${pid}`;
+    const _BD_CACHE_KEY   = 'rubik_bd_cache_v1';
+
+    function _guardarPresCache(d) {
+        try { const s = JSON.stringify(d); if (s.length < 600000) localStorage.setItem(_PRES_CACHE_KEY, s); } catch(e) {}
+    }
+    function _cargarPresCache() {
+        try { const s = localStorage.getItem(_PRES_CACHE_KEY); return s ? JSON.parse(s) : null; } catch(e) { return null; } }
+
+    function _aplicarDatos(d) {
+        data = d.items || [];
+        data.forEach(item => {
+            if (item && item.apu) {
+                const norm = ApuUtils.normalizeApu(item.apu, item);
+                item.apu.mat = norm.mat; item.apu.mo = norm.mo;
+                item.apu.eq = norm.eq;  item.apu.sub = norm.sub;
+                if (norm.util) item.apu.util = norm.util;
+                if (norm.ind)  item.apu.ind  = norm.ind;
+            }
+        });
+        if (d.fecha) document.getElementById('h-date').value = d.fecha;
+        if (d.cond) {
+            document.getElementById('c-pago').value = d.cond.pago || '';
+            document.getElementById('c-validez').value = d.cond.validez || '';
+            document.getElementById('sw-mont').checked = d.cond.montaje || false;
+            document.getElementById('sw-desm').checked = d.cond.desmontaje || false;
+        }
+        document.getElementById('sw-imp').checked = d.impuestos || false;
+        document.getElementById('t-desc-pct').value = d.descuento_pct || 0;
+        document.getElementById('t-desc-val').value = d.descuento || 0;
+        render();
+    }
+
+    // Mostrar caché inmediatamente si existe
+    (function _mostrarCacheInmediato() {
+        const c = _cargarPresCache();
+        if (c) {
+            _aplicarDatos(c);
+            document.getElementById('global-loader').style.display = 'none';
+        }
+    })();
+
     // ── Esperar auth antes de leer Firebase ──────────────────────────
     (function arrancarCarga() {
         var auth = firebase.auth();
         if (auth.currentUser) { cargarPresupuesto(); return; }
+        if (window.rubikAuthReady) {
+            window.rubikAuthReady.then(function() { cargarPresupuesto(); }).catch(function() {});
+            return;
+        }
         var unsub = auth.onAuthStateChanged(function(user) {
             unsub();
             if (user) { cargarPresupuesto(); }
@@ -454,8 +510,28 @@
     })();
 
     function cargarPresupuesto() {
-    // PERFORMANCE FIX: cargamos materiales, MO y otros en paralelo (liviano ~55KB total)
-    // Items APU (7.6MB) se carga de forma lazy solo cuando el usuario abre el modal de APU
+    // Cargar base_datos desde caché si existe, y actualizar en background
+    const _bdCached = (() => { try { const s = localStorage.getItem(_BD_CACHE_KEY); return s ? JSON.parse(s) : null; } catch(e) { return null; } })();
+
+    function _poblarDropdowns(mats, mo, otros, unds, pers) {
+        dbMats = mats || {}; dbMo = mo || {}; dbOtros = otros || {};
+        const dlMat = document.getElementById('dl-materiales'); dlMat.innerHTML = '';
+        Object.values(dbMats).forEach(m => { const opt = document.createElement('option'); opt.value = m.n || m.desc; dlMat.appendChild(opt); });
+        const dlCargos = document.getElementById('dl-cargos'); dlCargos.innerHTML = '';
+        Object.values(dbMo).forEach(m => { const opt = document.createElement('option'); opt.value = m.desc || m.n; dlCargos.appendChild(opt); });
+        if (pers) Object.values(pers).forEach(p => { if(p.especialidad) p.especialidad.split(',').forEach(esp => { let t=esp.trim().toUpperCase(); if(t){const opt=document.createElement('option');opt.value=t;dlCargos.appendChild(opt);} }); });
+        const dlOtros = document.getElementById('dl-otros'); dlOtros.innerHTML = '';
+        Object.values(dbOtros).forEach(m => { const opt = document.createElement('option'); opt.value = m.desc || m.n; dlOtros.appendChild(opt); });
+        const dlUnds = document.getElementById('dl-unds');
+        dlUnds.innerHTML = '<option value="glb"><option value="pza"><option value="und"><option value="m2"><option value="ml"><option value="plancha"><option value="barra"><option value="kg"><option value="ltr"><option value="jornal"><option value="hr">';
+        if (unds) Object.values(unds).forEach(u => { const opt = document.createElement('option'); opt.value = u.nombre; dlUnds.appendChild(opt); });
+    }
+
+    if (_bdCached) {
+        _poblarDropdowns(_bdCached.mats, _bdCached.mo, _bdCached.otros, _bdCached.unds, _bdCached.pers);
+    }
+
+    // Siempre actualizar base_datos desde Firebase en background
     Promise.all([
         db.ref('base_datos/materiales').once('value'),
         db.ref('base_datos/mano_obra').once('value'),
@@ -463,19 +539,11 @@
         db.ref('base_datos/unidades').once('value'),
         db.ref('personal').once('value')
     ]).then(([matSnap, moSnap, eqSnap, undSnap, persSnap]) => {
-        dbMats = matSnap.val() || {};
-        dbMo   = moSnap.val()  || {};
-        dbOtros = eqSnap.val() || {};
-        const dlMat = document.getElementById('dl-materiales');
-        Object.values(dbMats).forEach(m => { const opt = document.createElement('option'); opt.value = m.n || m.desc; dlMat.appendChild(opt); });
-        const dlCargos = document.getElementById('dl-cargos');
-        Object.values(dbMo).forEach(m => { const opt = document.createElement('option'); opt.value = m.desc || m.n; dlCargos.appendChild(opt); });
-        if(persSnap.exists()) persSnap.forEach(c => { let p = c.val(); if(p.especialidad) { p.especialidad.split(',').forEach(esp => { let t = esp.trim().toUpperCase(); if(t) { const opt = document.createElement('option'); opt.value = t; dlCargos.appendChild(opt); } }); } });
-        const dlOtros = document.getElementById('dl-otros');
-        Object.values(dbOtros).forEach(m => { const opt = document.createElement('option'); opt.value = m.desc || m.n; dlOtros.appendChild(opt); });
-        const dlUnds = document.getElementById('dl-unds');
-        dlUnds.innerHTML = '<option value="glb"><option value="pza"><option value="und"><option value="m2"><option value="ml"><option value="plancha"><option value="barra"><option value="kg"><option value="ltr"><option value="jornal"><option value="hr">';
-        if(undSnap.exists()) undSnap.forEach(c => { const opt = document.createElement('option'); opt.value = c.val().nombre; dlUnds.appendChild(opt); });
+        const mats = matSnap.val() || {}, mo = moSnap.val() || {}, otros = eqSnap.val() || {};
+        const unds = {}; if(undSnap.exists()) undSnap.forEach(c => { unds[c.key] = c.val(); });
+        const pers = {}; if(persSnap.exists()) persSnap.forEach(c => { pers[c.key] = c.val(); });
+        _poblarDropdowns(mats, mo, otros, unds, pers);
+        try { localStorage.setItem(_BD_CACHE_KEY, JSON.stringify({ mats, mo, otros, unds, pers })); } catch(e) {}
     });
 
     // Items APU: lazy load, se carga solo cuando se abre el modal de nuevo ítem
@@ -512,28 +580,8 @@
     db.ref('proyectos/' + cid + '/' + pid + '/presupuesto').once('value').then(snap => {
         const d = snap.val();
         if(d) {
-            data = d.items || [];
-            // Normalizar APU al cargar desde Firebase usando función centralizada
-            data.forEach(item => {
-                if (item && item.apu) {
-                    const norm = ApuUtils.normalizeApu(item.apu, item);
-                    item.apu.mat = norm.mat;
-                    item.apu.mo  = norm.mo;
-                    item.apu.eq  = norm.eq;
-                    item.apu.sub = norm.sub;
-                    if (norm.util) item.apu.util = norm.util;
-                    if (norm.ind)  item.apu.ind  = norm.ind;
-                }
-            });
-            document.getElementById('h-date').value = d.fecha || new Date().toISOString().split('T')[0];
-            if(d.cond) {
-                document.getElementById('c-pago').value = d.cond.pago || ''; document.getElementById('c-validez').value = d.cond.validez || '';
-                document.getElementById('sw-mont').checked = d.cond.montaje || false; document.getElementById('sw-desm').checked = d.cond.desmontaje || false;
-            }
-            document.getElementById('sw-imp').checked = d.impuestos || false;
-            document.getElementById('t-desc-pct').value = d.descuento_pct || 0;
-            document.getElementById('t-desc-val').value = d.descuento || 0;
-            render();
+            _guardarPresCache(d);
+            _aplicarDatos(d);
 
             if(urlParams.get('retApu')) {
                 let apuI = parseInt(urlParams.get('retApu'));
@@ -971,6 +1019,37 @@
         saveDB(true); document.getElementById('mod-apu').style.display = 'none'; activeMod=null; 
     }
 
+    function abrirLightbox(src) {
+        document.getElementById('lightbox-img').src = src;
+        document.getElementById('mod-lightbox').style.display = 'flex';
+    }
+
+    window.guardarImagenGaleria = async function() {
+        const src = document.getElementById('lightbox-img').src;
+        const btn = document.getElementById('lightbox-save-btn');
+        const orig = btn.innerHTML;
+        try {
+            btn.innerHTML = '<i class="ph-bold ph-spinner-gap anim-spin"></i> Descargando...';
+            btn.disabled = true;
+            const resp = await fetch(src);
+            const blob = await resp.blob();
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'rubik-imagen-' + Date.now() + '.jpg';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            btn.innerHTML = '<i class="ph-bold ph-check"></i> Guardado';
+            setTimeout(() => { btn.innerHTML = orig; btn.disabled = false; }, 2000);
+        } catch(e) {
+            btn.innerHTML = orig;
+            btn.disabled = false;
+            alert('No se pudo descargar. Mantené presionada la imagen y elegí "Guardar imagen".');
+        }
+    };
+
     function openPhotoOpt(i) {
         targetIdx = i; const item = data[i]; const pList = document.getElementById('photo-preview-list'); pList.innerHTML = '';
         let imgs = [];
@@ -988,11 +1067,9 @@
                 delIcon.style.cssText = 'position:absolute; top:-5px; right:-5px; color:var(--red); font-size:20px; cursor:pointer; background:#fff; border-radius:50%; z-index:10;';
                 delIcon.addEventListener('click', function() { deletePhoto(i, im.del[0], im.del[1], im.del[2]); });
 
-                const anchor = document.createElement('a');
-                anchor.href = im.src;
-                anchor.target = '_blank';
-                anchor.rel = 'noopener noreferrer';
-                anchor.style.display = 'block';
+                const anchor = document.createElement('div');
+                anchor.style.cssText = 'display:block; cursor:zoom-in;';
+                anchor.addEventListener('click', (function(src){ return function(){ abrirLightbox(src); }; })(im.src));
 
                 const img = document.createElement('img');
                 img.loading = 'lazy';
