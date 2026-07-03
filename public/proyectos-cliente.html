@@ -276,6 +276,8 @@
         } catch(e) { return null; }
     }
 
+    let _lastRenderSig = ''; // declarado aquí (scope externo) para evitar TDZ con el reset interno
+
     function _cargarProyectos() {
     const grid = document.getElementById('project-grid');
 
@@ -310,8 +312,6 @@
     let _yaRenderizado = false;
     // true once real project cards have been shown — prevents null/empty WebSocket from wiping them
     let _hadGoodData = false;
-    // Firma del último render para evitar re-renders con la misma data (causa el flash)
-    let _lastRenderSig = '';
     function _dataSig(dataObj) {
         if (!dataObj || typeof dataObj !== 'object') return '';
         return Object.entries(dataObj)
