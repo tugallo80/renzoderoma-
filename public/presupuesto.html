@@ -410,6 +410,15 @@
     </div>
 
     <input type="file" id="file-up" style="display:none" accept="image/*" onchange="processPhotoUpload(this)">
+
+    <!-- Lightbox visor de imagen -->
+    <div id="mod-lightbox" style="display:none; position:fixed; inset:0; z-index:99999; background:rgba(0,0,0,0.92); flex-direction:column; align-items:center; justify-content:center;">
+        <button onclick="document.getElementById('mod-lightbox').style.display='none'" style="position:absolute; top:16px; right:16px; background:rgba(255,255,255,0.15); border:none; color:#fff; border-radius:50%; width:40px; height:40px; font-size:22px; cursor:pointer; line-height:1;">×</button>
+        <img id="lightbox-img" src="" style="max-width:95vw; max-height:80vh; object-fit:contain; border-radius:8px;">
+        <button id="lightbox-save-btn" onclick="guardarImagenGaleria()" style="margin-top:18px; background:#30d158; color:#fff; border:none; border-radius:12px; padding:12px 28px; font-size:15px; font-weight:800; cursor:pointer; display:flex; align-items:center; gap:8px;">
+            <i class="ph-bold ph-download-simple"></i> Guardar en Galería
+        </button>
+    </div>
     <img loading="lazy" decoding="async" src="logo.jpg" id="logo-hidden" style="display:none;" crossorigin="anonymous">
 
 <script>
@@ -971,6 +980,37 @@
         saveDB(true); document.getElementById('mod-apu').style.display = 'none'; activeMod=null; 
     }
 
+    function abrirLightbox(src) {
+        document.getElementById('lightbox-img').src = src;
+        document.getElementById('mod-lightbox').style.display = 'flex';
+    }
+
+    window.guardarImagenGaleria = async function() {
+        const src = document.getElementById('lightbox-img').src;
+        const btn = document.getElementById('lightbox-save-btn');
+        const orig = btn.innerHTML;
+        try {
+            btn.innerHTML = '<i class="ph-bold ph-spinner-gap anim-spin"></i> Descargando...';
+            btn.disabled = true;
+            const resp = await fetch(src);
+            const blob = await resp.blob();
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'rubik-imagen-' + Date.now() + '.jpg';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            btn.innerHTML = '<i class="ph-bold ph-check"></i> Guardado';
+            setTimeout(() => { btn.innerHTML = orig; btn.disabled = false; }, 2000);
+        } catch(e) {
+            btn.innerHTML = orig;
+            btn.disabled = false;
+            alert('No se pudo descargar. Mantené presionada la imagen y elegí "Guardar imagen".');
+        }
+    };
+
     function openPhotoOpt(i) {
         targetIdx = i; const item = data[i]; const pList = document.getElementById('photo-preview-list'); pList.innerHTML = '';
         let imgs = [];
@@ -988,11 +1028,9 @@
                 delIcon.style.cssText = 'position:absolute; top:-5px; right:-5px; color:var(--red); font-size:20px; cursor:pointer; background:#fff; border-radius:50%; z-index:10;';
                 delIcon.addEventListener('click', function() { deletePhoto(i, im.del[0], im.del[1], im.del[2]); });
 
-                const anchor = document.createElement('a');
-                anchor.href = im.src;
-                anchor.target = '_blank';
-                anchor.rel = 'noopener noreferrer';
-                anchor.style.display = 'block';
+                const anchor = document.createElement('div');
+                anchor.style.cssText = 'display:block; cursor:zoom-in;';
+                anchor.addEventListener('click', (function(src){ return function(){ abrirLightbox(src); }; })(im.src));
 
                 const img = document.createElement('img');
                 img.loading = 'lazy';
