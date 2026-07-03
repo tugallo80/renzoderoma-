@@ -566,14 +566,17 @@ input[type=number].stroke-inp {
       <i class="ph ph-floppy-disk"></i> Guardar
     </button>
     <div class="popover hidden" id="save-popover">
-      <div class="popover-item" onclick="saveAsImage()">
-        <i class="ph ph-image"></i> Guardar como imagen
-      </div>
       <div class="popover-item" onclick="saveToProject()">
-        <i class="ph ph-cloud-arrow-up"></i> Guardar en proyecto
+        <i class="ph ph-cloud-arrow-up"></i> Guardar como proyecto
+      </div>
+      <div class="popover-item" onclick="saveAsImageClean()">
+        <i class="ph ph-image"></i> Guardar como imagen en galería
+      </div>
+      <div class="popover-item" onclick="saveToProduccion()">
+        <i class="ph ph-package"></i> Guardar en producción
       </div>
       <div class="popover-item" onclick="exportDXF()">
-        <i class="ph ph-file-arrow-down"></i> Exportar DXF (Vectorworks)
+        <i class="ph ph-file-arrow-down"></i> Exportar DXF
       </div>
     </div>
   </div>
@@ -820,21 +823,88 @@ function snapToGrid(v) {
 }
 
 function snapPoint(wx, wy) {
-  var x = snapToGrid(wx), y = snapToGrid(wy);
-  var threshold = 15 / state.scale;
-  var layer = state.layers[state.activeLayerIdx];
-  if (!layer) return { x: x, y: y };
+  var gridSnap = { x: snapToGrid(wx), y: snapToGrid(wy) };
+  var threshold = 18 / state.scale;
+  var bestDist = threshold, bestSnap = null;
   for (var li = 0; li < state.layers.length; li++) {
     var lyr = state.layers[li];
+    if (!lyr.visible) continue;
     for (var si = 0; si < lyr.shapes.length; si++) {
-      var verts = getShapeVertices(lyr.shapes[si]);
+      var sh = lyr.shapes[si];
+      // 1. Vertex snap (highest priority — checked first, exits early if exact)
+      var verts = getShapeVertices(sh);
       for (var vi = 0; vi < verts.length; vi++) {
         var v = verts[vi];
-        if (Math.abs(v.x - wx) < threshold && Math.abs(v.y - wy) < threshold) return { x: v.x, y: v.y };
+        var dv = Math.sqrt((v.x-wx)*(v.x-wx)+(v.y-wy)*(v.y-wy));
+        if (dv < bestDist) { bestDist=dv; bestSnap={x:v.x,y:v.y}; }
+      }
+      // 2. Midpoints and nearest-point on segment
+      var segs = getShapeSegments(sh);
+      for (var ei = 0; ei < segs.length; ei++) {
+        var s = segs[ei];
+        var ax=s.x1,ay=s.y1,bx=s.x2,by=s.y2;
+        // midpoint snap
+        var mx=(ax+bx)*0.5, my=(ay+by)*0.5;
+        var dm=Math.sqrt((mx-wx)*(mx-wx)+(my-wy)*(my-wy));
+        if (dm < bestDist) { bestDist=dm; bestSnap={x:mx,y:my}; }
+        // nearest point on segment
+        var dx=bx-ax, dy=by-ay, lenSq=dx*dx+dy*dy;
+        if (lenSq > 0) {
+          var t=Math.max(0,Math.min(1,((wx-ax)*dx+(wy-ay)*dy)/lenSq));
+          var px=ax+t*dx, py=ay+t*dy;
+          var dp=Math.sqrt((px-wx)*(px-wx)+(py-wy)*(py-wy));
+          if (dp < bestDist) { bestDist=dp; bestSnap={x:px,y:py}; }
+        }
       }
     }
   }
-  return { x: x, y: y };
+  return bestSnap || gridSnap;
+}
+
+function getShapeSegments(sh) {
+  switch(sh.type) {
+    case 'rect': {
+      var segs = [
+        {x1:sh.x,y1:sh.y,        x2:sh.x+sh.w,y2:sh.y},
+        {x1:sh.x+sh.w,y1:sh.y,   x2:sh.x+sh.w,y2:sh.y+sh.h},
+        {x1:sh.x+sh.w,y1:sh.y+sh.h,x2:sh.x,   y2:sh.y+sh.h},
+        {x1:sh.x,y1:sh.y+sh.h,   x2:sh.x,y2:sh.y}
+      ];
+      // Section divider lines as snap segments
+      if (sh.sectionsV > 0) {
+        var cw = sh.w/(sh.sectionsV+1);
+        for (var j=1; j<=sh.sectionsV; j++) {
+          var cx = sh.x + cw*j;
+          segs.push({x1:cx,y1:sh.y,x2:cx,y2:sh.y+sh.h});
+        }
+      }
+      if (sh.sectionsH > 0) {
+        var rh = sh.h/(sh.sectionsH+1);
+        for (var i=1; i<=sh.sectionsH; i++) {
+          var ry = sh.y + rh*i;
+          segs.push({x1:sh.x,y1:ry,x2:sh.x+sh.w,y2:ry});
+        }
+      }
+      return segs;
+    }
+    case 'line': return [{x1:sh.x1,y1:sh.y1,x2:sh.x2,y2:sh.y2}];
+    case 'polygon-free': {
+      var pts=sh.points||[], pSegs=[];
+      for (var pi=0;pi<pts.length-1;pi++) pSegs.push({x1:pts[pi].x,y1:pts[pi].y,x2:pts[pi+1].x,y2:pts[pi+1].y});
+      if (pts.length>2) pSegs.push({x1:pts[pts.length-1].x,y1:pts[pts.length-1].y,x2:pts[0].x,y2:pts[0].y});
+      return pSegs;
+    }
+    case 'triangle': {
+      var tv=getTriangleVerts(sh); if(tv.length<3) return [];
+      return [{x1:tv[0].x,y1:tv[0].y,x2:tv[1].x,y2:tv[1].y},{x1:tv[1].x,y1:tv[1].y,x2:tv[2].x,y2:tv[2].y},{x1:tv[2].x,y1:tv[2].y,x2:tv[0].x,y2:tv[0].y}];
+    }
+    case 'polygon-sym': {
+      var pv=getShapeVertices(sh), psSegs=[];
+      for (var pk=0;pk<pv.length;pk++) { var pn=(pk+1)%pv.length; psSegs.push({x1:pv[pk].x,y1:pv[pk].y,x2:pv[pn].x,y2:pv[pn].y}); }
+      return psSegs;
+    }
+    default: return [];
+  }
 }
 
 function getShapeVertices(sh) {
@@ -1144,22 +1214,67 @@ function drawAutoDim(sh) {
   ctx.save();
   ctx.strokeStyle = '#007aff'; ctx.fillStyle = '#007aff';
   ctx.lineWidth = 1; ctx.font = '11px -apple-system,sans-serif';
-  var wW = bb.maxX-bb.minX;
-  var wD = state.unit==='cm' ? (wW/10).toFixed(1)+'cm' : (wW/1000).toFixed(3)+'m';
+  function fmtW(w) { return state.unit==='cm' ? (w/10).toFixed(1)+'cm' : (w/1000).toFixed(3)+'m'; }
+
+  var totalW = bb.maxX-bb.minX, totalH = bb.maxY-bb.minY;
+
+  // ── Overall width (below) ──
   var p1s = worldToScreen(bb.minX,bb.minY), p2s = worldToScreen(bb.maxX,bb.minY);
+  var dimYBase = Math.max(worldToScreen(bb.minX,bb.maxY).y, worldToScreen(bb.maxX,bb.maxY).y) + off;
   ctx.setLineDash([3,3]);
-  ctx.beginPath(); ctx.moveTo(p1s.x,p1s.y+off); ctx.lineTo(p2s.x,p2s.y+off); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(p1s.x,dimYBase); ctx.lineTo(p2s.x,dimYBase); ctx.stroke();
   ctx.setLineDash([]);
   ctx.textAlign='center'; ctx.textBaseline='top';
-  ctx.fillText(wD,(p1s.x+p2s.x)/2,Math.max(p1s.y,p2s.y)+off+2);
-  var hW = bb.maxY-bb.minY;
-  var hD = state.unit==='cm' ? (hW/10).toFixed(1)+'cm' : (hW/1000).toFixed(3)+'m';
+  ctx.fillText(fmtW(totalW), (p1s.x+p2s.x)/2, dimYBase+2);
+
+  // ── Column widths (below overall, one label per column) ──
+  if (sh.sectionsV > 0) {
+    var colW = totalW/(sh.sectionsV+1);
+    var secLineY = dimYBase+18;
+    ctx.font = '10px -apple-system,sans-serif';
+    for (var j=0; j<=sh.sectionsV; j++) {
+      var cxL = bb.minX + colW*j, cxR = cxL + colW;
+      var csL = worldToScreen(cxL,bb.maxY), csR = worldToScreen(cxR,bb.maxY);
+      ctx.setLineDash([2,2]);
+      ctx.beginPath(); ctx.moveTo(csL.x,secLineY-2); ctx.lineTo(csR.x,secLineY-2); ctx.stroke();
+      ctx.setLineDash([]);
+      // tick marks at edges
+      ctx.beginPath(); ctx.moveTo(csL.x,secLineY-5); ctx.lineTo(csL.x,secLineY+1); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(csR.x,secLineY-5); ctx.lineTo(csR.x,secLineY+1); ctx.stroke();
+      ctx.textAlign='center'; ctx.textBaseline='top';
+      ctx.fillText(fmtW(colW), (csL.x+csR.x)/2, secLineY+2);
+    }
+    ctx.font = '11px -apple-system,sans-serif';
+  }
+
+  // ── Overall height (right) ──
   var p3s = worldToScreen(bb.maxX,bb.minY), p4s = worldToScreen(bb.maxX,bb.maxY);
+  var dimXBase = Math.max(p3s.x,p4s.x) + off;
   ctx.setLineDash([3,3]);
-  ctx.beginPath(); ctx.moveTo(p3s.x+off,p3s.y); ctx.lineTo(p4s.x+off,p4s.y); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(dimXBase,p3s.y); ctx.lineTo(dimXBase,p4s.y); ctx.stroke();
   ctx.setLineDash([]);
   ctx.textAlign='left'; ctx.textBaseline='middle';
-  ctx.fillText(hD, p3s.x+off+2, (p3s.y+p4s.y)/2);
+  ctx.fillText(fmtW(totalH), dimXBase+2, (p3s.y+p4s.y)/2);
+
+  // ── Row heights (right of overall, one label per row) ──
+  if (sh.sectionsH > 0) {
+    var rowH = totalH/(sh.sectionsH+1);
+    var secLineX = dimXBase+48;
+    ctx.font = '10px -apple-system,sans-serif';
+    for (var i=0; i<=sh.sectionsH; i++) {
+      var ryT = bb.minY + rowH*i, ryB = ryT + rowH;
+      var rsT = worldToScreen(bb.maxX,ryT), rsB = worldToScreen(bb.maxX,ryB);
+      ctx.setLineDash([2,2]);
+      ctx.beginPath(); ctx.moveTo(secLineX-2,rsT.y); ctx.lineTo(secLineX-2,rsB.y); ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.beginPath(); ctx.moveTo(secLineX-5,rsT.y); ctx.lineTo(secLineX+1,rsT.y); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(secLineX-5,rsB.y); ctx.lineTo(secLineX+1,rsB.y); ctx.stroke();
+      ctx.textAlign='left'; ctx.textBaseline='middle';
+      ctx.fillText(fmtW(rowH), secLineX+2, (rsT.y+rsB.y)/2);
+    }
+    ctx.font = '11px -apple-system,sans-serif';
+  }
+
   ctx.restore();
 }
 
@@ -1222,6 +1337,12 @@ function drawInProgress() {
     ctx.strokeStyle = '#007aff';
     ctx.beginPath(); ctx.moveTo(dp1.x,dp1.y); ctx.lineTo(dp2.x,dp2.y); ctx.stroke();
   }
+  // Snap indicator: yellow circle at current snap point
+  ctx.setLineDash([]);
+  var snapScr = worldToScreen(cur.x, cur.y);
+  ctx.strokeStyle = '#ffcc00'; ctx.fillStyle = 'rgba(255,204,0,0.25)';
+  ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.arc(snapScr.x,snapScr.y,7,0,Math.PI*2); ctx.fill(); ctx.stroke();
   ctx.restore();
 }
 
@@ -2016,11 +2137,87 @@ document.addEventListener('click', function(e) {
   if (wrap&&!wrap.contains(e.target)) document.getElementById('save-popover').classList.add('hidden');
 });
 
-function saveAsImage() {
+function _drawCleanCanvas() {
+  var prevDark = state.darkMode, prevGrid = state.gridOn, prevSel = state.selectedId;
+  state.darkMode = false; state.gridOn = false; state.selectedId = null;
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  ctx.fillStyle = '#ffffff'; ctx.fillRect(0,0,canvas.width,canvas.height);
+  for (var _li=0; _li<state.layers.length; _li++) {
+    if (!state.layers[_li].visible) continue;
+    ctx.save();
+    ctx.globalAlpha = typeof state.layers[_li].opacity==='number' ? state.layers[_li].opacity : 1;
+    for (var _si=0; _si<state.layers[_li].shapes.length; _si++) drawShape(state.layers[_li].shapes[_si]);
+    ctx.restore();
+  }
+  var dataUrl = canvas.toDataURL('image/png');
+  state.darkMode = prevDark; state.gridOn = prevGrid; state.selectedId = prevSel; setDirty();
+  return dataUrl;
+}
+
+function saveAsImageClean() {
   document.getElementById('save-popover').classList.add('hidden');
-  var a=document.createElement('a');
-  a.download='rubik-cad.png'; a.href=canvas.toDataURL('image/png'); a.click();
-  showToast('Imagen descargada');
+  var dataUrl = _drawCleanCanvas();
+  var a = document.createElement('a');
+  a.href = dataUrl; a.download = 'rubik-cad.png';
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  showToast('Imagen guardada ✓');
+}
+
+function saveToProduccion() {
+  document.getElementById('save-popover').classList.add('hidden');
+  if (!fbDb||!CLIENT_ID||!PROJECT_ID) { showToast('Configura el proyecto primero'); return; }
+  fbDb.ref('proyectos/'+CLIENT_ID+'/'+PROJECT_ID+'/presupuesto/items').once('value').then(function(snap) {
+    if (!snap.exists()) { showToast('No hay ítems en el presupuesto'); return; }
+    var allItems = [];
+    snap.forEach(function(child) {
+      var it = child.val();
+      if (it && it.type !== 'chapter' && it.desc) allItems.push({key: child.key, desc: it.desc});
+    });
+    if (!allItems.length) { showToast('No hay ítems en el presupuesto'); return; }
+    var modal = document.createElement('div');
+    modal.style.cssText = 'position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.75);display:flex;align-items:center;justify-content:center;padding:16px;';
+    var box = document.createElement('div');
+    box.style.cssText = 'background:var(--card);border-radius:16px;padding:20px;width:100%;max-width:380px;max-height:75vh;overflow-y:auto;';
+    box.innerHTML = '<div style="font-weight:700;font-size:15px;margin-bottom:14px;color:var(--text);">Seleccionar ítem de producción</div>';
+    allItems.forEach(function(entry) {
+      var btn = document.createElement('button');
+      btn.style.cssText = 'display:block;width:100%;text-align:left;padding:10px 12px;margin-bottom:8px;background:var(--bg);border:1px solid var(--border);border-radius:10px;color:var(--text);font-size:13px;cursor:pointer;';
+      btn.textContent = entry.desc;
+      btn.onclick = function() { document.body.removeChild(modal); _saveCADToItem(entry.key, entry.desc); };
+      box.appendChild(btn);
+    });
+    var cancelBtn = document.createElement('button');
+    cancelBtn.style.cssText = 'display:block;width:100%;padding:10px;margin-top:4px;background:transparent;border:1px solid var(--border);border-radius:10px;color:var(--text-secondary,#888);font-size:14px;cursor:pointer;';
+    cancelBtn.textContent = 'Cancelar';
+    cancelBtn.onclick = function() { document.body.removeChild(modal); };
+    box.appendChild(cancelBtn);
+    modal.appendChild(box);
+    modal.onclick = function(e) { if (e.target===modal) document.body.removeChild(modal); };
+    document.body.appendChild(modal);
+  }).catch(function() { showToast('Error cargando presupuesto'); });
+}
+
+function _saveCADToItem(itemKey, itemDesc) {
+  var prevDark = state.darkMode, prevGrid = state.gridOn, prevSel = state.selectedId;
+  state.darkMode = false; state.gridOn = false; state.selectedId = null;
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  ctx.fillStyle = '#ffffff'; ctx.fillRect(0,0,canvas.width,canvas.height);
+  for (var _li=0; _li<state.layers.length; _li++) {
+    if (!state.layers[_li].visible) continue;
+    ctx.save();
+    ctx.globalAlpha = typeof state.layers[_li].opacity==='number' ? state.layers[_li].opacity : 1;
+    for (var _si=0; _si<state.layers[_li].shapes.length; _si++) drawShape(state.layers[_li].shapes[_si]);
+    ctx.restore();
+  }
+  var jpegUrl = canvas.toDataURL('image/jpeg', 0.8);
+  state.darkMode = prevDark; state.gridOn = prevGrid; state.selectedId = prevSel; setDirty();
+  fbDb.ref('proyectos/'+CLIENT_ID+'/'+PROJECT_ID+'/presupuesto/items/'+itemKey+'/fotos').once('value').then(function(fSnap) {
+    var fotos = [];
+    if (fSnap.exists()) fSnap.forEach(function(c){ fotos.push(c.val()); });
+    fotos.push({url: jpegUrl, name: 'CAD-'+(itemDesc||'plano')+'.jpg'});
+    return fbDb.ref('proyectos/'+CLIENT_ID+'/'+PROJECT_ID+'/presupuesto/items/'+itemKey+'/fotos').set(fotos);
+  }).then(function(){ showToast('Plano guardado en ítem ✓'); })
+    .catch(function(err){ console.error(err); showToast('Error al guardar'); });
 }
 
 function saveToProject() {
