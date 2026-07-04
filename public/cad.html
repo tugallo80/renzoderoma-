@@ -556,6 +556,9 @@ input[type=number].stroke-inp {
   </div>
   <button class="btn" id="axo-btn" onclick="toggleAxo()">Axo</button>
   <div class="bar-div"></div>
+  <button class="btn icon-only active" id="snap-btn" onclick="toggleSnap()" title="Imán / Snap">
+    <i class="ph ph-magnet"></i>
+  </button>
   <button class="btn icon-only" id="darkmode-btn" onclick="toggleDark()" title="Modo oscuro">
     <i class="ph ph-moon"></i>
   </button>
@@ -731,6 +734,7 @@ var state = {
   lastTouchDist: null,
   lastTouchMid: null,
   moveDragStart: null,
+  snapOn: true,
 };
 
 // ============================================================
@@ -833,8 +837,16 @@ function snapToGrid(v) {
   return Math.round(v / state.gridSize) * state.gridSize;
 }
 
+function toggleSnap() {
+  state.snapOn = !state.snapOn;
+  var btn = document.getElementById('snap-btn');
+  if (btn) btn.classList.toggle('active', state.snapOn);
+  showToast(state.snapOn ? 'Imán activado' : 'Imán desactivado');
+}
+
 function snapPoint(wx, wy) {
   var gridSnap = { x: snapToGrid(wx), y: snapToGrid(wy) };
+  if (!state.snapOn) return { x: wx, y: wy };
   var threshold = 18 / state.scale;
   var bestDist = threshold, bestSnap = null;
   for (var li = 0; li < state.layers.length; li++) {
@@ -1132,7 +1144,9 @@ function drawShape(sh) {
   buildPath(sh);
   if (sh.fillColor && sh.fillColor !== 'none') { ctx.fillStyle = sh.fillColor; ctx.fill(); }
   ctx.stroke();
-  if (sh.sectionsH > 0 || sh.sectionsV > 0 || sh.sectionsAngular > 0) drawSections(sh);
+  // Skip plan-view sections for extruded shapes in 3D views (drawExtrudedSections handles them)
+  var _is3D = sh.extruded && sh.extrudeH > 0 && (state.axo || state.view === 'frontal' || state.view === 'lateral');
+  if ((sh.sectionsH > 0 || sh.sectionsV > 0 || sh.sectionsAngular > 0) && !_is3D) drawSections(sh);
   if (sh.extruded && sh.extrudeH > 0) { drawExtrusion(sh); drawExtrudedSections(sh); }
   if (sh.autoDim) drawAutoDim(sh);
   ctx.restore();
@@ -1351,37 +1365,55 @@ function drawAutoDim(sh) {
   ctx.textAlign='center'; ctx.textBaseline='top';
   ctx.fillText(fmtW(totalW), (sL0.x+sR0.x)/2, genY+6);
 
-  // ════ VERTICAL (height axis, drawn to the right of figure) ════
+  // ════ DEPTH / Y AXIS (drawn to the right in plan, along world-Y diagonal in axo) ════
+  var isAxoDim = state.axo;
+  // In axo, offset along world X so the dim line is parallel to the right edge (world-Y direction)
+  var ySecWOff = isAxoDim ? (SEC_OFF / state.scale) : 0;
+  var yGenWOff = isAxoDim ? (GEN_OFF / state.scale) : 0;
 
-  // 3. Section row heights (just outside right edge)
+  // 3. Section row depths (just outside right edge)
   if (sh.sectionsH > 0) {
     var rowH = totalH / (sh.sectionsH + 1);
-    var secX = figRight + SEC_OFF;
     ctx.font = '10px -apple-system,sans-serif';
     for (var i = 0; i <= sh.sectionsH; i++) {
-      var ryB = bb.minY + rowH * i, ryT = ryB + rowH;  // minY=visual-bottom, grows upward
-      var srB = worldToScreen(bb.maxX, ryB), srT = worldToScreen(bb.maxX, ryT);
-      // srB.y > srT.y because lower world Y → larger screen Y
+      var ryB = bb.minY + rowH * i, ryT = ryB + rowH;
+      var srB, srT;
+      if (isAxoDim) {
+        srB = worldToScreen(bb.maxX + ySecWOff, ryB, 0);
+        srT = worldToScreen(bb.maxX + ySecWOff, ryT, 0);
+      } else {
+        var secX = figRight + SEC_OFF;
+        srB = { x: secX, y: worldToScreen(bb.maxX, ryB).y };
+        srT = { x: secX, y: worldToScreen(bb.maxX, ryT).y };
+      }
       ctx.setLineDash([2,2]);
-      ctx.beginPath(); ctx.moveTo(secX, srB.y); ctx.lineTo(secX, srT.y); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(srB.x, srB.y); ctx.lineTo(srT.x, srT.y); ctx.stroke();
       ctx.setLineDash([]);
-      dimTick(secX-4, srB.y, secX+4, srB.y);
-      dimTick(secX-4, srT.y, secX+4, srT.y);
+      dimTick(srB.x-4, srB.y, srB.x+4, srB.y);
+      dimTick(srT.x-4, srT.y, srT.x+4, srT.y);
       ctx.textAlign='left'; ctx.textBaseline='middle';
-      ctx.fillText(fmtW(rowH), secX+5, (srB.y+srT.y)/2);
+      ctx.fillText(fmtW(rowH), Math.max(srB.x,srT.x)+5, (srB.y+srT.y)/2);
     }
     ctx.font = '11px -apple-system,sans-serif';
   }
 
-  // 4. Overall height (further right)
-  var genX = figRight + GEN_OFF;
+  // 4. Overall depth (further right)
+  var genPtY1, genPtY2;
+  if (isAxoDim) {
+    genPtY1 = worldToScreen(bb.maxX + yGenWOff, bb.minY, 0);
+    genPtY2 = worldToScreen(bb.maxX + yGenWOff, bb.maxY, 0);
+  } else {
+    var genX = figRight + GEN_OFF;
+    genPtY1 = { x: genX, y: sL0.y };
+    genPtY2 = { x: genX, y: sL1.y };
+  }
   ctx.setLineDash([3,3]);
-  ctx.beginPath(); ctx.moveTo(genX, sL0.y); ctx.lineTo(genX, sL1.y); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(genPtY1.x, genPtY1.y); ctx.lineTo(genPtY2.x, genPtY2.y); ctx.stroke();
   ctx.setLineDash([]);
-  dimTick(genX-5, sL0.y, genX+5, sL0.y);
-  dimTick(genX-5, sL1.y, genX+5, sL1.y);
+  dimTick(genPtY1.x-5, genPtY1.y, genPtY1.x+5, genPtY1.y);
+  dimTick(genPtY2.x-5, genPtY2.y, genPtY2.x+5, genPtY2.y);
   ctx.textAlign='left'; ctx.textBaseline='middle';
-  ctx.fillText(fmtW(totalH), genX+6, (sL0.y+sL1.y)/2);
+  ctx.fillText(fmtW(totalH), Math.max(genPtY1.x,genPtY2.x)+6, (genPtY1.y+genPtY2.y)/2);
 
   // ════ Z AXIS: extrusion height (right-front vertical edge) ════
   if (sh.extruded && sh.extrudeH > 0) {
@@ -1486,7 +1518,17 @@ function drawInProgress() {
     ctx.restore();
     return;
   }
-  if (!state.drawing && !state.dimP1) return;
+  if (!state.drawing && !state.dimP1) {
+    // Still show snap indicator for dimension tool waiting for first click
+    if (state.tool === 'dimension' && cur && state.snapOn) {
+      ctx.save(); ctx.setLineDash([]);
+      var _ss = worldToScreen(cur.x, cur.y);
+      ctx.strokeStyle = '#ffcc00'; ctx.fillStyle = 'rgba(255,204,0,0.25)'; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(_ss.x,_ss.y,7,0,Math.PI*2); ctx.fill(); ctx.stroke();
+      ctx.restore();
+    }
+    return;
+  }
   if (!cur) return;
   ctx.save();
   ctx.strokeStyle = state.strokeColor; ctx.lineWidth = state.strokeWidth;
