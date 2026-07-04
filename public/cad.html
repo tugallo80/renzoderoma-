@@ -1259,6 +1259,39 @@ function drawExtrudedSections(sh) {
     }
   }
 
+  // Horizontal section planes at different Z heights (pisos)
+  if (sh.sectionsZ > 0) {
+    for (var kz = 1; kz <= sh.sectionsZ; kz++) {
+      var zp = eh * kz / (sh.sectionsZ + 1);
+      var fzL = worldToScreen(sh.x, sh.y, zp);
+      var fzR = worldToScreen(sh.x+sh.w, sh.y, zp);
+      ctx.beginPath(); ctx.moveTo(fzL.x,fzL.y); ctx.lineTo(fzR.x,fzR.y); ctx.stroke();
+      var rzF = worldToScreen(sh.x+sh.w, sh.y, zp);
+      var rzB = worldToScreen(sh.x+sh.w, sh.y+sh.h, zp);
+      ctx.beginPath(); ctx.moveTo(rzF.x,rzF.y); ctx.lineTo(rzB.x,rzB.y); ctx.stroke();
+    }
+  }
+
+  // Section lines on top face (tapa superior)
+  if (sh.sectionsShowTop) {
+    if (sh.sectionsV > 0) {
+      var tcW = sh.w / (sh.sectionsV + 1);
+      for (var tv = 1; tv <= sh.sectionsV; tv++) {
+        var txD = sh.x + tcW * tv;
+        var ttF = worldToScreen(txD, sh.y, eh), ttB = worldToScreen(txD, sh.y+sh.h, eh);
+        ctx.beginPath(); ctx.moveTo(ttF.x,ttF.y); ctx.lineTo(ttB.x,ttB.y); ctx.stroke();
+      }
+    }
+    if (sh.sectionsH > 0) {
+      var trH = sh.h / (sh.sectionsH + 1);
+      for (var th2 = 1; th2 <= sh.sectionsH; th2++) {
+        var tyD = sh.y + trH * th2;
+        var ttL = worldToScreen(sh.x, tyD, eh), ttR = worldToScreen(sh.x+sh.w, tyD, eh);
+        ctx.beginPath(); ctx.moveTo(ttL.x,ttL.y); ctx.lineTo(ttR.x,ttR.y); ctx.stroke();
+      }
+    }
+  }
+
   ctx.setLineDash([]);
   ctx.restore();
 }
@@ -1349,6 +1382,45 @@ function drawAutoDim(sh) {
   dimTick(genX-5, sL1.y, genX+5, sL1.y);
   ctx.textAlign='left'; ctx.textBaseline='middle';
   ctx.fillText(fmtW(totalH), genX+6, (sL0.y+sL1.y)/2);
+
+  // ════ Z AXIS: extrusion height (right-front vertical edge) ════
+  if (sh.extruded && sh.extrudeH > 0) {
+    var useX = sh.type==='rect' ? sh.x+sh.w : bb.maxX;
+    var useY = sh.type==='rect' ? sh.y      : bb.minY;
+    var eBot = worldToScreen(useX, useY, 0);
+    var eTop = worldToScreen(useX, useY, sh.extrudeH);
+    if (Math.abs(eTop.y - eBot.y) > 5) {
+      var zSecX = eBot.x + SEC_OFF;
+      var zGenX = eBot.x + GEN_OFF + SEC_OFF;
+
+      // 5. Section Z heights (pisos)
+      if (sh.sectionsZ > 0) {
+        var zSec = sh.extrudeH / (sh.sectionsZ + 1);
+        ctx.font = '10px -apple-system,sans-serif';
+        for (var k = 0; k <= sh.sectionsZ; k++) {
+          var sk1 = worldToScreen(useX, useY, zSec * k);
+          var sk2 = worldToScreen(useX, useY, zSec * (k + 1));
+          ctx.setLineDash([2,2]);
+          ctx.beginPath(); ctx.moveTo(zSecX, sk1.y); ctx.lineTo(zSecX, sk2.y); ctx.stroke();
+          ctx.setLineDash([]);
+          dimTick(zSecX-4, sk1.y, zSecX+4, sk1.y);
+          dimTick(zSecX-4, sk2.y, zSecX+4, sk2.y);
+          ctx.textAlign='left'; ctx.textBaseline='middle';
+          ctx.fillText(fmtW(zSec), zSecX+5, (sk1.y+sk2.y)/2);
+        }
+        ctx.font = '11px -apple-system,sans-serif';
+      }
+
+      // 6. Overall extrusion height
+      ctx.setLineDash([3,3]);
+      ctx.beginPath(); ctx.moveTo(zGenX, eTop.y); ctx.lineTo(zGenX, eBot.y); ctx.stroke();
+      ctx.setLineDash([]);
+      dimTick(zGenX-5, eTop.y, zGenX+5, eTop.y);
+      dimTick(zGenX-5, eBot.y, zGenX+5, eBot.y);
+      ctx.textAlign='left'; ctx.textBaseline='middle';
+      ctx.fillText(fmtW(sh.extrudeH), zGenX+6, (eTop.y+eBot.y)/2);
+    }
+  }
 
   ctx.restore();
 }
@@ -1979,14 +2051,23 @@ document.getElementById('shape-actions').addEventListener('pointerdown', functio
 function openSectionDialog() {
   var sh=_getActionShape(); if (!sh) return;
   var isCirc=sh.type==='circle'||sh.type==='oval'||sh.type==='polygon-sym';
+  var isVol=sh.extruded && sh.extrudeH > 0;
   var content=document.getElementById('modal-content');
-  content.innerHTML='<h3>Seccionar</h3>'+
-    '<div class="modal-field"><label>Divisiones horizontales</label>'+
-    '<input type="number" id="d-sec-h" value="'+(sh.sectionsH||0)+'" min="0" max="20"></div>'+
-    '<div class="modal-field"><label>Divisiones verticales</label>'+
+  var volFields = isVol
+    ? '<div class="modal-field"><label>Divisiones de altura / pisos (Z)</label>'+
+      '<input type="number" id="d-sec-z" value="'+(sh.sectionsZ||0)+'" min="0" max="20"></div>'+
+      '<div class="modal-field" style="display:flex;align-items:center;gap:10px;padding:6px 0;">'+
+      '<input type="checkbox" id="d-sec-top" '+(sh.sectionsShowTop?'checked':'')+' style="width:18px;height:18px;flex-shrink:0;">'+
+      '<label for="d-sec-top" style="margin:0;cursor:pointer;">Mostrar secciones en tapa superior</label></div>'
+    : '';
+  content.innerHTML='<h3>'+(isVol?'Seccionar Volumen':'Seccionar')+'</h3>'+
+    '<div class="modal-field"><label>Divisiones verticales (X)</label>'+
     '<input type="number" id="d-sec-v" value="'+(sh.sectionsV||0)+'" min="0" max="20"></div>'+
+    '<div class="modal-field"><label>Divisiones horizontales (Y)</label>'+
+    '<input type="number" id="d-sec-h" value="'+(sh.sectionsH||0)+'" min="0" max="20"></div>'+
     (isCirc?'<div class="modal-field"><label>Divisiones radiales</label>'+
     '<input type="number" id="d-sec-ang" value="'+(sh.sectionsAngular||0)+'" min="0" max="36"></div>':'')+
+    volFields+
     '<div class="modal-btns"><button class="modal-btn" onclick="closeModal()">Cancelar</button>'+
     '<button class="modal-btn primary" onclick="confirmSection()">Aplicar</button></div>';
   document.getElementById('modal-overlay').classList.remove('hidden');
@@ -1998,6 +2079,8 @@ function confirmSection() {
   sh.sectionsH=parseInt(document.getElementById('d-sec-h').value)||0;
   sh.sectionsV=parseInt(document.getElementById('d-sec-v').value)||0;
   var ai=document.getElementById('d-sec-ang'); if (ai) sh.sectionsAngular=parseInt(ai.value)||0;
+  var az=document.getElementById('d-sec-z'); if (az) sh.sectionsZ=parseInt(az.value)||0;
+  var at=document.getElementById('d-sec-top'); if (at) sh.sectionsShowTop=at.checked;
   closeModal(); setDirty(); showToast('Secciones aplicadas');
 }
 
