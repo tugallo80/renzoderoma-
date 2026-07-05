@@ -1234,7 +1234,7 @@ function drawExtrusion(sh) {
 // Draw section dividers on the visible vertical faces of an extruded shape
 function drawExtrudedSections(sh) {
   if (!sh.extruded || sh.extrudeH <= 0) return;
-  if (sh.sectionsV <= 0 && sh.sectionsH <= 0) return;
+  if (sh.sectionsV <= 0 && sh.sectionsH <= 0 && !(sh.sectionsZ > 0) && !sh.sectionsShowTop) return;
   if (sh.type !== 'rect') return;
   var eh = sh.extrudeH;
   ctx.save();
@@ -1257,19 +1257,14 @@ function drawExtrudedSections(sh) {
     }
   }
 
-  // Horizontal row dividers on the base → horizontal bands on the vertical faces
-  // Interpreted as height-divisions: dividers at z = eh * i/(sectionsH+1)
+  // Horizontal row dividers (Y-depth) → vertical lines on right face at different depths
   if (sh.sectionsH > 0) {
+    var rowH = sh.h / (sh.sectionsH + 1);
     for (var i = 1; i <= sh.sectionsH; i++) {
-      var zDiv = eh * i / (sh.sectionsH + 1);
-      // Front face (y = sh.y): horizontal line at height zDiv
-      var fL = worldToScreen(sh.x,       sh.y, zDiv);
-      var fR = worldToScreen(sh.x+sh.w,  sh.y, zDiv);
-      ctx.beginPath(); ctx.moveTo(fL.x,fL.y); ctx.lineTo(fR.x,fR.y); ctx.stroke();
-      // Right face (x = sh.x+sh.w): horizontal line at height zDiv
-      var rF = worldToScreen(sh.x+sh.w, sh.y,       zDiv);
-      var rB = worldToScreen(sh.x+sh.w, sh.y+sh.h,  zDiv);
-      ctx.beginPath(); ctx.moveTo(rF.x,rF.y); ctx.lineTo(rB.x,rB.y); ctx.stroke();
+      var yDiv = sh.y + rowH * i;
+      var rB2 = worldToScreen(sh.x+sh.w, yDiv, 0);
+      var rT2 = worldToScreen(sh.x+sh.w, yDiv, eh);
+      ctx.beginPath(); ctx.moveTo(rB2.x,rB2.y); ctx.lineTo(rT2.x,rT2.y); ctx.stroke();
     }
   }
 
@@ -2097,18 +2092,18 @@ function openSectionDialog() {
   var content=document.getElementById('modal-content');
   var volFields = isVol
     ? '<div class="modal-field"><label>Divisiones de altura / pisos (Z)</label>'+
-      '<input type="number" id="d-sec-z" value="'+(sh.sectionsZ||0)+'" min="0" max="20"></div>'+
+      '<input type="number" id="d-sec-z" value="" placeholder="ej: '+(sh.sectionsZ||0)+'" min="0" max="20"></div>'+
       '<div class="modal-field" style="display:flex;align-items:center;gap:10px;padding:6px 0;">'+
       '<input type="checkbox" id="d-sec-top" '+(sh.sectionsShowTop?'checked':'')+' style="width:18px;height:18px;flex-shrink:0;">'+
       '<label for="d-sec-top" style="margin:0;cursor:pointer;">Mostrar secciones en tapa superior</label></div>'
     : '';
   content.innerHTML='<h3>'+(isVol?'Seccionar Volumen':'Seccionar')+'</h3>'+
     '<div class="modal-field"><label>Divisiones verticales (X)</label>'+
-    '<input type="number" id="d-sec-v" value="'+(sh.sectionsV||0)+'" min="0" max="20"></div>'+
+    '<input type="number" id="d-sec-v" value="" placeholder="ej: '+(sh.sectionsV||0)+'" min="0" max="20"></div>'+
     '<div class="modal-field"><label>Divisiones horizontales (Y)</label>'+
-    '<input type="number" id="d-sec-h" value="'+(sh.sectionsH||0)+'" min="0" max="20"></div>'+
+    '<input type="number" id="d-sec-h" value="" placeholder="ej: '+(sh.sectionsH||0)+'" min="0" max="20"></div>'+
     (isCirc?'<div class="modal-field"><label>Divisiones radiales</label>'+
-    '<input type="number" id="d-sec-ang" value="'+(sh.sectionsAngular||0)+'" min="0" max="36"></div>':'')+
+    '<input type="number" id="d-sec-ang" value="" placeholder="ej: '+(sh.sectionsAngular||0)+'" min="0" max="36"></div>':'')+
     volFields+
     '<div class="modal-btns"><button class="modal-btn" onclick="closeModal()">Cancelar</button>'+
     '<button class="modal-btn primary" onclick="confirmSection()">Aplicar</button></div>';
@@ -2118,10 +2113,10 @@ function openSectionDialog() {
 function confirmSection() {
   var sh=_getActionShape(); if (!sh) { closeModal(); return; }
   pushHistory();
-  sh.sectionsH=parseInt(document.getElementById('d-sec-h').value)||0;
-  sh.sectionsV=parseInt(document.getElementById('d-sec-v').value)||0;
-  var ai=document.getElementById('d-sec-ang'); if (ai) sh.sectionsAngular=parseInt(ai.value)||0;
-  var az=document.getElementById('d-sec-z'); if (az) sh.sectionsZ=parseInt(az.value)||0;
+  var _sh=document.getElementById('d-sec-h'); if(_sh&&_sh.value!=='') sh.sectionsH=parseInt(_sh.value)||0;
+  var _sv=document.getElementById('d-sec-v'); if(_sv&&_sv.value!=='') sh.sectionsV=parseInt(_sv.value)||0;
+  var ai=document.getElementById('d-sec-ang'); if(ai&&ai.value!=='') sh.sectionsAngular=parseInt(ai.value)||0;
+  var az=document.getElementById('d-sec-z'); if(az&&az.value!=='') sh.sectionsZ=parseInt(az.value)||0;
   var at=document.getElementById('d-sec-top'); if (at) sh.sectionsShowTop=at.checked;
   closeModal(); setDirty(); showToast('Secciones aplicadas');
 }
@@ -2138,7 +2133,7 @@ function openExtrudeDialog() {
   var content=document.getElementById('modal-content');
   content.innerHTML='<h3>Extruir</h3>'+
     '<div class="modal-field"><label>Altura de extrusión ('+ul+')</label>'+
-    '<input type="number" id="d-ext-h" value="'+(curH||100)+'" min="1" step="1"></div>'+
+    '<input type="number" id="d-ext-h" value="" placeholder="ej: '+(curH||100)+'" min="1" step="1"></div>'+
     '<div class="modal-btns"><button class="modal-btn" onclick="closeModal()">Cancelar</button>'+
     '<button class="modal-btn primary" onclick="confirmExtrude()">Aplicar</button></div>';
   document.getElementById('modal-overlay').classList.remove('hidden');
@@ -2146,7 +2141,7 @@ function openExtrudeDialog() {
 
 function confirmExtrude() {
   var sh=_getActionShape(); if (!sh) { closeModal(); return; }
-  pushHistory(); sh.extruded=true; sh.extrudeH=toMM(document.getElementById('d-ext-h').value);
+  pushHistory(); sh.extruded=true; var _eh=document.getElementById('d-ext-h'); if(_eh&&_eh.value!=='') sh.extrudeH=toMM(_eh.value);
   closeModal(); setDirty(); showToast('Extrusión aplicada');
 }
 
@@ -2162,26 +2157,26 @@ function editSelectedShape() {
   var content=document.getElementById('modal-content');
   var html='<h3>Editar: '+sh.name+'</h3>';
   if (sh.type==='rect') {
-    html+='<div class="modal-field"><label>Base ('+ul+')</label><input type="number" id="e-w" value="'+toU(sh.w)+'" min="0.1" step="0.1"></div>'+
-      '<div class="modal-field"><label>Altura ('+ul+')</label><input type="number" id="e-h" value="'+toU(sh.h)+'" min="0.1" step="0.1"></div>';
+    html+='<div class="modal-field"><label>Base ('+ul+')</label><input type="number" id="e-w" value="" placeholder="ej: '+toU(sh.w)+'" min="0.1" step="0.1"></div>'+
+      '<div class="modal-field"><label>Profundidad ('+ul+')</label><input type="number" id="e-h" value="" placeholder="ej: '+toU(sh.h)+'" min="0.1" step="0.1"></div>';
   } else if (sh.type==='circle') {
-    html+='<div class="modal-field"><label>Radio ('+ul+')</label><input type="number" id="e-r" value="'+toU(sh.r)+'" min="0.1" step="0.1"></div>';
+    html+='<div class="modal-field"><label>Radio ('+ul+')</label><input type="number" id="e-r" value="" placeholder="ej: '+toU(sh.r)+'" min="0.1" step="0.1"></div>';
   } else if (sh.type==='oval') {
-    html+='<div class="modal-field"><label>Radio X ('+ul+')</label><input type="number" id="e-rx" value="'+toU(sh.rx)+'" min="0.1" step="0.1"></div>'+
-      '<div class="modal-field"><label>Radio Y ('+ul+')</label><input type="number" id="e-ry" value="'+toU(sh.ry)+'" min="0.1" step="0.1"></div>';
+    html+='<div class="modal-field"><label>Radio X ('+ul+')</label><input type="number" id="e-rx" value="" placeholder="ej: '+toU(sh.rx)+'" min="0.1" step="0.1"></div>'+
+      '<div class="modal-field"><label>Radio Y ('+ul+')</label><input type="number" id="e-ry" value="" placeholder="ej: '+toU(sh.ry)+'" min="0.1" step="0.1"></div>';
   } else if (sh.type==='polygon-sym') {
     var opts=[3,4,5,6,7,8,9,10,11,12].map(function(n){return'<option value="'+n+'"'+(n===sh.sides?' selected':'')+'>'+n+'</option>';}).join('');
     html+='<div class="modal-field"><label>Lados</label><select id="e-sides">'+opts+'</select></div>'+
-      '<div class="modal-field"><label>Radio ('+ul+')</label><input type="number" id="e-radius" value="'+toU(sh.radius)+'" min="0.1" step="0.1"></div>'+
-      '<div class="modal-field"><label>Rotación (°)</label><input type="number" id="e-rot" value="'+(sh.rotation||0)+'" step="1"></div>';
+      '<div class="modal-field"><label>Radio ('+ul+')</label><input type="number" id="e-radius" value="" placeholder="ej: '+toU(sh.radius)+'" min="0.1" step="0.1"></div>'+
+      '<div class="modal-field"><label>Rotación (°)</label><input type="number" id="e-rot" value="" placeholder="ej: '+(sh.rotation||0)+'" step="1"></div>';
   } else if (sh.type==='triangle') {
-    html+='<div class="modal-field"><label>Base ('+ul+')</label><input type="number" id="e-base" value="'+toU(sh.base)+'" min="0.1" step="0.1"></div>'+
-      '<div class="modal-field"><label>Altura ('+ul+')</label><input type="number" id="e-height" value="'+toU(sh.height)+'" min="0.1" step="0.1"></div>';
+    html+='<div class="modal-field"><label>Base ('+ul+')</label><input type="number" id="e-base" value="" placeholder="ej: '+toU(sh.base)+'" min="0.1" step="0.1"></div>'+
+      '<div class="modal-field"><label>Altura ('+ul+')</label><input type="number" id="e-height" value="" placeholder="ej: '+toU(sh.height)+'" min="0.1" step="0.1"></div>';
   }
   html+='<div class="modal-field"><label>Nombre</label><input type="text" id="e-name" value="'+sh.name+'"></div>'+
     '<div class="modal-field"><label>Color de trazo</label>'+
     '<input type="color" id="e-color" value="'+(sh.strokeColor||'#000000')+'" style="width:100%;height:36px;border-radius:8px;border:1px solid var(--border);cursor:pointer;"></div>'+
-    '<div class="modal-field"><label>Grosor</label><input type="number" id="e-stroke" value="'+(sh.strokeWidth||2)+'" min="1" max="20"></div>'+
+    '<div class="modal-field"><label>Grosor</label><input type="number" id="e-stroke" value="" placeholder="ej: '+(sh.strokeWidth||2)+'" min="1" max="20"></div>'+
     '<div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">'+
     '<input type="checkbox" id="e-autodim"'+(sh.autoDim?' checked':'')+'>'+
     '<label for="e-autodim" style="font-size:13px;cursor:pointer;">Acotar automáticamente</label></div>'+
@@ -2196,15 +2191,16 @@ function applyEdit(shId) {
   for (var li=0;li<state.layers.length;li++) for (var si=0;si<state.layers[li].shapes.length;si++) if (state.layers[li].shapes[si].id===shId) sh=state.layers[li].shapes[si];
   if (!sh) { closeModal(); return; }
   pushHistory();
-  var ni=document.getElementById('e-name'); if(ni) sh.name=ni.value;
+  var ni=document.getElementById('e-name'); if(ni&&ni.value!=='') sh.name=ni.value;
   var ci=document.getElementById('e-color'); if(ci) sh.strokeColor=ci.value;
-  var sti=document.getElementById('e-stroke'); if(sti) sh.strokeWidth=parseInt(sti.value)||2;
+  var sti=document.getElementById('e-stroke'); if(sti&&sti.value!=='') sh.strokeWidth=parseInt(sti.value)||2;
   var adi=document.getElementById('e-autodim'); if(adi) sh.autoDim=adi.checked;
-  if (sh.type==='rect') { sh.w=toMM(document.getElementById('e-w').value); sh.h=toMM(document.getElementById('e-h').value); }
-  else if (sh.type==='circle') { sh.r=toMM(document.getElementById('e-r').value); }
-  else if (sh.type==='oval') { sh.rx=toMM(document.getElementById('e-rx').value); sh.ry=toMM(document.getElementById('e-ry').value); }
-  else if (sh.type==='polygon-sym') { sh.sides=parseInt(document.getElementById('e-sides').value); sh.radius=toMM(document.getElementById('e-radius').value); sh.rotation=parseFloat(document.getElementById('e-rot').value)||0; }
-  else if (sh.type==='triangle') { sh.base=toMM(document.getElementById('e-base').value); sh.height=toMM(document.getElementById('e-height').value); }
+  function _applyMM(id,field){ var el=document.getElementById(id); if(el&&el.value!=='') sh[field]=toMM(el.value); }
+  if (sh.type==='rect') { _applyMM('e-w','w'); _applyMM('e-h','h'); }
+  else if (sh.type==='circle') { _applyMM('e-r','r'); }
+  else if (sh.type==='oval') { _applyMM('e-rx','rx'); _applyMM('e-ry','ry'); }
+  else if (sh.type==='polygon-sym') { var _si=document.getElementById('e-sides'); if(_si) sh.sides=parseInt(_si.value); _applyMM('e-radius','radius'); var _ri=document.getElementById('e-rot'); if(_ri&&_ri.value!=='') sh.rotation=parseFloat(_ri.value)||0; }
+  else if (sh.type==='triangle') { _applyMM('e-base','base'); _applyMM('e-height','height'); }
   closeModal(); setDirty(); showToast('Forma actualizada');
 }
 
