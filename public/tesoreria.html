@@ -1755,7 +1755,7 @@
     }
 
     // ─── Generar PDF rango de meses ───────────────────────────────────────────
-    function generarPDFAmplio() {
+    async function generarPDFAmplio() {
         const inicio = document.getElementById('exp-mes-inicio').value;
         const fin    = document.getElementById('exp-mes-fin').value;
         const tFiltro = document.getElementById('exp-trabajador').value;
@@ -1855,6 +1855,10 @@
                 // Última fila en negrita
                 didParseCell: function(d) { if(d.row.index === resumenPorMes.length-1) d.cell.styles.fontStyle='bold'; }
             });
+            // Anexo comprobantes de todo el rango
+            const _ampComps = [];
+            datosPorMes.forEach(({ data }) => Object.entries(data).forEach(([nom, d]) => _ampComps.push(..._recolectarComprobantes(d, nom))));
+            await _appendComprobantePDFs(doc, _ampComps);
             doc.setTextColor(150); doc.setFontSize(8); doc.setFont(undefined,'normal');
             doc.text('Rubik OS - rubikbolivia.com', 14, 288);
             doc.save('Balance_'+inicio+'_'+fin+'.pdf');
@@ -1862,7 +1866,7 @@
         } catch(e) { alert('Error al generar PDF: '+e.message); console.error(e); }
     }
 
-    function exportarConsolidadoPDF(todos, mes) {
+    async function exportarConsolidadoPDF(todos, mes) {
         try {
             const { jsPDF } = window.jspdf;
             const doc = new jsPDF();
@@ -1929,13 +1933,66 @@
             doc.setTextColor(0); doc.setFontSize(13); doc.setFont(undefined, 'bold');
             doc.text('RESUMEN GLOBAL', 14, y); y += 5;
             doc.autoTable({ startY: y, head: [['Total Contratos', 'Total Anticipos', 'SALDO TOTAL A PAGAR']], body: [[fMoney(totG) + ' Bs', fMoney(antG) + ' Bs', fMoney(totG - antG) + ' Bs']], theme: 'grid', styles: { fontSize: 11, fontStyle: 'bold' }, headStyles: { fillColor: [28, 28, 30] } });
+            // Anexo comprobantes de todos los trabajadores
+            const _allComps = [];
+            Object.entries(todos).forEach(([nom, d]) => _allComps.push(..._recolectarComprobantes(d, nom)));
+            await _appendComprobantePDFs(doc, _allComps);
             doc.setTextColor(150); doc.setFontSize(8); doc.setFont(undefined, 'normal');
             doc.text('Rubik OS - rubikbolivia.com', 14, 288);
             doc.save('Consolidado_' + mes + '.pdf');
         } catch(e) { alert('Error al generar PDF: ' + e.message); console.error(e); }
     }
 
-    function exportarPlanillaPDF(nombre, mes, data) {
+    // ── Helper: anexa comprobantes de pago como imágenes al final del PDF ──
+    async function _appendComprobantePDFs(doc, comps) {
+        if (!comps || comps.length === 0) return;
+        let y = 28;
+        doc.addPage();
+        doc.setFillColor(0, 122, 255);
+        doc.roundedRect(10, 8, 190, 14, 3, 3, 'F');
+        doc.setTextColor(255, 255, 255); doc.setFontSize(11); doc.setFont(undefined, 'bold');
+        doc.text('Anexo: Comprobantes de pago (' + comps.length + ')', 15, 17);
+        doc.setTextColor(0);
+        for (const comp of comps) {
+            if (!comp.url) continue;
+            try {
+                const resp = await fetch(comp.url);
+                const blob = await resp.blob();
+                const b64 = await new Promise(res => { const fr = new FileReader(); fr.onload = e => res(e.target.result); fr.readAsDataURL(blob); });
+                if (y > 215) { doc.addPage(); y = 15; }
+                doc.setFontSize(8); doc.setFont(undefined, 'bold'); doc.setTextColor(0);
+                const label = (comp.nombre ? comp.nombre + '  ' : '') + (comp.fecha || 's/f') + (comp.nota ? '  ·  ' + comp.nota : '');
+                doc.text(label.substring(0, 90), 14, y); y += 5;
+                const img = new Image();
+                await new Promise(res => { img.onload = res; img.onerror = res; img.src = b64; });
+                const maxW = 182, maxH = 100;
+                const ratio = img.width > 0 ? img.height / img.width : 1;
+                let w = maxW, h = maxW * ratio;
+                if (h > maxH) { h = maxH; w = maxH / ratio; }
+                doc.addImage(b64, 'JPEG', 14, y, w, h);
+                y += h + 8;
+            } catch(imgErr) {
+                if (y > 270) { doc.addPage(); y = 15; }
+                doc.setFontSize(8); doc.setFont(undefined, 'italic'); doc.setTextColor(150);
+                doc.text('No se pudo cargar comprobante: ' + (comp.fecha || '') + ' · ' + (comp.nota || ''), 14, y); y += 7;
+            }
+        }
+    }
+
+    // ── Helper: recolecta todos los comprobantes de un objeto porTrabajador ──
+    function _recolectarComprobantes(data, nombreTrab) {
+        const comps = [];
+        (data.proyectos || []).forEach(proy => {
+            (proy.contratos || []).forEach(c => {
+                (c.pagosDetalle || []).forEach(p => {
+                    if (p.comprobante) comps.push({ url: p.comprobante, fecha: p.fecha || '', nota: p.nota || '', nombre: nombreTrab || '' });
+                });
+            });
+        });
+        return comps;
+    }
+
+    async function exportarPlanillaPDF(nombre, mes, data) {
         try {
             const { jsPDF } = window.jspdf;
             const doc = new jsPDF();
@@ -1991,6 +2048,9 @@
             doc.setTextColor(255, 149, 0); doc.text('Anticipos Pagados:  ' + fMoney(data.totalAnticipos) + ' Bs', 14, y); y += 7;
             doc.setTextColor(saldo > 0 ? 220 : 52, saldo > 0 ? 53 : 199, saldo > 0 ? 69 : 89);
             doc.text('SALDO A PAGAR:  ' + fMoney(saldo) + ' Bs', 14, y);
+            // Anexo comprobantes
+            const _comps = _recolectarComprobantes(data, nombre);
+            await _appendComprobantePDFs(doc, _comps);
             doc.setTextColor(150); doc.setFontSize(8); doc.setFont(undefined, 'normal');
             doc.text('Rubik OS - rubikbolivia.com', 14, 288);
             doc.save('Planilla_' + nombre.replace(/ /g,'_') + '_' + mes + '.pdf');
