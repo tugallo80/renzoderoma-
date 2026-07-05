@@ -1427,15 +1427,17 @@
                     if (participantes && participantes.length > 1) {
                         participantes.forEach(p => {
                             if(!p) return;
-                            const pNom = p.nombre || (p.worker_id && personalData[p.worker_id] && (personalData[p.worker_id].nombre || personalData[p.worker_id].name)) || null;
+                            const pNom = p.nombre || (p.worker_id && personalData[p.worker_id] && (personalData[p.worker_id].nombre || personalData[p.worker_id].name)) || p.worker_id || null;
                             if(!pNom) return;
                             const pct = parseFloat(p.porcentaje) || 0;
                             const montoShare = montoConExtras * pct / 100;
                             const anticiposShare = anticipos * pct / 100;
+                            // Scale pagosDetalle amounts proportionally for this participant
+                            const pagosDetalleShare = pagosDetalle.map(pg => ({ ...pg, monto: pg.monto * pct / 100 }));
                             if(!porTrabajador[pNom]) porTrabajador[pNom] = { proyectos: [], totalContrato: 0, totalAnticipos: 0 };
                             let pEx2 = porTrabajador[pNom].proyectos.find(pr => pr.nombre === pNombre);
                             if(!pEx2) { pEx2 = { nombre: pNombre, contratos: [], subTotal: 0, subAnticipos: 0 }; porTrabajador[pNom].proyectos.push(pEx2); }
-                            pEx2.contratos.push({ tareas, tareasDetalle, pagosDetalle, monto: montoShare, anticipos: anticiposShare, estado: lic.estado||'aprobado', esCompartido: true, porcentaje: pct, montoTotal: montoConExtras });
+                            pEx2.contratos.push({ tareas, tareasDetalle, pagosDetalle: pagosDetalleShare, monto: montoShare, anticipos: anticiposShare, estado: lic.estado||'aprobado', esCompartido: true, porcentaje: pct, montoTotal: montoConExtras });
                             pEx2.subTotal += montoShare; pEx2.subAnticipos += anticiposShare;
                             porTrabajador[pNom].totalContrato += montoShare; porTrabajador[pNom].totalAnticipos += anticiposShare;
                         });
@@ -1817,14 +1819,16 @@
                     wContratos += d.totalContrato; wAnticipos += d.totalAnticipos;
                 });
 
-                // Subtotal trabajador
+                // Subtotal trabajador — nombre en línea propia, montos debajo
                 const wSaldo = wContratos - wAnticipos;
                 doc.setFont(undefined,'bold'); doc.setFontSize(10); doc.setTextColor(0);
-                doc.text('SUBTOTAL '+nombre+':', 14, y);
-                doc.setTextColor(0,122,255); doc.text(fMoney(wContratos)+' Bs', 70, y);
-                doc.setTextColor(255,149,0); doc.text('Ant: '+fMoney(wAnticipos)+' Bs', 110, y);
+                doc.text('SUBTOTAL '+nombre, 14, y); y += 5;
+                doc.setFontSize(9);
+                doc.setTextColor(0,122,255); doc.text('Cont: '+fMoney(wContratos)+' Bs', 14, y);
+                doc.setTextColor(255,149,0); doc.text('Ant: '+fMoney(wAnticipos)+' Bs', 80, y);
                 doc.setTextColor(wSaldo>0?220:52, wSaldo>0?53:199, wSaldo>0?69:89);
-                doc.text('SALDO: '+fMoney(wSaldo)+' Bs', 155, y); y += 5;
+                doc.text('SALDO: '+fMoney(wSaldo)+' Bs', 148, y); y += 4;
+                doc.setFontSize(10);
                 doc.setDrawColor(180,180,180); doc.line(14, y, 196, y); y += 8;
                 gContratos += wContratos; gAnticipos += wAnticipos;
             });
