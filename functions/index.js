@@ -262,13 +262,13 @@ exports.geminiProxy = onRequest(GEMINI_PROXY_OPTS, async (req, res) => {
             return result;
         }
 
-        // Cadena de fallback: 2.5-flash → 1.5-pro → 1.5-flash (gemini-2.0-flash fue dado de baja)
-        const FALLBACK_CHAIN = ["gemini-2.5-flash", "gemini-1.5-pro", "gemini-1.5-flash"];
+        // Cadena de fallback: 2.5-flash → 1.5-flash (gemini-1.5-pro y 2.0-flash dados de baja julio 2026)
+        const FALLBACK_CHAIN = ["gemini-2.5-flash", "gemini-1.5-flash"];
         let result;
         let lastErr;
         const modelsToTry = requestedModel === "gemini-2.5-flash"
             ? FALLBACK_CHAIN
-            : [requestedModel, "gemini-1.5-pro", "gemini-1.5-flash"];
+            : [requestedModel, "gemini-1.5-flash"];
 
         for (const modelName of modelsToTry) {
             try {
@@ -325,7 +325,7 @@ exports.procesarIngestaIA = onRequest(HTTP_OPTS, async (req, res) => {
     try {
         const { GoogleGenerativeAI } = require("@google/generative-ai");
         const genAI = new GoogleGenerativeAI(GEMINI_API_KEY.value());
-        const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+        const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
         const { textPrompt, imagesBase64, pdfBase64, tipoIngesta } = req.body || {};
 
