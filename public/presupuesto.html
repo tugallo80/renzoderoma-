@@ -1966,8 +1966,12 @@ Devolvé exactamente este formato (sin texto adicional):
         if (inp.files && inp.files[0]) {
             const file = inp.files[0];
             const lbl = document.getElementById('ia-pdf-filename');
-            lbl.innerText = file.name;
+            const sizeMB = (file.size / 1024 / 1024).toFixed(1);
+            lbl.innerText = file.name + ' (' + sizeMB + ' MB)';
             lbl.style.display = 'block';
+            if (file.size > 15 * 1024 * 1024) {
+                lbl.innerText += ' — ⚠️ PDF muy grande, puede fallar. Intentá con uno más liviano.';
+            }
             const reader = new FileReader();
             reader.onload = (e) => { currentIAPdfBase64 = e.target.result; };
             reader.readAsDataURL(file);
@@ -2549,11 +2553,12 @@ EJEMPLO VÁLIDO:
                 contents: [{ role: 'user', parts }]
             });
 
-            // Verificar tamaño antes de enviar — Firebase Hosting limita a ~10MB
+            // Verificar tamaño antes de enviar
+            // PDFs van a Cloud Function (32MB limit) — solo bloqueamos si es absurdamente grande
             const _payloadKB = Math.round(_reqBody.length / 1024);
             console.log('[Budget] Payload size:', _payloadKB, 'KB');
-            if (_payloadKB > 7000) {
-                throw new Error(`Las imágenes adjuntas son demasiado pesadas (${_payloadKB} KB total). Intentá con menos imágenes o usá solo 1-2 fotos de referencia.`);
+            if (_payloadKB > 18000) {
+                throw new Error(`El archivo adjunto es demasiado grande (${_payloadKB} KB). Para PDFs, intentá con un archivo de menos de 15 MB. Para imágenes, usá 1-3 fotos.`);
             }
 
             // Payloads >50KB van directo a Cloud Functions para evitar el timeout
