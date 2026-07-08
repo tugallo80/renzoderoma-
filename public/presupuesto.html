@@ -1776,13 +1776,14 @@ ${_reglasTextoRegen}
 Instrucciones específicas: ${_cleanPrompt}
 
 PROCESO OBLIGATORIO ANTES DE GENERAR EL JSON:
-① LEER: ¿Qué incluye ESTE ítem específicamente? Solo los componentes mencionados en nombre + prompt + imagen.
-② GEOMETRÍA: Calculá áreas, perímetros y ml según las dimensiones. Cada cantidad del APU sale de un cálculo real.
-③ BASE DE DATOS: Para cada material/MO, buscá primero en el catálogo Rubik. Usá ese precio exacto. Si no está, usá precio de mercado boliviano.
-④ APU: Solo materiales de ESTE ítem. Si el ítem es un bastidor → no meter foam de letras. Si es letras → no meter lona ni tubín de bastidor.
-⑤ VERIFICACIÓN: ¿Las cantidades son coherentes con las dimensiones?
-⑥ feat: 4-8 líneas para el cliente. Sin cálculos, sin ml de insumos, sin remaches ni mermas.
-⑦ RECIÉN AHÍ: Generar el JSON.
+① PLANO CAD: Si hay imagen con cotas numéricas anotadas → leé TODAS las cotas visibles (son las ÚNICAS medidas válidas, NUNCA las inventes). Para cotas implícitas calculalas: ej. apertura = total − faja superior − faja inferior. Usá esos valores exactos en feat y en cálculos del APU.
+② LEER: ¿Qué incluye ESTE ítem específicamente? Solo los componentes mencionados en nombre + prompt + imagen.
+③ GEOMETRÍA: Calculá áreas, perímetros y ml según las dimensiones del plano. Cada cantidad del APU sale de un cálculo real.
+④ BASE DE DATOS: Para cada material/MO, buscá primero en el catálogo Rubik. Usá ese precio exacto. Si no está, usá precio de mercado boliviano.
+⑤ APU: Solo materiales de ESTE ítem. Si el ítem es un bastidor → no meter foam de letras. Si es letras → no meter lona ni tubín de bastidor.
+⑥ VERIFICACIÓN: ¿Las cantidades son coherentes con las dimensiones del plano?
+⑦ feat: 4-8 líneas para el cliente. Incluí dimensiones totales exactas del plano. Sin cálculos, sin ml de insumos, sin remaches ni mermas.
+⑧ RECIÉN AHÍ: Generar el JSON.
 
 No cambies el nombre del ítem — el desc lo pone el usuario.
 
@@ -1812,7 +1813,7 @@ Devolvé exactamente este formato (sin texto adicional):
                     const _fUrl = _f.url || _f;
                     if (_fUrl && _fUrl.startsWith('data:')) {
                         try {
-                            const _fComp = await _compressB64(_fUrl, 600, 0.5);
+                            const _fComp = await _compressB64(_fUrl, 1200, 0.7);
                             _regenImgParts.push({ inlineData: { data: _fComp.split(',')[1], mimeType: 'image/jpeg' } });
                         } catch(_fe) {}
                     }
@@ -2520,12 +2521,20 @@ F3. MATERIALES POR PIEZAS COMPLEJAS — preguntar si no se especifica:
 
         // 4. Armar el JSON final de la petición
         const sysPrompt = `REGLA ABSOLUTA: Responde SOLO con un array JSON válido. Cero texto antes o después. Cero markdown.
+
+LECTURA DE PLANOS TÉCNICOS / CAD — OBLIGATORIO:
+Si hay una imagen de plano técnico, dibujo CAD o croquis acotado:
+1. Lee TODAS las cotas numéricas anotadas en el dibujo — son las ÚNICAS medidas válidas. NUNCA inventes ni estimes.
+2. Para dimensiones no anotadas directamente, calculalas: ej. si altura total=250, faja superior=56.6, faja inferior=100 → apertura central=250-56.6-100=93.4 cm.
+3. Usá esos valores exactos en "feat" (totales y aperturas/huecos) y en el APU para calcular cantidades de materiales.
+4. La profundidad del cajón/estructura también es una cota del plano — no la omitas.
+
 CAMPOS OBLIGATORIOS por ítem:
 - "desc": string — usá EXACTAMENTE el nombre que el usuario escribió para ese ítem, sin cambiarlo ni traducirlo
 - "cant": número — cantidad exacta indicada por el usuario
 - "und": string — unidad (glb, m2, ml, pza, etc.)
 - "feat": string — OBLIGATORIO, NUNCA vacío. Descripción orientada AL CLIENTE. Cada línea empieza con "- ". Mínimo 4 líneas, máximo 8 líneas.
-  ✅ Incluir: qué es el ítem, materiales principales (sin cantidades), acabado superficial, dimensiones generales, iluminación si aplica, cantidad si es set.
+  ✅ Incluir: qué es el ítem, materiales principales (sin cantidades), acabado superficial, dimensiones totales exactas del plano, dimensión del hueco/apertura si aplica, profundidad si es estructura tipo cajón.
   ❌ PROHIBIDO en feat: metros lineales de insumos, perímetros calculados, cantidad de remaches/barras/costillas, mermas, fórmulas, cálculos intermedios, precios. Todo eso va en el APU.
   ✅ Ej correcto: "- Bastidor tubín 20×20mm, 3.00m × 2.00m\\n- Lona backlight impresa digitalmente\\n- Acabado pintura duco\\n- Neon flex RGB perimetral"
   ❌ Ej PROHIBIDO: "- Tubin: 39.4 ml\\n- Remaches: 180 pzas\\n- Área lona: 13.2m2 × 1.08 = 14.26m2"
