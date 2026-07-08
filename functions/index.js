@@ -30,6 +30,7 @@ const GEMINI_API_KEY        = defineSecret("GEMINI_API_KEY");
 const ANTHROPIC_API_KEY     = defineSecret("ANTHROPIC_API_KEY");
 const WHATSAPP_TOKEN        = defineSecret("WHATSAPP_TOKEN");
 const WHATSAPP_VERIFY_TOKEN = defineSecret("WHATSAPP_VERIFY_TOKEN");
+const ADMIN_IMPORT_KEY      = defineSecret("ADMIN_IMPORT_KEY");
 
 const ALLOWED_ORIGINS = new Set([
     "https://rubikbolivia.com",
@@ -821,3 +822,70 @@ exports.proxyImagen = onRequest(
         }
     }
 );
+
+// ============================================================================
+// IMPORTACIÓN BULK ADMIN — para agentes automatizados (scraping, migraciones)
+// Protegido por X-Admin-Key (ADMIN_IMPORT_KEY en Secret Manager)
+// Escribe directamente a Firebase Realtime Database sin requerir auth de usuario
+// ============================================================================
+exports.importarAdmin = onRequest({
+    secrets: [ADMIN_IMPORT_KEY],
+    timeoutSeconds: 120,
+    memory: "512MiB",
+    region: "us-central1",
+    invoker: "public",
+    cors: false,
+}, async (req, res) => {
+    res.set("Access-Control-Allow-Origin", "*");
+    res.set("Access-Control-Allow-Methods", "POST, OPTIONS");
+    res.set("Access-Control-Allow-Headers", "Content-Type, X-Admin-Key");
+    if (req.method === "OPTIONS") return res.status(204).send("");
+    if (req.method !== "POST") return res.status(405).json({ error: "Método no permitido" });
+
+    const key = req.headers["x-admin-key"] || "";
+    if (!key || key !== ADMIN_IMPORT_KEY.value()) {
+        return res.status(401).json({ error: "Clave de administrador inválida" });
+    }
+
+    const { materiales = [], mano_obra = [], items_apu = [] } = req.body || {};
+    const db = admin.database();
+
+    function toKey(nombre) {
+        return String(nombre).toUpperCase().replace(/[.#$[\]/\s]+/g, "_").slice(0, 80);
+    }
+
+    const resultados = { materiales: 0, mano_obra: 0, items: 0, errores: [] };
+
+    for (const mat of materiales) {
+        try {
+            const k = toKey(mat.n || mat.nombre || "");
+            if (!k) continue;
+            const payload = { n: k, u: (mat.u || "und").toLowerCase(), p: parseFloat(mat.p) || 0, desc: k, und: (mat.u || "und").toLowerCase(), pu: parseFloat(mat.p) || 0 };
+            if (mat.proveedor) payload.proveedor = mat.proveedor;
+            await db.ref(`base_datos/materiales/${k}`).update(payload);
+            resultados.materiales++;
+        } catch (e) { resultados.errores.push(`mat:${mat.n} → ${e.message}`); }
+    }
+
+    for (const mo of mano_obra) {
+        try {
+            const k = toKey(mo.n || mo.nombre || "");
+            if (!k) continue;
+            const payload = { n: k, u: (mo.u || "jornal").toLowerCase(), p: parseFloat(mo.p) || 0, desc: k, und: (mo.u || "jornal").toLowerCase(), pu: parseFloat(mo.p) || 0 };
+            await db.ref(`base_datos/mano_obra/${k}`).update(payload);
+            resultados.mano_obra++;
+        } catch (e) { resultados.errores.push(`mo:${mo.n} → ${e.message}`); }
+    }
+
+    for (const item of items_apu) {
+        try {
+            const k = toKey(item.desc || "");
+            if (!k) continue;
+            await db.ref(`base_datos/items/${k}`).update(item);
+            resultados.items++;
+        } catch (e) { resultados.errores.push(`item:${item.desc} → ${e.message}`); }
+    }
+
+    console.log("importarAdmin:", JSON.stringify(resultados));
+    return res.status(200).json({ ok: true, cargados: resultados });
+});
