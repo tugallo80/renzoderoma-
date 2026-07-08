@@ -86,9 +86,9 @@ function geminiPartsToClaudeContent(parts) {
 }
 
 /** Llama a Claude API (raw HTTP) y devuelve el texto de respuesta */
-async function llamarClaude(anthropicKey, messages, systemText, maxTokens) {
+async function llamarClaude(anthropicKey, messages, systemText, maxTokens, model) {
     const body = {
-        model: "claude-haiku-4-5",
+        model: model || "claude-haiku-4-5",
         max_tokens: Math.min(maxTokens || 8192, 8192),
         messages,
     };
@@ -334,15 +334,31 @@ exports.geminiProxy = onRequest(GEMINI_PROXY_OPTS, async (req, res) => {
         const generationConfig = body.generationConfig;
         const systemInstruction = body.systemInstruction;
 
+        // Sufijo de dominio que se agrega a todo system prompt de presupuesto/cotización
+        const DOMAIN_SUFFIX = `
+
+RUBROS DE MANO DE OBRA — BOLIVIA (Santa Cruz): Usá SIEMPRE rubros específicos al trabajo. Ejemplos críticos:
+- Espejos/vidrio → VIDRERO (corte, biselado, colocación con silicona) — jornal 150-200 Bs
+- Soldadura → SOLDADOR ESTRUCTURAL — jornal 200-280 Bs
+- Cerrajería armado → MAESTRO CERRAJERO — jornal 130-180 Bs
+- Pintura → PINTOR — jornal 120-160 Bs
+- Lona/tensado → TENSADOR — m2 8-12 Bs
+- Instalación general → INSTALADOR — jornal 100-150 Bs
+NUNCA usar "MANO DE OBRA" genérico.
+
+MATERIALES — ESPEJOS/VIDRIO: Para paneles de espejo la estructura es tubín metálico + espejos. NO incluir plancha galvanizada ni MDF a menos que el usuario lo pida. El área de espejo = área total del panel MENOS las aperturas (huecos TV, ventanas, etc.). Calculá siempre esa resta.`;
+
         let systemText = null;
         if (systemInstruction) {
             if (typeof systemInstruction === "string") {
-                systemText = systemInstruction;
+                systemText = systemInstruction + DOMAIN_SUFFIX;
             } else if (Array.isArray(systemInstruction.parts)) {
-                systemText = systemInstruction.parts.map(p => p.text || "").join("\n");
+                systemText = systemInstruction.parts.map(p => p.text || "").join("\n") + DOMAIN_SUFFIX;
             } else if (typeof systemInstruction.text === "string") {
-                systemText = systemInstruction.text;
+                systemText = systemInstruction.text + DOMAIN_SUFFIX;
             }
+        } else {
+            systemText = DOMAIN_SUFFIX.trim();
         }
 
         let messages;
@@ -364,11 +380,13 @@ exports.geminiProxy = onRequest(GEMINI_PROXY_OPTS, async (req, res) => {
             throw new Error("El body debe contener 'contents', 'parts', 'prompt' o 'text'");
         }
 
+        // Sonnet para presupuesto/cotización (requiere razonamiento geométrico y conocimiento del rubro)
         const text = await llamarClaude(
             anthropicKey,
             messages,
             systemText,
-            generationConfig?.maxOutputTokens
+            generationConfig?.maxOutputTokens,
+            "claude-sonnet-4-6"
         );
 
         // Devolver en formato Gemini para que el frontend existente lo lea sin cambios
