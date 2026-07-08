@@ -371,7 +371,11 @@ exports.geminiProxy = onRequest(GEMINI_PROXY_OPTS, async (req, res) => {
             generationConfig?.maxOutputTokens
         );
 
-        return res.status(200).json({ text, candidates: null, promptFeedback: null });
+        // Devolver en formato Gemini para que el frontend existente lo lea sin cambios
+        return res.status(200).json({
+            candidates: [{ content: { parts: [{ text }], role: "model" }, finishReason: "STOP" }],
+            promptFeedback: null,
+        });
 
     } catch (error) {
         console.error("geminiProxy error:", error);
