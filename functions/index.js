@@ -1,9 +1,16 @@
-// Deploy forzado: 2026-05-26
+// Deploy forzado: 2026-07-08
 /**
  * Cloud Functions — Rubik OS
- * VERSION TAG: rubik-2026-05-26-v1
+ * VERSION TAG: rubik-2026-07-08-v3
  *
  * Migrado a firebase-functions v2 (Gen 2 / Cloud Run).
+ *
+ * Arquitectura de IA:
+ *   - Texto / presupuesto / cotización → Claude (Anthropic)
+ *   - Ingesta base de datos (materiales, APU, MO) → Claude
+ *   - Generación de renders: Claude optimiza el prompt → Gemini genera la imagen
+ *   - WhatsApp bot → Gemini
+ *
  * El frontend llama a las funciones a través de Firebase Hosting rewrites:
  *   /api/gemini    -> geminiProxy
  *   /api/ingesta   -> procesarIngestaIA
@@ -20,6 +27,7 @@ admin.initializeApp();
 
 // Secrets gestionados por Firebase Secret Manager
 const GEMINI_API_KEY        = defineSecret("GEMINI_API_KEY");
+const ANTHROPIC_API_KEY     = defineSecret("ANTHROPIC_API_KEY");
 const WHATSAPP_TOKEN        = defineSecret("WHATSAPP_TOKEN");
 const WHATSAPP_VERIFY_TOKEN = defineSecret("WHATSAPP_VERIFY_TOKEN");
 
@@ -59,8 +67,95 @@ async function requireAuth(req, res) {
     }
 }
 
+// ── Claude helpers ────────────────────────────────────────────────────────────
+
+/** Convierte partes de formato Gemini a bloques de contenido de Claude */
+function geminiPartsToClaudeContent(parts) {
+    return parts.map(p => {
+        if (p.text !== undefined) return { type: "text", text: p.text };
+        const inline = p.inlineData || p.inline_data;
+        if (inline) {
+            const mime = inline.mimeType || inline.mime_type || "image/jpeg";
+            if (mime === "application/pdf") {
+                return { type: "document", source: { type: "base64", media_type: "application/pdf", data: inline.data } };
+            }
+            return { type: "image", source: { type: "base64", media_type: mime, data: inline.data } };
+        }
+        return { type: "text", text: JSON.stringify(p) };
+    });
+}
+
+/** Llama a Claude API (raw HTTP) y devuelve el texto de respuesta */
+async function llamarClaude(anthropicKey, messages, systemText, maxTokens) {
+    const body = {
+        model: "claude-haiku-4-5",
+        max_tokens: Math.min(maxTokens || 8192, 8192),
+        messages,
+    };
+    if (systemText) body.system = systemText;
+
+    const res = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: {
+            "x-api-key": anthropicKey,
+            "anthropic-version": "2023-06-01",
+            "Content-Type": "application/json",
+        },
+        body: JSON.stringify(body),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+        throw new Error(`Claude API ${res.status}: ${data?.error?.message || JSON.stringify(data)}`);
+    }
+    return data.content?.find(b => b.type === "text")?.text || "";
+}
+
+/**
+ * Claude optimiza el prompt antes de enviarlo a Gemini para generación de imagen.
+ * Recibe la descripción del usuario (y opcionalmente imagen de referencia)
+ * y devuelve un prompt técnico detallado en inglés para los modelos de Gemini.
+ */
+async function claudeOptimizarPromptImagen(anthropicKey, descripcion, referenceImageData, referenceImageMime) {
+    const content = [];
+    if (referenceImageData) {
+        content.push({
+            type: "image",
+            source: { type: "base64", media_type: referenceImageMime || "image/jpeg", data: referenceImageData },
+        });
+    }
+    content.push({
+        type: "text",
+        text: `You are an expert at writing image generation prompts for photorealistic renders of signage, advertising, and branding installations in Latin America.
+
+Based on the client's description${referenceImageData ? " and the reference image provided" : ""}, write a detailed image generation prompt in English.
+
+Requirements:
+- Photorealistic render quality, professional photography style
+- Specify exact lighting (time of day, direction, intensity)
+- Describe materials and textures in detail
+- Include camera angle and perspective
+- Specify Bolivian/Latin American urban or commercial context
+- Include color palette details
+- Maximum 300 words
+- Return ONLY the prompt text, no explanations or preamble
+
+Client description: ${descripcion}`,
+    });
+
+    try {
+        const refined = await llamarClaude(anthropicKey, [{ role: "user", content }], null, 600);
+        return refined.trim();
+    } catch (e) {
+        console.warn("Claude prompt refinement failed, using original:", e.message);
+        return descripcion;
+    }
+}
+
+// ── Opciones de funciones ─────────────────────────────────────────────────────
+
+// procesarIngestaIA: Claude (base de datos — materiales, APU, mano de obra)
 const HTTP_OPTS = {
-    secrets: [GEMINI_API_KEY],
+    secrets: [ANTHROPIC_API_KEY],
     timeoutSeconds: 540,
     memory: "2GiB",
     cpu: 1,
@@ -70,9 +165,9 @@ const HTTP_OPTS = {
     cors: false,
 };
 
-// geminiProxy con minInstances:1 para evitar cold starts en el cotizador del cliente
+// geminiProxy: Claude para texto + Claude→Gemini para imágenes
 const GEMINI_PROXY_OPTS = {
-    secrets: [GEMINI_API_KEY],
+    secrets: [GEMINI_API_KEY, ANTHROPIC_API_KEY],
     timeoutSeconds: 540,
     memory: "2GiB",
     cpu: 1,
@@ -84,7 +179,7 @@ const GEMINI_PROXY_OPTS = {
 };
 
 // ============================================================================
-// PROXY GENÉRICO — reemplaza las llamadas directas a Gemini desde el frontend
+// PROXY GENÉRICO — texto via Claude, imágenes via Claude→Gemini
 // ============================================================================
 exports.geminiProxy = onRequest(GEMINI_PROXY_OPTS, async (req, res) => {
     applyCors(req, res);
@@ -97,18 +192,25 @@ exports.geminiProxy = onRequest(GEMINI_PROXY_OPTS, async (req, res) => {
     if (!decoded) return;
 
     try {
-        const { GoogleGenerativeAI } = require("@google/generative-ai");
-        const geminiKey = GEMINI_API_KEY.value();
-        const genAI = new GoogleGenerativeAI(geminiKey);
-
         const body = req.body || {};
+        const geminiKey    = GEMINI_API_KEY.value();
+        const anthropicKey = ANTHROPIC_API_KEY.value();
 
-        // ── Generación de imagen — manejo temprano, NO usa el modelo de texto ──
+        // ── Generación de imagen — Claude optimiza el prompt → Gemini genera ──
         if (body.generateImage) {
-            const imgPrompt = body.prompt || body.text || "imagen profesional corporativa";
+            const userDescription = body.prompt || body.text || "imagen profesional corporativa";
             const errors = [];
 
-            // Parts con referencia visual opcional
+            // Claude refina el prompt antes de enviarlo a Gemini
+            const imgPrompt = await claudeOptimizarPromptImagen(
+                anthropicKey,
+                userDescription,
+                body.referenceImage?.data,
+                body.referenceImage?.mimeType
+            );
+            console.log("Claude→Gemini optimized prompt:", imgPrompt.slice(0, 200));
+
+            // Parts para Gemini (incluye imágenes de referencia si las hay)
             const userParts = [];
             if (body.referenceImage?.data) {
                 userParts.push({ inlineData: { data: body.referenceImage.data, mimeType: body.referenceImage.mimeType || "image/jpeg" } });
@@ -138,8 +240,6 @@ exports.geminiProxy = onRequest(GEMINI_PROXY_OPTS, async (req, res) => {
                     n.includes("image-generation") || n.includes("flash-image") || n.includes("pro-image")
                 );
                 dynamicImagenModels = allNames.filter((n) => n.startsWith("imagen"));
-                console.log("DYNAMIC_IMG:", dynamicImageModels.join(" | "));
-                console.log("DYNAMIC_IMAGEN:", dynamicImagenModels.join(" | "));
             } catch(e) {
                 console.warn("ListModels failed:", e.message);
             }
@@ -182,7 +282,6 @@ exports.geminiProxy = onRequest(GEMINI_PROXY_OPTS, async (req, res) => {
                 "imagen-4.0-fast-generate-preview-06-02",
             ])];
             for (const m of imagenModels) {
-                // generateImages (formato Google AI Studio)
                 try {
                     const r = await fetch(
                         `https://generativelanguage.googleapis.com/v1beta/models/${m}:generateImages?key=${geminiKey}`,
@@ -201,7 +300,6 @@ exports.geminiProxy = onRequest(GEMINI_PROXY_OPTS, async (req, res) => {
                     errors.push(`${m}(generateImages) → ${r.status}: ${d?.error?.message || "?"}`);
                 } catch(e) { errors.push(`${m}(generateImages) → excepcion: ${e.message}`); }
 
-                // predict (formato Vertex AI)
                 try {
                     const r = await fetch(
                         `https://generativelanguage.googleapis.com/v1beta/models/${m}:predict?key=${geminiKey}`,
@@ -221,7 +319,6 @@ exports.geminiProxy = onRequest(GEMINI_PROXY_OPTS, async (req, res) => {
             }
 
             console.error("imagen-gen ALL FAILED:", errors.join(" | "));
-            // Si todos son 429 de créditos agotados, devolver mensaje claro
             const creditsMsg = "prepayment credits are depleted";
             const allCredits = errors.length > 0 && errors.every(e => e.includes("429") && e.includes(creditsMsg));
             if (allCredits) {
@@ -233,73 +330,49 @@ exports.geminiProxy = onRequest(GEMINI_PROXY_OPTS, async (req, res) => {
             return res.status(500).json({ error: "Ningún modelo de imagen disponible.", detalle: errors.join(" | ") });
         }
 
-        const requestedModel = body.model || "gemini-2.5-flash";
+        // ── Generación de texto — Claude ──────────────────────────────────────
         const generationConfig = body.generationConfig;
-        const systemInstruction = body.systemInstruction || null;
+        const systemInstruction = body.systemInstruction;
 
-        async function llamarModelo(modelName) {
-            const modelOpts = {
-                model: modelName,
-                ...(generationConfig ? { generationConfig } : {}),
-                ...(systemInstruction ? { systemInstruction } : {}),
-            };
-            const model = genAI.getGenerativeModel(modelOpts);
-            let result;
-            if (body.contents) {
-                result = await model.generateContent({ contents: body.contents });
-            } else if (Array.isArray(body.parts)) {
-                result = await model.generateContent(body.parts);
-            } else if (typeof body.prompt === "string" || typeof body.text === "string") {
-                const promptText = body.prompt || body.text;
-                const parts = [{ text: promptText }];
-                if (body.image && body.image.data && body.image.mimeType) {
-                    parts.unshift({ inlineData: { data: body.image.data, mimeType: body.image.mimeType } });
-                }
-                result = await model.generateContent(parts);
-            } else {
-                throw new Error("El body debe contener 'contents', 'parts', 'prompt' o 'text'");
-            }
-            return result;
-        }
-
-        // Cadena de fallback: 2.5-flash → 1.5-flash (gemini-1.5-pro y 2.0-flash dados de baja julio 2026)
-        const FALLBACK_CHAIN = ["gemini-2.5-flash", "gemini-1.5-flash"];
-        let result;
-        let lastErr;
-        const modelsToTry = requestedModel === "gemini-2.5-flash"
-            ? FALLBACK_CHAIN
-            : [requestedModel, "gemini-1.5-flash"];
-
-        for (const modelName of modelsToTry) {
-            try {
-                result = await llamarModelo(modelName);
-                if (modelName !== requestedModel) {
-                    console.warn(`geminiProxy: fallback usado — ${requestedModel} → ${modelName}`);
-                }
-                break;
-            } catch (err) {
-                lastErr = err;
-                const msg = err.message || String(err);
-                const isRetriable = msg.includes("503") || msg.includes("unavailable") ||
-                    msg.includes("high demand") || msg.includes("Service Unavailable") ||
-                    msg.includes("500") || msg.includes("Internal") || msg.includes("overloaded");
-                if (!isRetriable) throw err;
-                const attemptIdx = modelsToTry.indexOf(modelName);
-                const delay = (attemptIdx + 1) * 3000;
-                console.warn(`geminiProxy: ${modelName} falló (${msg.slice(0,80)}), esperando ${delay}ms…`);
-                await new Promise(r => setTimeout(r, delay));
+        let systemText = null;
+        if (systemInstruction) {
+            if (typeof systemInstruction === "string") {
+                systemText = systemInstruction;
+            } else if (Array.isArray(systemInstruction.parts)) {
+                systemText = systemInstruction.parts.map(p => p.text || "").join("\n");
+            } else if (typeof systemInstruction.text === "string") {
+                systemText = systemInstruction.text;
             }
         }
-        if (!result) throw lastErr || new Error("Todos los modelos fallaron");
 
-        let text = "";
-        try { text = result.response.text() || ""; } catch (_) { text = ""; }
+        let messages;
+        if (body.contents) {
+            messages = body.contents.map(c => ({
+                role: c.role === "model" ? "assistant" : "user",
+                content: geminiPartsToClaudeContent(c.parts || []),
+            }));
+        } else if (Array.isArray(body.parts)) {
+            messages = [{ role: "user", content: geminiPartsToClaudeContent(body.parts) }];
+        } else if (typeof body.prompt === "string" || typeof body.text === "string") {
+            const content = [];
+            if (body.image?.data) {
+                content.push({ type: "image", source: { type: "base64", media_type: body.image.mimeType || "image/jpeg", data: body.image.data } });
+            }
+            content.push({ type: "text", text: body.prompt || body.text });
+            messages = [{ role: "user", content }];
+        } else {
+            throw new Error("El body debe contener 'contents', 'parts', 'prompt' o 'text'");
+        }
 
-        return res.status(200).json({
-            text,
-            candidates: result.response.candidates,
-            promptFeedback: result.response.promptFeedback,
-        });
+        const text = await llamarClaude(
+            anthropicKey,
+            messages,
+            systemText,
+            generationConfig?.maxOutputTokens
+        );
+
+        return res.status(200).json({ text, candidates: null, promptFeedback: null });
+
     } catch (error) {
         console.error("geminiProxy error:", error);
         return res.status(500).json({
@@ -310,7 +383,8 @@ exports.geminiProxy = onRequest(GEMINI_PROXY_OPTS, async (req, res) => {
 });
 
 // ============================================================================
-// Motor de Ingesta Inteligente Multimodal
+// Motor de Ingesta Inteligente Multimodal — Claude
+// (organización de base de datos: materiales, APU, mano de obra)
 // ============================================================================
 exports.procesarIngestaIA = onRequest(HTTP_OPTS, async (req, res) => {
     applyCors(req, res);
@@ -323,14 +397,10 @@ exports.procesarIngestaIA = onRequest(HTTP_OPTS, async (req, res) => {
     if (!decoded) return;
 
     try {
-        const { GoogleGenerativeAI } = require("@google/generative-ai");
-        const genAI = new GoogleGenerativeAI(GEMINI_API_KEY.value());
-        const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
-
+        const anthropicKey = ANTHROPIC_API_KEY.value();
         const { textPrompt, imagesBase64, pdfBase64, tipoIngesta } = req.body || {};
 
-        const systemPrompt = `
-Eres el "Cerebro Central" de Ingesta de Datos de Rubik OS.
+        const systemPrompt = `Eres el "Cerebro Central" de Ingesta de Datos de Rubik OS.
 Tu tarea es analizar archivos (imágenes, PDFs), enlaces web y consultas para extraer información técnica y estructurar su guardado, O BIEN responder consultas sobre costos para el mercado boliviano.
 
 REGLAS CRÍTICAS DE SALIDA JSON:
@@ -347,32 +417,35 @@ Si la consulta no es una orden de registro, responde amablemente en un campo "me
 Formato: { "mensaje": "Tu respuesta conversacional aquí." }
 
 Usuario solicita ingesta/consulta en categoría: ${tipoIngesta}
-Consulta/Links: ${textPrompt || "No proporcionado."}
-`;
+Consulta/Links: ${textPrompt || "No proporcionado."}`;
 
-        const parts = [{ text: systemPrompt }];
+        const userContent = [];
 
         if (Array.isArray(imagesBase64) && imagesBase64.length > 0) {
-            imagesBase64.forEach((img) => {
+            imagesBase64.forEach(img => {
                 if (typeof img === "string" && img.includes(",")) {
-                    const base64Data = img.split(",")[1];
-                    const mimeTypeMatch = img.match(/data:([a-zA-Z0-9]+\/[a-zA-Z0-9-.+]+).*,.*/);
-                    const mimeType = mimeTypeMatch ? mimeTypeMatch[1] : "image/jpeg";
-                    parts.push({ inlineData: { data: base64Data, mimeType } });
+                    const b64 = img.split(",")[1];
+                    const mimeMatch = img.match(/data:([^;]+);/);
+                    const mime = mimeMatch ? mimeMatch[1] : "image/jpeg";
+                    userContent.push({ type: "image", source: { type: "base64", media_type: mime, data: b64 } });
                 }
             });
         }
 
         if (pdfBase64 && typeof pdfBase64 === "string" && pdfBase64.includes(",")) {
-            const base64Data = pdfBase64.split(",")[1];
-            parts.push({ inlineData: { data: base64Data, mimeType: "application/pdf" } });
+            const b64 = pdfBase64.split(",")[1];
+            userContent.push({ type: "document", source: { type: "base64", media_type: "application/pdf", data: b64 } });
         }
 
-        const result = await model.generateContent({
-            contents: [{ role: "user", parts }],
-        });
+        userContent.push({ type: "text", text: "Procesa la solicitud y devuelve el JSON correspondiente." });
 
-        const rawText = result.response.text();
+        const rawText = await llamarClaude(
+            anthropicKey,
+            [{ role: "user", content: userContent }],
+            systemPrompt,
+            4096
+        );
+
         let parsedResponse;
         try {
             const cleanText = rawText.replace(/```json/gi, "").replace(/```/g, "").trim();
@@ -394,22 +467,7 @@ Consulta/Links: ${textPrompt || "No proporcionado."}
 // ============================================================================
 // WHATSAPP AI AGENT — Webhook de Meta  v2 (sistema de roles)
 // ============================================================================
-//
-// ROLES:
-//   ADMIN      — número 76868833 / 59176868833 (Renzo, acceso total)
-//   SUPERVISOR — personal con tipo:"supervisor" en /personal
-//   TRABAJADOR — personal con telefono en /personal (sin tipo supervisor)
-//   CLIENTE    — clientes con wsp/whatsapp en /clientes
-//   DESCONOCIDO— número no registrado
-//
-// Estructura Firebase Realtime DB:
-//   /whatsapp_historial/{phone}/mensajes/{pushId} -> { role, text, ts }
-//   /whatsapp_historial/{phone}/meta -> { nombre, rol, ultimaInteraccion }
-//
 
-// ── Helpers ────────────────────────────────────────────────────────────────
-
-/** Normaliza teléfono: quita prefijo 591, deja solo dígitos locales bolivianos */
 function normalizarTel(tel) {
     if (!tel) return "";
     const s = String(tel).replace(/\D/g, "");
@@ -417,7 +475,6 @@ function normalizarTel(tel) {
     return s;
 }
 
-/** Envía un mensaje de texto por WhatsApp API de Meta */
 async function enviarWA(phoneNumberId, to, texto, waToken) {
     const https = require("https");
     const waUrl = "https://graph.facebook.com/v20.0/" + phoneNumberId + "/messages";
@@ -449,7 +506,6 @@ async function enviarWA(phoneNumberId, to, texto, waToken) {
     });
 }
 
-/** Lee los últimos N mensajes del historial de un número */
 async function leerHistorial(db, phone, n) {
     try {
         const snap = await db.ref("/whatsapp_historial/" + phone + "/mensajes")
@@ -466,7 +522,6 @@ async function leerHistorial(db, phone, n) {
     }
 }
 
-/** Guarda mensaje en historial y actualiza meta */
 async function guardarHistorial(db, phone, textUser, textBot, nombre, rol) {
     const ref = db.ref("/whatsapp_historial/" + phone + "/mensajes");
     const ts = Date.now();
@@ -480,17 +535,12 @@ async function guardarHistorial(db, phone, textUser, textBot, nombre, rol) {
     });
 }
 
-/** Identifica rol del número emisor consultando Firebase */
 async function identificarRol(db, phone) {
     const phoneNorm = normalizarTel(phone);
-
-    // ADMIN — número del dueño
     const ADMIN_PHONES = ["76868833", "59176868833"];
     if (ADMIN_PHONES.includes(phone) || ADMIN_PHONES.includes(phoneNorm)) {
         return { rol: "ADMIN", nombre: "Renzo", id: "RENZO_INTERNO", data: {} };
     }
-
-    // TRABAJADOR / SUPERVISOR — buscar en /personal
     try {
         const persSnap = await db.ref("/personal").get();
         if (persSnap.exists()) {
@@ -499,26 +549,15 @@ async function identificarRol(db, phone) {
                 const p = child.val();
                 if (!p || encontrado) return;
                 const tel = normalizarTel(p.telefono || p.phone || p.whatsapp || "");
-                if (tel === phoneNorm || tel === phone) {
-                    encontrado = { key: child.key, data: p };
-                }
+                if (tel === phoneNorm || tel === phone) encontrado = { key: child.key, data: p };
             });
             if (encontrado) {
                 const d = encontrado.data;
                 const esSupervisor = d.tipo === "supervisor" || d.rol === "supervisor";
-                return {
-                    rol: esSupervisor ? "SUPERVISOR" : "TRABAJADOR",
-                    nombre: d.nombre || encontrado.key,
-                    id: encontrado.key,
-                    data: d,
-                };
+                return { rol: esSupervisor ? "SUPERVISOR" : "TRABAJADOR", nombre: d.nombre || encontrado.key, id: encontrado.key, data: d };
             }
         }
-    } catch (e) {
-        console.warn("Error buscando personal:", e.message);
-    }
-
-    // CLIENTE — buscar en /clientes por wsp o whatsapp
+    } catch (e) { console.warn("Error buscando personal:", e.message); }
     try {
         const cliSnap = await db.ref("/clientes").get();
         if (cliSnap.exists()) {
@@ -528,43 +567,25 @@ async function identificarRol(db, phone) {
                 if (!c || encontrado) return;
                 const tel1 = normalizarTel(c.wsp || "");
                 const tel2 = normalizarTel(c.whatsapp || "");
-                if ([tel1, tel2].includes(phoneNorm) || [tel1, tel2].includes(phone)) {
-                    encontrado = { key: child.key, data: c };
-                }
+                if ([tel1, tel2].includes(phoneNorm) || [tel1, tel2].includes(phone)) encontrado = { key: child.key, data: c };
             });
-            if (encontrado) {
-                return {
-                    rol: "CLIENTE",
-                    nombre: encontrado.data.nombre || encontrado.key,
-                    id: encontrado.key,
-                    data: encontrado.data,
-                };
-            }
+            if (encontrado) return { rol: "CLIENTE", nombre: encontrado.data.nombre || encontrado.key, id: encontrado.key, data: encontrado.data };
         }
-    } catch (e) {
-        console.warn("Error buscando cliente:", e.message);
-    }
-
+    } catch (e) { console.warn("Error buscando cliente:", e.message); }
     return { rol: "DESCONOCIDO", nombre: "Desconocido", id: null, data: {} };
 }
 
-/** Construye contexto de proyectos según el rol */
 async function contextoProyectos(db, rol, id) {
     try {
         const proySnap = await db.ref("/proyectos").get();
         if (!proySnap.exists()) return "";
         const lineas = [];
-
         proySnap.forEach(function(cliNode) {
             const cid = cliNode.key;
-            // Para CLIENTE solo sus proyectos; para ADMIN/SUPERVISOR todos
             if (rol === "CLIENTE" && cid !== id) return;
-
             cliNode.forEach(function(proyNode) {
                 const p = proyNode.val();
                 if (!p || p.archivado) return;
-
-                // Para TRABAJADOR solo proyectos donde aparece asignado
                 if (rol === "TRABAJADOR") {
                     let asignado = false;
                     if (p.gantt && p.gantt.items) {
@@ -579,12 +600,9 @@ async function contextoProyectos(db, rol, id) {
                     }
                     if (!asignado) return;
                 }
-
                 const nombre = p.nombre || proyNode.key;
                 const estado = p.estado || "sin estado";
                 const total  = p.presupuesto_total || (p.presupuesto && p.presupuesto.total) || 0;
-
-                // Tareas del gantt
                 let tareasStr = "";
                 if (p.gantt && p.gantt.items) {
                     const items = Array.isArray(p.gantt.items) ? p.gantt.items : Object.values(p.gantt.items);
@@ -599,29 +617,20 @@ async function contextoProyectos(db, rol, id) {
                     });
                     if (tareas.length) tareasStr = "\n  Tareas:\n" + tareas.slice(0, 8).join("\n");
                 }
-
-                // Presupuesto: solo para ADMIN, ocultar para otros
                 let presStr = "";
                 if (rol === "ADMIN") {
                     presStr = " | Total: " + total + " Bs";
                     if (p.gasto_total) presStr += " | Gasto: " + p.gasto_total + " Bs";
                 } else if (rol === "CLIENTE") {
-                    // Cliente ve su total sin margen interno
                     presStr = " | Presupuesto aprobado: " + total + " Bs";
                 }
-
                 lineas.push("Proyecto: \"" + nombre + "\" (cid:" + cid + "/pid:" + proyNode.key + ") | Estado: " + estado + presStr + tareasStr);
             });
         });
-
         return lineas.length ? "\n\nPROYECTOS:\n" + lineas.join("\n\n") : "";
-    } catch (e) {
-        console.warn("Error leyendo proyectos:", e.message);
-        return "";
-    }
+    } catch (e) { console.warn("Error leyendo proyectos:", e.message); return ""; }
 }
 
-/** Construye contexto de precios y proveedores (solo ADMIN) */
 async function contextoPrecios(db) {
     try {
         const [matsSnap, provSnap] = await Promise.all([
@@ -650,58 +659,33 @@ async function contextoPrecios(db) {
             if (provs.length) ctx += "\n\nPROVEEDORES:\n" + provs.join("\n");
         }
         return ctx;
-    } catch (e) {
-        return "";
-    }
+    } catch (e) { return ""; }
 }
 
-/** Construye el system prompt según el rol */
 function buildPrompt(rol, nombre, contexto, historial, mensaje) {
     const base =
         "Sos el asistente de WhatsApp de RUBIK Bolivia — empresa de señaletica, publicidad y rotulacion.\n" +
         "Tu nombre es Rubik Asistente. Respondés en español latinoamericano, de forma amable, profesional y concisa (maximo 3 parrafos cortos).\n" +
         "Nunca uses markdown, asteriscos ni JSON en tu respuesta — solo texto plano.\n\n";
-
     let instrucciones = "";
-
     if (rol === "ADMIN") {
-        instrucciones =
-            "ROL: ADMIN (Renzo, dueño de RUBIK Bolivia). Tenes acceso total al sistema.\n" +
-            "Podes consultar proyectos, precios, proveedores, finanzas, inventario y personal.\n" +
-            "Si pide una cotizacion, construila con los materiales de la BD.\n" +
-            "Si pide una cotizacion, construila con los materiales de la BD.\n" +
-            "Si piden reportes financieros, resume los datos disponibles.\n" +
-            "Nunca reveles margenes de ganancia ni precios internos a nadie que no sea ADMIN.\n";
+        instrucciones = "ROL: ADMIN (Renzo, dueño de RUBIK Bolivia). Tenes acceso total al sistema.\nPodes consultar proyectos, precios, proveedores, finanzas, inventario y personal.\nSi pide una cotizacion, construila con los materiales de la BD.\nSi piden reportes financieros, resume los datos disponibles.\nNunca reveles margenes de ganancia ni precios internos a nadie que no sea ADMIN.\n";
     } else if (rol === "SUPERVISOR") {
-        instrucciones =
-            "ROL: SUPERVISOR de obra. Podes consultar estado de proyectos y tareas asignadas.\n" +
-            "NO tenes acceso a datos financieros, margenes ni precios de costo.\n";
+        instrucciones = "ROL: SUPERVISOR de obra. Podes consultar estado de proyectos y tareas asignadas.\nNO tenes acceso a datos financieros, margenes ni precios de costo.\n";
     } else if (rol === "TRABAJADOR") {
-        instrucciones =
-            "ROL: TRABAJADOR. Solo podes consultar tus tareas y el estado de los proyectos en los que participas.\n" +
-            "No tenes acceso a datos de otros trabajadores ni informacion financiera.\n";
+        instrucciones = "ROL: TRABAJADOR. Solo podes consultar tus tareas y el estado de los proyectos en los que participas.\nNo tenes acceso a datos de otros trabajadores ni informacion financiera.\n";
     } else if (rol === "CLIENTE") {
-        instrucciones =
-            "ROL: CLIENTE. Solo podes consultar el estado de avance de TUS proyectos.\n" +
-            "No tenes acceso a proyectos de otros clientes ni a informacion interna.\n";
+        instrucciones = "ROL: CLIENTE. Solo podes consultar el estado de avance de TUS proyectos.\nNo tenes acceso a proyectos de otros clientes ni a informacion interna.\n";
     } else {
-        instrucciones =
-            "ROL: Visitante no registrado. Podes dar informacion general sobre RUBIK Bolivia (servicios, contacto).\n" +
-            "Para mas informacion invita al usuario a contactarse por los canales oficiales.\n";
+        instrucciones = "ROL: Visitante no registrado. Podes dar informacion general sobre RUBIK Bolivia (servicios, contacto).\nPara mas informacion invita al usuario a contactarse por los canales oficiales.\n";
     }
-
     const historialTxt = historial.length
         ? "\n\nHISTORIAL RECIENTE:\n" + historial.map(function(h) {
             return (h.role === "user" ? "Usuario" : "Asistente") + ": " + h.content;
           }).join("\n")
         : "";
-
     return base + instrucciones + (contexto ? "\n\nDATOS DEL SISTEMA:" + contexto : "") + historialTxt + "\n\nMensaje actual del usuario: " + mensaje;
 }
-
-// ─────────────────────────────────────────────────────────
-// WHATSAPP WEBHOOK
-// ─────────────────────────────────────────────────────────
 
 const WA_OPTS = {
     region: "us-central1",
@@ -712,7 +696,6 @@ const WA_OPTS = {
 };
 
 exports.whatsappWebhook = onRequest(WA_OPTS, async (req, res) => {
-    // ── GET: verificación del webhook ──
     if (req.method === "GET") {
         const verifyToken = (WHATSAPP_VERIFY_TOKEN.value && WHATSAPP_VERIFY_TOKEN.value()) || "rubik-webhook-2026";
         const mode      = req.query["hub.mode"];
@@ -724,10 +707,7 @@ exports.whatsappWebhook = onRequest(WA_OPTS, async (req, res) => {
         }
         return res.status(403).send("Token inválido");
     }
-
-    // ── POST: mensajes entrantes ──
     if (req.method !== "POST") return res.status(405).send("Method Not Allowed");
-
     try {
         const body = req.body;
         const entry    = body?.entry?.[0];
@@ -735,34 +715,24 @@ exports.whatsappWebhook = onRequest(WA_OPTS, async (req, res) => {
         const value    = changes?.value;
         const messages = value?.messages;
         if (!messages || !messages.length) return res.status(200).send("OK");
-
         const msg         = messages[0];
-        const from        = msg.from;                          // número del usuario
+        const from        = msg.from;
         const phoneNumberId = value?.metadata?.phone_number_id;
         const waToken     = WHATSAPP_TOKEN.value();
         const geminiKey   = GEMINI_API_KEY.value();
-
-        // Solo texto e imágenes por ahora
         const msgType = msg.type;
         let textoUsuario = "";
         let imagenB64 = null;
         let imagenMime = "image/jpeg";
-
         if (msgType === "text") {
             textoUsuario = msg.text?.body || "";
         } else if (msgType === "image") {
             const mediaId = msg.image?.id;
             textoUsuario  = msg.image?.caption || "Analiza esta imagen";
-            // Descargar imagen de WhatsApp
             try {
-                const mediaRes = await fetch(
-                    "https://graph.facebook.com/v20.0/" + mediaId,
-                    { headers: { Authorization: "Bearer " + waToken } }
-                );
+                const mediaRes = await fetch("https://graph.facebook.com/v20.0/" + mediaId, { headers: { Authorization: "Bearer " + waToken } });
                 const mediaData = await mediaRes.json();
-                const imgRes = await fetch(mediaData.url, {
-                    headers: { Authorization: "Bearer " + waToken }
-                });
+                const imgRes = await fetch(mediaData.url, { headers: { Authorization: "Bearer " + waToken } });
                 const arrayBuf = await imgRes.arrayBuffer();
                 imagenB64  = Buffer.from(arrayBuf).toString("base64");
                 imagenMime = msg.image?.mime_type || "image/jpeg";
@@ -771,32 +741,19 @@ exports.whatsappWebhook = onRequest(WA_OPTS, async (req, res) => {
                 textoUsuario = "No se pudo procesar la imagen. " + textoUsuario;
             }
         } else {
-            return res.status(200).send("OK"); // tipo no soportado
+            return res.status(200).send("OK");
         }
-
         if (!textoUsuario.trim()) return res.status(200).send("OK");
-
         const db   = admin.database();
         const rol  = await identificarRol(from);
         const nombre = rol === "ADMIN" ? "Renzo" : from;
-
-        // Contexto de proyectos y precios según rol
         let contexto = await contextoProyectos(db, rol, from);
         if (rol === "ADMIN") contexto += await contextoPrecios(db);
-
-        // Historial de conversación
         const historial = await leerHistorial(db, from);
-
-        // Construir prompt
         const systemPrompt = buildPrompt(rol, nombre, contexto, historial, textoUsuario);
-
-        // Llamar Gemini
         const parts = [];
-        if (imagenB64) {
-            parts.push({ inlineData: { mimeType: imagenMime, data: imagenB64 } });
-        }
+        if (imagenB64) parts.push({ inlineData: { mimeType: imagenMime, data: imagenB64 } });
         parts.push({ text: textoUsuario });
-
         const geminiRes = await fetch(
             "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=" + geminiKey,
             {
@@ -810,19 +767,13 @@ exports.whatsappWebhook = onRequest(WA_OPTS, async (req, res) => {
             }
         );
         const geminiData = await geminiRes.json();
-        const respuesta  = geminiData?.candidates?.[0]?.content?.parts?.[0]?.text
-            || "No pude procesar tu consulta en este momento.";
-
-        // Guardar en historial
+        const respuesta  = geminiData?.candidates?.[0]?.content?.parts?.[0]?.text || "No pude procesar tu consulta en este momento.";
         await guardarHistorial(db, from, textoUsuario, respuesta);
-
-        // Enviar respuesta por WhatsApp
         await enviarWA(phoneNumberId, from, respuesta, waToken);
-
         return res.status(200).send("OK");
     } catch (e) {
         console.error("Error en whatsappWebhook:", e);
-        return res.status(200).send("OK"); // siempre 200 para Meta
+        return res.status(200).send("OK");
     }
 });
 
