@@ -97,7 +97,11 @@
         .btn-ai-action.audio { background: #000; color: var(--gray); border: 1px solid var(--border); transition: transform 0.1s, background 0.15s; }
         .btn-ai-action.audio.recording { background: var(--red); color: white; animation: pulse 1.5s infinite; border: none; transform: scale(1.2); }
         .btn-ai-action.audio:active { transform: scale(1.25); }
+        .btn-ai-action.conv { background: #000; color: var(--gray); border: 1px solid var(--border); transition: background 0.2s, color 0.2s; }
+        .btn-ai-action.conv.conv-on { background: var(--purple, #7c3aed); color: white; border: none; animation: pulse-purple 2s infinite; }
+        .btn-ai-action.conv.conv-listening { background: var(--purple, #7c3aed); color: white; border: none; animation: pulse-purple 1s infinite; }
         @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(255, 59, 48, 0.7); } 70% { box-shadow: 0 0 0 10px rgba(255, 59, 48, 0); } 100% { box-shadow: 0 0 0 0 rgba(255, 59, 48, 0); } }
+        @keyframes pulse-purple { 0% { box-shadow: 0 0 0 0 rgba(124,58,237,0.6); } 70% { box-shadow: 0 0 0 8px rgba(124,58,237,0); } 100% { box-shadow: 0 0 0 0 rgba(124,58,237,0); } }
 
         .chat-img-preview { max-width: 100px; border-radius: 8px; display: none; border: 1px solid var(--border); object-fit: cover;}
         .typing-indicator { display: none; align-self: flex-start; background: #1c1c1e; padding: 12px 16px; border-radius: 20px; border-bottom-left-radius: 4px; border: 1px solid var(--border); margin-left: 20px;}
@@ -238,9 +242,13 @@
             <div class="chat-footer" id="chat-footer">
                 <button class="btn-ai-action cam" onclick="document.getElementById('ai-file-upload').click()"><i class="ph-bold ph-paperclip"></i></button>
                 <input type="file" id="ai-file-upload" accept="image/*,application/pdf" multiple style="display:none" onchange="handleAIImage(this)">
+                <button id="btn-conv" class="btn-ai-action conv" onclick="toggleConvMode()" title="Modo conversación — hablar libremente con la IA">
+                    <i class="ph-bold ph-headset"></i>
+                </button>
                 <button id="btn-audio" class="btn-ai-action audio"
                     onmousedown="pttStart(event)" onmouseup="pttStop(event)" onmouseleave="pttStop(event)"
                     ontouchstart="pttStart(event)" ontouchend="pttStop(event)" ontouchcancel="pttStop(event)"
+                    title="Mantener presionado para hablar"
                     style="touch-action:none; user-select:none; -webkit-user-select:none;">
                     <i class="ph-bold ph-microphone"></i>
                 </button>
@@ -1006,92 +1014,76 @@ Recuerda aplicar siempre: [REGLA_UTILIDAD].`
             getContextDB(); // warmup silencioso
         };
 
-        // ── PTT (Push-to-Talk) estilo WhatsApp ──────────────────────────────
+        // ── Voz: PTT + Modo Conversación ────────────────────────────────────
         const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-        let _pttActive = false;
-        let _pttTranscript = '';
 
-        function _buildRecognition() {
+        // ── Helpers compartidos ──
+        function _mostrarToastVoz(msg) {
+            let t = document.getElementById('_toast_voz');
+            if (!t) { t = document.createElement('div'); t.id = '_toast_voz';
+                t.style.cssText = 'position:fixed;bottom:90px;left:50%;transform:translateX(-50%);background:#7c3aed;color:white;padding:10px 18px;border-radius:20px;font-size:13px;font-weight:600;z-index:9999;opacity:0;transition:opacity .3s;pointer-events:none;max-width:85vw;text-align:center;'; document.body.appendChild(t); }
+            t.textContent = msg; t.style.opacity = '1';
+            setTimeout(() => { t.style.opacity = '0'; }, 3500);
+        }
+
+        // Construye un SpeechRecognition que acumula texto sin duplicar.
+        // Usa índice de guardado para evitar re-procesar finales ya vistos (bug Android).
+        function _buildSR(opts) {
             if (!SpeechRecognition) return null;
             const r = new SpeechRecognition();
-            r.continuous = true;
+            r.continuous = false; // false evita acumulación infinita en Android
             r.interimResults = true;
             r.lang = 'es-ES';
-            let _finalAccum = ''; // acumula fragmentos finales de esta sesión
+            let _accum = '';
             r.onresult = (e) => {
-                // e.resultIndex = primer resultado NUEVO en este evento
-                // NO iterar desde 0 o se re-leen todos los anteriores (bug de duplicación)
                 let interim = '';
-                for (let i = e.resultIndex; i < e.results.length; i++) {
-                    if (e.results[i].isFinal) _finalAccum += e.results[i][0].transcript;
-                    else interim += e.results[i][0].transcript;
+                for (let i = 0; i < e.results.length; i++) {
+                    if (e.results[i].isFinal) {
+                        // Solo agregar si este resultado no estaba ya en _accum
+                        const t = e.results[i][0].transcript;
+                        if (!_accum.endsWith(t)) _accum += t;
+                    } else {
+                        interim += e.results[i][0].transcript;
+                    }
                 }
-                _pttTranscript = _finalAccum + interim;
-                // Mostrar en vivo en el input mientras se habla
                 const inp = document.getElementById('ai-user-input');
-                inp.value = _pttTranscript;
-                inp.style.height = 'auto'; inp.style.height = inp.scrollHeight + 'px';
+                if (inp) { inp.value = _accum + interim; inp.style.height = 'auto'; inp.style.height = inp.scrollHeight + 'px'; }
+                if (opts.onPartial) opts.onPartial(_accum + interim);
+                if (opts.onSilence) { clearTimeout(r._silTimer); r._silTimer = setTimeout(opts.onSilence, opts.silenceMs || 1500); }
             };
-            r.onerror = (e) => {
-                if (e.error === 'aborted') return;
-                _pttReset();
-            };
-            r.onend = () => {
-                // Si soltaron antes de que termine, enviar igual
-                if (!_pttActive) _pttEnviar();
-            };
+            r.onerror = (e) => { if (e.error !== 'aborted' && e.error !== 'no-speech') console.warn('[SR]', e.error); if (opts.onError) opts.onError(e); };
+            r.onend = () => { clearTimeout(r._silTimer); if (opts.onEnd) opts.onEnd(_accum.trim()); };
             return r;
         }
 
+        // ── PTT (presionar y sostener) ───────────────────────────────────────
+        let _pttActive = false, _pttRec = null, _pttLastTouch = 0;
+
         function _pttReset() {
             _pttActive = false;
-            _pttTranscript = '';
             const btn = document.getElementById('btn-audio');
-            if (btn) {
-                btn.classList.remove('recording');
-                btn.innerHTML = `<i class="ph-bold ph-microphone"></i>`;
-                btn.style.transform = '';
-            }
+            if (btn) { btn.classList.remove('recording'); btn.innerHTML = '<i class="ph-bold ph-microphone"></i>'; btn.style.transform = ''; }
         }
-
-        function _pttEnviar() {
-            const txt = _pttTranscript.trim();
-            _pttReset();
-            if (txt) {
-                const inp = document.getElementById('ai-user-input');
-                inp.value = txt;
-                sendAIMessage();
-            } else {
-                const inp = document.getElementById('ai-user-input');
-                inp.value = '';
-            }
-        }
-
-        let _pttLastTouch = 0; // para bloquear mouse sintético en móvil
 
         window.pttStart = function(e) {
             e.preventDefault();
-            // En móvil, touchstart dispara mouse events sintéticos ~300ms después.
-            // Si ya arrancó por touch, ignorar el mousedown duplicado.
             if (e.type === 'touchstart') _pttLastTouch = Date.now();
             if (e.type === 'mousedown' && Date.now() - _pttLastTouch < 600) return;
-            if (!SpeechRecognition) return alert("Tu navegador no soporta el micrófono. Usa Chrome o Safari.");
-            if (_pttActive) return;
+            if (!SpeechRecognition) return alert('Tu navegador no soporta micrófono. Usa Chrome.');
+            if (_pttActive || _convMode) return;
             _pttActive = true;
-            _pttTranscript = '';
-            recognition = _buildRecognition();
             const btn = document.getElementById('btn-audio');
-            btn.classList.add('recording');
-            btn.innerHTML = `<i class="ph-fill ph-microphone"></i>`;
-            btn.style.transform = 'scale(1.2)';
-            try { recognition.start(); } catch(_) {}
-            // Activar TTS automáticamente la primera vez que se usa el mic
-            if (typeof VoiceUtils !== 'undefined' && !VoiceUtils.ttsEnabled()) {
-                VoiceUtils.ttsToggle();
-                const ttsBtn = document.getElementById('btn-tts-ia');
-                if (ttsBtn) { ttsBtn.style.color = 'var(--purple)'; ttsBtn.innerHTML = '<i class="ph-bold ph-speaker-simple-high"></i>'; }
-                _mostrarToastVoz('🎙️ Modo conversación activado — la IA te responderá en voz');
-            }
+            if (btn) { btn.classList.add('recording'); btn.innerHTML = '<i class="ph-fill ph-microphone"></i>'; btn.style.transform = 'scale(1.2)'; }
+            _pttRec = _buildSR({
+                silenceMs: 0,
+                onEnd: (txt) => {
+                    _pttReset();
+                    if (txt) { const inp = document.getElementById('ai-user-input'); if (inp) inp.value = txt; sendAIMessage(); }
+                    else { const inp = document.getElementById('ai-user-input'); if (inp) inp.value = ''; }
+                },
+                onError: () => _pttReset()
+            });
+            try { _pttRec.start(); } catch(_) { _pttReset(); }
         };
 
         window.pttStop = function(e) {
@@ -1100,20 +1092,84 @@ Recuerda aplicar siempre: [REGLA_UTILIDAD].`
             if (e.type === 'mouseup' && Date.now() - _pttLastTouch < 600) return;
             if (!_pttActive) return;
             _pttActive = false;
-            try { recognition.stop(); } catch(_) {
-                _pttEnviar();
+            try { _pttRec && _pttRec.stop(); } catch(_) { _pttReset(); }
+        };
+
+        // ── Modo Conversación (toggle, manos libres) ─────────────────────────
+        let _convMode = false, _convRec = null, _convWaiting = false;
+
+        function _convEnsureTTS() {
+            if (typeof VoiceUtils === 'undefined') return;
+            if (!VoiceUtils.ttsEnabled()) {
+                VoiceUtils.ttsToggle();
+                const ttsBtn = document.getElementById('btn-tts-ia');
+                if (ttsBtn) { ttsBtn.style.color = 'var(--purple)'; ttsBtn.innerHTML = '<i class="ph-bold ph-speaker-simple-high"></i>'; }
+            }
+        }
+
+        function _convUpdateBtn(state) {
+            const btn = document.getElementById('btn-conv');
+            if (!btn) return;
+            btn.classList.remove('conv-on', 'conv-listening');
+            if (state === 'off') { btn.innerHTML = '<i class="ph-bold ph-headset"></i>'; btn.title = 'Modo conversación'; }
+            else if (state === 'idle') { btn.classList.add('conv-on'); btn.innerHTML = '<i class="ph-bold ph-headset"></i>'; btn.title = 'Conversación activa — toca para detener'; }
+            else if (state === 'listening') { btn.classList.add('conv-listening'); btn.innerHTML = '<i class="ph-fill ph-microphone"></i>'; btn.title = 'Escuchando... (toca para detener)'; }
+        }
+
+        function _convStartListen() {
+            if (!_convMode || _convWaiting || _pttActive) return;
+            if (_convRec) { try { _convRec.abort(); } catch(_) {} }
+            _convUpdateBtn('listening');
+            _convRec = _buildSR({
+                silenceMs: 1800,
+                onSilence: () => { try { _convRec && _convRec.stop(); } catch(_) {} },
+                onEnd: (txt) => {
+                    if (!_convMode) return;
+                    _convUpdateBtn('idle');
+                    if (txt) {
+                        const inp = document.getElementById('ai-user-input');
+                        if (inp) inp.value = txt;
+                        _convWaiting = true;
+                        sendAIMessage(); // después de la respuesta, _convOnAIDone() reactivará escucha
+                    } else {
+                        // No hubo texto, volver a escuchar
+                        setTimeout(_convStartListen, 600);
+                    }
+                },
+                onError: (ev) => {
+                    if (!_convMode) return;
+                    _convUpdateBtn('idle');
+                    setTimeout(_convStartListen, 1000);
+                }
+            });
+            try { _convRec.start(); } catch(_) { _convUpdateBtn('idle'); setTimeout(_convStartListen, 1000); }
+        }
+
+        // Llamar cuando la IA termine de hablar (o timeout) para reanudar escucha
+        function _convOnAIDone() {
+            _convWaiting = false;
+            if (_convMode) setTimeout(_convStartListen, 700);
+        }
+
+        window.toggleConvMode = function() {
+            _convMode = !_convMode;
+            if (_convMode) {
+                _convEnsureTTS();
+                if (typeof VoiceUtils !== 'undefined') VoiceUtils._onTTSEnd = _convOnAIDone;
+                _convUpdateBtn('idle');
+                _mostrarToastVoz('Conversación activada — hablá cuando estés listo');
+                setTimeout(_convStartListen, 400);
+            } else {
+                _convMode = false;
+                _convWaiting = false;
+                if (_convRec) { try { _convRec.abort(); } catch(_) {} _convRec = null; }
+                if (typeof VoiceUtils !== 'undefined') { VoiceUtils.ttsStop(); VoiceUtils._onTTSEnd = null; }
+                _convUpdateBtn('off');
+                _mostrarToastVoz('Conversación desactivada');
             }
         };
 
-        function _mostrarToastVoz(msg) {
-            let t = document.getElementById('_toast_voz');
-            if (!t) { t = document.createElement('div'); t.id = '_toast_voz';
-                t.style.cssText = 'position:fixed;bottom:90px;left:50%;transform:translateX(-50%);background:#7c3aed;color:white;padding:10px 18px;border-radius:20px;font-size:13px;font-weight:600;z-index:9999;opacity:0;transition:opacity .3s;pointer-events:none;white-space:nowrap;'; document.body.appendChild(t); }
-            t.textContent = msg; t.style.opacity = '1';
-            setTimeout(() => { t.style.opacity = '0'; }, 3000);
-        };
-
-        // Compatibilidad: si alguien llama toggleAudioRecording legacy
+        // Compatibilidad legacy
         window.toggleAudioRecording = window.pttStart;
         window.toggleTTSIA = function() {
             if (typeof VoiceUtils === 'undefined') return;
@@ -1337,6 +1393,15 @@ $$$QUOTE_DATA: [{"desc":"Nombre Item","feat":"Característica","cant":1,"und":"p
                 // Typewriter: renderizado progresivo carácter por carácter
                 await typewriterAppend(aiMsg, aiText, 10);
                 if (typeof VoiceUtils !== 'undefined') VoiceUtils.ttsSpeak(_rawResponseIA);
+                // En modo conversación: si TTS no está activo o no dispara onend, reanudar escucha tras timeout
+                if (_convMode && !VoiceUtils?.ttsEnabled()) {
+                    setTimeout(_convOnAIDone, 500);
+                } else if (_convMode) {
+                    // Fallback: si TTS no dispara _onTTSEnd en 30s, reanudar igual
+                    const _ttsGuard = setTimeout(_convOnAIDone, 30000);
+                    const _origEnd = VoiceUtils._onTTSEnd;
+                    VoiceUtils._onTTSEnd = () => { clearTimeout(_ttsGuard); _origEnd && _origEnd(); };
+                }
                 // Botón de cotización se añade DESPUÉS del typewriter (si aplica)
                 if (quoteDataChat) {
                     window.memoriaCotizacionChat = quoteDataChat;
