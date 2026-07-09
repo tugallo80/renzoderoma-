@@ -196,7 +196,10 @@
             <div style="font-weight: 900; font-size: 15px; display: flex; align-items: center; gap: 8px; color:white;">
                 <img loading="lazy" decoding="async" src="IA RUBIK BOTON.png" style="width: 28px; border-radius: 50%;" onerror="this.src='./IA RUBIK BOTON.png'"> IA del Proyecto
             </div>
-            <button class="btn-action" style="width:auto; padding: 6px 12px; font-size:12px; background:var(--card); color:var(--text);" onclick="closeAIChat()">Cerrar</button>
+            <div style="display:flex;align-items:center;gap:6px;">
+                <button id="btn-tts-dash" onclick="toggleTTSDash()" title="Activar voz IA" style="background:none;border:none;cursor:pointer;padding:6px 8px;border-radius:8px;color:rgba(255,255,255,0.5);font-size:20px;display:flex;align-items:center;transition:color .2s;"><i class="ph-bold ph-speaker-slash"></i></button>
+                <button class="btn-action" style="width:auto; padding: 6px 12px; font-size:12px; background:var(--card); color:var(--text);" onclick="closeAIChat()">Cerrar</button>
+            </div>
         </div>
         <div class="chat-body" id="ai-chat-box">
             <div class="msg msg-ai">Hola CEO. Estoy analizando las finanzas exclusivas de este proyecto. Puedo ayudarte con dudas sobre los costos, utilidad o evaluar la salud de la obra. ¿En qué te ayudo?</div>
@@ -212,8 +215,8 @@
         </div>
         
         <div class="chat-footer">
-            <button class="btn-ai-action cam" onclick="document.getElementById('ai-file-upload').click()"><i class="ph-bold ph-camera"></i></button>
-            <input type="file" id="ai-file-upload" accept="image/*" capture="environment" style="display:none" onchange="handleAIImage(this)">
+            <button class="btn-ai-action cam" onclick="document.getElementById('ai-file-upload').click()"><i class="ph-bold ph-paperclip"></i></button>
+            <input type="file" id="ai-file-upload" accept="image/*,application/pdf" multiple style="display:none" onchange="handleAIImage(this)">
             
             <button id="btn-audio" class="btn-ai-action cam" onclick="toggleAudioRecording()"><i class="ph-bold ph-microphone"></i></button>
 
@@ -693,10 +696,13 @@
                 inp.style.height = 'auto'; inp.style.height = (inp.scrollHeight) + 'px';
             };
             recognition.onerror = () => { isRecording = false; const btn = document.getElementById('btn-audio'); if(btn) btn.style.background = '#000'; };
-            recognition.onend = () => { 
-                isRecording = false; 
+            recognition.onend = () => {
+                isRecording = false;
                 const btn = document.getElementById('btn-audio');
-                if(btn) { btn.style.background = '#000'; btn.innerHTML = '<i class="ph-bold ph-microphone"></i>'; }
+                if(btn) { btn.style.background = ''; btn.innerHTML = '<i class="ph-bold ph-microphone"></i>'; }
+                // Auto-enviar si hay texto (modo conversación)
+                const inp = document.getElementById('ai-user-input');
+                if (inp && inp.value.trim()) setTimeout(() => window.sendAIMessage(), 200);
             };
         }
 
@@ -711,6 +717,17 @@
                 if(btn) { btn.style.background = 'var(--red)'; btn.innerHTML = '<i class="ph-bold ph-stop-circle"></i>'; }
             }
         }
+
+        window.toggleTTSDash = function() {
+            if (typeof VoiceUtils === 'undefined') return;
+            const on = VoiceUtils.ttsToggle();
+            const btn = document.getElementById('btn-tts-dash');
+            if (btn) {
+                btn.style.color = on ? 'white' : 'rgba(255,255,255,0.5)';
+                btn.innerHTML = on ? '<i class="ph-bold ph-speaker-simple-high"></i>' : '<i class="ph-bold ph-speaker-slash"></i>';
+                btn.title = on ? 'Voz activa — clic para silenciar' : 'Activar voz IA';
+            }
+        };
 
         window.handleAIImage = function(inp) {
             if (inp.files && inp.files[0]) {
@@ -954,6 +971,7 @@ TABLA OBLIGATORIA:
                 aiMsg.innerHTML = aiText.replace(/\n/g, '<br>');
                 chatBox.appendChild(aiMsg);
                 chatBox.scrollTop = chatBox.scrollHeight;
+                if (typeof VoiceUtils !== 'undefined') VoiceUtils.ttsSpeak(_dataDash.text || '');
             } catch(e) {
                 typing.style.display = 'none';
                 const errMsg = document.createElement('div'); errMsg.className = 'msg msg-ai';
@@ -965,6 +983,7 @@ TABLA OBLIGATORIA:
         }
 
     </script>
+<script src="/js/voice-utils.js"></script>
 <script src="/paste-image.js"></script>
 </body>
 </html>

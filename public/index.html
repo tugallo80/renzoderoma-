@@ -210,9 +210,12 @@
                     <div class="ia-brand">
                         <img loading="lazy" decoding="async" src="LOGO-IA-RUBIK.jpg" class="ia-logo-min" onerror="this.src='./LOGO-IA-RUBIK.jpg'"> Cerebro Ejecutivo
                     </div>
-                    <button class="btn-close-ia" onclick="closeAIChat()">Cerrar</button>
+                    <div style="display:flex;align-items:center;gap:6px;">
+                        <button id="btn-tts-ia" onclick="toggleTTSIA()" title="Activar voz IA" style="background:none;border:none;cursor:pointer;padding:6px 8px;border-radius:8px;color:var(--gray,#888);font-size:20px;display:flex;align-items:center;transition:color .2s;"><i class="ph-bold ph-speaker-slash"></i></button>
+                        <button class="btn-close-ia" onclick="closeAIChat()">Cerrar</button>
+                    </div>
                 </div>
-                
+
                 <div class="ia-tabs">
                     <button id="tab-gen" class="ia-tab-btn active" onclick="setIAMode('general')"><i class="ph-bold ph-chats"></i> CONSULTOR GLOBAL</button>
                     <button id="tab-flash" class="ia-tab-btn" onclick="setIAMode('flash')"><i class="ph-bold ph-lightning"></i> COTIZACIÓN FLASH</button>
@@ -233,8 +236,8 @@
             </div>
             
             <div class="chat-footer" id="chat-footer">
-                <button class="btn-ai-action cam" onclick="document.getElementById('ai-file-upload').click()"><i class="ph-bold ph-camera"></i></button>
-                <input type="file" id="ai-file-upload" accept="image/*" capture="environment" style="display:none" onchange="handleAIImage(this)">
+                <button class="btn-ai-action cam" onclick="document.getElementById('ai-file-upload').click()"><i class="ph-bold ph-paperclip"></i></button>
+                <input type="file" id="ai-file-upload" accept="image/*,application/pdf" multiple style="display:none" onchange="handleAIImage(this)">
                 <button id="btn-audio" class="btn-ai-action audio"
                     onmousedown="pttStart(event)" onmouseup="pttStop(event)" onmouseleave="pttStop(event)"
                     ontouchstart="pttStart(event)" ontouchend="pttStop(event)" ontouchcancel="pttStop(event)"
@@ -1088,6 +1091,16 @@ Recuerda aplicar siempre: [REGLA_UTILIDAD].`
 
         // Compatibilidad: si alguien llama toggleAudioRecording legacy
         window.toggleAudioRecording = window.pttStart;
+        window.toggleTTSIA = function() {
+            if (typeof VoiceUtils === 'undefined') return;
+            const on = VoiceUtils.ttsToggle();
+            const btn = document.getElementById('btn-tts-ia');
+            if (btn) {
+                btn.style.color = on ? 'var(--purple)' : 'var(--gray,#888)';
+                btn.innerHTML = on ? '<i class="ph-bold ph-speaker-simple-high"></i>' : '<i class="ph-bold ph-speaker-slash"></i>';
+                btn.title = on ? 'Voz activa — clic para silenciar' : 'Activar voz IA';
+            }
+        };
 
         window.setIAMode = function(mode) {
             currentIAMode = mode;
@@ -1285,6 +1298,7 @@ $$$QUOTE_DATA: [{"desc":"Nombre Item","feat":"Característica","cant":1,"und":"p
                 chatBox.scrollTop = chatBox.scrollHeight;
                 // Typewriter: renderizado progresivo carácter por carácter
                 await typewriterAppend(aiMsg, aiText, 10);
+                if (typeof VoiceUtils !== 'undefined') VoiceUtils.ttsSpeak(_rawResponseIA);
                 // Botón de cotización se añade DESPUÉS del typewriter (si aplica)
                 if (quoteDataChat) {
                     window.memoriaCotizacionChat = quoteDataChat;
@@ -1561,6 +1575,7 @@ $$$QUOTE_DATA: [{"desc":"Nombre Item","feat":"Característica","cant":1,"und":"p
         })(25);
     </script>
     <script src="/js/viewmode.js?v=1"></script>
+    <script src="/js/voice-utils.js"></script>
     <script>
         // Fallback: asegura que openAIChat sea accesible desde onclick HTML
         document.addEventListener('DOMContentLoaded', function() {

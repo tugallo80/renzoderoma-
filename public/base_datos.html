@@ -188,6 +188,7 @@
                 <h3 style="margin:0; color:var(--purple); display:flex; align-items:center; gap:8px;"><i class="ph-fill ph-magic-wand"></i> Cerebro Central IA</h3>
                 <div style="display:flex;gap:8px;align-items:center;">
                     <button title="Nueva conversación" onclick="nuevaConversacionIA()" style="background:none;border:none;cursor:pointer;padding:4px 8px;border-radius:8px;color:var(--gray);font-size:11px;font-weight:700;"><i class="ph-bold ph-arrow-counter-clockwise"></i> Nueva</button>
+                    <button id="btn-tts-bd" onclick="toggleTTSBD()" title="Activar voz IA" style="background:none;border:none;cursor:pointer;padding:4px 6px;border-radius:8px;color:var(--gray);font-size:20px;display:flex;align-items:center;transition:color .2s;"><i class="ph-bold ph-speaker-slash"></i></button>
                     <i class="ph-bold ph-x" style="font-size:24px; color:var(--gray); cursor:pointer;" onclick="document.getElementById('mod-ia-chat').style.display='none'"></i>
                 </div>
             </div>
@@ -1075,6 +1076,7 @@ Reglas:
     }
 </script>
     <script src="/js/viewmode.js?v=1"></script>
+<script src="/js/voice-utils.js"></script>
 <script src="/paste-image.js"></script>
 </body>
 </html>
