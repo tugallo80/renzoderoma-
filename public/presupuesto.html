@@ -2575,7 +2575,28 @@ CAMPOS OBLIGATORIOS por ítem:
   - sub: []
 - "util": 50
 - "ind": 10
-EJEMPLO VÁLIDO:
+
+CAPÍTULOS — OBLIGATORIO cuando el resultado tiene 4 o más ítems:
+Cuando vayas a generar 4 o más objetos de ítem, agrupalos en CAPÍTULOS temáticos.
+Un capítulo se representa así: {"type":"chapter","name":"NOMBRE DEL CAPÍTULO"}
+Va INMEDIATAMENTE ANTES de los ítems de ese grupo en el array.
+Nombres de capítulo recomendados (usá los que apliquen):
+  "ESTRUCTURA METÁLICA" | "REVESTIMIENTO Y ACABADOS" | "GRÁFICA E IMPRESIÓN"
+  "INSTALACIÓN ELÉCTRICA" | "MUEBLES Y ACCESORIOS" | "SEÑALÉTICA"
+  "MONTAJE Y DESMONTAJE" | "ILUMINACIÓN" | "CARPINTERÍA"
+Los ítems dentro de un capítulo NO llevan el campo "type".
+NUNCA pongas "type":"item" en los ítems normales — solo "type":"chapter" para separadores.
+
+EJEMPLO CON CAPÍTULOS (4+ ítems):
+[
+  {"type":"chapter","name":"ESTRUCTURA METÁLICA"},
+  {"desc":"PISO TÉCNICO 12×3m","cant":1,"und":"glb","feat":"- Plataforma...","apu":{...},"util":50,"ind":10},
+  {"desc":"TUBÍN ESTRUCTURA PERIMETRAL","cant":1,"und":"glb","feat":"- Estructura...","apu":{...},"util":50,"ind":10},
+  {"type":"chapter","name":"GRÁFICA E IMPRESIÓN"},
+  {"desc":"LONA BACKLIGHT FOTO SPOT","cant":1,"und":"glb","feat":"- Impresión...","apu":{...},"util":50,"ind":10}
+]
+
+EJEMPLO SIN CAPÍTULOS (menos de 4 ítems):
 [{"desc":"BASTIDOR TUBIN CON LONA","cant":1,"und":"glb","feat":"- Estructura tubín 20x20x1mm\\n- Lona backlight 510g\\n- Impresión digital una cara","apu":{"mat":[{"d":"TUBIN 20X20X1","u":"barra","q":3,"p":55}],"mo":[{"d":"SOLDADOR","u":"jornal","q":1,"p":250}],"eq":[],"sub":[]},"util":50,"ind":10}]`;
 
         parts.unshift({ text: textPrompt });
@@ -2702,12 +2723,13 @@ EJEMPLO VÁLIDO:
             }
             if (!Array.isArray(items) || items.length === 0) throw new Error('La IA no generó ítems. Intentá con un prompt más simple.');
 
-            // Post-proceso: si hay ítems con desc duplicado, diferenciar con primera línea de feat
+            // Post-proceso: si hay ítems (no capítulos) con desc duplicado, diferenciar con primera línea de feat
             (function deduplicateDescs() {
                 const _cnt = {};
-                items.forEach(it => { _cnt[it.desc] = (_cnt[it.desc] || 0) + 1; });
+                items.forEach(it => { if (it.type !== 'chapter') _cnt[it.desc] = (_cnt[it.desc] || 0) + 1; });
                 const _seen = {};
                 items.forEach(it => {
+                    if (it.type === 'chapter') return;
                     if (_cnt[it.desc] > 1) {
                         const _featLine = (it.feat || '').split(/\\n|\n/)
                             .map(l => l.replace(/^[-•\s]+/, '').trim())
@@ -2718,8 +2740,9 @@ EJEMPLO VÁLIDO:
                 });
             })();
 
-            // Validar que al menos el primer ítem tiene APU con datos
-            const _primerApu = ApuUtils.normalizeApu(items[0]?.apu, items[0]);
+            // Validar que al menos el primer ítem real (no capítulo) tiene APU con datos
+            const _primerItem = items.find(it => it.type !== 'chapter');
+            const _primerApu = ApuUtils.normalizeApu(_primerItem?.apu, _primerItem);
             const _apuVacio = _primerApu.mat.length === 0 && _primerApu.mo.length === 0;
             if (_apuVacio) {
                 console.warn('[IA Budget] APU vacío detectado. Raw del primer ítem:', JSON.stringify(items[0]).substring(0, 300));
@@ -2752,19 +2775,32 @@ EJEMPLO VÁLIDO:
                 }
             }
 
-            items.forEach((it, _itIdx) => {
+            // Contador de ítems reales (excluye capítulos) para mapear con _iaRowData
+            let _itemCounter = 0;
+            items.forEach((it) => {
+                // Capítulo: insertarlo directamente como separador
+                if (it.type === 'chapter') {
+                    data.push({ type: 'chapter', name: (it.name || 'CAPÍTULO').toUpperCase(), collapsed: false });
+                    return;
+                }
+
+                const _itIdx = _itemCounter++;
                 const apuObj = ApuUtils.normalizeApu(it.apu, it);
                 const pu = ApuUtils.calcPuFromApu(apuObj);
-                // Preservar el nombre que escribió el usuario — la IA no debe sobreescribirlo
-                const _rowOriginal = _iaRowData[_itIdx] || _iaRowData[0] || {};
-                const _descOriginal = _rowOriginal.nombre || '';
                 const _descIA = it.desc || it.nombre || it.name || it.title || '';
-                const _desc = _descOriginal || _descIA; // prioridad al nombre del usuario
+                // Usar nombre del usuario solo si hay un row exacto para este índice
+                // (si la IA generó más ítems que filas, usar el nombre que puso la IA)
+                const _rowExacto = _iaRowData[_itIdx];
+                const _rowFallback = _iaRowData[0] || {};
+                const _rowOriginal = _rowExacto || _rowFallback;
+                const _descOriginal = _rowExacto ? (_rowExacto.nombre || '') : '';
+                // Si hay nombre de usuario exacto Y el AI no lo diferenció → usar user name
+                // Si el AI ya tiene un nombre diferenciado (con "—") → respetar el del AI
+                const _desc = (_descOriginal && !_descIA.includes(' — ')) ? _descOriginal : (_descIA || _descOriginal);
                 const _feat = Array.isArray(it.feat)
                     ? it.feat.join('\n')
                     : (it.feat || it.caracteristicas || it.features || '');
                 const _featClean = (_feat || '').replace(/\\n/g, '\n');
-                // Si feat llegó vacío, generar un placeholder mínimo para no dejar en blanco
                 const _featFinal = _featClean.trim() || `- Ítem generado por IA\n- Verificar características manualmente`;
                 const _imgUrl = _iaRowImgUrls[_itIdx] || null;
                 const _newItem = {
@@ -2775,7 +2811,7 @@ EJEMPLO VÁLIDO:
                     feat: _featFinal,
                     pu:   Math.round(pu * 100) / 100,
                     apu:  apuObj,
-                    iaPrompt: JSON.stringify({ nombre: _descOriginal, instrucciones: _rowOriginal.instrucciones || '' })
+                    iaPrompt: JSON.stringify({ nombre: _descOriginal || _descIA, instrucciones: _rowOriginal.instrucciones || '' })
                 };
                 if (_imgUrl) _newItem.img = _imgUrl;
                 data.push(_newItem);
