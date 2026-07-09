@@ -1815,16 +1815,20 @@ Devolvé exactamente este formato (sin texto adicional):
                 if (data[idx].ctx_est) _regenFullPrompt += `\nEstructura/Acabado: ${data[idx].ctx_est}`;
             }
 
-            // Collect images to send: fotos del ítem (planos CAD, etc.) + ctx_img (cotización, referencia)
+            // Collect images to send: img principal + cortes + fotos + ctx_img
             const _regenImgParts = [];
 
-            // Fotos del ítem (guardadas desde CAD u otras fuentes) — hasta 3, más recientes primero
+            // Recolectar todas las imágenes del ítem: img, cortes, fotos (legacy), corte_url en APU
+            const _allItemImgs = [];
+            if (data[idx].img) _allItemImgs.push(data[idx].img);
+            if (data[idx].cortes && Array.isArray(data[idx].cortes)) _allItemImgs.push(...data[idx].cortes);
             const _itemFotos = Array.isArray(data[idx].fotos) ? data[idx].fotos : (data[idx].fotos ? Object.values(data[idx].fotos) : []);
-            const _fotosToSend = _itemFotos.slice(-3);
+            _itemFotos.forEach(_f => { const _fu = _f.url || _f; if (_fu && !_allItemImgs.includes(_fu)) _allItemImgs.push(_fu); });
+
+            const _fotosToSend = _allItemImgs.slice(0, 4); // máx 4 imágenes del ítem
             if (_fotosToSend.length > 0) {
-                _regenFullPrompt += `\n\nPLANOS/FOTOS DEL ÍTEM ADJUNTAS (${_fotosToSend.length} imagen${_fotosToSend.length>1?'s':''}): planos CAD exportados o fotos de referencia vinculadas a este ítem. Leé las cotas numéricas de las imágenes para calcular dimensiones y m².`;
-                for (const _f of _fotosToSend) {
-                    const _fUrl = _f.url || _f;
+                _regenFullPrompt += `\n\nIMÁGENES DEL ÍTEM ADJUNTAS (${_fotosToSend.length}): foto/s de referencia y planos CAD vinculados a este ítem. Si hay cotas numéricas anotadas, son las medidas exactas — usálas para calcular dimensiones y cantidades del APU.`;
+                for (const _fUrl of _fotosToSend) {
                     if (_fUrl && _fUrl.startsWith('data:')) {
                         try {
                             const _fComp = await _compressB64(_fUrl, 1200, 0.7);
@@ -1834,7 +1838,7 @@ Devolvé exactamente este formato (sin texto adicional):
                 }
             }
 
-            // Imagen de contexto (cotización de proveedor, foto adicional)
+            // Imagen de contexto (cotización de proveedor, foto adicional del panel ctx)
             if (data[idx].ctx_img) {
                 _regenFullPrompt += '\n\nIMAGEN DE CONTEXTO ADJUNTA: puede ser una cotización de proveedor con precios (extraé y usá esos precios en el APU) o foto de referencia del ítem.';
                 if (data[idx].ctx_img.startsWith('data:')) {
