@@ -407,13 +407,13 @@ MATERIALES — ESPEJOS/VIDRIO: Para paneles de espejo la estructura es tubín me
             throw new Error("El body debe contener 'contents', 'parts', 'prompt' o 'text'");
         }
 
-        // Sonnet para presupuesto/cotización (requiere razonamiento geométrico y conocimiento del rubro)
+        // Haiku para presupuesto/cotización — 5x más barato que Sonnet, con caching queda ~$0.01/req
         const text = await llamarClaude(
             anthropicKey,
             messages,
             systemText,
             generationConfig?.maxOutputTokens,
-            "claude-sonnet-4-6"
+            "claude-haiku-4-5"
         );
 
         // Devolver en formato Gemini para que el frontend existente lo lea sin cambios
