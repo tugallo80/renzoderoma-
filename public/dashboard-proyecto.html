@@ -952,13 +952,28 @@ TABLA OBLIGATORIA:
                 const _imgDash = imageToSend;
                 const _bodyDash = { systemInstruction: sysPrompt, contents: _dashHistorial, model: 'gemini-2.5-flash' };
                 const _tokDash = await firebase.auth().currentUser.getIdToken();
-                const _resDash = await fetch('/api/gemini', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + _tokDash },
-                    body: JSON.stringify(_bodyDash)
-                });
-                const _dataDash = await _resDash.json();
-                if (!_resDash.ok) throw new Error(_dataDash.error || 'Error IA');
+                let _resDash, _dataDash, _lastDashErr;
+                for (let _att = 0; _att < 3; _att++) {
+                    if (_att > 0) await new Promise(r => setTimeout(r, 2000 * _att));
+                    _resDash = await fetch('/api/gemini', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + _tokDash },
+                        body: JSON.stringify(_bodyDash)
+                    });
+                    if (_resDash.status === 502 || _resDash.status === 503 || _resDash.status === 504) {
+                        _lastDashErr = new Error('Servicio no disponible (' + _resDash.status + '). Reintentando...');
+                        continue;
+                    }
+                    if (!_resDash.ok) {
+                        const _errText = await _resDash.text();
+                        throw new Error(_errText.startsWith('<') ? 'Error del servidor (' + _resDash.status + ')' : (_errText || 'Error IA'));
+                    }
+                    _dataDash = await _resDash.json();
+                    _lastDashErr = null;
+                    break;
+                }
+                if (_lastDashErr) throw _lastDashErr;
+                if (!_dataDash) throw new Error('Sin respuesta del servidor tras 3 intentos');
                 let aiText = _dataDash.text || (_dataDash.candidates?.[0]?.content?.parts?.[0]?.text) || '';
 
                 // Guardar respuesta del modelo en historial
