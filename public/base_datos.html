@@ -763,7 +763,7 @@ Reglas: si proveedor existe usa nombre exacto con es_nuevo:false. Convierte USD�
                 const provList = Object.values(dbData.prov||{}).map(p=>`${p.nombre||''}${p.categoria?' – '+p.categoria:''}`).filter(Boolean).join('\n');
 
                 if (iaChatHistory.length === 0) {
-                    // Primera vez: armar prompt completo con contexto de BD
+                    // Primera vez: armar prompt completo con contexto de BD + la pregunta del usuario
                     const sysPrompt = `Eres el Cerebro Central de Rubik OS — agente inteligente de base de datos para Rubik Bolivia, empresa de señalética, muebles y publicidad.
 
 CAPACIDADES:
@@ -790,29 +790,23 @@ ESTRUCTURA FIREBASE para acciones:
 - Otros/Equipos: base_datos/otros/{KEY}
 - KEY = nombre en MAYÚSCULAS, espacios y especiales reemplazados por "_"
 
-RESPONDE SIEMPRE con JSON limpio (sin markdown):
+FORMATO DE RESPUESTA — CRÍTICO: Responde ÚNICAMENTE con un objeto JSON válido, sin texto antes ni después, sin bloques markdown.
 
 Para consultas/respuestas:
-{ "tipo": "chat", "mensaje": "respuesta en texto", "tabla": [{"col":"val"}] }
-(tabla es opcional, úsala para mostrar listas comparativas)
+{"tipo":"chat","mensaje":"respuesta en texto","tabla":[{"col":"val"}]}
 
 Para ejecutar cambios en BD:
-{
-  "tipo": "accion",
-  "mensaje": "Descripción de lo que vas a hacer",
-  "acciones": [
-    { "op": "update", "coleccion": "mano_obra", "key": "ADHESIVADOR", "data": {"p": 15}, "desc": "Precio ADHESIVADOR: 10 → 15 Bs/hr" },
-    { "op": "delete", "coleccion": "mano_obra", "key": "ELECTRISISTA", "desc": "Eliminar duplicado con typo" },
-    { "op": "create", "coleccion": "materiales", "key": "NUEVO_MATERIAL", "data": {"n":"Nuevo","u":"pza","p":50}, "desc": "Agregar nuevo material" }
-  ]
-}
+{"tipo":"accion","mensaje":"Descripción","acciones":[{"op":"update","coleccion":"mano_obra","key":"KEY","data":{"p":15},"desc":"descripción del cambio"}]}
+
+ops válidas: update | delete | create
 
 Reglas:
 - Siempre mencioná el valor anterior antes de cambiarlo.
-- Para encontrar el KEY: normaliza a MAYÚSCULAS y reemplazá espacios y caracteres especiales con "_".
-- Para limpiar duplicados: usá op:delete en los que tienen typos, manteniendo el más correcto.
-- Para comparar proveedores: buscá el material en la lista y listá todos los proveedores con su precio.
-- NUNCA respondas con texto plano, SIEMPRE JSON válido.`;
+- KEY = nombre en MAYÚSCULAS, espacios reemplazados por "_".
+- Para comparar proveedores: listá todos con su precio en una tabla.
+- Tu respuesta es SOLO el JSON. Nunca texto plano, nunca markdown.
+
+[CONSULTA DEL USUARIO]: ${text}`;
                     iaChatHistory.push({ role: 'user', parts: [{ text: sysPrompt }] });
                 } else {
                     iaChatHistory.push({ role: 'user', parts: [{ text: text }] });
@@ -833,7 +827,21 @@ Reglas:
                 iaChatHistory.push({ role: 'model', parts: [{ text: rawText }] });
             }
 
-            const data = JSON.parse(rawText.replace(/```json|```/g,'').trim());
+            let data;
+            try {
+                const cleaned = rawText.replace(/```json|```/g, '').trim();
+                data = JSON.parse(cleaned);
+            } catch {
+                // Fallback: extract the first {...} block (handles "text before JSON")
+                const match = rawText.match(/\{[\s\S]*\}/);
+                if (match) {
+                    try { data = JSON.parse(match[0]); }
+                    catch { throw new Error('Respuesta no es JSON válido: ' + rawText.substring(0, 120)); }
+                } else {
+                    // Last resort: wrap plain text in a chat response
+                    data = { tipo: 'chat', mensaje: rawText.trim() };
+                }
+            }
             if (document.getElementById(loaderId)) document.getElementById(loaderId).remove();
 
             if (data.tipo === 'escaneo' || data.datos) {
