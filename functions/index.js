@@ -86,18 +86,23 @@ function geminiPartsToClaudeContent(parts) {
     });
 }
 
-/** Llama a Claude API con retry para errores transitorios (529 overloaded, 503, 502) */
+/** Llama a Claude API con retry para errores transitorios (529 overloaded, 503, 502).
+ *  Usa prompt caching en el system prompt para reducir costos ~80% en requests repetidos. */
 async function llamarClaude(anthropicKey, messages, systemText, maxTokens, model) {
     const body = {
         model: model || "claude-haiku-4-5",
         max_tokens: Math.min(maxTokens || 4096, 4000),
         messages,
     };
-    if (systemText) body.system = systemText;
+    // Prompt caching: cachea el system prompt (se reutiliza por 5 min, costo 10% en hits)
+    if (systemText) {
+        body.system = [{ type: "text", text: systemText, cache_control: { type: "ephemeral" } }];
+    }
 
     const reqHeaders = {
         "x-api-key": anthropicKey,
         "anthropic-version": "2023-06-01",
+        "anthropic-beta": "prompt-caching-2024-07-31",
         "Content-Type": "application/json",
     };
     const reqBodyStr = JSON.stringify(body);
