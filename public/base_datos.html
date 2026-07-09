@@ -207,6 +207,7 @@ Puedo ayudarte con:<br>
             <div style="padding:15px; background:var(--card); border-top:1px solid var(--border); display:flex; gap:8px; align-items:center;">
                 <input type="file" id="ia-file-up" accept="image/*,application/pdf" multiple style="display:none;" onchange="handleIAUploadBD(this)">
                 <button class="btn-main" style="width:40px; height:40px; margin:0; border-radius:50%; background:rgba(0,122,255,0.1); color:var(--blue); flex-shrink:0; box-shadow:none;" onclick="document.getElementById('ia-file-up').click()"><i class="ph-bold ph-paperclip" style="font-size:20px;"></i></button>
+                <button id="bd-btn-mic" class="btn-main" style="width:40px; height:40px; margin:0; border-radius:50%; background:rgba(0,122,255,0.1); color:var(--blue); flex-shrink:0; box-shadow:none;" onclick="toggleBDMic()" title="Hablar"><i class="ph-bold ph-microphone" style="font-size:20px;"></i></button>
                 <input type="text" id="ia-chat-input" class="inp-std" style="margin:0; flex-grow:1; border-radius:20px; padding:12px 15px;" placeholder="Pega un link o escribe aquí..." onkeypress="if(event.key === 'Enter') enviarMensajeIA()">
                 <button class="btn-main" style="width:40px; height:40px; margin:0; padding:0; border-radius:50%; background:var(--purple); flex-shrink:0;" onclick="enviarMensajeIA()"><i class="ph-bold ph-paper-plane-right" style="font-size:20px;"></i></button>
             </div>
@@ -864,6 +865,7 @@ Reglas:
                 }
                 html += `</div>`;
                 chat.innerHTML += html;
+                if (typeof VoiceUtils !== 'undefined') VoiceUtils.ttsSpeak(data.mensaje || '');
             }
             chat.scrollTop = chat.scrollHeight;
 
@@ -873,6 +875,41 @@ Reglas:
             console.error(error);
         }
     }
+
+    let _bdDictInited = false;
+    window.toggleBDMic = function() {
+        if (typeof VoiceUtils === 'undefined') return;
+        const btn = document.getElementById('bd-btn-mic');
+        const inp = document.getElementById('ia-chat-input');
+        if (!inp) return;
+        if (VoiceUtils.isDictating()) {
+            VoiceUtils.stopDictation();
+            if (btn) { btn.style.background = 'rgba(0,122,255,0.1)'; btn.style.color = 'var(--blue)'; btn.innerHTML = '<i class="ph-bold ph-microphone" style="font-size:20px;"></i>'; }
+        } else {
+            if (!VoiceUtils.hasSpeechRecognition()) { alert('Tu navegador no soporta reconocimiento de voz. Usá Chrome.'); return; }
+            if (!_bdDictInited) {
+                VoiceUtils.initDictation(inp, {
+                    onStop: () => {
+                        if (btn) { btn.style.background = 'rgba(0,122,255,0.1)'; btn.style.color = 'var(--blue)'; btn.innerHTML = '<i class="ph-bold ph-microphone" style="font-size:20px;"></i>'; }
+                    }
+                });
+                _bdDictInited = true;
+            }
+            const started = VoiceUtils.startDictation();
+            if (started && btn) { btn.style.background = 'var(--red,#e74c3c)'; btn.style.color = 'white'; btn.innerHTML = '<i class="ph-bold ph-stop-circle" style="font-size:20px;"></i>'; }
+        }
+    };
+
+    window.toggleTTSBD = function() {
+        if (typeof VoiceUtils === 'undefined') return;
+        const on = VoiceUtils.ttsToggle();
+        const btn = document.getElementById('btn-tts-bd');
+        if (btn) {
+            btn.style.color = on ? 'var(--purple)' : 'var(--gray)';
+            btn.innerHTML = on ? '<i class="ph-bold ph-speaker-simple-high"></i>' : '<i class="ph-bold ph-speaker-slash"></i>';
+            btn.title = on ? 'Voz activa — clic para silenciar' : 'Activar voz IA';
+        }
+    };
 
     function renderEscaneoIA(data, chat) {
         if (!data.datos || data.datos.length === 0) {
