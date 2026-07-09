@@ -961,7 +961,7 @@ TABLA OBLIGATORIA:
                         body: JSON.stringify(_bodyDash)
                     });
                     if (_resDash.status === 502 || _resDash.status === 503 || _resDash.status === 504) {
-                        _lastDashErr = new Error('Servicio no disponible (' + _resDash.status + '). Reintentando...');
+                        _lastDashErr = new Error('Servidor temporalmente no disponible. Intentá de nuevo en unos segundos.');
                         continue;
                     }
                     if (!_resDash.ok) {

@@ -1347,7 +1347,7 @@ $$$QUOTE_DATA: [{"desc":"Nombre Item","feat":"Característica","cant":1,"und":"p
                     try {
                         _res1 = await fetch('/api/gemini', { method: 'POST', headers: _reqHeaders, body: _reqBodyStr });
                         if (_res1.status === 502 || _res1.status === 503 || _res1.status === 504) {
-                            _lastFetchErr = new Error(`Servidor no disponible (${_res1.status}). Reintentando...`);
+                            _lastFetchErr = new Error('Servidor temporalmente no disponible. Intentá de nuevo en unos segundos.');
                             continue;
                         }
                         if (!_res1.ok) {
