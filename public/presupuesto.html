@@ -2263,6 +2263,10 @@ REGLAS ADICIONALES:
    Neon flex hasta 1.5m: 800–2000 Bs | Caja de luz 1.2×0.6m: 400–900 Bs | Acrílico iluminado: 600–1500 Bs/m2
    Si el pu supera el doble del límite superior → revisá cantidades, estás sobreestimando materiales.
    Neon flex cursiva texto 1.20m → entre 5 y 8 ml total (no más de 15 ml en ningún caso para ese tamaño).
+7. CONSISTENCIA DE PRECIOS — OBLIGATORIO:
+   Para materiales no encontrados en el catálogo, usá SIEMPRE el precio PROMEDIO del rango de mercado (no el mínimo ni el máximo).
+   Ejemplo: si lona mate va entre 35–45 Bs/m2 → usá 40 Bs/m2. Si tubín 20×20 va entre 50–60 Bs/barra → usá 55 Bs/barra.
+   Esto garantiza que el mismo presupuesto generado dos veces dé el mismo resultado (±5%).
 9. CONTORNOS Y METROS LINEALES — OBLIGATORIO cuando el ítem lleve neon flex, canal de letra, perfil aluminio, marco o tubo doblado:
    Calculá el perímetro/contorno ANTES de asignar cantidades:
    → Rectángulo: ml = 2×(base+altura). Ej: 1.20×0.40m → 3.20 ml base, +15% curvas = 3.68 ml
@@ -2586,7 +2590,7 @@ EJEMPLO VÁLIDO:
             const _reqBody = JSON.stringify({
                 systemInstruction: { parts: [{ text: sysPrompt }] },
                 contents: [{ role: 'user', parts }],
-                generationConfig: { maxOutputTokens: 16000 }
+                generationConfig: { maxOutputTokens: 16000, temperature: 0.2 }
             });
 
             // Verificar tamaño antes de enviar
@@ -2697,6 +2701,22 @@ EJEMPLO VÁLIDO:
                 items = JSON.parse(extracted2);
             }
             if (!Array.isArray(items) || items.length === 0) throw new Error('La IA no generó ítems. Intentá con un prompt más simple.');
+
+            // Post-proceso: si hay ítems con desc duplicado, diferenciar con primera línea de feat
+            (function deduplicateDescs() {
+                const _cnt = {};
+                items.forEach(it => { _cnt[it.desc] = (_cnt[it.desc] || 0) + 1; });
+                const _seen = {};
+                items.forEach(it => {
+                    if (_cnt[it.desc] > 1) {
+                        const _featLine = (it.feat || '').split(/\\n|\n/)
+                            .map(l => l.replace(/^[-•\s]+/, '').trim())
+                            .find(l => l.length > 4 && l.length < 55);
+                        const _idx = (_seen[it.desc] = (_seen[it.desc] || 0) + 1);
+                        it.desc = it.desc + (_featLine ? ' — ' + _featLine : ' (' + _idx + ')');
+                    }
+                });
+            })();
 
             // Validar que al menos el primer ítem tiene APU con datos
             const _primerApu = ApuUtils.normalizeApu(items[0]?.apu, items[0]);
