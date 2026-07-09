@@ -186,10 +186,19 @@
         <div class="modal-box" style="display:flex; flex-direction:column; height:85vh; padding:0; overflow:hidden; max-width: 500px;">
             <div style="padding:20px; background:var(--card); border-bottom:1px solid var(--border); display:flex; justify-content:space-between; align-items:center;">
                 <h3 style="margin:0; color:var(--purple); display:flex; align-items:center; gap:8px;"><i class="ph-fill ph-magic-wand"></i> Cerebro Central IA</h3>
-                <i class="ph-bold ph-x" style="font-size:24px; color:var(--gray); cursor:pointer;" onclick="document.getElementById('mod-ia-chat').style.display='none'"></i>
+                <div style="display:flex;gap:8px;align-items:center;">
+                    <button title="Nueva conversación" onclick="nuevaConversacionIA()" style="background:none;border:none;cursor:pointer;padding:4px 8px;border-radius:8px;color:var(--gray);font-size:11px;font-weight:700;"><i class="ph-bold ph-arrow-counter-clockwise"></i> Nueva</button>
+                    <i class="ph-bold ph-x" style="font-size:24px; color:var(--gray); cursor:pointer;" onclick="document.getElementById('mod-ia-chat').style.display='none'"></i>
+                </div>
             </div>
             <div id="ia-chat-history" style="flex-grow:1; padding:20px; overflow-y:auto; display:flex; flex-direction:column; background:var(--bg);">
-                <div class="msg msg-ai">Hola Renzo. Soy el Cerebro Central. ¿Qué necesitas actualizar, cotizar o registrar en la matriz hoy? Puedes pegar links, subir fotos o PDFs.</div>
+                <div class="msg msg-ai">Hola Renzo. Soy el Cerebro Central de Rubik OS.<br><br>
+Puedo ayudarte con:<br>
+📄 <b>Escanear</b> facturas/cotizaciones (adjuntá imagen o PDF)<br>
+✏️ <b>Actualizar precios</b> — ej: "el adhesivador subió a 15 Bs"<br>
+🔍 <b>Consultas</b> — ej: "¿cuál es el proveedor más barato de acrílico?"<br>
+🧹 <b>Limpieza</b> — ej: "buscá y eliminá duplicados en mano de obra"<br><br>
+¿Qué necesitás?</div>
             </div>
             
             <div id="ia-preview-box" class="img-preview-box" style="display:none;"></div>
@@ -630,6 +639,7 @@
 
     let iaImagesBase64 = [];
     let iaPdfBase64 = null;
+    let iaChatHistory = []; // historial multi-turn para el agente
 
     function abrirChatIA() {
         document.getElementById('mod-ia-chat').style.display = 'flex';
@@ -696,138 +706,258 @@
     async function enviarMensajeIA() {
         const input = document.getElementById('ia-chat-input');
         const text = input.value.trim();
-        if(!text && iaImagesBase64.length === 0 && !iaPdfBase64) return;
+        const tieneArchivos = iaImagesBase64.length > 0 || iaPdfBase64 !== null;
+        if (!text && !tieneArchivos) return;
 
         const chat = document.getElementById('ia-chat-history');
 
         // Mostrar mensaje del usuario
         let userMsgHtml = text ? text.replace(/\n/g,'<br>') : '';
-        if(iaImagesBase64.length > 0) userMsgHtml = iaImagesBase64.map(img => `<img loading="lazy" decoding="async" src="${img.dataUrl}" style="max-width:100px; border-radius:8px; margin-right:5px; margin-bottom:5px;">`).join('') + (userMsgHtml ? '<br>' + userMsgHtml : '');
-        if(iaPdfBase64) userMsgHtml = `<i class="ph-bold ph-file-pdf" style="color:var(--red);"></i> PDF adjunto<br>` + userMsgHtml;
+        if (iaImagesBase64.length > 0) userMsgHtml = iaImagesBase64.map(img => `<img loading="lazy" decoding="async" src="${img.dataUrl}" style="max-width:100px;border-radius:8px;margin-right:5px;margin-bottom:5px;">`).join('') + (userMsgHtml ? '<br>'+userMsgHtml : '');
+        if (iaPdfBase64) userMsgHtml = `<i class="ph-bold ph-file-pdf" style="color:var(--red);"></i> PDF adjunto<br>` + userMsgHtml;
         chat.innerHTML += `<div class="msg msg-user">${userMsgHtml}</div>`;
         input.value = '';
         chat.scrollTop = chat.scrollHeight;
 
         const loaderId = 'ia-loader-' + Date.now();
-        chat.innerHTML += `<div id="${loaderId}" class="msg msg-ai">Analizando archivos e investigando precios de mercado...</div>`;
+        chat.innerHTML += `<div id="${loaderId}" class="msg msg-ai">${tieneArchivos ? '📄 Analizando archivos e investigando precios...' : '⏳ Consultando base de datos...'}</div>`;
         chat.scrollTop = chat.scrollHeight;
 
-        // Snapshot de lo que se va a enviar
         const imgSnapshot = [...iaImagesBase64];
         const pdfSnapshot = iaPdfBase64;
         iaImagesBase64 = []; iaPdfBase64 = null; renderIAPreviewBD();
 
-        // Construir catálogo actual de proveedores para el contexto
-        const provList = Object.values(dbData.prov).map(p => p.nombre).filter(Boolean).join(', ') || 'Ninguno registrado aún';
+        try {
+            let contents;
 
-        const sysPrompt = `Eres el Cerebro Central de Rubik OS, experto en gestión de costos para una empresa de fabricación de señalética, muebles y publicidad en Bolivia.
+            if (tieneArchivos) {
+                // ── MODO ESCANEO: single-turn, detecta materiales/proveedor de imágenes ──
+                iaChatHistory = [];
+                const provList = Object.values(dbData.prov||{}).map(p=>p.nombre).filter(Boolean).join(', ') || 'Ninguno registrado';
+                const sysPrompt = `Eres el Cerebro Central de Rubik OS, experto en gestión de costos para una empresa de fabricación de señalética, muebles y publicidad en Bolivia.
 
-Tu misión es analizar los archivos, capturas, fotos de listas de precios, facturas o recibos que te envíen y extraer la información para actualizar la base de datos de la empresa.
+Tu misión es analizar los archivos adjuntos (facturas, listas de precios, fotos) y extraer materiales con sus precios para actualizar la base de datos.
 
 PROVEEDORES YA REGISTRADOS: ${provList}
 
-REGLAS CRÍTICAS — Responde SOLO con este JSON limpio, sin markdown:
+Responde SOLO con JSON (sin markdown):
 {
-  "mensaje": "Resumen breve de lo que encontraste",
-  "proveedor_detectado": {
-    "es_nuevo": true,
-    "nombre": "Nombre del proveedor detectado",
-    "categoria": "Categoría (Ej: Melaminas, Maderas, Herrajes)",
-    "telefono": "número si aparece, sino vacío",
-    "nit": "NIT si aparece, sino vacío"
-  },
-  "categoria_materiales": "materiales",
-  "datos": [
-    {
-      "n": "NOMBRE MATERIAL EN MAYÚSCULAS",
-      "u": "unidad (m2, plancha, pza, ml, kg, etc)",
-      "p": 250.00,
-      "proveedor": "Nombre del proveedor",
-      "notas": "Observación si el precio es estimado o de mercado"
-    }
+  "tipo": "escaneo",
+  "mensaje": "Resumen breve",
+  "proveedor_detectado": { "es_nuevo": true, "nombre": "...", "categoria": "...", "telefono": "...", "nit": "..." },
+  "datos": [{ "n": "NOMBRE MATERIAL EN MAYÚSCULAS", "u": "unidad", "p": 250.00, "proveedor": "...", "notas": "..." }]
+}
+
+Reglas: si proveedor existe usa nombre exacto con es_nuevo:false. Convierte USD→Bs (1 USD≈6.96). Unidades: plancha, m2, ml, pza, kg, lt, gl, jornal, hr. ${text ? 'Instrucción del usuario: '+text : ''}`;
+                let parts = [{ text: sysPrompt }];
+                imgSnapshot.forEach(img => parts.push({ inlineData: { data: img.dataUrl.split(',')[1], mimeType: img.mimeType } }));
+                if (pdfSnapshot) parts.push({ inlineData: { data: pdfSnapshot.dataUrl.split(',')[1], mimeType: pdfSnapshot.mimeType } });
+                contents = [{ role: 'user', parts }];
+
+            } else {
+                // ── MODO AGENTE: multi-turn, comandos y consultas sobre la BD ──
+                const moEntries = Object.values(dbData.mo||{});
+                const matEntries = Object.values(dbData.mat||{});
+                const moList = moEntries.map(m=>`${m.n||m.desc||''}: ${m.p||0}Bs/${m.u||''}`).join('\n');
+                const matList = matEntries.slice(0,500).map(m=>`${m.n||m.desc||''}: ${m.p||0}Bs/${m.u||''}${m.proveedor?' ('+m.proveedor+')':''}`).join('\n');
+                const provList = Object.values(dbData.prov||{}).map(p=>`${p.nombre||''}${p.categoria?' – '+p.categoria:''}`).filter(Boolean).join('\n');
+
+                if (iaChatHistory.length === 0) {
+                    // Primera vez: armar prompt completo con contexto de BD
+                    const sysPrompt = `Eres el Cerebro Central de Rubik OS — agente inteligente de base de datos para Rubik Bolivia, empresa de señalética, muebles y publicidad.
+
+CAPACIDADES:
+• Responder consultas sobre costos, proveedores, comparativas de precios
+• Ejecutar actualizaciones en la base de datos (cambiar precios, unidades, eliminar duplicados)
+• Detectar y limpiar duplicados
+• Analizar y comparar proveedores ("¿quién es el más barato en acrílico?")
+• Cálculos de costos y análisis
+
+BASE DE DATOS ACTUAL:
+
+== MANO DE OBRA (${moEntries.length} registros) ==
+${moList || 'Vacío'}
+
+== MATERIALES (mostrando ${Math.min(500,matEntries.length)} de ${matEntries.length}) ==
+${matList || 'Vacío'}
+
+== PROVEEDORES ==
+${provList || 'Ninguno'}
+
+ESTRUCTURA FIREBASE para acciones:
+- Mano de obra: base_datos/mano_obra/{KEY}
+- Materiales:   base_datos/materiales/{KEY}
+- Otros/Equipos: base_datos/otros/{KEY}
+- KEY = nombre en MAYÚSCULAS, espacios y especiales reemplazados por "_"
+
+RESPONDE SIEMPRE con JSON limpio (sin markdown):
+
+Para consultas/respuestas:
+{ "tipo": "chat", "mensaje": "respuesta en texto", "tabla": [{"col":"val"}] }
+(tabla es opcional, úsala para mostrar listas comparativas)
+
+Para ejecutar cambios en BD:
+{
+  "tipo": "accion",
+  "mensaje": "Descripción de lo que vas a hacer",
+  "acciones": [
+    { "op": "update", "coleccion": "mano_obra", "key": "ADHESIVADOR", "data": {"p": 15}, "desc": "Precio ADHESIVADOR: 10 → 15 Bs/hr" },
+    { "op": "delete", "coleccion": "mano_obra", "key": "ELECTRISISTA", "desc": "Eliminar duplicado con typo" },
+    { "op": "create", "coleccion": "materiales", "key": "NUEVO_MATERIAL", "data": {"n":"Nuevo","u":"pza","p":50}, "desc": "Agregar nuevo material" }
   ]
 }
 
-INSTRUCCIONES ADICIONALES:
-- Si el proveedor ya existe en la lista de proveedores registrados, pon "es_nuevo": false con el nombre exacto.
-- Si es un proveedor nuevo, pon "es_nuevo": true y llena todos los campos disponibles.
-- Extrae TODOS los materiales/productos visibles con sus precios y unidades.
-- Si hay precios en USD u otra moneda, conviértelos a Bs (1 USD ≈ 6.96 Bs).
-- Para materiales que NO aparezcan en el documento pero sean necesarios para completar el contexto, investiga el precio de mercado en Bolivia y márcalos con notas: "Precio estimado de mercado".
-- Usa unidades estándar: plancha, m2, ml, pza, kg, lt, gl, jornal, hr.
-
-Mensaje del usuario: ${text || '(Solo archivos adjuntos)'}`;
-
-        try {
-            // Construir parts para Gemini
-            let parts = [{ text: sysPrompt }];
-            imgSnapshot.forEach(img => {
-                parts.push({ inlineData: { data: img.dataUrl.split(',')[1], mimeType: img.mimeType } });
-            });
-            if(pdfSnapshot) {
-                parts.push({ inlineData: { data: pdfSnapshot.dataUrl.split(',')[1], mimeType: pdfSnapshot.mimeType } });
+Reglas:
+- Siempre mencioná el valor anterior antes de cambiarlo.
+- Para encontrar el KEY: normaliza a MAYÚSCULAS y reemplazá espacios y caracteres especiales con "_".
+- Para limpiar duplicados: usá op:delete en los que tienen typos, manteniendo el más correcto.
+- Para comparar proveedores: buscá el material en la lista y listá todos los proveedores con su precio.
+- NUNCA respondas con texto plano, SIEMPRE JSON válido.`;
+                    iaChatHistory.push({ role: 'user', parts: [{ text: sysPrompt }] });
+                } else {
+                    iaChatHistory.push({ role: 'user', parts: [{ text: text }] });
+                }
+                contents = [...iaChatHistory];
             }
 
-            // Llamada vía Cloud Function autenticado (sin key expuesta)
             const geminiResult = await window.callGemini({
                 model: "gemini-2.5-flash",
-                contents: [{ role: 'user', parts: parts }],
+                contents: contents,
                 generationConfig: { responseMimeType: 'application/json' }
             });
 
-            const rawText = geminiResult.candidates?.[0]?.content?.parts?.[0]?.text
-                || geminiResult.text
-                || '{}';
-            const data = JSON.parse(rawText.replace(/```json|```/g, '').trim());
+            const rawText = geminiResult.candidates?.[0]?.content?.parts?.[0]?.text || '{}';
 
-            if(document.getElementById(loaderId)) document.getElementById(loaderId).remove();
-
-            if(!data.datos || data.datos.length === 0) {
-                chat.innerHTML += `<div class="msg msg-ai">${data.mensaje || 'No se detectaron datos estructurados. Intenta con una imagen más clara.'}</div>`;
-                chat.scrollTop = chat.scrollHeight;
-                return;
+            // Guardar respuesta en historial (solo modo agente)
+            if (!tieneArchivos) {
+                iaChatHistory.push({ role: 'model', parts: [{ text: rawText }] });
             }
 
-            // Renderizar propuesta con info del proveedor
-            const prov = data.proveedor_detectado || {};
-            let provBadge = '';
-            if(prov.nombre) {
-                const badgeColor = prov.es_nuevo ? 'var(--orange)' : 'var(--green)';
-                const badgeLabel = prov.es_nuevo ? '🆕 Proveedor Nuevo' : '✅ Proveedor Existente';
-                provBadge = `<div style="background:rgba(0,0,0,0.05); padding:10px; border-radius:10px; margin-bottom:10px; border-left:3px solid ${badgeColor};">
-                    <div style="font-size:11px; font-weight:800; color:${badgeColor}; margin-bottom:4px;">${badgeLabel}</div>
-                    <div style="font-size:13px; font-weight:900;">${prov.nombre}</div>
-                    ${prov.categoria ? `<div style="font-size:11px; color:var(--gray);">${prov.categoria}</div>` : ''}
-                    ${prov.telefono ? `<div style="font-size:11px; color:var(--gray);"><i class="ph-fill ph-phone"></i> ${prov.telefono}</div>` : ''}
-                    ${prov.nit ? `<div style="font-size:11px; color:var(--gray);">NIT: ${prov.nit}</div>` : ''}
-                </div>`;
+            const data = JSON.parse(rawText.replace(/```json|```/g,'').trim());
+            if (document.getElementById(loaderId)) document.getElementById(loaderId).remove();
+
+            if (data.tipo === 'escaneo' || data.datos) {
+                renderEscaneoIA(data, chat);
+            } else if (data.tipo === 'accion' && data.acciones && data.acciones.length > 0) {
+                renderAccionesIA(data, chat);
+            } else {
+                // Respuesta de texto (consulta, análisis)
+                let html = `<div class="msg msg-ai">`;
+                if (data.mensaje) html += `<span>${data.mensaje.replace(/\n/g,'<br>')}</span>`;
+                if (data.tabla && data.tabla.length > 0) {
+                    const cols = Object.keys(data.tabla[0]);
+                    html += `<div style="overflow-x:auto;margin-top:10px;"><table style="width:100%;border-collapse:collapse;font-size:11px;">`;
+                    html += `<tr>${cols.map(c=>`<th style="text-align:left;padding:5px 8px;background:var(--bg2,var(--bg));border-bottom:2px solid var(--border);font-weight:800;text-transform:uppercase;font-size:10px;white-space:nowrap;">${c}</th>`).join('')}</tr>`;
+                    data.tabla.forEach((row,i) => {
+                        html += `<tr style="background:${i%2===0?'transparent':'rgba(0,0,0,0.03)'};">${cols.map(c=>`<td style="padding:4px 8px;border-bottom:1px solid var(--border);">${row[c]!=null?row[c]:''}</td>`).join('')}</tr>`;
+                    });
+                    html += `</table></div>`;
+                }
+                html += `</div>`;
+                chat.innerHTML += html;
             }
-
-            let htmlPropuesta = `<div class="msg msg-ai" style="border-color:var(--purple);">
-                <b style="color:var(--purple);">📦 ${data.mensaje}</b><br><br>
-                ${provBadge}
-                <b style="font-size:11px; text-transform:uppercase; color:var(--gray);">Materiales detectados (${data.datos.length}):</b>`;
-
-            data.datos.forEach(d => {
-                htmlPropuesta += `<div style="background:var(--bg); padding:8px 10px; border-radius:8px; margin-top:6px; font-size:12px;">
-                    <div style="font-weight:900;">${d.n}</div>
-                    <div style="color:var(--blue); font-weight:800;">${d.p} Bs / ${d.u}</div>
-                    ${d.notas ? `<div style="color:var(--orange); font-size:10px;">⚠ ${d.notas}</div>` : ''}
-                </div>`;
-            });
-
-            window.tempIAData = data;
-            htmlPropuesta += `<button class="btn-main" style="background:var(--green); padding:10px; font-size:12px; margin-top:12px; width:100%;" onclick="confirmarGuardadoIA()">
-                <i class="ph-bold ph-check-circle"></i> Confirmar y Guardar Todo
-            </button></div>`;
-            chat.innerHTML += htmlPropuesta;
             chat.scrollTop = chat.scrollHeight;
 
         } catch(error) {
-            if(document.getElementById(loaderId)) document.getElementById(loaderId).remove();
-            chat.innerHTML += `<div class="msg msg-ai" style="background:rgba(255,59,48,0.1); color:var(--red); border-color:var(--red);">Error al procesar con IA: ${error.message}</div>`;
+            if (document.getElementById(loaderId)) document.getElementById(loaderId).remove();
+            chat.innerHTML += `<div class="msg msg-ai" style="background:rgba(255,59,48,0.1);color:var(--red);border-color:var(--red);">Error: ${error.message}</div>`;
             console.error(error);
         }
+    }
+
+    function renderEscaneoIA(data, chat) {
+        if (!data.datos || data.datos.length === 0) {
+            chat.innerHTML += `<div class="msg msg-ai">${data.mensaje || 'No se detectaron datos estructurados. Intentá con una imagen más clara.'}</div>`;
+            return;
+        }
+        const prov = data.proveedor_detectado || {};
+        let provBadge = '';
+        if (prov.nombre) {
+            const badgeColor = prov.es_nuevo ? 'var(--orange)' : 'var(--green)';
+            const badgeLabel = prov.es_nuevo ? '🆕 Proveedor Nuevo' : '✅ Proveedor Existente';
+            provBadge = `<div style="background:rgba(0,0,0,0.05);padding:10px;border-radius:10px;margin-bottom:10px;border-left:3px solid ${badgeColor};">
+                <div style="font-size:11px;font-weight:800;color:${badgeColor};margin-bottom:4px;">${badgeLabel}</div>
+                <div style="font-size:13px;font-weight:900;">${prov.nombre}</div>
+                ${prov.categoria ? `<div style="font-size:11px;color:var(--gray);">${prov.categoria}</div>` : ''}
+                ${prov.telefono ? `<div style="font-size:11px;color:var(--gray);"><i class="ph-fill ph-phone"></i> ${prov.telefono}</div>` : ''}
+                ${prov.nit ? `<div style="font-size:11px;color:var(--gray);">NIT: ${prov.nit}</div>` : ''}
+            </div>`;
+        }
+        let html = `<div class="msg msg-ai" style="border-color:var(--purple);">
+            <b style="color:var(--purple);">📦 ${data.mensaje}</b><br><br>
+            ${provBadge}
+            <b style="font-size:11px;text-transform:uppercase;color:var(--gray);">Materiales detectados (${data.datos.length}):</b>`;
+        data.datos.forEach(d => {
+            html += `<div style="background:var(--bg);padding:8px 10px;border-radius:8px;margin-top:6px;font-size:12px;">
+                <div style="font-weight:900;">${d.n}</div>
+                <div style="color:var(--blue);font-weight:800;">${d.p} Bs / ${d.u}</div>
+                ${d.notas ? `<div style="color:var(--orange);font-size:10px;">⚠ ${d.notas}</div>` : ''}
+            </div>`;
+        });
+        window.tempIAData = data;
+        html += `<button class="btn-main" style="background:var(--green);padding:10px;font-size:12px;margin-top:12px;width:100%;" onclick="confirmarGuardadoIA()">
+            <i class="ph-bold ph-check-circle"></i> Confirmar y Guardar Todo
+        </button></div>`;
+        chat.innerHTML += html;
+    }
+
+    function renderAccionesIA(data, chat) {
+        let html = `<div class="msg msg-ai" style="border-color:var(--blue);">
+            <b style="color:var(--blue);">⚡ ${data.mensaje}</b><br><br>
+            <b style="font-size:11px;text-transform:uppercase;color:var(--gray);">Cambios propuestos (${data.acciones.length}):</b>`;
+        data.acciones.forEach(a => {
+            const opColor = a.op==='delete' ? 'var(--red)' : a.op==='create' ? 'var(--green)' : 'var(--orange)';
+            const opIcon = a.op==='delete' ? '🗑' : a.op==='create' ? '➕' : '✏️';
+            html += `<div style="background:var(--bg);padding:8px 10px;border-radius:8px;margin-top:6px;font-size:12px;border-left:3px solid ${opColor};">
+                <span style="color:${opColor};font-weight:800;text-transform:uppercase;">${opIcon} ${a.op}</span>
+                <span style="margin-left:6px;color:var(--gray);font-size:10px;">${a.coleccion||''}</span>
+                <div style="font-weight:900;margin-top:2px;">${a.key||''}</div>
+                <div style="color:var(--gray);font-size:11px;">${a.desc||''}</div>
+                ${a.data ? `<div style="color:var(--blue);font-size:10px;font-family:monospace;margin-top:2px;">${JSON.stringify(a.data)}</div>` : ''}
+            </div>`;
+        });
+        window.tempAccionesIA = data;
+        html += `<button class="btn-main" style="background:var(--blue);padding:10px;font-size:12px;margin-top:12px;width:100%;" onclick="ejecutarAccionesIA(this)">
+            <i class="ph-bold ph-check-circle"></i> Confirmar y Ejecutar Cambios
+        </button></div>`;
+        chat.innerHTML += html;
+    }
+
+    async function ejecutarAccionesIA(btn) {
+        if (!window.tempAccionesIA) return;
+        const data = window.tempAccionesIA;
+        const chat = document.getElementById('ia-chat-history');
+        btn.disabled = true; btn.innerHTML = '<i class="ph-bold ph-spinner-gap anim-spin"></i> Ejecutando...';
+
+        const updates = {};
+        data.acciones.forEach(a => {
+            const path = `base_datos/${a.coleccion}/${a.key}`;
+            if (a.op === 'delete') {
+                updates[path] = null;
+            } else {
+                // Para update: fusionar con datos existentes; para create: solo a.data
+                const colMap = { mano_obra: 'mo', materiales: 'mat', otros: 'eq' };
+                const existing = (dbData[colMap[a.coleccion]||'mat'] || {})[a.key] || {};
+                updates[path] = a.op === 'create' ? a.data : { ...existing, ...a.data };
+            }
+        });
+
+        try {
+            await db.ref('/').update(updates);
+            window.tempAccionesIA = null;
+            chat.innerHTML += `<div class="msg msg-ai" style="background:rgba(52,199,89,0.1);color:var(--green);border-color:var(--green);">
+                ✅ ${data.acciones.length} cambio(s) aplicado(s) correctamente.
+            </div>`;
+            chat.scrollTop = chat.scrollHeight;
+        } catch(err) {
+            btn.disabled = false; btn.innerHTML = '<i class="ph-bold ph-check-circle"></i> Reintentar';
+            chat.innerHTML += `<div class="msg msg-ai" style="color:var(--red);">Error: ${err.message}</div>`;
+        }
+    }
+
+    function nuevaConversacionIA() {
+        iaChatHistory = [];
+        document.getElementById('ia-chat-history').innerHTML = '<div class="msg msg-ai" style="color:var(--gray);font-size:12px;">💬 Nueva conversación iniciada. Podés preguntarme sobre precios, proveedores o pedirme que actualice datos.</div>';
     }
 
     async function confirmarGuardadoIA() {
