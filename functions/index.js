@@ -90,7 +90,7 @@ function geminiPartsToClaudeContent(parts) {
 async function llamarClaude(anthropicKey, messages, systemText, maxTokens, model) {
     const body = {
         model: model || "claude-haiku-4-5",
-        max_tokens: Math.min(maxTokens || 4096, 8192),
+        max_tokens: Math.min(maxTokens || 4096, 4000),
         messages,
     };
     if (systemText) body.system = systemText;

@@ -2508,19 +2508,16 @@ F3. MATERIALES POR PIEZAS COMPLEJAS — preguntar si no se especifica:
                 }
 
                 const rowImages = row.querySelectorAll('.ia-row-image-data');
-                const MAX_IMG_BYTES = 150000; // 150KB por imagen en base64 (~112KB binario)
-                const MAX_TOTAL_IMG_PARTS = 2; // máximo 2 imágenes por ítem
+                const MAX_IMG_BYTES = 80000; // 80KB por imagen en base64
+                const MAX_TOTAL_IMG_PARTS = 1; // máximo 1 imagen por ítem para mantener payload bajo
                 let imgCount = 0;
                 for (let imgIdx = 0; imgIdx < rowImages.length && imgCount < MAX_TOTAL_IMG_PARTS; imgIdx++) {
                     const imgEl = rowImages[imgIdx];
                     const b64Full = imgEl.src;
                     if (!b64Full || !b64Full.startsWith('data:')) continue;
-                    let comp = await _compressB64(b64Full, 400, 0.4);
+                    let comp = await _compressB64(b64Full, 300, 0.35);
                     if (comp.split(',')[1].length > MAX_IMG_BYTES) {
-                        comp = await _compressB64(b64Full, 300, 0.3);
-                    }
-                    if (comp.split(',')[1].length > MAX_IMG_BYTES) {
-                        comp = await _compressB64(b64Full, 240, 0.25);
+                        comp = await _compressB64(b64Full, 220, 0.28);
                     }
                     parts.push({ inlineData: { data: comp.split(',')[1], mimeType: 'image/jpeg' } });
                     textPrompt += `-> FOTO ADJUNTA ${imgIdx+1} PARA ÍTEM ${index+1}.\n`;
@@ -2529,11 +2526,17 @@ F3. MATERIALES POR PIEZAS COMPLEJAS — preguntar si no se especifica:
             }
         }
 
-        // 3. Adjuntar PDF si existe
+        // 3. Adjuntar imágenes de contexto (máx 1) + PDF si existe
         if(currentIAImages.length > 0) {
-            currentIAImages.slice(0, 4).forEach(img => {
-                parts.push({ inlineData: { data: img.data, mimeType: img.mimeType } });
-            });
+            // Solo 1 imagen de contexto, recomprimida a 250px/0.3 para mantener payload bajo 150KB
+            const _ctxImg = currentIAImages[0];
+            try {
+                const _ctxFull = 'data:' + _ctxImg.mimeType + ';base64,' + _ctxImg.data;
+                const _ctxComp = await _compressB64(_ctxFull, 250, 0.3);
+                parts.push({ inlineData: { data: _ctxComp.split(',')[1], mimeType: 'image/jpeg' } });
+            } catch(_ce) {
+                parts.push({ inlineData: { data: _ctxImg.data, mimeType: _ctxImg.mimeType } });
+            }
         }
         if(currentIAPdfBase64) {
             parts.push({ inlineData: { data: currentIAPdfBase64.split(',')[1], mimeType: "application/pdf" } });
