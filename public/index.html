@@ -496,7 +496,37 @@ Soldadura: nodo simple=15min, reforzado=25min. Anticorrosivo 0.08ltr/m2, duco 0.
 BLOQUE E — IMPRESIÓN GRAN FORMATO: área = ancho × alto × 1.08 (+8% sangrado). Lona mate 440g: 35–45 Bs/m2 | Lona backlight 510g: 75–90 Bs/m2 | Adhesivo vinílico: 85–110 Bs/m2.
 
 BLOQUE F — PROFUNDIDADES ESTÁNDAR: Caja de luz simple 8–12cm | Letra acrílica sin luz 3–5cm canto | Con luz 6–10cm | Mostrador 85–95cm alto | Stand portátil 200–250cm.
-En feat SIEMPRE mostrar: "- Tapa frontal: X.XX m2", "- Canto Xcm: X.XX m2", "- Perímetro: X.XX ml", "- LED: X.XX ml".`,
+En feat SIEMPRE mostrar: "- Tapa frontal: X.XX m2", "- Canto Xcm: X.XX m2", "- Perímetro: X.XX ml", "- LED: X.XX ml".
+
+════════════════════════════════════════════════════════════════
+BLOQUE G — CALCULADORA DE PLANCHAS Y LÁMINAS
+════════════════════════════════════════════════════════════════
+Cuando el CEO pida calcular piezas o láminas (ej: "30 piezas de 15×48 cm en acrílico"), ejecutá estos pasos:
+
+TAMAÑOS ESTÁNDAR BOLIVIA:
+• Acrílico (cualquier espesor): plancha 1.22×2.44m | media plancha 0.61×1.22m
+• MDF (3/6/9/12/15/18mm): plancha 1.22×2.44m
+• PVC rígido/foam/Sintra: plancha 1.22×2.44m
+• Galvanizado / aluminio liso: plancha 1.22×2.44m
+• Coroplast: plancha 1.22×2.44m
+
+ALGORITMO (siempre mostrar los pasos):
+1. Convertir medidas a metros: 15cm → 0.15m, 48cm → 0.48m
+2. Orientación A: piezas_A = floor(1.22/0.15) × floor(2.44/0.48) = 8 × 5 = 40 piezas/plancha
+3. Orientación B (rotada): piezas_B = floor(1.22/0.48) × floor(2.44/0.15) = 2 × 16 = 32 piezas/plancha
+4. piezas_por_plancha = max(40, 32) = 40 → orientación A es más eficiente
+5. planchas_completas = ceil(30 / 40) = 1 plancha (quedan 10 piezas libres)
+6. Evaluar media plancha (0.61×1.22m): piezas_media_A = floor(0.61/0.15)×floor(1.22/0.48) = 4×2 = 8 piezas
+7. Si 30 piezas ≤ una plancha → compara costo plancha vs costo media plancha(s)
+
+TABLA DE SALIDA OBLIGATORIA:
+| Opción | Piezas que entran | Unidades necesarias | Costo unit. | Costo total | Desperdicio |
+|---|---|---|---|---|---|
+| Plancha completa 1.22×2.44m | X | X | $price | $total | X% |
+| Media plancha 0.61×1.22m | X | X | $price | $total | X% |
+→ Recomendación: [la opción más económica]
+
+BUSCÁ el precio del material en [CONTEXTO_MATERIALES] antes de calcular costos.`,
             
             'index_flash': `Eres el Especialista en Licitaciones de Rubik Bolivia. 
 TU OBJETIVO: Ganar la licitación con precios competitivos reales de Santa Cruz/Bolivia.
@@ -1205,19 +1235,16 @@ $$$QUOTE_DATA: [{"desc":"Nombre Item","feat":"Característica","cant":1,"und":"p
                 .replace('[CONTEXTO_ITEMS]', contextDB.items.join('; '))
                 .replace('[CONTEXTO_PERSONAL]', contextDB.personal.join(', '));
 
-            // Historial de conversación (últimos 10 turnos para contexto continuo)
-            if (_iaHistorial.length > 0) {
-                const histStr = _iaHistorial.slice(-10).map(h => `${h.role === 'user' ? 'CEO' : 'Cerebro'}: ${h.text}`).join('\n');
-                sysPrompt += `\n\n════ CONVERSACIÓN PREVIA ════\n${histStr}`;
-            }
+            // Multi-turn: armar partes del mensaje del usuario y agregar al historial
+            const _userPartsIA = [];
+            if (imageToSend) _userPartsIA.push({ inlineData: { data: imageToSend.split(',')[1], mimeType: imageToSend.split(';')[0].split(':')[1] } });
+            _userPartsIA.push({ text: text || 'Analiza la imagen adjunta.' });
+            _iaHistorial.push({ role: 'user', parts: _userPartsIA });
+            if (_iaHistorial.length > 22) _iaHistorial = _iaHistorial.slice(-22);
 
             try {
-                // Construir prompt final con imagen si existe
-                let promptFinal = sysPrompt + "\n\nCEO DICE: " + (text || "Analiza esta imagen.");
-                const reqBody = { prompt: promptFinal, model: 'gemini-2.5-flash' };
-                if (imageToSend) {
-                    reqBody.image = { data: imageToSend.split(',')[1], mimeType: imageToSend.split(';')[0].split(':')[1] };
-                }
+                // systemInstruction = contexto completo | contents = historial real de conversación
+                const reqBody = { systemInstruction: sysPrompt, contents: _iaHistorial, model: 'gemini-2.5-flash' };
                 const _tok1 = await firebase.auth().currentUser.getIdToken();
                 const _res1 = await fetch('/api/gemini', {
                     method: 'POST',
@@ -1227,7 +1254,8 @@ $$$QUOTE_DATA: [{"desc":"Nombre Item","feat":"Característica","cant":1,"und":"p
                 const _data1 = await _res1.json();
                 if (!_res1.ok) throw new Error(_data1.error || 'Gemini API error');
                 let aiText = _data1.text || (_data1.candidates && _data1.candidates[0].content.parts[0].text) || '';
-                
+                const _rawResponseIA = aiText; // guardar antes de formatear para el historial
+
                 let quoteDataChat = null;
                 // Regex mejorado: captura JSON entre $$$QUOTE_DATA: y $$$ incluyendo multilínea y anidado
                 const regex = /\$\$\$QUOTE_DATA:\s*(\[[\s\S]*?\])\s*\$\$\$/;
@@ -1249,10 +1277,9 @@ $$$QUOTE_DATA: [{"desc":"Nombre Item","feat":"Característica","cant":1,"und":"p
 
                 const aiMsg = document.createElement('div'); aiMsg.className = 'msg msg-ai';
 
-                // Guardar en historial multi-turn (máx 20 turnos)
-                _iaHistorial.push({ role: 'user', text: text || '[imagen]' });
-                _iaHistorial.push({ role: 'assistant', text: aiText.replace(/<[^>]+>/g, '') });
-                if (_iaHistorial.length > 20) _iaHistorial = _iaHistorial.slice(-20);
+                // Guardar respuesta del modelo en historial (texto limpio para contexto real)
+                _iaHistorial.push({ role: 'model', parts: [{ text: _rawResponseIA }] });
+                if (_iaHistorial.length > 22) _iaHistorial = _iaHistorial.slice(-22);
 
                 chatBox.appendChild(aiMsg);
                 chatBox.scrollTop = chatBox.scrollHeight;
@@ -1496,6 +1523,7 @@ $$$QUOTE_DATA: [{"desc":"Nombre Item","feat":"Característica","cant":1,"und":"p
                         // 4. Instanciar Gemini y procesar la respuesta
                         // Llamada via proxy /api/gemini
                         const _promptWA = `${sysPrompt}\n\nMENSAJE RECIBIDO VÍA WHATSAPP:\nRemitente: ${data.telefono} | Nombre: ${data.nombre_remitente || 'Desconocido'} | Rol detectado: ${rolRemitente}\nMensaje: ${data.mensaje}`;
+                        if (!firebase.auth().currentUser) throw new Error('Sin sesión para responder WA');
                         const _tokWA = await firebase.auth().currentUser.getIdToken();
                         const _resWA = await fetch('/api/gemini', {
                             method: 'POST',

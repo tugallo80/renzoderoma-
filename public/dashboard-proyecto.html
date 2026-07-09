@@ -811,50 +811,92 @@
                     let preciosRef = {};
                     if(bdSnap.exists()) {
                         const bd = bdSnap.val();
-                        preciosRef.materiales = Object.values(bd.materiales||{}).slice(0,60).map(m=>`${m.desc||m.n}: ${m.precio||m.pu||m.p||0} Bs/${m.und||m.u}`);
+                        preciosRef.materiales = Object.values(bd.materiales||{}).slice(0,120).map(m=>`${m.desc||m.n}: ${m.precio||m.pu||m.p||0} Bs/${m.und||m.u}${m.proveedor?' ('+m.proveedor+')':''}`);
                         preciosRef.mano_obra = Object.values(bd.mano_obra||{}).map(m=>`${m.desc||m.n}: ${m.p||0} Bs/${m.u}`);
                     }
+
+                    // Calcular totales de compras y extras
+                    let totalCompras = 0;
+                    if(p.compras) Object.values(p.compras).forEach(c => totalCompras += parseFloat(c.monto||c.precio||0));
+                    let totalExtras = 0;
+                    if(p.extras) Object.values(p.extras).forEach(e => totalExtras += parseFloat(e.monto||0));
+
+                    // Fotos de producción (URLs de artes/fotos del proyecto)
+                    const fotosProduccion = [];
+                    if(p.artes) Object.values(p.artes).forEach(a => { if(a.url) fotosProduccion.push({ nombre: a.nombre||'Arte', url: a.url, fecha: a.fecha||'' }); });
+                    if(p.fotos) Object.values(p.fotos).forEach(f => { if(f.url) fotosProduccion.push({ nombre: f.nombre||'Foto', url: f.url, fecha: f.fecha||'' }); });
 
                     contextoProyecto = JSON.stringify({
                         nombre: p.nombre,
                         estado: p.estado,
                         cliente_id: currentCid,
+                        descripcion: p.descripcion || '',
                         financiero: {
                             venta_base: ventaBase,
                             monto_cierre: p.monto_cierre || ventaBase,
                             gasto_licitaciones: gastoLic,
+                            total_compras: totalCompras,
+                            total_extras: totalExtras,
                             pagado_por_cliente: totalPagadoCliente,
                             saldo_cliente: (p.monto_cierre || ventaBase) - totalPagadoCliente,
-                            utilidad_estimada: (p.monto_cierre || ventaBase) - gastoLic
+                            utilidad_real: (p.monto_cierre || ventaBase) - gastoLic - totalCompras - totalExtras,
+                            margen_pct: ventaBase > 0 ? Math.round(((p.monto_cierre||ventaBase) - gastoLic - totalCompras - totalExtras) / (p.monto_cierre||ventaBase) * 100) : 0
                         },
                         items_detalle: itemsDetalle,
                         licitaciones: p.licitaciones || {},
                         gantt: p.gantt?.items || {},
                         compras: p.compras || {},
                         extras: p.extras || {},
-                        descripcion: p.descripcion || '',
+                        pagos_cliente: p.pagos || {},
+                        fotos_produccion: fotosProduccion,
                         precios_referencia: preciosRef
                     });
                 }
             } catch(e){ console.warn('Context error:', e); }
 
             let sysPrompt = "";
-            const _dashPromptDefecto = `Eres el Cerebro IA del proyecto de Rubik Bolivia. Analiza el contexto completo.
+            const _dashPromptDefecto = `Eres el Gerente Ejecutivo IA de este proyecto — Rubik Bolivia, empresa de señalética, stands y publicidad en Santa Cruz.
+Tenés visión COMPLETA del proyecto: financiero, producción, materiales, equipo y cronograma.
 
-DATOS DEL PROYECTO:
+DATOS COMPLETOS DEL PROYECTO (cargados en tiempo real):
 [DATOS_PROYECTO]
 
-CAPACIDADES:
-1. FINANCIERO: venta base, cierre, gastos, saldo cliente, utilidad.
-2. ÍTEMS Y APU: cada ítem con materiales, MO y precios del APU.
-3. LICITACIONES: trabajadores, montos, anticipos, saldos.
-4. GANTT: tareas y su estado.
-5. COMPRAS: qué se compró, cuándo y cuánto.
+════ NODOS DEL DASHBOARD QUE CONOCÉS ════
 
-REGLAS:
-- Directo y técnico. El CEO es tu jefe.
-- Si te mandan foto, analizá en contexto del proyecto.
-- NUNCA digas "no tengo acceso". Si falta info, estimá con lo disponible.`;
+1. PRESUPUESTO / ÍTEMS: Cada ítem tiene APU desglosado (mat, mo, eq, sub). precio_unitario = costos × (1+ind%) × (1+util%). venta_base = suma de cant×pu.
+2. LICITACIONES: Contratos de MO con trabajadores. saldo = precio_propuesto − pagos_realizados. gasto_licitaciones = suma de todos los montos.
+3. GANTT: Cronograma con fechas y estado por tarea. Detectá atrasos y solapamientos.
+4. COMPRAS: Materiales adquiridos con proveedor, qty, precio y fecha. Compará vs precios_referencia.
+5. PAGOS DEL CLIENTE: Historial de abonos. saldo_cliente = monto_cierre − total_pagado.
+6. EXTRAS: Gastos imprevistos fuera del presupuesto.
+7. FOTOS DE PRODUCCIÓN: Si el CEO sube imagen → analizá ejecución, acabados, riesgos, calidad constructiva.
+
+════ MOTOR DE CÁLCULO DE PLANCHAS Y LÁMINAS ════
+
+Cuando pidan piezas (ej: "30 piezas de 15×48cm en acrílico"):
+
+TAMAÑOS ESTÁNDAR BOLIVIA:
+• Acrílico (cualquier espesor): plancha 1.22×2.44m | media plancha 0.61×1.22m
+• MDF (3/6/9/12/15/18mm): plancha 1.22×2.44m
+• PVC foam/Sintra: 1.22×2.44m | Galvanizado/aluminio: 1.22×2.44m
+
+ALGORITMO (mostrá cada paso):
+1. Convertir a metros. 2. Orient.A = floor(1.22/largo)×floor(2.44/ancho). 3. Orient.B = floor(1.22/ancho)×floor(2.44/largo). 4. piezas/plancha = max(A,B). 5. planchas = ceil(qty/piezas_plancha). 6. Evaluar media plancha: piezas/media = floor(0.61/lado)×floor(1.22/otro). 7. Comparar costos totales.
+
+TABLA OBLIGATORIA:
+| Opción | Piezas/unidad | Cant.necesaria | Precio unit. | Total | Desperdicio |
+→ Recomendación con justificación económica.
+
+════ CÁLCULOS FINANCIEROS ════
+• Utilidad REAL = monto_cierre − gasto_licitaciones − total_compras − total_extras
+• Margen % = (utilidad / monto_cierre) × 100
+• Saldo cliente = monto_cierre − pagado_por_cliente
+• Para precios: usá precios_referencia del contexto o BD cuando esté disponible.
+
+════ REGLAS ════
+- Directo, técnico, ejecutivo. Mostrá el proceso antes del resultado.
+- NUNCA digas "no tengo acceso". Razoná con los datos disponibles.
+- Para fotos: evaluá calidad, alineación, acabados, riesgos visibles en el contexto del proyecto.`;
 
             // Cargar prompt desde Firebase o usar default
             const _now = Date.now();
@@ -881,19 +923,17 @@ REGLAS:
             // Inyectar contexto del proyecto
             sysPrompt = sysPrompt.replace('[DATOS_PROYECTO]', contextoProyecto);
 
-            // Historial multi-turn (últimos 8 turnos)
-            if (_dashHistorial.length > 0) {
-                const histStr = _dashHistorial.slice(-8).map(h => `${h.role === 'user' ? 'CEO' : 'IA'}: ${h.text}`).join('\n');
-                sysPrompt += `\n\n═══ CONVERSACIÓN PREVIA ═══\n${histStr}`;
-            }
+            // Multi-turn: agregar mensaje del usuario al historial
+            const _dashUserParts = [];
+            if (imageToSend) _dashUserParts.push({ inlineData: { data: imageToSend.split(',')[1], mimeType: imageToSend.split(';')[0].split(':')[1] } });
+            _dashUserParts.push({ text: text || 'Analiza la imagen adjunta.' });
+            _dashHistorial.push({ role: 'user', parts: _dashUserParts });
+            if (_dashHistorial.length > 18) _dashHistorial = _dashHistorial.slice(-18);
 
             try {
-                // Llamada via proxy /api/gemini
+                // systemInstruction = sysPrompt con contexto | contents = historial multi-turn real
                 const _imgDash = imageToSend;
-                const _bodyDash = { prompt: sysPrompt + '\n\nCEO DICE: ' + (text || 'Analiza la imagen adjunta.'), model: 'gemini-2.5-flash' };
-                if (_imgDash) {
-                    _bodyDash.image = { data: _imgDash.split(',')[1], mimeType: _imgDash.split(';')[0].split(':')[1] };
-                }
+                const _bodyDash = { systemInstruction: sysPrompt, contents: _dashHistorial, model: 'gemini-2.5-flash' };
                 const _tokDash = await firebase.auth().currentUser.getIdToken();
                 const _resDash = await fetch('/api/gemini', {
                     method: 'POST',
@@ -901,15 +941,14 @@ REGLAS:
                     body: JSON.stringify(_bodyDash)
                 });
                 const _dataDash = await _resDash.json();
-                if (!_resDash.ok) throw new Error(_dataDash.error || 'Gemini error');
+                if (!_resDash.ok) throw new Error(_dataDash.error || 'Error IA');
                 let aiText = _dataDash.text || (_dataDash.candidates?.[0]?.content?.parts?.[0]?.text) || '';
 
-                // Guardar en historial
-                _dashHistorial.push({ role: 'user', text: text || '[imagen]' });
-                _dashHistorial.push({ role: 'assistant', text: aiText.replace(/<[^>]+>/g, '') });
-                if (_dashHistorial.length > 16) _dashHistorial = _dashHistorial.slice(-16);
+                // Guardar respuesta del modelo en historial
+                _dashHistorial.push({ role: 'model', parts: [{ text: aiText }] });
+                if (_dashHistorial.length > 18) _dashHistorial = _dashHistorial.slice(-18);
 
-                aiText = aiText.replace(/\*\*(.*?)\*\*/g, '<b>$1</b>');
+                aiText = aiText.replace(/\*\*(.*?)\*\*/g, '<b>$1</b>').replace(/^#{1,3} /gm, '').replace(/`([^`]+)`/g, '<code>$1</code>');
                 typing.style.display = 'none';
                 const aiMsg = document.createElement('div'); aiMsg.className = 'msg msg-ai';
                 aiMsg.innerHTML = aiText.replace(/\n/g, '<br>');
