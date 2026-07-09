@@ -1030,7 +1030,7 @@
         updateChapterTotalsUI();
         calcGlobal();
         ['mat', 'mo', 'eq'].forEach(t => {
-            if(data[targetIdx].apu[t]) { data[targetIdx].apu[t].forEach(item => { if(item.d && item.d.trim().length > 1) { let path = t === 'mat' ? 'materiales' : (t === 'mo' ? 'mano_obra' : 'otros'); let key = item.d.toUpperCase().replace(/[.#$\[\]/]/g, ""); db.ref(`base_datos/${path}/${key}`).update({ desc: item.d, n: item.d, u: item.u, p: item.p }); } }); }
+            if(data[targetIdx].apu[t]) { data[targetIdx].apu[t].forEach(item => { if(item.d && item.d.trim().length > 1) { let path = t === 'mat' ? 'materiales' : (t === 'mo' ? 'mano_obra' : 'otros'); let key = item.d.toUpperCase().trim().replace(/[.#$\[\]/]/g, ""); db.ref(`base_datos/${path}/${key}`).once('value', snap => { if (!snap.exists()) db.ref(`base_datos/${path}/${key}`).set({ desc: item.d, n: item.d, u: item.u, p: item.p }); }); } }); }
         });
         if (data[targetIdx].desc && data[targetIdx].desc.length > 3) { db.ref(`base_datos/items/${data[targetIdx].desc.replace(/[.#$\[\]/]/g, "")}`).set(JSON.parse(JSON.stringify(data[targetIdx]))); }
         saveDB(true); document.getElementById('mod-apu').style.display = 'none'; activeMod=null; 
