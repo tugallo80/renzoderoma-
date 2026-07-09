@@ -2177,9 +2177,12 @@ Devolvé exactamente este formato (sin texto adicional):
         let parts = [];
 
         // 1. CREAR EL CATÁLOGO DE LA BASE DE DATOS PARA ENVIARSELO A LA IA
-        // Esto le da a la IA los precios exactos que tienes guardados.
-        let catalogoMat = Object.values(dbMats).map(m => `${m.n || m.desc}: ${m.p || m.pu} Bs/${m.u || m.und}`).join(", ");
-        let catalogoMo = Object.values(dbMo).map(m => `${m.n || m.desc}: ${m.p || m.pu} Bs`).join(", ");
+        // Limitar a 300 materiales y 100 MO para no inflar el payload
+        const _matEntries = Object.values(dbMats).slice(0, 300);
+        const _moEntries  = Object.values(dbMo).slice(0, 100);
+        console.log('[Budget] DB: mats=' + Object.values(dbMats).length + ' mo=' + Object.values(dbMo).length + ' (enviando ' + _matEntries.length + '/' + _moEntries.length + ')');
+        let catalogoMat = _matEntries.map(m => `${m.n || m.desc}: ${m.p || m.pu} Bs/${m.u || m.und}`).join(", ");
+        let catalogoMo  = _moEntries.map(m => `${m.n || m.desc}: ${m.p || m.pu} Bs`).join(", ");
 
         let textPrompt = `ERES EL ESTIMADOR DE COSTOS APU DE RUBIK BOLIVIA — empresa de señalética, fabricación de stands, letreros luminosos, BTL y publicidad física en Santa Cruz, Bolivia.
 
