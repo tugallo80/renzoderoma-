@@ -1855,10 +1855,7 @@ Devolvé exactamente este formato (sin texto adicional):
             const headers = { 'Content-Type': 'application/json' };
             if(token) headers['Authorization'] = 'Bearer ' + token;
 
-            const _regenPayloadKB = Math.round(JSON.stringify(_regenParts).length / 1024);
-            const _regenUrl = _regenPayloadKB > 50
-                ? 'https://us-central1-rubik-bolivia.cloudfunctions.net/geminiProxy'
-                : '/api/gemini';
+            const _regenUrl = '/api/gemini';
 
             const resp = await fetch(_regenUrl, {
                 method: 'POST', headers,
@@ -2622,12 +2619,8 @@ EJEMPLO SIN CAPÍTULOS (menos de 4 ítems):
                 throw new Error(`El archivo adjunto es demasiado grande (${_payloadKB} KB). Para PDFs, intentá con un archivo de menos de 15 MB. Para imágenes, usá 1-3 fotos.`);
             }
 
-            // Payloads >50KB van directo a Cloud Functions para evitar el timeout
-            // del rewrite de Firebase Hosting (~60s). La función tiene 540s de timeout.
-            const _geminiUrl = _payloadKB > 50
-                ? 'https://us-central1-rubik-bolivia.cloudfunctions.net/geminiProxy'
-                : '/api/gemini';
-            console.log('[Budget] Endpoint:', _geminiUrl);
+            const _geminiUrl = '/api/gemini';
+            console.log('[Budget] Endpoint:', _geminiUrl, '| payload:', _payloadKB, 'KB');
 
             const resp = await fetch(_geminiUrl, { method: 'POST', headers, body: _reqBody });
 
