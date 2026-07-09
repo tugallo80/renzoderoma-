@@ -1017,13 +1017,16 @@ Recuerda aplicar siempre: [REGLA_UTILIDAD].`
             r.continuous = true;
             r.interimResults = true;
             r.lang = 'es-ES';
+            let _finalAccum = ''; // acumula fragmentos finales de esta sesión
             r.onresult = (e) => {
-                let interim = '', final = '';
-                for (let i = 0; i < e.results.length; i++) {
-                    if (e.results[i].isFinal) final += e.results[i][0].transcript;
+                // e.resultIndex = primer resultado NUEVO en este evento
+                // NO iterar desde 0 o se re-leen todos los anteriores (bug de duplicación)
+                let interim = '';
+                for (let i = e.resultIndex; i < e.results.length; i++) {
+                    if (e.results[i].isFinal) _finalAccum += e.results[i][0].transcript;
                     else interim += e.results[i][0].transcript;
                 }
-                _pttTranscript = final || interim;
+                _pttTranscript = _finalAccum + interim;
                 // Mostrar en vivo en el input mientras se habla
                 const inp = document.getElementById('ai-user-input');
                 inp.value = _pttTranscript;
@@ -1264,8 +1267,13 @@ $$$QUOTE_DATA: [{"desc":"Nombre Item","feat":"Característica","cant":1,"und":"p
                     headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + _tok1 },
                     body: JSON.stringify(reqBody)
                 });
+                if (!_res1.ok) {
+                    const _errText = await _res1.text();
+                    if (_errText.startsWith('<')) throw new Error(`Servicio no disponible (${_res1.status}). Intentá de nuevo en unos segundos.`);
+                    let _errMsg = _errText; try { _errMsg = JSON.parse(_errText).error || _errMsg; } catch(_) {}
+                    throw new Error(_errMsg);
+                }
                 const _data1 = await _res1.json();
-                if (!_res1.ok) throw new Error(_data1.error || 'Gemini API error');
                 let aiText = _data1.text || (_data1.candidates && _data1.candidates[0].content.parts[0].text) || '';
                 const _rawResponseIA = aiText; // guardar antes de formatear para el historial
 
