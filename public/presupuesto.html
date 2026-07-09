@@ -2548,7 +2548,15 @@ Si hay una imagen de plano técnico, dibujo CAD o croquis acotado:
 4. La profundidad del cajón/estructura también es una cota del plano — no la omitas.
 
 CAMPOS OBLIGATORIOS por ítem:
-- "desc": string — usá EXACTAMENTE el nombre que el usuario escribió para ese ítem, sin cambiarlo ni traducirlo
+- "desc": string — REGLA DE NOMBRES:
+  • Si el ítem del usuario genera UN SOLO objeto en el JSON → usá EXACTAMENTE el nombre que escribió el usuario.
+  • Si el ítem del usuario se descompone en VARIOS objetos (zonas, partidas, sistemas) → al nombre original agregale "— [descripción específica]" para identificar cada uno. NUNCA repitas el mismo desc en dos objetos del mismo ítem.
+  EJEMPLOS correctos cuando un ítem se divide:
+    Usuario escribió "FABRICACION DE STAND" → JSON:
+    {"desc":"FABRICACION DE STAND — Piso técnico y estructura",...}
+    {"desc":"FABRICACION DE STAND — Instalación eléctrica",...}
+    {"desc":"FABRICACION DE STAND — Muro curvo con follaje",...}
+  PROHIBIDO: dos objetos con desc idéntico.
 - "cant": número — cantidad exacta indicada por el usuario
 - "und": string — unidad (glb, m2, ml, pza, etc.)
 - "feat": string — OBLIGATORIO, NUNCA vacío. Descripción orientada AL CLIENTE. Cada línea empieza con "- ". Mínimo 4 líneas, máximo 8 líneas.
