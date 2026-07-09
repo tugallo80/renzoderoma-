@@ -4200,6 +4200,279 @@ window.actualizarPreciosBDProd = async function() {
         window.addEventListener('resize', checkMobile);
     })();
     </script>
+
+<!-- ══ Modal Ficha Técnica IA ══════════════════════════════════════════════ -->
+<style>
+    #ficha-ia-modal { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.6); z-index:10000; align-items:center; justify-content:center; padding:12px; }
+    #ficha-ia-modal.open { display:flex; }
+    #ficha-ia-box { background:var(--card); border-radius:18px; width:min(560px,100%); max-height:90vh; display:flex; flex-direction:column; box-shadow:0 24px 70px rgba(0,0,0,0.5); overflow:hidden; }
+    #ficha-ia-header { padding:18px 20px 12px; border-bottom:1px solid var(--border); display:flex; justify-content:space-between; align-items:center; flex-shrink:0; }
+    #ficha-ia-items-list { flex:1; overflow-y:auto; padding:12px 20px; display:flex; flex-direction:column; gap:6px; }
+    #ficha-ia-footer { padding:14px 20px; border-top:1px solid var(--border); display:flex; gap:10px; flex-shrink:0; }
+    .ficha-ia-item-row { display:flex; align-items:center; gap:10px; padding:9px 12px; border-radius:10px; border:1.5px solid var(--border); cursor:pointer; transition:border-color .15s, background .15s; }
+    .ficha-ia-item-row:hover, .ficha-ia-item-row.selected { border-color:var(--purple); background:rgba(124,58,237,0.07); }
+    .ficha-ia-item-row input[type=checkbox] { width:16px; height:16px; accent-color:var(--purple); flex-shrink:0; cursor:pointer; }
+    .ficha-ia-chapter-row { font-size:11px; font-weight:800; color:var(--purple); padding:8px 12px 2px; text-transform:uppercase; letter-spacing:.5px; }
+    #ficha-ia-result { display:none; flex:1; overflow-y:auto; padding:16px 20px; }
+    #ficha-ia-result .ft-title { font-size:15px; font-weight:900; margin-bottom:14px; color:var(--text); }
+    #ficha-ia-result .ft-item { margin-bottom:16px; border-left:3px solid var(--purple); padding-left:12px; }
+    #ficha-ia-result .ft-item-name { font-size:13px; font-weight:800; color:var(--text); margin-bottom:6px; }
+    #ficha-ia-result .ft-item-body { font-size:12px; color:var(--muted); line-height:1.6; white-space:pre-wrap; }
+    #ficha-ia-result .ft-section-label { font-size:10px; font-weight:800; text-transform:uppercase; color:var(--purple); margin-top:6px; margin-bottom:2px; letter-spacing:.5px; }
+</style>
+
+<div id="ficha-ia-modal">
+    <div id="ficha-ia-box">
+        <div id="ficha-ia-header">
+            <div style="display:flex;align-items:center;gap:10px;">
+                <i class="ph-bold ph-file-doc" style="font-size:22px;color:var(--purple);"></i>
+                <div>
+                    <div style="font-size:15px;font-weight:900;">Ficha Técnica IA</div>
+                    <div id="ficha-ia-subtitle" style="font-size:11px;color:var(--muted);">Seleccioná los ítems a incluir</div>
+                </div>
+            </div>
+            <i class="ph-bold ph-x" style="font-size:22px;cursor:pointer;" onclick="cerrarFichaIA()"></i>
+        </div>
+
+        <!-- Paso 1: selección de ítems -->
+        <div id="ficha-ia-step1" style="display:flex;flex-direction:column;flex:1;overflow:hidden;">
+            <div style="padding:10px 20px 0;display:flex;gap:8px;align-items:center;flex-shrink:0;">
+                <button onclick="fichaSelAll(true)" style="font-size:11px;font-weight:700;background:none;border:1px solid var(--border);border-radius:6px;padding:4px 10px;cursor:pointer;color:var(--text);">Todos</button>
+                <button onclick="fichaSelAll(false)" style="font-size:11px;font-weight:700;background:none;border:1px solid var(--border);border-radius:6px;padding:4px 10px;cursor:pointer;color:var(--text);">Ninguno</button>
+                <span id="ficha-sel-count" style="font-size:11px;color:var(--muted);margin-left:4px;"></span>
+            </div>
+            <div id="ficha-ia-items-list"></div>
+            <div id="ficha-ia-footer">
+                <button onclick="cerrarFichaIA()" style="flex:1;padding:11px;border-radius:10px;background:var(--bg);border:1px solid var(--border);font-weight:700;font-size:13px;cursor:pointer;color:var(--text);">Cancelar</button>
+                <button id="btn-gen-ficha" onclick="generarFichaTecnicaIA()" style="flex:2;padding:11px;border-radius:10px;background:var(--purple);color:white;border:none;font-weight:800;font-size:13px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;"><i class="ph-bold ph-sparkle"></i> Generar Ficha Técnica</button>
+            </div>
+        </div>
+
+        <!-- Paso 2: resultado -->
+        <div id="ficha-ia-step2" style="display:none;flex-direction:column;flex:1;overflow:hidden;">
+            <div id="ficha-ia-result"></div>
+            <div style="padding:14px 20px;border-top:1px solid var(--border);display:flex;gap:10px;flex-shrink:0;">
+                <button onclick="fichaIAVolver()" style="flex:1;padding:11px;border-radius:10px;background:var(--bg);border:1px solid var(--border);font-weight:700;font-size:13px;cursor:pointer;color:var(--text);"><i class="ph-bold ph-arrow-left"></i> Volver</button>
+                <button onclick="fichaIAExportarPDF()" style="flex:2;padding:11px;border-radius:10px;background:var(--purple);color:white;border:none;font-weight:800;font-size:13px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;"><i class="ph-bold ph-file-pdf"></i> Descargar PDF</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+(function(){
+    window.abrirSelectorFichaIA = function() {
+        // Poblar lista de ítems
+        const list = document.getElementById('ficha-ia-items-list');
+        list.innerHTML = '';
+        const items = window.allItems || [];
+        let count = 0;
+        Object.keys(items).forEach(idx => {
+            const it = items[idx];
+            if (!it) return;
+            if (it.type === 'chapter') {
+                const ch = document.createElement('div');
+                ch.className = 'ficha-ia-chapter-row';
+                ch.textContent = it.name || it.desc || 'Capítulo';
+                list.appendChild(ch);
+                return;
+            }
+            count++;
+            const row = document.createElement('label');
+            row.className = 'ficha-ia-item-row';
+            row.style.display = 'flex';
+            const cb = document.createElement('input');
+            cb.type = 'checkbox'; cb.checked = true;
+            cb.dataset.idx = idx;
+            cb.addEventListener('change', _fichaUpdateCount);
+            row.appendChild(cb);
+            const info = document.createElement('div');
+            info.style.cssText = 'flex:1;min-width:0;';
+            info.innerHTML = `<div style="font-size:12px;font-weight:700;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${it.desc || 'Ítem sin nombre'}</div>
+                <div style="font-size:11px;color:var(--muted);">${parseFloat(it.cant||1).toLocaleString('es-BO')} ${it.und||'glb'}</div>`;
+            row.appendChild(info);
+            list.appendChild(row);
+        });
+        _fichaUpdateCount();
+        // Mostrar paso 1
+        document.getElementById('ficha-ia-step1').style.display = 'flex';
+        document.getElementById('ficha-ia-step2').style.display = 'none';
+        document.getElementById('ficha-ia-subtitle').textContent = 'Seleccioná los ítems a incluir';
+        document.getElementById('ficha-ia-modal').classList.add('open');
+    };
+
+    window.cerrarFichaIA = function() { document.getElementById('ficha-ia-modal').classList.remove('open'); };
+
+    window.fichaSelAll = function(val) {
+        document.querySelectorAll('#ficha-ia-items-list input[type=checkbox]').forEach(cb => cb.checked = val);
+        _fichaUpdateCount();
+    };
+
+    function _fichaUpdateCount() {
+        const total = document.querySelectorAll('#ficha-ia-items-list input[type=checkbox]').length;
+        const sel = document.querySelectorAll('#ficha-ia-items-list input[type=checkbox]:checked').length;
+        document.getElementById('ficha-sel-count').textContent = `${sel} de ${total} ítems seleccionados`;
+    }
+
+    window.fichaIAVolver = function() {
+        document.getElementById('ficha-ia-step1').style.display = 'flex';
+        document.getElementById('ficha-ia-step2').style.display = 'none';
+        document.getElementById('ficha-ia-subtitle').textContent = 'Seleccioná los ítems a incluir';
+    };
+
+    window.generarFichaTecnicaIA = async function() {
+        const selected = [];
+        document.querySelectorAll('#ficha-ia-items-list input[type=checkbox]:checked').forEach(cb => {
+            const it = (window.allItems || [])[cb.dataset.idx];
+            if (it && it.type !== 'chapter') selected.push(it);
+        });
+        if (!selected.length) { alert('Seleccioná al menos un ítem.'); return; }
+
+        const btn = document.getElementById('btn-gen-ficha');
+        btn.disabled = true; btn.innerHTML = '<i class="ph-bold ph-spinner-gap"></i> Generando...';
+
+        const projName = document.getElementById('h-pro')?.innerText || 'Proyecto';
+        const clientName = localStorage.getItem('rubik_client_name') || '';
+
+        const itemsText = selected.map((it, i) =>
+            `${i+1}. ${it.desc} — Cant: ${parseFloat(it.cant||1).toLocaleString('es-BO')} ${it.und||'glb'}`
+        ).join('\n');
+
+        const prompt = `Sos un ingeniero técnico de Rubik Bolivia (señalética, carpintería, metalmecanica, impresión gran formato, Santa Cruz).
+Generá una FICHA TÉCNICA profesional para el proyecto: "${projName}"${clientName ? ` - Cliente: ${clientName}` : ''}.
+
+Ítems del proyecto:
+${itemsText}
+
+Para CADA ítem generá:
+- Materiales principales (lista concisa de 2-4 materiales)
+- Proceso resumido (3-5 pasos clave)
+- Acabado/terminación
+- Observaciones técnicas si aplica
+
+Respondé SOLO con JSON:
+{"items":[{"nombre":"...","materiales":"...","proceso":"...","acabado":"...","observaciones":"..."}]}
+SIN markdown, SIN texto fuera del JSON.`;
+
+        try {
+            const user = firebase.auth().currentUser;
+            const token = user ? await user.getIdToken() : null;
+            const headers = {'Content-Type':'application/json'};
+            if (token) headers['Authorization'] = 'Bearer ' + token;
+
+            let resp, data, lastErr;
+            for (let att = 0; att < 3; att++) {
+                if (att > 0) await new Promise(r => setTimeout(r, 2000 * att));
+                resp = await fetch('/api/gemini', {
+                    method: 'POST', headers,
+                    body: JSON.stringify({
+                        systemInstruction: { parts: [{ text: 'Eres un ingeniero técnico de Rubik Bolivia. Devuelve SOLO JSON válido, sin markdown.' }] },
+                        contents: [{ role: 'user', parts: [{ text: prompt }] }],
+                        generationConfig: { maxOutputTokens: 8000, temperature: 0.2 }
+                    })
+                });
+                if (resp.status === 502 || resp.status === 503 || resp.status === 504) { lastErr = new Error('Servidor no disponible (' + resp.status + ')'); continue; }
+                if (!resp.ok) { const t = await resp.text(); throw new Error(t.startsWith('<') ? 'Error del servidor' : t); }
+                data = await resp.json();
+                lastErr = null; break;
+            }
+            if (lastErr) throw lastErr;
+
+            const raw = (data?.candidates?.[0]?.content?.parts?.[0]?.text || data?.text || '').replace(/```json/gi,'').replace(/```/g,'').trim();
+            const start = raw.indexOf('{'); const end = raw.lastIndexOf('}');
+            const parsed = JSON.parse(raw.substring(start, end + 1));
+            const fichaItems = parsed.items || [];
+
+            // Renderizar resultado
+            const result = document.getElementById('ficha-ia-result');
+            result.innerHTML = `<div class="ft-title"><i class="ph-bold ph-file-doc" style="color:var(--purple);"></i> ${projName}${clientName ? ' — ' + clientName : ''}</div>`;
+            fichaItems.forEach((fi, i) => {
+                const div = document.createElement('div');
+                div.className = 'ft-item';
+                div.innerHTML = `<div class="ft-item-name">${i+1}. ${fi.nombre || selected[i]?.desc || 'Ítem'}</div>
+                    <div class="ft-section-label">Materiales</div><div class="ft-item-body">${fi.materiales || '—'}</div>
+                    <div class="ft-section-label">Proceso</div><div class="ft-item-body">${fi.proceso || '—'}</div>
+                    <div class="ft-section-label">Acabado</div><div class="ft-item-body">${fi.acabado || '—'}</div>
+                    ${fi.observaciones ? `<div class="ft-section-label">Observaciones</div><div class="ft-item-body">${fi.observaciones}</div>` : ''}`;
+                result.appendChild(div);
+            });
+
+            // Guardar para PDF
+            window._fichaIAData = { projName, clientName, items: fichaItems, selected };
+
+            document.getElementById('ficha-ia-step1').style.display = 'none';
+            document.getElementById('ficha-ia-step2').style.display = 'flex';
+            document.getElementById('ficha-ia-subtitle').textContent = 'Ficha generada';
+
+        } catch(e) {
+            alert('Error al generar ficha: ' + (e.message || 'desconocido'));
+            console.error('[FichaTecnicaIA]', e);
+        } finally {
+            btn.disabled = false; btn.innerHTML = '<i class="ph-bold ph-sparkle"></i> Generar Ficha Técnica';
+        }
+    };
+
+    window.fichaIAExportarPDF = function() {
+        const d = window._fichaIAData;
+        if (!d) return;
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF('p', 'mm', 'a4');
+        const margin = 14, pageW = 210, contentW = pageW - margin * 2;
+        let y = margin;
+
+        // Encabezado
+        doc.setFillColor(124, 58, 237);
+        doc.rect(0, 0, pageW, 28, 'F');
+        doc.setTextColor(255,255,255);
+        doc.setFontSize(16); doc.setFont(undefined,'bold');
+        doc.text('FICHA TÉCNICA', margin, 11);
+        doc.setFontSize(11); doc.setFont(undefined,'normal');
+        doc.text(d.projName + (d.clientName ? ' — ' + d.clientName : ''), margin, 19);
+        doc.setFontSize(9); doc.text('Rubik Bolivia · rubikbolivia.com', pageW - margin, 23, {align:'right'});
+        y = 35;
+
+        doc.setTextColor(30,30,30);
+        d.items.forEach((fi, i) => {
+            const itemName = `${i+1}. ${fi.nombre || d.selected[i]?.desc || 'Ítem'}`;
+            // Check space
+            if (y > 260) { doc.addPage(); y = margin; }
+            // Item header
+            doc.setFillColor(240, 235, 255);
+            doc.rect(margin, y, contentW, 8, 'F');
+            doc.setFontSize(10); doc.setFont(undefined,'bold'); doc.setTextColor(80,30,180);
+            doc.text(itemName, margin + 3, y + 5.5);
+            doc.setTextColor(30,30,30);
+            y += 11;
+
+            const sections = [
+                { label: 'Materiales', val: fi.materiales },
+                { label: 'Proceso', val: fi.proceso },
+                { label: 'Acabado', val: fi.acabado },
+                ...(fi.observaciones ? [{ label: 'Observaciones', val: fi.observaciones }] : [])
+            ];
+            sections.forEach(sec => {
+                if (!sec.val) return;
+                doc.setFontSize(8); doc.setFont(undefined,'bold'); doc.setTextColor(124,58,237);
+                doc.text(sec.label.toUpperCase(), margin + 2, y + 4);
+                y += 6;
+                doc.setFont(undefined,'normal'); doc.setTextColor(50,50,50); doc.setFontSize(9);
+                const lines = doc.splitTextToSize(sec.val, contentW - 4);
+                lines.forEach(line => {
+                    if (y > 272) { doc.addPage(); y = margin + 5; }
+                    doc.text(line, margin + 2, y + 3); y += 5;
+                });
+                y += 2;
+            });
+            y += 4;
+            doc.setDrawColor(220,210,255); doc.line(margin, y, pageW - margin, y); y += 4;
+        });
+
+        const fname = d.projName.replace(/[^a-zA-Z0-9]/g,'_').substring(0,30) + '_FichaTecnica.pdf';
+        doc.save(fname);
+    };
+})();
+</script>
+
 <script src="/paste-image.js"></script>
 </body>
 </html>
