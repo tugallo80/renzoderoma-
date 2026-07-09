@@ -1337,7 +1337,7 @@ $$$QUOTE_DATA: [{"desc":"Nombre Item","feat":"Característica","cant":1,"und":"p
 
             try {
                 // systemInstruction = contexto completo | contents = historial real de conversación
-                const reqBody = { systemInstruction: sysPrompt, contents: _iaHistorial, model: 'gemini-2.5-flash' };
+                const reqBody = { systemInstruction: sysPrompt, contents: _iaHistorial, model: 'gemini-2.5-flash', generationConfig: { maxOutputTokens: 2500 } };
                 const _tok1 = await firebase.auth().currentUser.getIdToken();
                 const _reqHeaders = { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + _tok1 };
                 const _reqBodyStr = JSON.stringify(reqBody);

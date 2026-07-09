@@ -86,29 +86,50 @@ function geminiPartsToClaudeContent(parts) {
     });
 }
 
-/** Llama a Claude API (raw HTTP) y devuelve el texto de respuesta */
+/** Llama a Claude API con retry para errores transitorios (529 overloaded, 503, 502) */
 async function llamarClaude(anthropicKey, messages, systemText, maxTokens, model) {
     const body = {
         model: model || "claude-haiku-4-5",
-        max_tokens: Math.min(maxTokens || 8192, 8192),
+        max_tokens: Math.min(maxTokens || 4096, 8192),
         messages,
     };
     if (systemText) body.system = systemText;
 
-    const res = await fetch("https://api.anthropic.com/v1/messages", {
-        method: "POST",
-        headers: {
-            "x-api-key": anthropicKey,
-            "anthropic-version": "2023-06-01",
-            "Content-Type": "application/json",
-        },
-        body: JSON.stringify(body),
-    });
-    const data = await res.json();
-    if (!res.ok) {
-        throw new Error(`Claude API ${res.status}: ${data?.error?.message || JSON.stringify(data)}`);
+    const reqHeaders = {
+        "x-api-key": anthropicKey,
+        "anthropic-version": "2023-06-01",
+        "Content-Type": "application/json",
+    };
+    const reqBodyStr = JSON.stringify(body);
+
+    let lastErr;
+    for (let attempt = 0; attempt < 3; attempt++) {
+        if (attempt > 0) await new Promise(r => setTimeout(r, 3000 * attempt));
+        let res;
+        try {
+            res = await fetch("https://api.anthropic.com/v1/messages", {
+                method: "POST",
+                headers: reqHeaders,
+                body: reqBodyStr,
+            });
+        } catch (netErr) {
+            lastErr = netErr;
+            console.warn(`[llamarClaude] red error intento ${attempt + 1}:`, netErr.message);
+            continue;
+        }
+        // Retry en errores transitorios de Anthropic
+        if (res.status === 529 || res.status === 503 || res.status === 502) {
+            lastErr = new Error(`Claude API transitorio ${res.status} (intento ${attempt + 1})`);
+            console.warn(`[llamarClaude]`, lastErr.message);
+            continue;
+        }
+        const data = await res.json();
+        if (!res.ok) {
+            throw new Error(`Claude API ${res.status}: ${data?.error?.message || JSON.stringify(data)}`);
+        }
+        return data.content?.find(b => b.type === "text")?.text || "";
     }
-    return data.content?.find(b => b.type === "text")?.text || "";
+    throw lastErr || new Error("Claude API: sin respuesta tras 3 intentos");
 }
 
 /**
