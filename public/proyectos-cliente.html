@@ -436,10 +436,12 @@
             if (activeMonthFilter && activeMonthFilter !== 'todos') {
                 const filtered = globalProjectsArr.filter(p => _getMonthKey(p.fecha_creacion) === activeMonthFilter);
                 if (filtered.length === 0) {
-                    grid.innerHTML = `<div style="grid-column:span 4;text-align:center;color:var(--gray);padding:40px;font-size:.85rem;">No hay proyectos en ${_monthLabel(activeMonthFilter)}.</div>`;
-                    return;
+                    // Fallback: if the active month has no projects, show all
+                    activeMonthFilter = 'todos';
+                    renderMonthFilter(dataObj);
+                } else {
+                    globalProjectsArr = filtered;
                 }
-                globalProjectsArr = filtered;
             }
 
             const wrap = document.createElement('div');
@@ -778,7 +780,7 @@
             });
         }
         const months = Array.from(monthSet).sort().reverse();
-        if (months.length === 0) { bar.innerHTML = ''; return; }
+        if (months.length === 0) { bar.innerHTML = ''; activeMonthFilter = 'todos'; return; }
         if (activeMonthFilter !== 'todos' && !monthSet.has(activeMonthFilter)) { activeMonthFilter = months[0]; }
         bar.innerHTML =
             `<span class="month-chip ${activeMonthFilter === 'todos' ? 'active' : ''}" onclick="setMonthFilter('todos')">Todos</span>` +
