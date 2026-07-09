@@ -1067,8 +1067,14 @@ Recuerda aplicar siempre: [REGLA_UTILIDAD].`
             }
         }
 
+        let _pttLastTouch = 0; // para bloquear mouse sintético en móvil
+
         window.pttStart = function(e) {
             e.preventDefault();
+            // En móvil, touchstart dispara mouse events sintéticos ~300ms después.
+            // Si ya arrancó por touch, ignorar el mousedown duplicado.
+            if (e.type === 'touchstart') _pttLastTouch = Date.now();
+            if (e.type === 'mousedown' && Date.now() - _pttLastTouch < 600) return;
             if (!SpeechRecognition) return alert("Tu navegador no soporta el micrófono. Usa Chrome o Safari.");
             if (_pttActive) return;
             _pttActive = true;
@@ -1079,17 +1085,32 @@ Recuerda aplicar siempre: [REGLA_UTILIDAD].`
             btn.innerHTML = `<i class="ph-fill ph-microphone"></i>`;
             btn.style.transform = 'scale(1.2)';
             try { recognition.start(); } catch(_) {}
+            // Activar TTS automáticamente la primera vez que se usa el mic
+            if (typeof VoiceUtils !== 'undefined' && !VoiceUtils.ttsEnabled()) {
+                VoiceUtils.ttsToggle();
+                const ttsBtn = document.getElementById('btn-tts-ia');
+                if (ttsBtn) { ttsBtn.style.color = 'var(--purple)'; ttsBtn.innerHTML = '<i class="ph-bold ph-speaker-simple-high"></i>'; }
+                _mostrarToastVoz('🎙️ Modo conversación activado — la IA te responderá en voz');
+            }
         };
 
         window.pttStop = function(e) {
             e.preventDefault();
+            if (e.type === 'touchend' || e.type === 'touchcancel') _pttLastTouch = Date.now();
+            if (e.type === 'mouseup' && Date.now() - _pttLastTouch < 600) return;
             if (!_pttActive) return;
             _pttActive = false;
             try { recognition.stop(); } catch(_) {
-                // Si stop falla, enviar lo que hay
                 _pttEnviar();
             }
-            // onend del recognition llamará a _pttEnviar
+        };
+
+        function _mostrarToastVoz(msg) {
+            let t = document.getElementById('_toast_voz');
+            if (!t) { t = document.createElement('div'); t.id = '_toast_voz';
+                t.style.cssText = 'position:fixed;bottom:90px;left:50%;transform:translateX(-50%);background:#7c3aed;color:white;padding:10px 18px;border-radius:20px;font-size:13px;font-weight:600;z-index:9999;opacity:0;transition:opacity .3s;pointer-events:none;white-space:nowrap;'; document.body.appendChild(t); }
+            t.textContent = msg; t.style.opacity = '1';
+            setTimeout(() => { t.style.opacity = '0'; }, 3000);
         };
 
         // Compatibilidad: si alguien llama toggleAudioRecording legacy
@@ -1262,18 +1283,27 @@ $$$QUOTE_DATA: [{"desc":"Nombre Item","feat":"Característica","cant":1,"und":"p
                 // systemInstruction = contexto completo | contents = historial real de conversación
                 const reqBody = { systemInstruction: sysPrompt, contents: _iaHistorial, model: 'gemini-2.5-flash' };
                 const _tok1 = await firebase.auth().currentUser.getIdToken();
-                const _res1 = await fetch('/api/gemini', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + _tok1 },
-                    body: JSON.stringify(reqBody)
-                });
-                if (!_res1.ok) {
-                    const _errText = await _res1.text();
-                    if (_errText.startsWith('<')) throw new Error(`Servicio no disponible (${_res1.status}). Intentá de nuevo en unos segundos.`);
-                    let _errMsg = _errText; try { _errMsg = JSON.parse(_errText).error || _errMsg; } catch(_) {}
-                    throw new Error(_errMsg);
+                const _reqHeaders = { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + _tok1 };
+                const _reqBodyStr = JSON.stringify(reqBody);
+                let _res1, _data1, _lastFetchErr;
+                for (let _attempt = 0; _attempt < 3; _attempt++) {
+                    if (_attempt > 0) await new Promise(r => setTimeout(r, 2000 * _attempt));
+                    try {
+                        _res1 = await fetch('/api/gemini', { method: 'POST', headers: _reqHeaders, body: _reqBodyStr });
+                        if (_res1.status === 502 || _res1.status === 503 || _res1.status === 504) {
+                            _lastFetchErr = new Error(`Servidor no disponible (${_res1.status}). Reintentando...`);
+                            continue;
+                        }
+                        if (!_res1.ok) {
+                            const _errText = await _res1.text();
+                            const _errMsg = _errText.startsWith('<') ? `Error ${_res1.status}` : (_errText.slice(0, 120));
+                            throw new Error(_errMsg);
+                        }
+                        _data1 = await _res1.json();
+                        break;
+                    } catch(fe) { if (_res1 && (_res1.status === 502 || _res1.status === 503 || _res1.status === 504)) { _lastFetchErr = fe; continue; } throw fe; }
                 }
-                const _data1 = await _res1.json();
+                if (!_data1) throw _lastFetchErr || new Error('Servicio no disponible. Intentá de nuevo en unos segundos.');
                 let aiText = _data1.text || (_data1.candidates && _data1.candidates[0].content.parts[0].text) || '';
                 const _rawResponseIA = aiText; // guardar antes de formatear para el historial
 
