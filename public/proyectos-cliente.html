@@ -70,6 +70,21 @@
         .img-upload { width: 100px; height: 100px; border-radius: 22px; background: var(--bg); border: 2px dashed var(--blue); margin: 0 auto 15px auto; display: flex; flex-direction: column; align-items: center; justify-content: center; cursor: pointer; overflow: hidden; position: relative; color: var(--blue); font-weight: 700; font-size: 11px; gap: 5px;}
         .img-upload img { width: 100%; height: 100%; object-fit: cover; display: none; position: absolute; top:0; left:0;}
         .img-upload i { font-size: 35px; }
+
+        /* Month filter */
+        .month-bar { overflow-x: auto; white-space: nowrap; padding: 0 0 12px 0; margin-bottom: 5px; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
+        .month-bar::-webkit-scrollbar { display: none; }
+        .month-chip { display: inline-block; padding: 7px 16px; border-radius: 20px; font-size: 12px; font-weight: 800; margin-right: 8px; cursor: pointer; border: 1.5px solid var(--border); background: var(--card); color: var(--gray); transition: 0.15s; }
+        .month-chip.active { background: var(--blue); color: #fff; border-color: var(--blue); }
+
+        /* Foto options */
+        .foto-opt-btn { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 14px 10px; border-radius: 14px; border: 1px solid var(--border); background: var(--bg); cursor: pointer; font-size: 11px; font-weight: 800; color: var(--text); transition: 0.15s; }
+        .foto-opt-btn:active { transform: scale(0.94); }
+        .foto-opt-btn i { font-size: 22px; }
+        .foto-opt-btn:disabled { opacity: 0.35; pointer-events: none; }
+
+        /* Image editor overlay */
+        #mod-editor-img { background: rgba(0,0,0,0.97); align-items: stretch; }
     </style>
     <link rel="stylesheet" href="/css/responsive.css?v=1">
 </head>
@@ -91,6 +106,8 @@
         <div class="client-name" id="h-client-name">Cargando...</div>
         <div class="client-sub">Carpeta de Proyectos</div>
     </div>
+
+    <div id="month-filter-bar" class="month-bar"></div>
 
     <div id="project-grid" class="project-grid"></div>
 
@@ -123,7 +140,7 @@
     <div id="modal-add" class="modal">
         <div class="modal-box">
             <h3 style="margin-top:0; text-align:center;" id="form-title">Crear Proyecto</h3>
-            <div class="img-upload" onclick="document.getElementById('file-img').click()">
+            <div class="img-upload" onclick="abrirFotoOpciones()">
                 <i class="ph-bold ph-image" id="icon-cam"></i><span id="txt-cam">Foto Portada</span><img loading="lazy" decoding="async" id="preview-img">
             </div>
             <input type="file" id="file-img" style="display:none" accept="image/*" onchange="previewImg(this)">
@@ -137,6 +154,69 @@
             </select>
             <button class="btn-act btn-primary" id="btn-save" onclick="saveProject()"><span id="save-text">Guardar Proyecto</span></button>
             <button class="btn-act btn-cancel" onclick="closeModals()">Cancelar</button>
+        </div>
+    </div>
+
+    <!-- Foto opciones -->
+    <div id="mod-foto-opts" class="modal">
+        <div class="modal-box">
+            <h3 style="margin-top:0;text-align:center;">Foto Portada</h3>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:15px;">
+                <button class="foto-opt-btn" onclick="document.getElementById('file-img').click();closeModals()">
+                    <i class="ph-bold ph-upload-simple"></i>Subir imagen
+                </button>
+                <button class="foto-opt-btn" onclick="pegarImagenPortada()">
+                    <i class="ph-bold ph-clipboard"></i>Pegar imagen
+                </button>
+                <button class="foto-opt-btn" id="btn-editar-foto" onclick="abrirEditorImagen()">
+                    <i class="ph-bold ph-pencil"></i>Editar imagen
+                </button>
+                <button class="foto-opt-btn" onclick="abrirGeneradorIA()">
+                    <i class="ph-bold ph-magic-wand"></i>Generar con IA
+                </button>
+            </div>
+            <button class="btn-act btn-cancel" style="margin-top:15px;" onclick="closeModals()">Cancelar</button>
+        </div>
+    </div>
+
+    <!-- Generador IA -->
+    <div id="mod-ia-portada" class="modal">
+        <div class="modal-box">
+            <h3 style="margin-top:0;text-align:center;"><i class="ph-bold ph-sparkle"></i> Generar Portada con IA</h3>
+            <label class="inp-lbl">Descripción del proyecto</label>
+            <textarea id="inp-ia-prompt" class="inp-std" rows="3" style="resize:none;" placeholder="Ej: Stand moderno con paneles LED plateados, fondo oscuro, estilo minimalista..."></textarea>
+            <div id="ia-preview-wrap" style="display:none;text-align:center;margin:14px 0;">
+                <img id="ia-preview-img" style="max-width:100%;border-radius:14px;max-height:230px;object-fit:cover;">
+            </div>
+            <div id="ia-loading" style="display:none;text-align:center;padding:20px;color:var(--gray);font-size:13px;font-weight:700;">✨ Generando imagen...</div>
+            <div class="action-list" style="margin-top:12px;">
+                <button class="btn-act btn-primary" onclick="generarPortadaConIA()"><i class="ph-bold ph-sparkle"></i> Generar</button>
+                <button class="btn-act btn-edit" id="btn-usar-ia" style="display:none;" onclick="usarImagenIA()"><i class="ph-bold ph-check"></i> Usar esta imagen</button>
+                <button class="btn-act btn-cancel" onclick="closeModals()">Cancelar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Editor de imagen -->
+    <div id="mod-editor-img" class="modal">
+        <div style="display:flex;flex-direction:column;height:100%;max-height:100vh;width:100%;padding:20px;box-sizing:border-box;">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:15px;">
+                <button onclick="closeModals()" style="background:rgba(255,255,255,0.1);border:none;color:#fff;border-radius:50%;width:38px;height:38px;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center;"><i class="ph-bold ph-x"></i></button>
+                <span style="color:#fff;font-weight:800;font-size:16px;">Editar Imagen</span>
+                <button onclick="confirmarEdicion()" style="background:var(--blue);border:none;color:#fff;border-radius:10px;padding:9px 18px;font-weight:800;cursor:pointer;">Usar</button>
+            </div>
+            <div style="flex:1;display:flex;align-items:center;justify-content:center;overflow:hidden;border-radius:14px;background:rgba(255,255,255,0.05);">
+                <canvas id="editor-canvas" style="max-width:100%;max-height:50vh;object-fit:contain;"></canvas>
+            </div>
+            <div style="padding-top:15px;">
+                <div style="color:rgba(255,255,255,0.55);font-size:10px;font-weight:800;margin-bottom:8px;">ROTACIÓN</div>
+                <div style="display:flex;gap:10px;margin-bottom:15px;">
+                    <button onclick="editarRotar(-90)" class="foto-opt-btn" style="flex:1;background:rgba(255,255,255,0.08);border-color:rgba(255,255,255,0.15);color:#fff;"><i class="ph-bold ph-arrow-counter-clockwise"></i>-90°</button>
+                    <button onclick="editarRotar(90)" class="foto-opt-btn" style="flex:1;background:rgba(255,255,255,0.08);border-color:rgba(255,255,255,0.15);color:#fff;"><i class="ph-bold ph-arrow-clockwise"></i>+90°</button>
+                </div>
+                <div style="color:rgba(255,255,255,0.55);font-size:10px;font-weight:800;margin-bottom:8px;">BRILLO</div>
+                <input type="range" id="editor-brightness" min="-100" max="100" value="0" oninput="aplicarFiltrosEditor()" style="width:100%;accent-color:var(--blue);">
+            </div>
         </div>
     </div>
 
@@ -208,6 +288,10 @@
 
     let tempImgFile = null; let existingImgUrl = null; let currentEditPid = null; let actionPid = null; let actionData = {}; let clientContact = { wsp: '', email: '' };
     let globalProjectsArr = [];
+    let _cachedProjectsData = null;
+    const _CURRENT_MONTH = (function(){ const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0'); })();
+    let activeMonthFilter = _CURRENT_MONTH;
+    let _editorImg = null; let _editorRotation = 0; let _iaGeneratedDataUrl = null;
 
     // Mostrar "Cargando..." inmediatamente — visible mientras auth resuelve
     document.getElementById('project-grid').innerHTML =
@@ -342,11 +426,21 @@
                 return;
             }
             _hadGoodData = true;
+            _cachedProjectsData = dataObj;
+            renderMonthFilter(dataObj);
             let tempArr = Object.entries(dataObj)
                 .filter(([pid, p]) => p && typeof p === 'object')
                 .map(([pid, p]) => { p = {...p}; p.pid = pid; return p; });
             tempArr.sort((a, b) => (a.orden ?? 999999) - (b.orden ?? 999999));
             globalProjectsArr = tempArr.map((p, i) => { p.orden = i; return p; });
+            if (activeMonthFilter && activeMonthFilter !== 'todos') {
+                const filtered = globalProjectsArr.filter(p => _getMonthKey(p.fecha_creacion) === activeMonthFilter);
+                if (filtered.length === 0) {
+                    grid.innerHTML = `<div style="grid-column:span 4;text-align:center;color:var(--gray);padding:40px;font-size:.85rem;">No hay proyectos en ${_monthLabel(activeMonthFilter)}.</div>`;
+                    return;
+                }
+                globalProjectsArr = filtered;
+            }
 
             const wrap = document.createElement('div');
             wrap.className = 'proj-items';
@@ -384,6 +478,8 @@
             </div>`;
         }
     }
+
+    window._renderDataProyectos = _renderData;
 
     function _mostrarError() {
         if (_yaRenderizado) return;
@@ -569,7 +665,11 @@
         document.getElementById('modal-actions').style.display = 'none'; document.getElementById('modal-add').style.display = 'flex';
     }
 
-    function closeModals() { document.getElementById('modal-add').style.display = 'none'; document.getElementById('modal-actions').style.display = 'none'; }
+    function closeModals() {
+        ['modal-add','modal-actions','mod-foto-opts','mod-ia-portada','mod-editor-img'].forEach(id => {
+            const el = document.getElementById(id); if (el) el.style.display = 'none';
+        });
+    }
 
     function abrirReqAsistido() {
         if (!actionPid) return;
@@ -658,6 +758,178 @@
         await db.ref(`proyectos/${cid}/${actionPid}/visible_cliente`).set(!actual);
         closeModals();
         _cargarProyectos();
+    }
+
+    // ── Month filter ──────────────────────────────────────────────────────────
+    function _getMonthKey(isoStr) { return isoStr ? isoStr.substring(0, 7) : null; }
+    function _monthLabel(ym) {
+        if (!ym) return '';
+        const ms = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+        const p = ym.split('-');
+        return ms[parseInt(p[1]) - 1] + ' ' + p[0];
+    }
+    function renderMonthFilter(dataObj) {
+        const bar = document.getElementById('month-filter-bar');
+        if (!bar) return;
+        const monthSet = new Set();
+        if (dataObj && typeof dataObj === 'object') {
+            Object.values(dataObj).forEach(p => {
+                if (p && p.fecha_creacion) { const mk = _getMonthKey(p.fecha_creacion); if (mk) monthSet.add(mk); }
+            });
+        }
+        const months = Array.from(monthSet).sort().reverse();
+        if (months.length === 0) { bar.innerHTML = ''; return; }
+        if (activeMonthFilter !== 'todos' && !monthSet.has(activeMonthFilter)) { activeMonthFilter = months[0]; }
+        bar.innerHTML =
+            `<span class="month-chip ${activeMonthFilter === 'todos' ? 'active' : ''}" onclick="setMonthFilter('todos')">Todos</span>` +
+            months.map(m => `<span class="month-chip ${m === activeMonthFilter ? 'active' : ''}" onclick="setMonthFilter('${m}')">${_monthLabel(m)}</span>`).join('');
+        // Scroll the active chip into view
+        setTimeout(() => {
+            const active = bar.querySelector('.month-chip.active');
+            if (active) active.scrollIntoView({ inline: 'center', behavior: 'smooth', block: 'nearest' });
+        }, 50);
+    }
+    function setMonthFilter(month) {
+        activeMonthFilter = month;
+        renderMonthFilter(_cachedProjectsData);
+        _lastRenderSig = '';
+        if (window._renderDataProyectos && _cachedProjectsData) window._renderDataProyectos(_cachedProjectsData);
+    }
+
+    // ── Foto portada ──────────────────────────────────────────────────────────
+    function abrirFotoOpciones() {
+        const hasImg = document.getElementById('preview-img').style.display !== 'none';
+        const btnEdit = document.getElementById('btn-editar-foto');
+        if (btnEdit) btnEdit.disabled = !hasImg;
+        document.getElementById('mod-foto-opts').style.display = 'flex';
+    }
+
+    function pegarImagenPortada() {
+        closeModals();
+        navigator.clipboard.read().then(items => {
+            for (const item of items) {
+                const imgType = item.types.find(t => t.startsWith('image/'));
+                if (imgType) {
+                    item.getType(imgType).then(blob => {
+                        tempImgFile = new File([blob], 'portada-pegada.jpg', { type: imgType });
+                        const url = URL.createObjectURL(blob);
+                        document.getElementById('preview-img').src = url;
+                        document.getElementById('preview-img').style.display = 'block';
+                        document.getElementById('icon-cam').style.display = 'none';
+                        document.getElementById('txt-cam').style.display = 'none';
+                    });
+                    return;
+                }
+            }
+            alert('No hay imagen en el portapapeles. Copia una imagen primero.');
+        }).catch(() => alert('No se pudo acceder al portapapeles. Permite el acceso y reintentá.'));
+    }
+
+    function abrirEditorImagen() {
+        closeModals();
+        _editorRotation = 0;
+        document.getElementById('editor-brightness').value = 0;
+        const loadSrc = (src) => {
+            _editorImg = new Image();
+            _editorImg.crossOrigin = 'anonymous';
+            _editorImg.onload = () => { dibujarEditorCanvas(); document.getElementById('mod-editor-img').style.display = 'flex'; };
+            _editorImg.onerror = () => {
+                if (_editorImg.crossOrigin) {
+                    _editorImg = new Image();
+                    _editorImg.onload = () => { dibujarEditorCanvas(); document.getElementById('mod-editor-img').style.display = 'flex'; };
+                    _editorImg.src = src;
+                } else { alert('No se pudo cargar la imagen para editar.'); }
+            };
+            _editorImg.src = src;
+        };
+        if (tempImgFile) { loadSrc(URL.createObjectURL(tempImgFile)); }
+        else if (existingImgUrl) { loadSrc(existingImgUrl); }
+        else { alert('No hay imagen para editar.'); }
+    }
+
+    function dibujarEditorCanvas() {
+        if (!_editorImg) return;
+        const canvas = document.getElementById('editor-canvas');
+        const brightness = parseInt(document.getElementById('editor-brightness').value || 0);
+        const rotRad = (_editorRotation % 360) * Math.PI / 180;
+        const sin = Math.abs(Math.sin(rotRad)); const cos = Math.abs(Math.cos(rotRad));
+        const w = _editorImg.naturalWidth; const h = _editorImg.naturalHeight;
+        canvas.width = Math.round(w * cos + h * sin);
+        canvas.height = Math.round(h * cos + w * sin);
+        const ctx = canvas.getContext('2d');
+        ctx.save();
+        ctx.translate(canvas.width / 2, canvas.height / 2);
+        ctx.rotate(rotRad);
+        ctx.filter = `brightness(${100 + brightness}%)`;
+        ctx.drawImage(_editorImg, -w / 2, -h / 2, w, h);
+        ctx.restore();
+    }
+
+    function editarRotar(deg) { _editorRotation = (_editorRotation + deg + 360) % 360; dibujarEditorCanvas(); }
+    function aplicarFiltrosEditor() { dibujarEditorCanvas(); }
+
+    function confirmarEdicion() {
+        const canvas = document.getElementById('editor-canvas');
+        canvas.toBlob(blob => {
+            tempImgFile = new File([blob], 'portada-editada.jpg', { type: 'image/jpeg' });
+            const url = URL.createObjectURL(blob);
+            document.getElementById('preview-img').src = url;
+            document.getElementById('preview-img').style.display = 'block';
+            document.getElementById('icon-cam').style.display = 'none';
+            document.getElementById('txt-cam').style.display = 'none';
+            closeModals();
+        }, 'image/jpeg', 0.92);
+    }
+
+    function abrirGeneradorIA() {
+        closeModals();
+        document.getElementById('inp-ia-prompt').value = '';
+        document.getElementById('ia-preview-wrap').style.display = 'none';
+        document.getElementById('ia-loading').style.display = 'none';
+        document.getElementById('btn-usar-ia').style.display = 'none';
+        _iaGeneratedDataUrl = null;
+        document.getElementById('mod-ia-portada').style.display = 'flex';
+    }
+
+    async function generarPortadaConIA() {
+        const prompt = document.getElementById('inp-ia-prompt').value.trim();
+        if (!prompt) return alert('Ingresa una descripción para generar la imagen.');
+        document.getElementById('ia-loading').style.display = 'block';
+        document.getElementById('ia-preview-wrap').style.display = 'none';
+        document.getElementById('btn-usar-ia').style.display = 'none';
+        try {
+            const user = firebase.auth().currentUser;
+            if (!user) throw new Error('Sin sesión');
+            const token = await user.getIdToken(false);
+            const resp = await fetch('/api/gemini', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+                body: JSON.stringify({ generateImage: true, prompt: 'Portada de proyecto publicitario de diseño de stands: ' + prompt })
+            });
+            if (!resp.ok) throw new Error('Error ' + resp.status);
+            const data = await resp.json();
+            if (!data.imageUrl) throw new Error('No se generó imagen. Intentá con otra descripción.');
+            _iaGeneratedDataUrl = data.imageUrl;
+            document.getElementById('ia-preview-img').src = _iaGeneratedDataUrl;
+            document.getElementById('ia-preview-wrap').style.display = 'block';
+            document.getElementById('btn-usar-ia').style.display = 'flex';
+        } catch (err) {
+            alert('Error al generar imagen: ' + err.message);
+        } finally {
+            document.getElementById('ia-loading').style.display = 'none';
+        }
+    }
+
+    async function usarImagenIA() {
+        if (!_iaGeneratedDataUrl) return;
+        const res = await fetch(_iaGeneratedDataUrl);
+        const blob = await res.blob();
+        tempImgFile = new File([blob], 'portada-ia.jpg', { type: 'image/jpeg' });
+        document.getElementById('preview-img').src = _iaGeneratedDataUrl;
+        document.getElementById('preview-img').style.display = 'block';
+        document.getElementById('icon-cam').style.display = 'none';
+        document.getElementById('txt-cam').style.display = 'none';
+        closeModals();
     }
 
 </script>
