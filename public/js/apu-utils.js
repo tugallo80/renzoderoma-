@@ -69,6 +69,8 @@
 
         var util = normPct(apuSource.util, 50) || normPct(itemRoot && itemRoot.util, 50) || 50;
         var ind  = normPct(apuSource.ind,  10) || normPct(itemRoot && itemRoot.ind,  10) || 10;
+        var csRaw = apuSource.cs != null ? apuSource.cs : (itemRoot && itemRoot.cs != null ? itemRoot.cs : null);
+        var cs = csRaw !== null ? (normPct(csRaw, 0) || 0) : 55; // 55% cargas sociales Bolivia por defecto
 
         var result = {
             mat:  toApuArr(apuSource.mat  || apuSource.materiales  || apuSource.materials  || apuSource.Materiales),
@@ -76,7 +78,8 @@
             eq:   toApuArr(apuSource.eq   || apuSource.equipos     || apuSource.equipment  || apuSource.Equipos),
             sub:  toApuArr(apuSource.sub  || apuSource.subcontratos|| apuSource.subcontract|| apuSource.Subcontratos),
             util: util,
-            ind:  ind
+            ind:  ind,
+            cs:   cs
         };
 
         if (result.mat.length === 0 && result.mo.length === 0) {
@@ -87,11 +90,13 @@
     }
 
     function calcPuFromApu(apuObj) {
-        var dir = 0;
-        ['mat','mo','eq','sub'].forEach(function(t) {
-            (apuObj[t] || []).forEach(function(x) {
-                dir += (parseFloat(x.q) || 0) * (parseFloat(x.p) || 0);
-            });
+        var moBase = 0;
+        (apuObj.mo || []).forEach(function(x) { moBase += (parseFloat(x.q) || 0) * (parseFloat(x.p) || 0); });
+        var cs = apuObj.cs != null ? parseFloat(apuObj.cs) : 55;
+        var csAmt = moBase * cs / 100;
+        var dir = moBase + csAmt;
+        ['mat','eq','sub'].forEach(function(t) {
+            (apuObj[t] || []).forEach(function(x) { dir += (parseFloat(x.q) || 0) * (parseFloat(x.p) || 0); });
         });
         return dir * (1 + (apuObj.ind || 10) / 100) * (1 + (apuObj.util || 50) / 100);
     }

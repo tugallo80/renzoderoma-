@@ -341,7 +341,9 @@
                 <div class="apu-head"><span>OTROS GASTOS (Logística, Herramientas...)</span></div><div id="apu-eq"></div><div class="btn-add-row" onclick="addApuRow('eq')">+ AGREGAR OTROS GASTOS</div>
             </div>
             
-            <div style="background:var(--bg); padding:10px; border-radius:8px; display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px;">
+            <div style="background:var(--bg); padding:10px; border-radius:8px; display:grid; grid-template-columns:1fr 1fr 1fr 1fr; gap:10px;">
+                <div><span class="lbl">MO Base</span><input id="apu-mo-base" class="mod-inp" readonly style="color:var(--gray)"></div>
+                <div><span class="lbl" title="Cargas sociales sobre MO — Bolivia: AFP+Salud+Pro-Viv ≈ 55%">CS MO % <span style="font-size:9px;color:var(--blue)">ℹ</span></span><input type="number" step="any" id="apu-cs" class="mod-inp" value="55" onchange="recalcApu()" style="color:var(--orange)"></div>
                 <div><span class="lbl">Costo Directo</span><input id="apu-dir" class="mod-inp" readonly></div>
                 <div><span class="lbl">Indirectos %</span><input type="number" step="any" id="apu-ind" class="mod-inp" value="10" onchange="recalcApu()"></div>
                 <div><span class="lbl">Utilidad %</span><input type="number" step="any" id="apu-util" class="mod-inp" value="15" onchange="recalcApu()"></div>
@@ -939,10 +941,12 @@
             data[i].apu.sub = norm.sub;
             if (!data[i].apu.util) data[i].apu.util = norm.util;
             if (!data[i].apu.ind)  data[i].apu.ind  = norm.ind;
+            if (data[i].apu.cs == null) data[i].apu.cs = norm.cs;
         }
         renderApuList('sub'); renderApuList('mat'); renderApuList('mo'); renderApuList('eq');
         document.getElementById('apu-ind').value = data[i].apu.ind != null ? stripZeros(data[i].apu.ind) : 10;
         document.getElementById('apu-util').value = data[i].apu.util != null ? stripZeros(data[i].apu.util) : 15;
+        document.getElementById('apu-cs').value = data[i].apu.cs != null ? stripZeros(data[i].apu.cs) : 55;
         recalcApu(); document.getElementById('mod-apu').style.display = 'flex';
     }
 
@@ -997,17 +1001,27 @@
     }
 
     function recalcApu() {
-        const apu = data[targetIdx].apu; let dir = 0;
-        ['mat','mo','eq','sub'].forEach(t => { if(apu[t]) apu[t].forEach(x => dir += (stripZeros(x.q) * stripZeros(x.p))); });
+        const apu = data[targetIdx].apu;
+        let moBase = 0;
+        if (apu.mo) apu.mo.forEach(x => moBase += (stripZeros(x.q) * stripZeros(x.p)));
+        const cs = parseFloat(document.getElementById('apu-cs').value) || 0;
+        const csAmt = moBase * cs / 100;
+        let dir = moBase + csAmt;
+        ['mat','eq','sub'].forEach(t => { if(apu[t]) apu[t].forEach(x => dir += (stripZeros(x.q) * stripZeros(x.p))); });
+        document.getElementById('apu-mo-base').value = fMoney(moBase);
         document.getElementById('apu-dir').value = fMoney(dir);
         const ind = parseFloat(document.getElementById('apu-ind').value) || 0; const util = parseFloat(document.getElementById('apu-util').value) || 0;
-        apu.ind = ind; apu.util = util;
+        apu.ind = ind; apu.util = util; apu.cs = cs;
         document.getElementById('apu-final').innerText = fMoney(dir * (1 + (ind/100)) * (1 + (util/100)));
     }
     
-    function closeApu() { 
-        const apu = data[targetIdx].apu; let dir = 0;
-        ['mat','mo','eq','sub'].forEach(t => { if(apu[t]) apu[t].forEach(x => dir += (stripZeros(x.q) * stripZeros(x.p))); });
+    function closeApu() {
+        const apu = data[targetIdx].apu;
+        let moBase = 0;
+        if (apu.mo) apu.mo.forEach(x => moBase += (stripZeros(x.q) * stripZeros(x.p)));
+        const cs = parseFloat(apu.cs) || 0;
+        let dir = moBase + moBase * cs / 100;
+        ['mat','eq','sub'].forEach(t => { if(apu[t]) apu[t].forEach(x => dir += (stripZeros(x.q) * stripZeros(x.p))); });
         let finalP = dir * (1 + ((parseFloat(apu.ind)||0)/100)) * (1 + ((parseFloat(apu.util)||0)/100));
 
         data[targetIdx].pu = stripZeros(finalP); 
