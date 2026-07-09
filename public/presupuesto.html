@@ -1925,15 +1925,16 @@ Devolvé exactamente este formato (sin texto adicional):
                 if (imgType) {
                     const blob = await item.getType(imgType);
                     const reader = new FileReader();
-                    reader.onload = (e) => {
+                    reader.onload = async (e) => {
                         const b64full = e.target.result;
                         const preview = document.getElementById('ia-imgs-preview');
+                        const comp = await _compressB64(b64full, 600, 0.5);
                         const idx = currentIAImages.length;
-                        currentIAImages.push({ data: b64full.split(',')[1], mimeType: imgType });
+                        currentIAImages.push({ data: comp.split(',')[1], mimeType: 'image/jpeg' });
                         const wrap = document.createElement('div');
                         wrap.style.cssText = 'position:relative;width:52px;height:52px;';
                         const img = document.createElement('img');
-                        img.src = b64full;
+                        img.src = comp;
                         img.style.cssText = 'width:52px;height:52px;object-fit:cover;border-radius:8px;border:1px solid var(--border);';
                         const del = document.createElement('span');
                         del.innerHTML = '×';
@@ -1957,14 +1958,15 @@ Devolvé exactamente este formato (sin texto adicional):
         const preview = document.getElementById('ia-imgs-preview');
         Array.from(inp.files).forEach(file => {
             const reader = new FileReader();
-            reader.onload = (e) => {
+            reader.onload = async (e) => {
                 const b64full = e.target.result;
+                const comp = await _compressB64(b64full, 600, 0.5);
                 const idx = currentIAImages.length;
-                currentIAImages.push({ data: b64full.split(',')[1], mimeType: file.type });
+                currentIAImages.push({ data: comp.split(',')[1], mimeType: 'image/jpeg' });
                 const wrap = document.createElement('div');
                 wrap.style.cssText = 'position:relative;width:52px;height:52px;';
                 const img = document.createElement('img');
-                img.src = b64full;
+                img.src = comp;
                 img.style.cssText = 'width:52px;height:52px;object-fit:cover;border-radius:8px;border:1px solid var(--border);';
                 const del = document.createElement('span');
                 del.innerHTML = '×';
@@ -2529,7 +2531,7 @@ F3. MATERIALES POR PIEZAS COMPLEJAS — preguntar si no se especifica:
 
         // 3. Adjuntar PDF si existe
         if(currentIAImages.length > 0) {
-            currentIAImages.slice(0, 10).forEach(img => {
+            currentIAImages.slice(0, 4).forEach(img => {
                 parts.push({ inlineData: { data: img.data, mimeType: img.mimeType } });
             });
         }
@@ -2619,24 +2621,34 @@ EJEMPLO SIN CAPÍTULOS (menos de 4 ítems):
                 throw new Error(`El archivo adjunto es demasiado grande (${_payloadKB} KB). Para PDFs, intentá con un archivo de menos de 15 MB. Para imágenes, usá 1-3 fotos.`);
             }
 
-            const _geminiUrl = '/api/gemini';
-            console.log('[Budget] Endpoint:', _geminiUrl, '| payload:', _payloadKB, 'KB');
+            console.log('[Budget] Endpoint: /api/gemini | payload:', _payloadKB, 'KB');
 
-            const resp = await fetch(_geminiUrl, { method: 'POST', headers, body: _reqBody });
-
-            if (!resp.ok) {
-                let _errMsg = `HTTP ${resp.status}`;
-                try {
-                    const _errBody = await resp.json();
-                    if (_errBody.detalle) _errMsg += ': ' + _errBody.detalle;
-                    else if (_errBody.error) _errMsg += ': ' + _errBody.error;
-                } catch(_) {}
-                if (resp.status === 502) {
-                    throw new Error(`Error de servidor (502) — el payload pesa ${_payloadKB} KB. Intentá con menos imágenes o un prompt más corto.`);
+            let _resp, respData, _lastBudgetErr;
+            for (let _bAtt = 0; _bAtt < 3; _bAtt++) {
+                if (_bAtt > 0) {
+                    const _pMsg = document.getElementById('ia-prog-msg');
+                    if (_pMsg) _pMsg.textContent = 'Servidor ocupado, reintentando...';
+                    await new Promise(r => setTimeout(r, 5000 * _bAtt));
                 }
-                throw new Error(_errMsg);
+                _resp = await fetch('/api/gemini', { method: 'POST', headers, body: _reqBody });
+                if (_resp.status === 502 || _resp.status === 503 || _resp.status === 504) {
+                    _lastBudgetErr = new Error('Servidor temporalmente no disponible. Intentá de nuevo en unos segundos.');
+                    continue;
+                }
+                if (!_resp.ok) {
+                    let _errMsg = `HTTP ${_resp.status}`;
+                    try {
+                        const _errBody = await _resp.json();
+                        if (_errBody.detalle) _errMsg += ': ' + _errBody.detalle;
+                        else if (_errBody.error) _errMsg += ': ' + _errBody.error;
+                    } catch(_) {}
+                    throw new Error(_errMsg);
+                }
+                respData = await _resp.json();
+                _lastBudgetErr = null;
+                break;
             }
-            const respData = await resp.json();
+            if (_lastBudgetErr) throw _lastBudgetErr;
 
             let raw = '';
             if (respData?.candidates?.[0]?.content?.parts?.[0]?.text) {
