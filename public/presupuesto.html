@@ -2577,7 +2577,8 @@ EJEMPLO VÁLIDO:
 
             const _reqBody = JSON.stringify({
                 systemInstruction: { parts: [{ text: sysPrompt }] },
-                contents: [{ role: 'user', parts }]
+                contents: [{ role: 'user', parts }],
+                generationConfig: { maxOutputTokens: 16000 }
             });
 
             // Verificar tamaño antes de enviar
@@ -2641,10 +2642,40 @@ EJEMPLO VÁLIDO:
                 return null;
             }
 
+            // Recupera todos los objetos {…} completos de un array truncado
+            function _repairTruncatedArray(str) {
+                const start = str.indexOf('[');
+                if (start === -1) return null;
+                const completedItems = [];
+                let i = start + 1, depth = 0, inStr = false, esc = false, itemStart = -1;
+                while (i < str.length) {
+                    const ch = str[i];
+                    if (esc) { esc = false; i++; continue; }
+                    if (ch === '\\' && inStr) { esc = true; i++; continue; }
+                    if (ch === '"') { inStr = !inStr; i++; continue; }
+                    if (inStr) { i++; continue; }
+                    if (ch === '{') { if (depth === 0) itemStart = i; depth++; }
+                    else if (ch === '}') {
+                        depth--;
+                        if (depth === 0 && itemStart !== -1) {
+                            completedItems.push(str.slice(itemStart, i + 1));
+                            itemStart = -1;
+                        }
+                    }
+                    i++;
+                }
+                return completedItems.length > 0 ? '[' + completedItems.join(',') + ']' : null;
+            }
+
             let items;
             let extracted = _extractBalancedArray(raw);
             try {
-                if (!extracted) throw new Error('Sin array JSON balanceado');
+                if (!extracted) {
+                    // Respuesta truncada — intentar recuperar objetos completos
+                    extracted = _repairTruncatedArray(raw);
+                    if (extracted) console.warn('[IA Budget] Array truncado, recuperando objetos completos.');
+                    else throw new Error('Sin array JSON balanceado');
+                }
                 items = JSON.parse(extracted);
             } catch(parseErr) {
                 console.warn('[IA Budget] Parse error, limpiando:', parseErr.message);
@@ -2653,7 +2684,7 @@ EJEMPLO VÁLIDO:
                     .replace(/[\x00-\x1F\x7F]/g, ' ')
                     .replace(/,(\s*[}\]])/g, '$1')
                     .replace(/([^\\])\\([^"\\\/bfnrtu])/g, '$1 $2');
-                let extracted2 = _extractBalancedArray(cleaned);
+                let extracted2 = _extractBalancedArray(cleaned) || _repairTruncatedArray(cleaned);
                 if (!extracted2) throw new Error('No se pudo extraer JSON válido de la respuesta. Intentá de nuevo.');
                 items = JSON.parse(extracted2);
             }
