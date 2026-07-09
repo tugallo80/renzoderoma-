@@ -2209,7 +2209,8 @@
         }
 
         // ── Sección Producción ──
-        doc.addPage(); y = margin;
+        // Only add a page if there was arts content; otherwise continue on page 1
+        if (artsItems.length > 0) { doc.addPage(); y = margin; } else { y += 6; }
         doc.setFont(undefined,'bold'); doc.setFontSize(12); doc.setTextColor(0,122,255);
         doc.text('SECCIÓN 2 — PRODUCCIÓN Y ESTRUCTURAS', margin, y); y += 10;
 
@@ -2228,22 +2229,29 @@
                 if (y > 260) { doc.addPage(); y = margin; }
                 doc.setFillColor(0,80,160); doc.rect(margin, y, usableW, 8, 'F');
                 doc.setTextColor(255,255,255); doc.setFont(undefined,'bold'); doc.setFontSize(10);
-                doc.text(item.desc || 'Capítulo', margin + 3, y + 5.5); y += 12;
+                // Chapters use item.name; item.desc is a fallback
+                doc.text((item.name || item.desc || 'Capítulo').substring(0, 80), margin + 3, y + 5.5); y += 12;
                 return;
             }
             if (y > 250) { doc.addPage(); y = margin; }
+            // Item title
             doc.setFont(undefined,'bold'); doc.setFontSize(9); doc.setTextColor(0,80,160);
-            doc.text((item.desc || 'Ítem').substring(0, 80), margin, y + 4);
+            const _titleLines = doc.splitTextToSize((item.desc || 'Ítem'), usableW - 2);
+            doc.text(_titleLines, margin, y + 5);
+            y += _titleLines.length * 5 + 2;
+            // Quantity line
             doc.setFont(undefined,'normal'); doc.setFontSize(8); doc.setTextColor(80,80,80);
-            doc.text('Cant: ' + (item.cant||'') + ' ' + (item.und||''), margin, y + 9);
-            // Mostrar feat (editable desde produccion con datos reales medidos)
+            doc.text('Cant: ' + (item.cant||'') + ' ' + (item.und||''), margin, y);
+            y += 5;
+            // Feat (description / medidas reales) — now starts AFTER the title+cant block
             if (item.feat) {
                 const _featTxt = (item.feat || '').replace(/\n/g, ' | ').substring(0, 300);
-                const _fl = doc.splitTextToSize(_featTxt, pageW - margin*2 - 4);
-                doc.setFontSize(8); doc.setFont(undefined, 'normal'); doc.setTextColor(80, 80, 80);
-                doc.text(_fl, margin, y + 4);
-                y += 5 + (_fl.length - 1) * 4;
-            } else { y += 5; }
+                const _fl = doc.splitTextToSize(_featTxt, usableW - 2);
+                doc.setFontSize(7.5); doc.setFont(undefined, 'italic'); doc.setTextColor(100, 100, 100);
+                doc.text(_fl, margin, y);
+                y += _fl.length * 4 + 2;
+            }
+            y += 2; // padding before tables
 
             // Materiales (sin precios)
             if (item.prod_apu && item.prod_apu.mat && item.prod_apu.mat.length > 0) {
