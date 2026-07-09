@@ -912,13 +912,27 @@
             const user = firebase.auth().currentUser;
             if (!user) throw new Error('Sin sesión');
             const token = await user.getIdToken(false);
-            const resp = await fetch('/api/gemini', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
-                body: JSON.stringify({ generateImage: true, prompt: 'Portada de proyecto publicitario de diseño de stands: ' + prompt })
-            });
-            if (!resp.ok) throw new Error('Error ' + resp.status);
-            const data = await resp.json();
+            const body = JSON.stringify({ generateImage: true, prompt: 'Portada de proyecto publicitario de diseño de stands: ' + prompt });
+            const headers = { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token };
+            // Imagen es request pesado — ir directo al Cloud Function para evitar timeout del rewrite
+            const CF_URL = 'https://us-central1-rubik-bolivia.cloudfunctions.net/geminiProxy';
+            let lastErr, data;
+            for (let attempt = 0; attempt < 3; attempt++) {
+                if (attempt > 0) await new Promise(r => setTimeout(r, 2000 * attempt));
+                try {
+                    const resp = await fetch(CF_URL, { method: 'POST', headers, body });
+                    if (resp.status === 503 || resp.status === 502 || resp.status === 504) {
+                        lastErr = new Error('Servicio temporalmente no disponible (' + resp.status + '). Reintentando...');
+                        continue;
+                    }
+                    if (!resp.ok) throw new Error('Error ' + resp.status);
+                    data = await resp.json();
+                    break;
+                } catch (fetchErr) {
+                    lastErr = fetchErr;
+                }
+            }
+            if (!data) throw lastErr || new Error('No se pudo conectar al servidor de imágenes.');
             if (!data.imageUrl) throw new Error('No se generó imagen. Intentá con otra descripción.');
             _iaGeneratedDataUrl = data.imageUrl;
             document.getElementById('ia-preview-img').src = _iaGeneratedDataUrl;
