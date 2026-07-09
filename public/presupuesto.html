@@ -2508,22 +2508,19 @@ F3. MATERIALES POR PIEZAS COMPLEJAS — preguntar si no se especifica:
                 }
 
                 const rowImages = row.querySelectorAll('.ia-row-image-data');
-                // Comprimir TODAS las imágenes a un tamaño muy pequeño (512px / 0.4)
-                // El límite de Firebase Hosting es 10MB — con prompt largo + imágenes hay que ser agresivo
-                const MAX_IMG_BYTES = 800000; // 800KB por imagen en base64
-                const MAX_TOTAL_IMG_PARTS = 3; // máximo 3 imágenes en total
+                const MAX_IMG_BYTES = 150000; // 150KB por imagen en base64 (~112KB binario)
+                const MAX_TOTAL_IMG_PARTS = 2; // máximo 2 imágenes por ítem
                 let imgCount = 0;
                 for (let imgIdx = 0; imgIdx < rowImages.length && imgCount < MAX_TOTAL_IMG_PARTS; imgIdx++) {
                     const imgEl = rowImages[imgIdx];
                     const b64Full = imgEl.src;
                     if (!b64Full || !b64Full.startsWith('data:')) continue;
-                    // Comprimir escalonadamente hasta quedar bajo el límite
-                    let comp = await _compressB64(b64Full, 512, 0.45);
-                    if (comp.split(',')[1].length > MAX_IMG_BYTES) {
-                        comp = await _compressB64(b64Full, 400, 0.35);
-                    }
+                    let comp = await _compressB64(b64Full, 400, 0.4);
                     if (comp.split(',')[1].length > MAX_IMG_BYTES) {
                         comp = await _compressB64(b64Full, 300, 0.3);
+                    }
+                    if (comp.split(',')[1].length > MAX_IMG_BYTES) {
+                        comp = await _compressB64(b64Full, 240, 0.25);
                     }
                     parts.push({ inlineData: { data: comp.split(',')[1], mimeType: 'image/jpeg' } });
                     textPrompt += `-> FOTO ADJUNTA ${imgIdx+1} PARA ÍTEM ${index+1}.\n`;

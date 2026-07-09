@@ -1,4 +1,4 @@
-// Deploy forzado: 2026-07-08
+// Deploy forzado: 2026-07-09
 /**
  * Cloud Functions — Rubik OS
  * VERSION TAG: rubik-2026-07-08-v3
