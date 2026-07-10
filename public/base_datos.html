@@ -357,9 +357,9 @@ Puedo ayudarte con:<br>
     }
 
     function renderCurrentTab() {
-        const box = document.getElementById('list-container'); 
-        box.innerHTML = '';
-        
+        const box = document.getElementById('list-container');
+        let html = '';
+
         const data = dbData[currentTab] || {};
         const keys = Object.keys(data);
         const searchInput = document.getElementById('search-db');
@@ -385,7 +385,7 @@ Puedo ayudarte con:<br>
                     const safeName = nameStr.replace(/'/g, "\\'"); 
                     const safeTipo = t.replace(/'/g, "\\'");
                     
-                    box.innerHTML += `
+                    html += `
                     <div class="data-card">
                         <div class="d-info">
                             <span class="d-badge ${bCls}">${bTxt}</span>
@@ -405,7 +405,7 @@ Puedo ayudarte con:<br>
                 const nameStr = String(el.nombre || 'Sin nombre');
                 if(nameStr.toLowerCase().includes(search)) {
                     count++;
-                    box.innerHTML += `
+                    html += `
                     <div class="data-card">
                         <div class="d-info"><span class="d-name">${nameStr}</span><span class="d-sub">${el.categoria || 'General'} | <i class="ph-fill ph-phone"></i> ${el.telefono || '-'}</span></div>
                         <div class="action-btns">
@@ -420,7 +420,7 @@ Puedo ayudarte con:<br>
                 if(nameStr.toLowerCase().includes(search) || String(el.tipo||'').toLowerCase().includes(search)) {
                     count++;
                     let fotoHtml = el.fotoUrl ? `<img loading="lazy" decoding="async" src="${el.fotoUrl}" style="width:50px; height:50px; border-radius:8px; object-fit:cover;">` : '';
-                    box.innerHTML += `
+                    html += `
                     <div class="data-card" style="align-items:flex-start;">
                         ${fotoHtml}
                         <div class="d-info" style="margin-left:10px;">
@@ -440,7 +440,7 @@ Puedo ayudarte con:<br>
                 const nameStr = String(el.desc || el.nombre || 'Sin nombre');
                 if(nameStr.toLowerCase().includes(search)) {
                     count++;
-                    box.innerHTML += `
+                    html += `
                     <div class="data-card">
                         <div class="d-info"><span class="d-badge bg-blue">${el.und || 'glb'}</span><span class="d-name">${nameStr}</span><span class="d-sub" style="color:var(--orange);">Plantilla Estandarizada</span></div>
                         <div style="display:flex; align-items:center; gap:10px;">
@@ -459,7 +459,7 @@ Puedo ayudarte con:<br>
                     
                     let pathNode = currentTab === 'mat' ? 'materiales' : (currentTab === 'mo' ? 'mano_obra' : 'otros');
                     
-                    box.innerHTML += `
+                    html += `
                     <div class="data-card">
                         <div class="d-info">${extraBadge}<span class="d-name">${nameStr}</span><span class="d-sub">UND: ${el.u || el.und || 'glb'}</span></div>
                         <div style="display:flex; align-items:center; gap:10px;">
@@ -474,7 +474,7 @@ Puedo ayudarte con:<br>
             }
         });
 
-        if(count === 0) box.innerHTML = '<div class="empty-state">No hay registros aquí.</div>';
+        box.innerHTML = count > 0 ? html : '<div class="empty-state">No hay registros aquí.</div>';
     }
 
     function abrirModalPrincipal() {
@@ -731,6 +731,7 @@ Puedo ayudarte con:<br>
 
         try {
             let contents;
+            let sysIA = null;
 
             if (tieneArchivos) {
                 // ── MODO ESCANEO: single-turn, detecta materiales/proveedor de imágenes ──
@@ -757,16 +758,15 @@ Reglas: si proveedor existe usa nombre exacto con es_nuevo:false. Convierte USD�
                 contents = [{ role: 'user', parts }];
 
             } else {
-                // ── MODO AGENTE: multi-turn, comandos y consultas sobre la BD ──
+                // ── MODO AGENTE: multi-turn con contexto de BD SIEMPRE fresco ──
                 const moEntries = Object.values(dbData.mo||{});
                 const matEntries = Object.values(dbData.mat||{});
                 const moList = moEntries.map(m=>`${m.n||m.desc||''}: ${m.p||0}Bs/${m.u||''}`).join('\n');
-                const matList = matEntries.slice(0,500).map(m=>`${m.n||m.desc||''}: ${m.p||0}Bs/${m.u||''}${m.proveedor?' ('+m.proveedor+')':''}`).join('\n');
+                const matList = matEntries.map(m=>`${m.n||m.desc||''}: ${m.p||0}Bs/${m.u||''}${m.proveedor?' ('+m.proveedor+')':''}`).join('\n');
                 const provList = Object.values(dbData.prov||{}).map(p=>`${p.nombre||''}${p.categoria?' – '+p.categoria:''}`).filter(Boolean).join('\n');
 
-                if (iaChatHistory.length === 0) {
-                    // Primera vez: armar prompt completo con contexto de BD + la pregunta del usuario
-                    const sysPrompt = `Eres el Cerebro Central de Rubik OS — agente inteligente de base de datos para Rubik Bolivia, empresa de señalética, muebles y publicidad.
+                // Contexto reconstruido en cada llamada → la IA siempre ve datos actuales
+                sysIA = `Eres el Cerebro Central de Rubik OS — agente inteligente de base de datos para Rubik Bolivia, empresa de señalética, muebles y publicidad.
 
 CAPACIDADES:
 • Responder consultas sobre costos, proveedores, comparativas de precios
@@ -780,7 +780,7 @@ BASE DE DATOS ACTUAL:
 == MANO DE OBRA (${moEntries.length} registros) ==
 ${moList || 'Vacío'}
 
-== MATERIALES (mostrando ${Math.min(500,matEntries.length)} de ${matEntries.length}) ==
+== MATERIALES (${matEntries.length} registros totales) ==
 ${matList || 'Vacío'}
 
 == PROVEEDORES ==
@@ -806,19 +806,16 @@ Reglas:
 - Siempre mencioná el valor anterior antes de cambiarlo.
 - KEY = nombre en MAYÚSCULAS, espacios reemplazados por "_".
 - Para comparar proveedores: listá todos con su precio en una tabla.
-- Tu respuesta es SOLO el JSON. Nunca texto plano, nunca markdown.
+- Tu respuesta es SOLO el JSON. Nunca texto plano, nunca markdown.`;
 
-[CONSULTA DEL USUARIO]: ${text}`;
-                    iaChatHistory.push({ role: 'user', parts: [{ text: sysPrompt }] });
-                } else {
-                    iaChatHistory.push({ role: 'user', parts: [{ text: text }] });
-                }
+                iaChatHistory.push({ role: 'user', parts: [{ text }] });
                 contents = [...iaChatHistory];
             }
 
             const geminiResult = await window.callGemini({
                 model: "gemini-2.5-flash",
                 contents: contents,
+                ...(sysIA ? { systemInstruction: { parts: [{ text: sysIA }] } } : {}),
                 generationConfig: { responseMimeType: 'application/json' }
             });
 
