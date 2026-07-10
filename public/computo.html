@@ -191,7 +191,7 @@
         
         const urlParams = new URLSearchParams(window.location.search);
         const cid = urlParams.get('cid'); const pid = urlParams.get('pid'); const idx = urlParams.get('idx');
-        const apuType = urlParams.get('type'); const apuIdx = urlParams.get('apuIdx');
+        const apuType = urlParams.get('type'); const apuIdx = urlParams.get('apuidx');
         
         let itemData = {}; let measures = []; let mode = 'lineal'; let targetName = ''; let finalTotalVal = 0;
         let pWidth = 2.44; let pHeight = 1.22; let cutPlates = [];
@@ -424,7 +424,8 @@
             }
 
             await db.ref(`proyectos/${cid}/${pid}/presupuesto/items/${idx}`).set(itemData);
-            window.location.href = `presupuesto.html?cid=${cid}&pid=${pid}`;
+            const retParam = (apuType && apuIdx !== null) ? `&retApu=${idx}` : '';
+            window.location.href = `presupuesto.html?cid=${cid}&pid=${pid}${retParam}`;
         }
         function goBack() { window.history.back(); }
     </script>
