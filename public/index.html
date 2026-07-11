@@ -170,8 +170,8 @@
         }
 
         /* ── GEMINI LIVE ── */
-        .live-body { display: none; flex: 1; flex-direction: column; align-items: center; justify-content: center; background: #000; padding: 30px 20px 30px; overflow: hidden; gap: 28px; }
-        .live-body.active { display: flex; }
+        .live-body { display: none; flex-direction: column; align-items: center; justify-content: center; background: #000; padding: 30px 20px; min-height: 350px; gap: 24px; box-sizing: border-box; }
+        .live-body.active { display: flex; flex: 1; }
 
         .live-logo-ring { position: relative; width: 90px; height: 90px; display: flex; align-items: center; justify-content: center; }
         .live-logo-ring img { width: 70px; height: 70px; border-radius: 50%; object-fit: contain; background: #fff; border: 2px solid rgba(255,255,255,0.2); }
@@ -310,17 +310,17 @@
 
             <!-- ── GEMINI LIVE PANEL ── -->
             <div class="live-body" id="live-panel">
-                <div class="live-logo-ring">
-                    <img loading="lazy" decoding="async" src="LOGO-IA-RUBIK.jpg" onerror="this.src='./LOGO-IA-RUBIK.jpg'">
+                <div style="width:76px;height:76px;border-radius:50%;border:2px solid rgba(124,58,237,0.4);display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+                    <img loading="lazy" decoding="async" src="LOGO-IA-RUBIK.jpg" style="width:62px;height:62px;border-radius:50%;object-fit:contain;background:#fff;" onerror="this.style.background='#af52de'">
                 </div>
-                <div class="live-status" id="live-status">Toca para hablar en vivo</div>
-                <div class="live-start-label">Conversación directa con el<br>Cerebro Ejecutivo Rubik</div>
-                <div id="live-start-ui">
-                    <button class="btn-live-call" id="btn-live-start" onclick="iniciarLive()">
+                <div id="live-status" style="color:#8e8e93;font-size:12px;font-weight:700;letter-spacing:1px;text-transform:uppercase;text-align:center;flex-shrink:0;">Toca para hablar en vivo</div>
+                <div style="color:rgba(255,255,255,0.45);font-size:13px;text-align:center;line-height:1.5;flex-shrink:0;">Conversación directa con el<br>Cerebro Ejecutivo Rubik</div>
+                <div id="live-start-ui" style="display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+                    <button id="btn-live-start" onclick="iniciarLive()" style="width:88px;height:88px;border-radius:50%;background:linear-gradient(145deg,#22c55e,#15803d);color:white;border:none;font-size:36px;display:flex;align-items:center;justify-content:center;cursor:pointer;animation:call-pulse 2.2s ease-in-out infinite;">
                         <i class="ph-fill ph-phone-call"></i>
                     </button>
                 </div>
-                <div id="live-transcript" class="live-transcript"></div>
+                <div id="live-transcript"></div>
             </div>
 
             <!-- Full-screen equalizer overlay (shown during active call) -->
@@ -1903,9 +1903,13 @@ $$$QUOTE_DATA: [{"desc":"Nombre Item","feat":"Característica","cant":1,"und":"p
 
     function _liveSetStatus(txt, cls) {
         const el = document.getElementById('live-status');
-        if (el) { el.textContent = txt; el.className = 'live-status ' + (cls || ''); }
+        if (el) {
+            el.textContent = txt;
+            const colors = {'st-ready':'#34c759','st-listening':'#007aff','st-thinking':'#ff9500','st-speaking':'#00ccff','st-error':'#ff3b30'};
+            el.style.color = colors[cls] || '#8e8e93';
+        }
         const eq = document.getElementById('live-eq-status');
-        if (eq) { eq.textContent = txt; }
+        if (eq) eq.textContent = txt;
     }
 
     function _liveAddMsg(role, text) {
