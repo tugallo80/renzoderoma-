@@ -69,6 +69,13 @@
           "functionId": "proxyImagen",
           "region": "us-central1"
         }
+      },
+      {
+        "source": "/api/gemini-live-key",
+        "function": {
+          "functionId": "geminiLiveKey",
+          "region": "us-central1"
+        }
       }
     ]
   },

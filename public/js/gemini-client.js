@@ -104,9 +104,10 @@ async function postProxy(payload, { retries = 3, delayMs = 1500 } = {}) {
  * https://generativelanguage.googleapis.com/...:generateContent).
  * Devuelve el shape REST de Gemini ({ candidates: [...] }).
  */
-export async function callGemini({ model, contents, parts, text, generationConfig }) {
+export async function callGemini({ model, contents, parts, text, generationConfig, systemInstruction }) {
     const payload = { model };
     if (generationConfig) payload.generationConfig = generationConfig;
+    if (systemInstruction) payload.systemInstruction = systemInstruction;
     if (contents) payload.contents = contents;
     else if (Array.isArray(parts)) payload.parts = parts;
     else if (typeof text === "string") payload.text = text;

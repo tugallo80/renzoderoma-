@@ -193,7 +193,22 @@
         .process-row:last-child { border:none; margin:0;}
         .proc-mat { font-size: 11px; font-weight: 800;}
         .proc-desc { font-size: 11px; color: var(--text);}
-    
+
+        /* ── Motor IA Producción ── */
+        .btn-ia-prod { background: linear-gradient(135deg,#5856d6,#af52de); color:#fff; border:none; border-radius:10px; padding:10px 16px; font-size:12px; font-weight:900; cursor:pointer; display:flex; align-items:center; gap:6px; width:100%; justify-content:center; margin-top:8px; transition:0.2s; }
+        .btn-ia-prod:disabled { opacity:0.55; cursor:wait; }
+        .ia-apu-box { background:rgba(88,86,214,0.06); border:1px solid rgba(88,86,214,0.3); border-radius:12px; padding:14px; margin-top:10px; }
+        .ia-apu-title { font-size:11px; font-weight:900; color:#5856d6; text-transform:uppercase; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center; }
+        .ia-mat-row { display:grid; grid-template-columns:2fr 1fr; gap:6px; padding:5px 0; border-bottom:1px dashed rgba(0,0,0,0.07); font-size:11px; align-items:start; }
+        .ia-mat-row:last-child { border:none; }
+        .ia-mat-name { font-weight:700; }
+        .ia-mat-qty { color:var(--blue); font-weight:800; text-align:right; }
+        .ia-mat-calc { font-size:9px; color:var(--gray); font-style:italic; grid-column:1/-1; margin-top:-2px; }
+        .ia-notas { font-size:10px; color:var(--gray); font-style:italic; margin-top:8px; border-top:1px dashed var(--border); padding-top:6px; }
+        .btn-apply-apu { background:rgba(52,199,89,0.12); color:var(--green); border:1px solid rgba(52,199,89,0.3); border-radius:8px; padding:6px 12px; font-size:11px; font-weight:800; cursor:pointer; white-space:nowrap; }
+        .item-notas-inp { width:100%; background:var(--card); color:var(--text); border:1px solid var(--border); border-radius:8px; padding:8px; font-size:11px; resize:vertical; min-height:48px; font-family:inherit; box-sizing:border-box; outline:none; }
+        .item-notas-inp:focus { border-color:var(--blue); }
+
         /* ══ VISTA MÓVIL ══════════════════════════════════════════════════════ */
         body[data-view="mobile"] { padding: 10px; padding-bottom: 85px; }
         body[data-view="mobile"] .nav-hide-mobile { display: none !important; }
@@ -293,7 +308,8 @@
             <div class="photo-opt admin-only" onclick="openDesignGallery()"><i class="ph-bold ph-images" style="color:var(--orange)"></i> Jalar de Galería de Diseños</div>
             <div class="photo-opt admin-only" onclick="document.getElementById('file-up').click()"><i class="ph-bold ph-upload" style="color:var(--blue)"></i> Subir desde Dispositivo</div>
             <div class="photo-opt admin-only" onclick="pasteImageClick()"><i class="ph-bold ph-clipboard" style="color:var(--green)"></i> Pegar Portapapeles (Ctrl+V)</div>
-            <div class="photo-opt admin-only" onclick="irADisenosParaIA()" style="border-top:1px dashed var(--border);"><i class="ph-bold ph-paint-brush-broad" style="color:var(--purple)"></i> Generar Plano IA → ir a Diseños</div>
+            <div class="photo-opt admin-only" onclick="irADisenosParaIA()"><i class="ph-bold ph-paint-brush-broad" style="color:var(--purple)"></i> Generar Plano IA → ir a Diseños</div>
+            <div class="photo-opt admin-only" onclick="abrirCADParaItem()" style="border-top:1px dashed var(--border);"><i class="ph-bold ph-pencil-ruler" style="color:#5856d6"></i> Diseñar en CAD → enviar al ítem</div>
             
             <div id="gallery-container" style="display:none; margin-top:10px; border-top:1px solid var(--border); padding-top:10px;">
                 <div style="font-size:10px; font-weight:bold; color:var(--gray); margin-bottom:5px;">SELECCIONA UNA IMAGEN O PLANO:</div>
@@ -479,9 +495,14 @@
     if (!firebase.apps.length) firebase.initializeApp(window._rubikFirebaseConfig);
     const db = firebase.database(); const storage = firebase.storage();
 
-    const cid = localStorage.getItem('rubik_client_id');
-    const pid = localStorage.getItem('rubik_current_pid');
-    const isWorker = new URLSearchParams(window.location.search).get('mode') === 'worker';
+    // URL params tienen prioridad — si vienen en el link (WhatsApp, QR, etc.) se usan directamente
+    const _urlP = new URLSearchParams(window.location.search);
+    const cid = _urlP.get('cid') || localStorage.getItem('rubik_client_id');
+    const pid = _urlP.get('pid') || localStorage.getItem('rubik_current_pid');
+    // Sincronizar localStorage para que la navegación interna funcione correctamente
+    if (_urlP.get('cid')) { localStorage.setItem('rubik_client_id', cid); }
+    if (_urlP.get('pid')) { localStorage.setItem('rubik_current_pid', pid); }
+    const isWorker = _urlP.get('mode') === 'worker';
 
     if(!cid || !pid) window.location.href="index.html";
 
@@ -727,6 +748,12 @@
                 
                 getValidStringsKeys(item.op_images).forEach(opIdx => { images.push({src: item.op_images[opIdx], type: 'op', i:opIdx}); });
                 getValidStringsKeys(item.cortes).forEach(cIdx => { images.push({src: item.cortes[cIdx], type: 'corte', i:cIdx}); });
+                if (item.fotos && typeof item.fotos === 'object') {
+                    Object.entries(item.fotos).forEach(([fIdx, f]) => {
+                        const src = typeof f === 'string' ? f : f?.url;
+                        if (src) images.push({src, type:'foto', i:fIdx, lbl: f?.name || 'CAD'});
+                    });
+                }
                 
                 if(item.apu) {
                     ['mat', 'sub'].forEach(t => {
@@ -742,7 +769,8 @@
                 html += `<div class="img-grid">`;
                 images.forEach(img => {
                     let btnTrash = !isWorker ? `<i class="ph-fill ph-x-circle img-del" onclick="deleteGeneralImage(${idx}, '${img.i}', '${img.type}', '${img.t||''}')"></i>` : '';
-                    let lblHtml = img.type === 'apu_corte' ? `<div style="position:absolute; bottom:0; background:rgba(0,0,0,0.6); color:white; font-size:8px; width:100%; text-align:center; white-space:nowrap; overflow:hidden; padding:2px 0;">Plano</div>` : '';
+                    let lblHtml = img.type === 'apu_corte' ? `<div style="position:absolute; bottom:0; background:rgba(0,0,0,0.6); color:white; font-size:8px; width:100%; text-align:center; white-space:nowrap; overflow:hidden; padding:2px 0;">Plano</div>`
+                               : img.type === 'foto' ? `<div style="position:absolute; bottom:0; background:rgba(88,86,214,0.85); color:white; font-size:8px; width:100%; text-align:center; white-space:nowrap; overflow:hidden; padding:2px 0;">📐 ${img.lbl||'CAD'}</div>` : '';
                     html += `<div class="img-box">${btnTrash}<img loading="lazy" decoding="async" src="${img.src}" onclick="viewFullImage('${img.src}')">${lblHtml}</div>`;
                 });
                 if(!isWorker) html += `<div class="btn-add-img" onclick="openGeneralUpload(${idx})"><i class="ph-bold ph-plus"></i><span style="font-size:8px; font-weight:800;">Añadir Foto</span></div>`;
@@ -756,6 +784,31 @@
                     html += `<div class="process-row"><div class="proc-mat">${r.m}</div><div class="proc-desc">${r.d}</div></div>`;
                 });
                 html += `<div style="font-size:10px; color:gray; font-weight:600; text-align:center; margin-top:8px;">Pregúntale a la IA en tu app para más detalles.</div></div>`;
+            }
+
+            // ── Notas de Fabricación (campo libre, opcional) ──
+            if (!isWorker && currentTab === 'items') {
+                const notasVal = (item.notas || '').replace(/`/g, "'").replace(/\$/g, '&#36;');
+                html += `<div style="margin-bottom:10px;">
+                    <div style="font-size:10px; font-weight:900; color:var(--gray); text-transform:uppercase; margin-bottom:4px; letter-spacing:0.5px;"><i class="ph-bold ph-note-pencil"></i> Notas de Fabricación</div>
+                    <textarea class="item-notas-inp"
+                        placeholder="Materiales especiales, proveedores, procesos particulares, notas de campo..."
+                        onchange="saveNotasItem(${idx}, this.value)"
+                    >${notasVal}</textarea>
+                </div>`;
+            }
+
+            // ── Motor IA Producción ──
+            if (!isWorker && currentTab === 'items') {
+                const hasProdIA = !!(item.prod_apu_ia?.materiales?.length || item.prod_apu_ia?.mano_obra?.length);
+                html += `<button class="btn-ia-prod" id="btn-ia-prod-${idx}" onclick="recalcularConIA(${idx})">
+                    <i class="ph-bold ph-magic-wand"></i> ${hasProdIA ? 'Recalcular APU con IA' : '✨ Calcular APU con IA'}
+                </button>`;
+                html += `<div id="ia-zone-${idx}">`;
+                if (hasProdIA) {
+                    html += buildIAApuHTML(idx, item.prod_apu_ia);
+                }
+                html += `</div>`;
             }
 
             html += generateMeasuresHTML(item.measures, idx, null, null, item.desc, item.und);
@@ -1770,6 +1823,226 @@
     function saveDriveLink() { /* nativo - preservado */ }
 
     function openGeneralUpload(i) { targetItemIdx = i; document.getElementById('mod-photo').style.display = 'flex'; }
+
+    // ── CAD desde ítem ───────────────────────────────────────────────────────
+    function abrirCADParaItem() {
+        document.getElementById('mod-photo').style.display = 'none';
+        window.location.href = `cad.html?cid=${cid}&pid=${pid}&itemIdx=${targetItemIdx}&returnTo=produccion`;
+    }
+
+    // ── Notas de fabricación ─────────────────────────────────────────────────
+    const _notasSaveTimers = {};
+    function saveNotasItem(idx, val) {
+        if (allItems[idx]) allItems[idx].notas = val;
+        clearTimeout(_notasSaveTimers[idx]);
+        _notasSaveTimers[idx] = setTimeout(() => {
+            window._suppressRenderTasks = true;
+            db.ref(`proyectos/${cid}/${pid}/presupuesto/items/${idx}/notas`).set(val);
+        }, 800);
+    }
+
+    // ── Motor IA Producción ──────────────────────────────────────────────────
+    function buildIAApuHTML(idx, data) {
+        let html = `<div class="ia-apu-box">
+            <div class="ia-apu-title">
+                <span><i class="ph-bold ph-robot"></i> APU calculado por IA</span>
+                <button class="btn-apply-apu" onclick="aplicarAPUdeIA(${idx})"><i class="ph-bold ph-check"></i> Aplicar al APU</button>
+            </div>`;
+        if (data.resumen_analisis) {
+            html += `<div style="font-size:10px; color:var(--gray); margin-bottom:8px; font-style:italic;">${data.resumen_analisis}</div>`;
+        }
+        if (data.materiales?.length) {
+            html += `<div style="font-size:10px; font-weight:900; color:var(--text); text-transform:uppercase; margin-bottom:4px;">Materiales:</div>`;
+            data.materiales.forEach(m => {
+                html += `<div class="ia-mat-row">
+                    <div class="ia-mat-name">${m.nombre || m.n || ''}</div>
+                    <div class="ia-mat-qty">${m.q} ${m.u}</div>
+                    ${m.calculo ? `<div class="ia-mat-calc">${m.calculo}</div>` : ''}
+                </div>`;
+            });
+        }
+        if (data.mano_obra?.length) {
+            html += `<div style="font-size:10px; font-weight:900; color:var(--text); text-transform:uppercase; margin:8px 0 4px;">Mano de Obra:</div>`;
+            data.mano_obra.forEach(m => {
+                html += `<div class="ia-mat-row">
+                    <div class="ia-mat-name">${m.d}</div>
+                    <div class="ia-mat-qty">${m.q} ${m.u}</div>
+                </div>`;
+            });
+        }
+        if (data.notas_ia) {
+            html += `<div class="ia-notas"><i class="ph-bold ph-info"></i> ${data.notas_ia}</div>`;
+        }
+        html += `</div>`;
+        return html;
+    }
+
+    async function _fetchBase64(url) {
+        if (!url) return null;
+        if (url.startsWith('data:')) return url.split(',')[1];
+        const resp = await fetch(url);
+        const blob = await resp.blob();
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result.split(',')[1]);
+            reader.onerror = reject;
+            reader.readAsDataURL(blob);
+        });
+    }
+
+    window.recalcularConIA = async function(idx) {
+        const item = allItems[idx];
+        if (!item) return;
+        const btn = document.getElementById(`btn-ia-prod-${idx}`);
+        if (btn) { btn.disabled = true; btn.innerHTML = '<i class="ph-bold ph-circle-notch" style="animation:spin 1s linear infinite;"></i> Analizando imágenes...'; }
+
+        try {
+            // 1. Recopilar imágenes (max 4 para no sobrecargar)
+            const imgParts = [];
+            const addImg = async (url) => {
+                if (!url || imgParts.length >= 4) return;
+                try {
+                    const b64 = await _fetchBase64(url);
+                    if (b64) imgParts.push({ inlineData: { mimeType: 'image/jpeg', data: b64 } });
+                } catch(e) { /* imagen no accesible, omitir */ }
+            };
+            if (item.img) await addImg(item.img);
+            for (const k of Object.keys(item.op_images || {})) await addImg(item.op_images[k]);
+            for (const k of Object.keys(item.cortes || {})) await addImg(item.cortes[k]);
+            if (item.fotos && typeof item.fotos === 'object') {
+                for (const f of Object.values(item.fotos)) {
+                    await addImg(typeof f === 'string' ? f : f?.url);
+                }
+            }
+
+            // 2. Contexto de materiales de la base de datos
+            let matsCtx = '';
+            try {
+                const matsSnap = await firebase.database().ref('base_datos/materiales').once('value');
+                const mats = matsSnap.val() || {};
+                matsCtx = Object.values(mats)
+                    .filter(m => m && (m.n || m.desc))
+                    .slice(0, 200)
+                    .map(m => `- ${m.n||m.desc}: ${m.p||0}Bs/${m.u||'und'}${m.pw ? ` (${m.pw}×${m.ph||'?'}m)` : ''}`)
+                    .join('\n');
+            } catch(e) { matsCtx = ''; }
+
+            // 3. Construir texto contextual del ítem
+            let medidas = '';
+            if (item.measures?.length) {
+                medidas = '\nMEDIDAS EXISTENTES: ' + item.measures.map(m => `${m.desc||'sin desc'}: ${m.b||0}×${m.h||0}m (cant: ${m.c||1})`).join(' | ');
+            }
+            let apuRef = '';
+            if (item.apu?.mat?.length) {
+                apuRef = '\nAPU PRESUPUESTADO (referencia): ' + item.apu.mat.map(m => `${m.d} (${m.q}${m.u})`).join(', ');
+            }
+            const annotations = [];
+            if (item.fotos && typeof item.fotos === 'object') {
+                Object.values(item.fotos).forEach(f => {
+                    if (f?.annotations?.length) f.annotations.forEach(a => annotations.push(a.desc));
+                });
+            }
+
+            const userText = `ÍTEM: ${item.desc || 'Sin descripción'}
+CARACTERÍSTICAS: ${item.feat || 'No especificadas'}
+CANTIDAD: ${item.cant || 1} ${item.und || 'glb'}
+NOTAS DE FABRICACIÓN: ${item.notas || 'Sin notas adicionales'}${medidas}${apuRef}
+${annotations.length ? 'ANOTACIONES DE PLANO CAD: ' + annotations.join(' | ') : ''}
+
+BASE DE DATOS DE MATERIALES (precios Bolivia):
+${matsCtx || 'No disponible'}
+
+${imgParts.length > 0 ? `Analiza las ${imgParts.length} imagen(es) adjunta(s).` : 'No hay imágenes — calcula basándote en descripción y características.'}`;
+
+            // 4. System instruction del motor de producción
+            const sysInst = `Eres RUBIK PROD-AI, motor de cálculo de producción de Rubik Bolivia (señalética, carpintería, metalmecánica, impresión gran formato — Santa Cruz, Bolivia).
+
+MISIÓN: Analizar imágenes/planos y generar APU de PRODUCCIÓN REAL con cálculos exactos.
+
+MATERIALES — REGLAS CRÍTICAS:
+- Tubería/perfil cuadrado-rectangular y ángulos: barras 6m estándar → metros lineales reales ÷ 6 → redondear ARRIBA → +8-12% desperdicio por cortes. NUNCA dividir metro total por 6 sin considerar cortes cortos que desperdician saldo.
+- Plancha galv/hierro/acero: 1.22×2.44m → distribución óptima de piezas → +10-15% desperdicio de corte.
+- MDF/Melamina/Aglomerado: planchas 1.83×2.44m o 1.22×2.44m → layout piezas → +15-20% desperdicio.
+- Acrílico: 1.22×2.44m. Mismo criterio tableros.
+- Lona/vinil: rollo 1.52m o 3.2m → metros lineales de corte + 5% sangría.
+- Perfiles aluminio: barras 6m. Igual tubería metálica.
+- Soldadura: 0.15-0.3 kg/m lineal según espesor. Electrodo: 1kg ≈ 40cm soldadura.
+- Pintura anticorrosiva: ~12m²/litro, 2 manos. Calcular superficie total.
+- Tornillería/anclajes: contar por punto de unión visible.
+
+MANO DE OBRA (jornales 8h):
+- Estructura metálica básica ≤3m²: 1-2 jornales soldador + 1 ayudante
+- Carpintería: 1 jornal ≈ 4-6m² tablero procesado
+- Vinilado/rotulación: ~2-3m²/hora operario calificado
+- Instalación campo: 1-2 jornales según dimensión y complejidad
+
+GEOMETRÍA: Usa trigonometría exacta (Pitágoras, seno/coseno). Si faltan medidas en la imagen, dedúcelas de proporciones o medidas parciales. Descomponer en formas básicas.
+
+SALIDA: responde SOLO con JSON válido sin texto fuera:
+{"resumen_analisis":"string","materiales":[{"nombre":"string","u":"unidad","q":número,"calculo":"cómo calculaste","p_ref":precio_Bs}],"mano_obra":[{"d":"actividad","u":"jornal","q":número}],"notas_ia":"supuestos y factores aplicados"}`;
+
+            // 5. Llamar API con claude-opus-4-8
+            const user = firebase.auth().currentUser;
+            const token = user ? await user.getIdToken() : null;
+            const headers = { 'Content-Type': 'application/json' };
+            if (token) headers['Authorization'] = 'Bearer ' + token;
+
+            const parts = [...imgParts, { text: userText }];
+            const resp = await fetch('/api/gemini', {
+                method: 'POST',
+                headers,
+                body: JSON.stringify({
+                    model: 'gemini-2.5-flash',
+                    advancedModel: true,
+                    contents: [{ role: 'user', parts }],
+                    systemInstruction: { parts: [{ text: sysInst }] },
+                    generationConfig: { maxOutputTokens: 8192 }
+                })
+            });
+            if (!resp.ok) throw new Error('Error API ' + resp.status);
+            const result = await resp.json();
+            const raw = result?.candidates?.[0]?.content?.parts?.[0]?.text || '{}';
+
+            let parsed;
+            try {
+                parsed = JSON.parse(raw.replace(/^```json\n?/, '').replace(/\n?```$/, '').trim());
+            } catch(e) {
+                const m = raw.match(/\{[\s\S]*\}/);
+                parsed = m ? JSON.parse(m[0]) : { resumen_analisis: 'Error de formato', notas_ia: raw.substring(0,200) };
+            }
+
+            // 6. Guardar y mostrar resultado
+            window._suppressRenderTasks = true;
+            await db.ref(`proyectos/${cid}/${pid}/presupuesto/items/${idx}/prod_apu_ia`).set(parsed);
+            if (allItems[idx]) allItems[idx].prod_apu_ia = parsed;
+
+            const zone = document.getElementById(`ia-zone-${idx}`);
+            if (zone) zone.innerHTML = buildIAApuHTML(idx, parsed);
+            if (btn) { btn.disabled = false; btn.innerHTML = '<i class="ph-bold ph-magic-wand"></i> Recalcular APU con IA'; }
+
+        } catch(e) {
+            console.error('recalcularConIA:', e);
+            alert('Error al calcular con IA: ' + e.message);
+            if (btn) { btn.disabled = false; btn.innerHTML = '<i class="ph-bold ph-magic-wand"></i> Calcular APU con IA'; }
+        }
+    };
+
+    window.aplicarAPUdeIA = function(idx) {
+        const item = allItems[idx];
+        if (!item?.prod_apu_ia) return;
+        if (!confirm('¿Aplicar el APU calculado por IA al APU de producción del ítem? Esto sobreescribirá el APU actual.')) return;
+        const data = item.prod_apu_ia;
+        const matRows = (data.materiales || []).map(m => ({
+            d: m.nombre || m.n || 'Material', u: m.u || 'und', q: Number(m.q) || 0, p: Number(m.p_ref) || 0
+        }));
+        const moRows = (data.mano_obra || []).map(m => ({
+            d: m.d || 'Mano de obra', u: m.u || 'jornal', q: Number(m.q) || 0, p: 0
+        }));
+        window._suppressRenderTasks = true;
+        db.ref(`proyectos/${cid}/${pid}/presupuesto/items/${idx}/prod_apu`).update({ mat: matRows, mo: moRows }).then(() => {
+            alert('APU aplicado. Recuerda revisar y ajustar los precios unitarios en el APU de producción.');
+        });
+    };
     
     function deleteGeneralImage(itemIdx, imgIdx, type, apuT) { 
         if(!confirm("¿Borrar esta imagen/plano?")) return; 
@@ -1777,6 +2050,7 @@
         else if (type === 'op') { db.ref(`proyectos/${cid}/${pid}/presupuesto/items/${itemIdx}/op_images/${imgIdx}`).remove(); } 
         else if (type === 'corte') { db.ref(`proyectos/${cid}/${pid}/presupuesto/items/${itemIdx}/cortes/${imgIdx}`).remove(); }
         else if (type === 'apu_corte') { db.ref(`proyectos/${cid}/${pid}/presupuesto/items/${itemIdx}/apu/${apuT}/${imgIdx}/corte_url`).remove(); }
+        else if (type === 'foto') { db.ref(`proyectos/${cid}/${pid}/presupuesto/items/${itemIdx}/fotos/${imgIdx}`).remove(); }
     }
     
     function openPieceUploadModal(itemIdx, apuType, apuIdx, measureIdx) { currentUploadTarget = { itemIdx, apuType, apuIdx, measureIdx }; document.getElementById('mod-piece-art').style.display = 'flex'; }
