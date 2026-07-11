@@ -495,9 +495,14 @@
     if (!firebase.apps.length) firebase.initializeApp(window._rubikFirebaseConfig);
     const db = firebase.database(); const storage = firebase.storage();
 
-    const cid = localStorage.getItem('rubik_client_id');
-    const pid = localStorage.getItem('rubik_current_pid');
-    const isWorker = new URLSearchParams(window.location.search).get('mode') === 'worker';
+    // URL params tienen prioridad — si vienen en el link (WhatsApp, QR, etc.) se usan directamente
+    const _urlP = new URLSearchParams(window.location.search);
+    const cid = _urlP.get('cid') || localStorage.getItem('rubik_client_id');
+    const pid = _urlP.get('pid') || localStorage.getItem('rubik_current_pid');
+    // Sincronizar localStorage para que la navegación interna funcione correctamente
+    if (_urlP.get('cid')) { localStorage.setItem('rubik_client_id', cid); }
+    if (_urlP.get('pid')) { localStorage.setItem('rubik_current_pid', pid); }
+    const isWorker = _urlP.get('mode') === 'worker';
 
     if(!cid || !pid) window.location.href="index.html";
 
