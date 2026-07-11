@@ -1769,6 +1769,20 @@ $$$QUOTE_DATA: [{"desc":"Nombre Item","feat":"Característica","cant":1,"und":"p
         // Apagar Live si cambia de pestaña
         if (mode !== 'live' && _liveSession) terminarLive();
 
+        if (mode === 'live') {
+            // Apagar modo conversación si estaba activo (evita que SpeechRecognition
+            // capture lo que se habla con Gemini y dispare sendAIMessage)
+            if (typeof _convMode !== 'undefined' && _convMode) {
+                window.toggleConvMode && window.toggleConvMode();
+            }
+            // Silenciar TTS robótico — Gemini Live tiene su propia voz natural
+            if (typeof VoiceUtils !== 'undefined' && VoiceUtils.ttsEnabled()) {
+                VoiceUtils.ttsToggle();
+                const ttsBtn = document.getElementById('btn-tts-ia');
+                if (ttsBtn) { ttsBtn.style.color = 'var(--gray,#888)'; ttsBtn.innerHTML = '<i class="ph-bold ph-speaker-slash"></i>'; }
+            }
+        }
+
         // Ocultar/mostrar panel Live
         const lp = document.getElementById('live-panel');
         if (lp) lp.classList.toggle('active', mode === 'live');
