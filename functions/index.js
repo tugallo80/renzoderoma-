@@ -178,6 +178,26 @@ Client description: ${descripcion}`,
     }
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Credencial Gemini Live — devuelve la API key a usuarios autenticados.
+// El WebSocket de Gemini Live no se puede proxy por Cloud Functions HTTP,
+// así que el cliente lo conecta directo con la key obtenida aquí.
+// ─────────────────────────────────────────────────────────────────────────────
+exports.geminiLiveKey = onRequest({
+    secrets: [GEMINI_API_KEY],
+    timeoutSeconds: 10,
+    memory: "128MiB",
+    region: "us-central1",
+    invoker: "public",
+    cors: false,
+}, async (req, res) => {
+    applyCors(req, res);
+    if (req.method === "OPTIONS") return res.status(204).send("");
+    const decoded = await requireAuth(req, res);
+    if (!decoded) return;
+    return res.status(200).json({ key: GEMINI_API_KEY.value() });
+});
+
 // ── Opciones de funciones ─────────────────────────────────────────────────────
 
 // procesarIngestaIA: Claude (base de datos — materiales, APU, mano de obra)

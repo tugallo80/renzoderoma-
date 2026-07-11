@@ -168,6 +168,40 @@
             .cms-sidebar { width: 100%; border-right: none; border-bottom: 1px solid var(--border); flex-direction: row; overflow-x: auto; padding-bottom: 5px;}
             .cms-menu-btn { white-space: nowrap; }
         }
+
+        /* ── GEMINI LIVE ── */
+        .live-body { display: none; flex: 1; flex-direction: column; align-items: center; justify-content: space-between; background: #000; padding: 30px 20px 20px; overflow: hidden; }
+        .live-body.active { display: flex; }
+
+        .live-orb-wrap { position: relative; display: flex; align-items: center; justify-content: center; flex: 1; }
+        .live-orb { width: 140px; height: 140px; border-radius: 50%; background: radial-gradient(circle at 40% 35%, #7c3aed, #5856d6 60%, #1c1c1e); box-shadow: 0 0 0 0 rgba(124,58,237,0.5); transition: transform 0.2s; }
+        .live-orb.speaking { animation: orb-pulse 0.8s ease-in-out infinite alternate; }
+        .live-orb.listening { animation: orb-breathe 2s ease-in-out infinite; }
+        @keyframes orb-pulse   { from { transform: scale(1);    box-shadow: 0 0 0 8px  rgba(124,58,237,0.3); } to { transform: scale(1.12); box-shadow: 0 0 0 24px rgba(124,58,237,0); } }
+        @keyframes orb-breathe { 0%,100% { transform: scale(1);    box-shadow: 0 0 0 6px  rgba(124,58,237,0.2); } 50% { transform: scale(1.05); box-shadow: 0 0 0 14px rgba(124,58,237,0.1); } }
+
+        .live-logo { position: absolute; width: 56px; height: 56px; border-radius: 50%; object-fit: contain; background: #fff; border: 2px solid rgba(255,255,255,0.3); pointer-events: none; }
+
+        .live-status { font-size: 13px; font-weight: 700; color: var(--gray); margin-top: 18px; letter-spacing: 0.5px; text-transform: uppercase; }
+        .live-status.st-ready     { color: var(--green); }
+        .live-status.st-listening { color: var(--blue); }
+        .live-status.st-thinking  { color: var(--orange); }
+        .live-status.st-speaking  { color: var(--purple); }
+        .live-status.st-error     { color: var(--red); }
+
+        .live-transcript { width: 100%; max-height: 130px; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; padding: 0 4px; scrollbar-width: none; }
+        .live-transcript::-webkit-scrollbar { display: none; }
+        .live-msg-user { align-self: flex-end; background: var(--blue); color: white; padding: 8px 13px; border-radius: 14px; border-bottom-right-radius: 4px; font-size: 13px; max-width: 80%; }
+        .live-msg-ai   { align-self: flex-start; background: #1c1c1e; color: white; border: 1px solid var(--border); padding: 8px 13px; border-radius: 14px; border-bottom-left-radius: 4px; font-size: 13px; max-width: 80%; }
+
+        .live-actions { display: flex; gap: 20px; align-items: center; margin-top: 20px; }
+        .btn-live-end { width: 64px; height: 64px; border-radius: 50%; background: var(--red); color: white; border: none; font-size: 28px; display: flex; align-items: center; justify-content: center; cursor: pointer; box-shadow: 0 6px 20px rgba(255,59,48,0.4); transition: transform 0.15s; }
+        .btn-live-end:active { transform: scale(0.9); }
+        .btn-live-mute { width: 48px; height: 48px; border-radius: 50%; background: #1c1c1e; color: var(--gray); border: 1px solid var(--border); font-size: 22px; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: 0.2s; }
+        .btn-live-mute.muted { background: #3a1a1a; color: var(--red); border-color: var(--red); }
+        .btn-live-start { width: 100%; padding: 18px; background: linear-gradient(135deg, #7c3aed, #5856d6); color: white; border: none; border-radius: 16px; font-size: 16px; font-weight: 900; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 10px; box-shadow: 0 8px 20px rgba(124,58,237,0.4); transition: transform 0.15s; }
+        .btn-live-start:active { transform: scale(0.98); }
+        .btn-live-start:disabled { opacity: 0.5; cursor: not-allowed; }
     </style>
     <link rel="stylesheet" href="/css/responsive.css?v=1">
 </head>
@@ -221,8 +255,9 @@
                 </div>
 
                 <div class="ia-tabs">
-                    <button id="tab-gen" class="ia-tab-btn active" onclick="setIAMode('general')"><i class="ph-bold ph-chats"></i> CONSULTOR GLOBAL</button>
-                    <button id="tab-flash" class="ia-tab-btn" onclick="setIAMode('flash')"><i class="ph-bold ph-lightning"></i> COTIZACIÓN FLASH</button>
+                    <button id="tab-gen" class="ia-tab-btn active" onclick="setIAMode('general')"><i class="ph-bold ph-chats"></i> CONSULTOR</button>
+                    <button id="tab-flash" class="ia-tab-btn" onclick="setIAMode('flash')"><i class="ph-bold ph-lightning"></i> FLASH</button>
+                    <button id="tab-live" class="ia-tab-btn" onclick="setIAMode('live')" style="color:#af52de;"><i class="ph-bold ph-waveform"></i> EN VIVO</button>
                 </div>
             </div>
             
@@ -269,6 +304,36 @@
             
             <div class="flash-footer" id="flash-footer" style="display:none;">
                 <button class="btn-flash-save" onclick="prepararCreacionFlash()"><i class="ph-bold ph-rocket-launch"></i> Generar e Inyectar Proyecto</button>
+            </div>
+
+            <!-- ── GEMINI LIVE PANEL ── -->
+            <div class="live-body" id="live-panel">
+                <div class="live-orb-wrap">
+                    <div class="live-orb" id="live-orb"></div>
+                    <img loading="lazy" decoding="async" src="LOGO-IA-RUBIK.jpg" class="live-logo" onerror="this.src='./LOGO-IA-RUBIK.jpg'">
+                </div>
+                <div class="live-status" id="live-status">Tocá "Iniciar" para hablar</div>
+
+                <div class="live-transcript" id="live-transcript"></div>
+
+                <!-- Pantalla de inicio -->
+                <div id="live-start-ui" style="width:100%;">
+                    <button class="btn-live-start" id="btn-live-start" onclick="iniciarLive()">
+                        <i class="ph-fill ph-waveform"></i> Iniciar conversación en vivo
+                    </button>
+                </div>
+
+                <!-- Pantalla de llamada activa -->
+                <div id="live-call-ui" style="display:none; width:100%; flex-direction:column; align-items:center; gap:10px;">
+                    <div class="live-actions">
+                        <button class="btn-live-mute" id="btn-live-mute" onclick="toggleLiveMute()" title="Silenciar micrófono">
+                            <i class="ph-bold ph-microphone"></i>
+                        </button>
+                        <button class="btn-live-end" onclick="terminarLive()" title="Colgar">
+                            <i class="ph-bold ph-phone-x"></i>
+                        </button>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
@@ -1677,6 +1742,7 @@ $$$QUOTE_DATA: [{"desc":"Nombre Item","feat":"Característica","cant":1,"und":"p
             } else if (retries > 0) { setTimeout(function(){ waitAuthWA(retries-1); }, 200); }
         })(25);
     </script>
+    <script src="/js/gemini-live.js?v=1"></script>
     <script src="/js/viewmode.js?v=1"></script>
     <script src="/js/voice-utils.js"></script>
     <script>
@@ -1688,6 +1754,196 @@ $$$QUOTE_DATA: [{"desc":"Nombre Item","feat":"Característica","cant":1,"und":"p
                 };
             }
         });
+    </script>
+
+    <script>
+    // ═══════════════════════════════════════════════════════════════
+    // GEMINI LIVE — lógica de UI
+    // ═══════════════════════════════════════════════════════════════
+    let _liveSession = null;
+    let _liveMuted   = false;
+
+    // Extender setIAMode para manejar la pestaña Live
+    const _origSetIAMode = window.setIAMode;
+    window.setIAMode = function(mode) {
+        // Apagar Live si cambia de pestaña
+        if (mode !== 'live' && _liveSession) terminarLive();
+
+        // Ocultar/mostrar panel Live
+        const lp = document.getElementById('live-panel');
+        if (lp) lp.classList.toggle('active', mode === 'live');
+
+        // Tabs
+        document.querySelectorAll('.ia-tab-btn').forEach(b => b.classList.remove('active'));
+        const tabEl = document.getElementById('tab-' + (mode === 'general' ? 'gen' : mode === 'flash' ? 'flash' : 'live'));
+        if (tabEl) tabEl.classList.add('active');
+
+        if (mode === 'live') {
+            // Ocultar el resto
+            document.getElementById('ai-chat-box').style.display  = 'none';
+            document.getElementById('chat-footer').style.display  = 'none';
+            document.getElementById('flash-table-view').classList.remove('active');
+            document.getElementById('flash-footer').style.display = 'none';
+            currentIAMode = 'live';
+        } else {
+            _origSetIAMode(mode);
+        }
+    };
+
+    // Cerrar Live también al cerrar el modal
+    const _origCloseAIChat = window.closeAIChat;
+    window.closeAIChat = function() {
+        if (_liveSession) terminarLive();
+        _origCloseAIChat();
+    };
+
+    function _liveSetOrb(state) {
+        const orb = document.getElementById('live-orb');
+        if (!orb) return;
+        orb.classList.remove('speaking', 'listening');
+        if (state === 'speaking') orb.classList.add('speaking');
+        else if (state === 'listening') orb.classList.add('listening');
+    }
+
+    function _liveSetStatus(txt, cls) {
+        const el = document.getElementById('live-status');
+        if (!el) return;
+        el.textContent = txt;
+        el.className = 'live-status ' + (cls || '');
+    }
+
+    function _liveAddMsg(role, text) {
+        if (!text || !text.trim()) return;
+        const box = document.getElementById('live-transcript');
+        if (!box) return;
+        const d = document.createElement('div');
+        d.className = role === 'user' ? 'live-msg-user' : 'live-msg-ai';
+        d.textContent = text;
+        box.appendChild(d);
+        box.scrollTop = box.scrollHeight;
+    }
+
+    window.iniciarLive = async function() {
+        const btn = document.getElementById('btn-live-start');
+        if (btn) { btn.disabled = true; btn.innerHTML = '<i class="ph-bold ph-spinner-gap" style="animation:spin 1s linear infinite;"></i> Conectando...'; }
+        _liveSetStatus('Conectando con Gemini...', '');
+        document.getElementById('live-transcript').innerHTML = '';
+
+        // Construir system instruction (misma lógica que sendAIMessage)
+        let sysPrompt = '';
+        try {
+            const contextDB = await getContextDB();
+            const [snapPrompt, snapTags, snapReglas] = await Promise.all([
+                db.ref('config_ia/prompts/index_consultor').once('value'),
+                db.ref('config_ia/custom_tags').once('value'),
+                db.ref('config_ia/reglas_tecnicas').once('value')
+            ]);
+            sysPrompt = (snapPrompt.exists() && snapPrompt.val()) ? snapPrompt.val() : (dicDefaultPrompts['index_consultor'] || '');
+            if (snapTags.exists()) {
+                Object.entries(snapTags.val()).forEach(([k,v]) => {
+                    sysPrompt = sysPrompt.replace(new RegExp('\\['+k+'\\]','g'), v);
+                });
+            }
+            if (snapReglas.exists()) {
+                const activas = Object.values(snapReglas.val()).filter(r => r.activa !== false);
+                if (activas.length) {
+                    sysPrompt += '\n\nREGLAS TÉCNICAS:\n' + activas.map(r=>`• ${r.nombre}: ${r.texto}`).join('\n');
+                }
+            }
+            sysPrompt = sysPrompt
+                .replace('[CONTEXTO_CLIENTES]',    JSON.stringify(contextDB.clientes))
+                .replace('[CONTEXTO_PROYECTOS]',   JSON.stringify(contextDB.proyectos))
+                .replace('[CONTEXTO_LICITACIONES]',JSON.stringify(contextDB.licitaciones))
+                .replace('[CONTEXTO_INGRESOS]',    JSON.stringify(contextDB.ingresos))
+                .replace('[CONTEXTO_MATERIALES]',  contextDB.materiales.join('; '))
+                .replace('[CONTEXTO_MO]',          contextDB.mo.join('; '))
+                .replace('[CONTEXTO_ITEMS]',       contextDB.items.join('; '))
+                .replace('[CONTEXTO_PERSONAL]',    contextDB.personal.join(', '));
+
+            // Nota de voz
+            sysPrompt += '\n\nIMPORTANTE: Estás en modo de voz en tiempo real. Respuestas CORTAS y DIRECTAS. Sin listas largas, sin markdown. Máximo 3 oraciones por respuesta a menos que el CEO pida detalles.';
+        } catch(e) {
+            sysPrompt = 'Eres el Cerebro Ejecutivo de Rubik Bolivia, empresa de señalética y publicidad. Asistente de voz directo y conciso.';
+        }
+
+        _liveSession = new GeminiLive();
+
+        _liveSession.onStateChange = (s) => {
+            const labels = {
+                connecting: ['Conectando...', ''],
+                ready:      ['Listo — hablá', 'st-ready'],
+                listening:  ['Escuchando...', 'st-listening'],
+                thinking:   ['Procesando...', 'st-thinking'],
+                speaking:   ['Respondiendo',  'st-speaking'],
+                error:      ['Error de conexión', 'st-error'],
+                closed:     ['Sesión terminada', '']
+            };
+            const [txt, cls] = labels[s] || ['...', ''];
+            _liveSetStatus(txt, cls);
+            _liveSetOrb(s === 'speaking' ? 'speaking' : (s === 'listening' ? 'listening' : ''));
+        };
+
+        _liveSession.onReady = () => {
+            document.getElementById('live-start-ui').style.display = 'none';
+            const callUi = document.getElementById('live-call-ui');
+            callUi.style.display = 'flex';
+        };
+
+        _liveSession.onUserSpeech = (txt) => _liveAddMsg('user', txt);
+        _liveSession.onAISpeech   = (txt) => _liveAddMsg('ai', txt);
+
+        _liveSession.onError = (msg) => {
+            _liveSetStatus('Error: ' + msg, 'st-error');
+            const btn2 = document.getElementById('btn-live-start');
+            if (btn2) { btn2.disabled = false; btn2.innerHTML = '<i class="ph-fill ph-waveform"></i> Intentar de nuevo'; }
+            document.getElementById('live-start-ui').style.display = 'block';
+            document.getElementById('live-call-ui').style.display  = 'none';
+            _liveSession = null;
+        };
+
+        await _liveSession.start(sysPrompt);
+    };
+
+    window.terminarLive = function() {
+        if (_liveSession) { _liveSession.stop(); _liveSession = null; }
+        _liveMuted = false;
+        _liveSetOrb('');
+        _liveSetStatus('Tocá "Iniciar" para hablar', '');
+        document.getElementById('live-start-ui').style.display  = 'block';
+        document.getElementById('live-call-ui').style.display   = 'none';
+        const btn = document.getElementById('btn-live-start');
+        if (btn) { btn.disabled = false; btn.innerHTML = '<i class="ph-fill ph-waveform"></i> Iniciar conversación en vivo'; }
+        const mute = document.getElementById('btn-live-mute');
+        if (mute) { mute.classList.remove('muted'); mute.innerHTML = '<i class="ph-bold ph-microphone"></i>'; }
+    };
+
+    window.toggleLiveMute = function() {
+        if (!_liveSession) return;
+        _liveMuted = !_liveMuted;
+        // Desconectar/reconectar el ScriptProcessor no es directo; controlamos via flag en GeminiLive
+        if (_liveSession.processor) {
+            if (_liveMuted) {
+                _liveSession.processor.onaudioprocess = null;
+            } else {
+                // Restaurar el handler original
+                const s = _liveSession;
+                s.processor.onaudioprocess = (e) => {
+                    if (!s.ws || s.ws.readyState !== WebSocket.OPEN || !s.ready) return;
+                    const f32 = e.inputBuffer.getChannelData(0);
+                    const resampled = s._resample(f32, s.nativeRate, 16000);
+                    const pcm16 = s._f32ToPcm16(resampled);
+                    const b64 = s._toBase64(pcm16.buffer);
+                    s.ws.send(JSON.stringify({ realtimeInput: { mediaChunks: [{ mimeType:'audio/pcm;rate=16000', data:b64 }] } }));
+                };
+            }
+        }
+        const btn = document.getElementById('btn-live-mute');
+        if (btn) {
+            btn.classList.toggle('muted', _liveMuted);
+            btn.innerHTML = _liveMuted ? '<i class="ph-bold ph-microphone-slash"></i>' : '<i class="ph-bold ph-microphone"></i>';
+        }
+        _liveSetStatus(_liveMuted ? 'Micrófono silenciado' : 'Escuchando...', _liveMuted ? '' : 'st-listening');
+    };
     </script>
 </body>
 </html>
