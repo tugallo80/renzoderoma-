@@ -531,7 +531,10 @@ input[type=number].stroke-inp {
 
 <!-- TOP BAR -->
 <div id="top-bar">
-  <button class="btn-back" onclick="goBack()">&#8592; Diseños</button>
+  <button class="btn-back" id="btn-back-cad" onclick="goBack()">&#8592; Diseños</button>
+  <button class="btn" id="btn-enviar-item" style="display:none; background:var(--green); color:#fff; border-color:var(--green); font-weight:700;" onclick="enviarAlItem()">
+    <i class="ph ph-check-circle"></i> Enviar al Ítem
+  </button>
   <div class="bar-div"></div>
   <div class="seg-ctrl" id="unit-ctrl">
     <button onclick="setUnit('cm')" id="unit-cm" class="active">cm</button>
@@ -659,6 +662,7 @@ input[type=number].stroke-inp {
 <!-- SHAPE ACTIONS FLOATING BAR -->
 <div id="shape-actions" style="display:none">
   <button onclick="editSelectedShape()"><i class="ph ph-pencil"></i> Editar</button>
+  <button onclick="anotarShape()" style="color:var(--orange);"><i class="ph ph-tag"></i> Describir</button>
   <button onclick="sectionSelectedShape()"><i class="ph ph-scissors"></i> Seccionar</button>
   <button onclick="extrudeSelectedShape()"><i class="ph ph-cube"></i> Extruir</button>
   <button class="sa-rotate" onclick="rotateSelected(-15)" style="display:none"><i class="ph ph-arrow-counter-clockwise"></i> -15°</button>
@@ -693,6 +697,9 @@ try {
 const urlParams = new URLSearchParams(location.search);
 const CLIENT_ID = urlParams.get('cid') || '';
 const PROJECT_ID = urlParams.get('pid') || '';
+const RETURN_ITEM_IDX = urlParams.get('itemIdx') || '';
+const RETURN_TO = urlParams.get('returnTo') || '';
+const IS_RETURN_MODE = RETURN_TO === 'produccion' && RETURN_ITEM_IDX !== '';
 
 // ============================================================
 //  UUID
@@ -1149,6 +1156,30 @@ function drawShape(sh) {
   if ((sh.sectionsH > 0 || sh.sectionsV > 0 || sh.sectionsAngular > 0) && !_is3D) drawSections(sh);
   if (sh.extruded && sh.extrudeH > 0) { drawExtrusion(sh); drawExtrudedSections(sh); }
   if (sh.autoDim) drawAutoDim(sh);
+  // Etiqueta de descripción (anotación de material)
+  if (sh.desc) {
+    var _bb = getShapeBBox(sh);
+    if (_bb) {
+      var _cx = (_bb.minX + _bb.maxX) / 2, _cy = (_bb.minY + _bb.maxY) / 2;
+      var _sp = worldToScreen(_cx, _cy);
+      ctx.save();
+      ctx.font = 'bold 11px -apple-system, sans-serif';
+      var _metrics = ctx.measureText(sh.desc);
+      var _lw = _metrics.width + 12, _lh = 18;
+      var _lx = _sp.x - _lw / 2, _ly = _sp.y - _lh - 8;
+      ctx.fillStyle = 'rgba(255,149,0,0.92)';
+      ctx.strokeStyle = '#fff';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      if (ctx.roundRect) { ctx.roundRect(_lx, _ly, _lw, _lh, 4); } else { ctx.rect(_lx, _ly, _lw, _lh); }
+      ctx.fill(); ctx.stroke();
+      ctx.fillStyle = '#fff';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(sh.desc, _sp.x, _ly + _lh / 2);
+      ctx.restore();
+    }
+  }
   ctx.restore();
 }
 
@@ -2509,8 +2540,97 @@ function loadFromProject() {
 //  NAVIGATION
 // ============================================================
 function goBack() {
-  if (window.history.length>1) window.history.back();
-  else window.location.href='disenos.html'+(CLIENT_ID?'?cid='+CLIENT_ID+'&pid='+PROJECT_ID:'');
+  if (IS_RETURN_MODE) {
+    window.location.href = 'produccion.html?cid=' + CLIENT_ID + '&pid=' + PROJECT_ID;
+    return;
+  }
+  if (window.history.length > 1) window.history.back();
+  else window.location.href = 'disenos.html' + (CLIENT_ID ? '?cid=' + CLIENT_ID + '&pid=' + PROJECT_ID : '');
+}
+
+// ── Enviar plano al ítem de producción ───────────────────────────────────
+async function enviarAlItem() {
+  if (!IS_RETURN_MODE || !RETURN_ITEM_IDX) { showToast('No hay ítem destino'); return; }
+  if (!fbDb || !CLIENT_ID || !PROJECT_ID) { showToast('Falta configurar proyecto'); return; }
+
+  showToast('Exportando plano...');
+
+  // Export canvas (desactivar grid y selección para imagen limpia)
+  var prevDark = state.darkMode, prevGrid = state.gridOn, prevSel = state.selectedId;
+  state.darkMode = false; state.gridOn = false; state.selectedId = null;
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+  for (var _li = 0; _li < state.layers.length; _li++) {
+    if (!state.layers[_li].visible) continue;
+    ctx.save();
+    ctx.globalAlpha = typeof state.layers[_li].opacity === 'number' ? state.layers[_li].opacity : 1;
+    for (var _si = 0; _si < state.layers[_li].shapes.length; _si++) drawShape(state.layers[_li].shapes[_si]);
+    ctx.restore();
+  }
+  var jpegUrl = canvas.toDataURL('image/jpeg', 0.82);
+  state.darkMode = prevDark; state.gridOn = prevGrid; state.selectedId = prevSel; setDirty();
+
+  // Recopilar anotaciones
+  var annotations = [];
+  state.layers.forEach(function(layer) {
+    if (!layer.visible) return;
+    layer.shapes.forEach(function(sh) {
+      if (sh.desc && sh.desc.trim()) {
+        annotations.push({ type: sh.type, desc: sh.desc.trim() });
+      }
+    });
+  });
+
+  try {
+    await fbDb.ref('proyectos/' + CLIENT_ID + '/' + PROJECT_ID +
+      '/presupuesto/items/' + RETURN_ITEM_IDX + '/fotos').push({
+      url: jpegUrl,
+      name: 'Plano CAD',
+      annotations: annotations.length > 0 ? annotations : null,
+      savedAt: Date.now()
+    });
+    showToast('✓ Plano enviado al ítem');
+    setTimeout(function() {
+      window.location.href = 'produccion.html?cid=' + CLIENT_ID + '&pid=' + PROJECT_ID;
+    }, 900);
+  } catch(e) {
+    showToast('Error al guardar: ' + e.message);
+  }
+}
+
+// ── Anotar shape (descripción de material) ───────────────────────────────
+function anotarShape() {
+  var sh = getSelectedShape();
+  if (!sh) { showToast('Seleccioná un elemento primero'); return; }
+  var current = sh.desc || '';
+  var overlay = document.getElementById('modal-overlay');
+  var content = document.getElementById('modal-content');
+  content.innerHTML = '<h3 style="margin-bottom:14px;">Describir elemento</h3>' +
+    '<div class="modal-field"><label>Material / Descripción (ej: Tubería 20×20mm)</label>' +
+    '<input type="text" id="shape-desc-inp" value="' + current.replace(/"/g, '&quot;').replace(/'/g, '&#39;') + '" ' +
+    'placeholder="Ej: Tubería 20×20mm, barra 6m" style="font-size:15px;">' +
+    '</div>' +
+    '<div class="modal-btns">' +
+    '<button class="modal-btn" onclick="document.getElementById(\'modal-overlay\').classList.add(\'hidden\')">Cancelar</button>' +
+    '<button class="modal-btn" style="background:var(--blue);color:#fff;border-color:var(--blue);" onclick="guardarDescShape()">Guardar</button>' +
+    '</div>';
+  overlay.classList.remove('hidden');
+  setTimeout(function() {
+    var inp = document.getElementById('shape-desc-inp');
+    if (inp) { inp.focus(); inp.select(); }
+  }, 80);
+}
+
+function guardarDescShape() {
+  var sh = getSelectedShape();
+  if (!sh) return;
+  var inp = document.getElementById('shape-desc-inp');
+  var val = inp ? inp.value.trim() : '';
+  sh.desc = val || undefined;
+  document.getElementById('modal-overlay').classList.add('hidden');
+  setDirty();
+  render();
+  showToast(val ? 'Descripción guardada' : 'Descripción eliminada');
 }
 
 // ============================================================
@@ -2632,6 +2752,15 @@ function init() {
 }
 
 init();
+
+// Configurar modo retorno al ítem
+if (IS_RETURN_MODE) {
+  var _envBtn = document.getElementById('btn-enviar-item');
+  var _backBtn = document.getElementById('btn-back-cad');
+  if (_envBtn) _envBtn.style.display = 'inline-flex';
+  if (_backBtn) _backBtn.textContent = '← Producción';
+  showToast('Modo ítem: dibujá el plano y tocá "Enviar al Ítem"');
+}
 </script>
 </body>
 </html>

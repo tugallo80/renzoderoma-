@@ -91,7 +91,7 @@ function geminiPartsToClaudeContent(parts) {
 async function llamarClaude(anthropicKey, messages, systemText, maxTokens, model) {
     const body = {
         model: model || "claude-haiku-4-5",
-        max_tokens: Math.min(maxTokens || 4096, 4000),
+        max_tokens: Math.min(maxTokens || 4096, 8192),
         messages,
     };
     // Prompt caching: cachea el system prompt (se reutiliza por 5 min, costo 10% en hits)
@@ -427,14 +427,12 @@ MATERIALES — ESPEJOS/VIDRIO: Para paneles de espejo la estructura es tubín me
             throw new Error("El body debe contener 'contents', 'parts', 'prompt' o 'text'");
         }
 
-        // Haiku para presupuesto/cotización — 5x más barato que Sonnet, con caching queda ~$0.01/req
-        const text = await llamarClaude(
-            anthropicKey,
-            messages,
-            systemText,
-            generationConfig?.maxOutputTokens,
-            "claude-haiku-4-5"
-        );
+        // advancedModel=true usa Opus para análisis complejos (producción, APU con imágenes)
+        const chosenModel = body.advancedModel === true ? "claude-opus-4-8" : "claude-haiku-4-5";
+        const maxOut = body.advancedModel === true
+            ? Math.min(generationConfig?.maxOutputTokens || 8192, 8192)
+            : generationConfig?.maxOutputTokens;
+        const text = await llamarClaude(anthropicKey, messages, systemText, maxOut, chosenModel);
 
         // Devolver en formato Gemini para que el frontend existente lo lea sin cambios
         return res.status(200).json({
