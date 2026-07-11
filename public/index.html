@@ -1922,46 +1922,48 @@ $$$QUOTE_DATA: [{"desc":"Nombre Item","feat":"Característica","cant":1,"und":"p
         const btn = document.getElementById('btn-live-start');
         if (btn) { btn.disabled = true; btn.innerHTML = '<i class="ph-bold ph-spinner-gap" style="animation:spin 1s linear infinite;"></i>'; }
         _liveSetStatus('Iniciando Agente IA...', '');
-        document.getElementById('live-transcript').innerHTML = '';
 
-        // Construir system instruction (misma lógica que sendAIMessage)
-        let sysPrompt = '';
+        // Prompt base inmediato — no espera Firebase
+        const _basePrompt = 'Eres el Cerebro Ejecutivo de Rubik Bolivia, empresa de señalética y publicidad en Bolivia. ' +
+            'Asistente de voz directo y conciso. Máximo 3 oraciones por respuesta. Sin markdown ni listas largas.';
+
+        // Cargar contexto completo con timeout de 4s — si falla, usa base
+        let sysPrompt = _basePrompt;
         try {
-            const contextDB = await getContextDB();
-            const [snapPrompt, snapTags, snapReglas] = await Promise.all([
-                db.ref('config_ia/prompts/index_consultor').once('value'),
-                db.ref('config_ia/custom_tags').once('value'),
-                db.ref('config_ia/reglas_tecnicas').once('value')
-            ]);
-            sysPrompt = (snapPrompt.exists() && snapPrompt.val()) ? snapPrompt.val() : (dicDefaultPrompts['index_consultor'] || '');
-            if (snapTags.exists()) {
-                Object.entries(snapTags.val()).forEach(([k,v]) => {
-                    sysPrompt = sysPrompt.replace(new RegExp('\\['+k+'\\]','g'), v);
-                });
-            }
-            if (snapReglas.exists()) {
-                const activas = Object.values(snapReglas.val()).filter(r => r.activa !== false);
-                if (activas.length) {
-                    sysPrompt += '\n\nREGLAS TÉCNICAS:\n' + activas.map(r=>`• ${r.nombre}: ${r.texto}`).join('\n');
+            const _timeout = new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 4000));
+            const _loadCtx = async () => {
+                const contextDB = await getContextDB();
+                const [snapPrompt, snapTags, snapReglas] = await Promise.all([
+                    db.ref('config_ia/prompts/index_consultor').once('value'),
+                    db.ref('config_ia/custom_tags').once('value'),
+                    db.ref('config_ia/reglas_tecnicas').once('value')
+                ]);
+                let sp = (snapPrompt.exists() && snapPrompt.val()) ? snapPrompt.val() : (dicDefaultPrompts['index_consultor'] || _basePrompt);
+                if (snapTags.exists()) {
+                    Object.entries(snapTags.val()).forEach(([k,v]) => {
+                        sp = sp.replace(new RegExp('\\['+k+'\\]','g'), v);
+                    });
                 }
-            }
-            sysPrompt = sysPrompt
-                .replace('[CONTEXTO_CLIENTES]',    JSON.stringify(contextDB.clientes))
-                .replace('[CONTEXTO_PROYECTOS]',   JSON.stringify(contextDB.proyectos))
-                .replace('[CONTEXTO_LICITACIONES]',JSON.stringify(contextDB.licitaciones))
-                .replace('[CONTEXTO_INGRESOS]',    JSON.stringify(contextDB.ingresos))
-                .replace('[CONTEXTO_MATERIALES]',  contextDB.materiales.join('; '))
-                .replace('[CONTEXTO_MO]',          contextDB.mo.join('; '))
-                .replace('[CONTEXTO_ITEMS]',       contextDB.items.join('; '))
-                .replace('[CONTEXTO_PERSONAL]',    contextDB.personal.join(', '));
+                if (snapReglas.exists()) {
+                    const activas = Object.values(snapReglas.val()).filter(r => r.activa !== false);
+                    if (activas.length) sp += '\n\nREGLAS TÉCNICAS:\n' + activas.map(r=>`• ${r.nombre}: ${r.texto}`).join('\n');
+                }
+                sp = sp
+                    .replace('[CONTEXTO_CLIENTES]',    JSON.stringify(contextDB.clientes))
+                    .replace('[CONTEXTO_PROYECTOS]',   JSON.stringify(contextDB.proyectos))
+                    .replace('[CONTEXTO_LICITACIONES]',JSON.stringify(contextDB.licitaciones))
+                    .replace('[CONTEXTO_INGRESOS]',    JSON.stringify(contextDB.ingresos))
+                    .replace('[CONTEXTO_MATERIALES]',  contextDB.materiales.join('; '))
+                    .replace('[CONTEXTO_MO]',          contextDB.mo.join('; '))
+                    .replace('[CONTEXTO_ITEMS]',       contextDB.items.join('; '))
+                    .replace('[CONTEXTO_PERSONAL]',    contextDB.personal.join(', '));
+                sp += '\n\nIMPORTANTE: Estás en modo de voz. Respuestas CORTAS y DIRECTAS. Sin markdown.';
+                return sp;
+            };
+            sysPrompt = await Promise.race([_loadCtx(), _timeout]);
+        } catch(_) { /* usa _basePrompt */ }
 
-            // Nota de voz
-            sysPrompt += '\n\nIMPORTANTE: Estás en modo de voz en tiempo real. Respuestas CORTAS y DIRECTAS. Sin listas largas, sin markdown. Máximo 3 oraciones por respuesta a menos que el CEO pida detalles.';
-        } catch(e) {
-            sysPrompt = 'Eres el Cerebro Ejecutivo de Rubik Bolivia, empresa de señalética y publicidad. Asistente de voz directo y conciso.';
-        }
-
-        _liveSession = new GeminiLive();
+        _liveSession = new CerebroLive();
 
         _liveSession.onStateChange = (s) => {
             const labels = {
