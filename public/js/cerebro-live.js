@@ -1,0 +1,205 @@
+/**
+ * Rubik OS — CerebroLive
+ * Conversación de voz en tiempo real usando Web Speech API + Claude Haiku.
+ * Reemplaza Gemini Live WebSocket eliminando dependencia de Google.
+ *
+ * Flujo:
+ *   1. SpeechRecognition  → usuario habla → texto
+ *   2. /api/gemini         → Claude Haiku  → respuesta texto
+ *   3. SpeechSynthesis    → reproduce respuesta en voz
+ *   4. Repite desde 1
+ *
+ * Misma interfaz de callbacks que la clase anterior GeminiLive.
+ */
+class CerebroLive {
+    constructor() {
+        this.recognition        = null;
+        this.active             = false;
+        this._muted             = false;
+        this._speaking          = false;
+        this._thinking          = false;
+        this._sysPrompt         = '';
+        this._pendingRestart    = null;
+
+        // Callbacks (mismos que GeminiLive para compatibilidad)
+        this.onReady       = null;   // ()
+        this.onUserSpeech  = null;   // (text)
+        this.onAISpeech    = null;   // (text)
+        this.onStateChange = null;   // ('connecting'|'ready'|'listening'|'thinking'|'speaking'|'error'|'closed')
+        this.onError       = null;   // (msg)
+    }
+
+    // ─── Iniciar sesión ──────────────────────────────────────────────────────
+    async start(sysPrompt) {
+        this._sysPrompt = sysPrompt;
+        this._setState('connecting');
+
+        // Verificar acceso al micrófono
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            stream.getTracks().forEach(t => t.stop());
+        } catch(e) {
+            this._onErr('Micrófono no disponible: ' + e.message);
+            return;
+        }
+
+        const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+        if (!SR) {
+            this._onErr('Tu navegador no soporta reconocimiento de voz');
+            return;
+        }
+
+        this._setupRecognition(SR);
+        this.active = true;
+
+        this._setState('ready');
+        if (this.onReady) this.onReady();
+        this._startListening();
+    }
+
+    // ─── Configurar SpeechRecognition ────────────────────────────────────────
+    _setupRecognition(SR) {
+        this.recognition = new SR();
+        this.recognition.lang            = navigator.language || 'es-BO';
+        this.recognition.continuous      = false;
+        this.recognition.interimResults  = false;
+        this.recognition.maxAlternatives = 1;
+
+        this.recognition.onstart = () => {
+            if (!this._speaking && !this._thinking) this._setState('listening');
+        };
+
+        this.recognition.onresult = (ev) => {
+            const text = ev.results[0][0].transcript.trim();
+            if (!text) return;
+            if (this.onUserSpeech) this.onUserSpeech(text);
+            this._askClaude(text);
+        };
+
+        this.recognition.onerror = (ev) => {
+            if (ev.error === 'no-speech' || ev.error === 'aborted') {
+                this._scheduleRestart(500);
+            } else if (ev.error === 'not-allowed') {
+                this._onErr('Permiso de micrófono denegado');
+            } else {
+                this._scheduleRestart(1000);
+            }
+        };
+
+        this.recognition.onend = () => {
+            if (this.active && !this._muted && !this._speaking && !this._thinking) {
+                this._scheduleRestart(350);
+            }
+        };
+    }
+
+    _startListening() {
+        if (!this.active || this._muted || !this.recognition) return;
+        if (this._speaking || this._thinking) return;
+        try { this.recognition.start(); } catch(_) {}
+    }
+
+    _scheduleRestart(delay) {
+        if (this._pendingRestart) clearTimeout(this._pendingRestart);
+        this._pendingRestart = setTimeout(() => {
+            this._pendingRestart = null;
+            this._startListening();
+        }, delay);
+    }
+
+    // ─── Llamar a Claude via /api/gemini ────────────────────────────────────
+    async _askClaude(userText) {
+        this._thinking = true;
+        this._setState('thinking');
+
+        try {
+            let headers = { 'Content-Type': 'application/json' };
+            try {
+                const user = firebase.auth().currentUser;
+                if (user) headers['Authorization'] = 'Bearer ' + await user.getIdToken();
+            } catch(_) {}
+
+            const resp = await fetch('/api/gemini', {
+                method: 'POST',
+                headers,
+                body: JSON.stringify({
+                    contents: [{ role: 'user', parts: [{ text: userText }] }],
+                    systemInstruction: { parts: [{ text: this._sysPrompt }] },
+                    generationConfig: { maxOutputTokens: 250 }
+                })
+            });
+
+            const data = await resp.json();
+            const aiText = data.text
+                || data.candidates?.[0]?.content?.parts?.[0]?.text
+                || '';
+
+            this._thinking = false;
+            if (aiText.trim()) {
+                if (this.onAISpeech) this.onAISpeech(aiText);
+                this._speak(aiText);
+            } else {
+                this._scheduleRestart(300);
+            }
+        } catch(e) {
+            this._thinking = false;
+            this._scheduleRestart(1000);
+        }
+    }
+
+    // ─── SpeechSynthesis ────────────────────────────────────────────────────
+    _speak(text) {
+        this._speaking = true;
+        this._setState('speaking');
+        window.speechSynthesis.cancel();
+
+        const utt = new SpeechSynthesisUtterance(text);
+        utt.lang  = navigator.language || 'es-BO';
+        utt.rate  = 0.96;
+        utt.pitch = 1.05;
+
+        const voices = window.speechSynthesis.getVoices();
+        const esp = voices.find(v => v.lang.startsWith('es') && v.localService)
+                 || voices.find(v => v.lang.startsWith('es'))
+                 || null;
+        if (esp) utt.voice = esp;
+
+        utt.onend = utt.onerror = () => {
+            this._speaking = false;
+            if (this.active && !this._muted) this._scheduleRestart(300);
+            else this._setState('listening');
+        };
+
+        window.speechSynthesis.speak(utt);
+    }
+
+    // ─── Control público ─────────────────────────────────────────────────────
+    mute(isMuted) {
+        this._muted = isMuted;
+        if (isMuted) {
+            if (this.recognition) { try { this.recognition.abort(); } catch(_) {} }
+            window.speechSynthesis.cancel();
+            this._speaking = false;
+        } else {
+            if (this.active) this._scheduleRestart(200);
+        }
+    }
+
+    stop() {
+        this.active   = false;
+        this._muted   = false;
+        this._speaking = false;
+        this._thinking = false;
+        if (this._pendingRestart) { clearTimeout(this._pendingRestart); this._pendingRestart = null; }
+        if (this.recognition) { try { this.recognition.abort(); } catch(_) {} this.recognition = null; }
+        window.speechSynthesis.cancel();
+        this._setState('closed');
+    }
+
+    _setState(s) { if (this.onStateChange) this.onStateChange(s); }
+    _onErr(msg)  { if (this.onError) this.onError(msg); this._setState('error'); }
+}
+
+window.CerebroLive = CerebroLive;
+// Alias para compatibilidad con código que usaba GeminiLive
+window.GeminiLive = CerebroLive;

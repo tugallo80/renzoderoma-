@@ -1744,7 +1744,7 @@ $$$QUOTE_DATA: [{"desc":"Nombre Item","feat":"Característica","cant":1,"und":"p
             } else if (retries > 0) { setTimeout(function(){ waitAuthWA(retries-1); }, 200); }
         })(25);
     </script>
-    <script src="/js/gemini-live.js?v=1"></script>
+    <script src="/js/cerebro-live.js?v=1"></script>
     <script src="/js/viewmode.js?v=1"></script>
     <script src="/js/voice-utils.js"></script>
     <script>
@@ -1921,7 +1921,7 @@ $$$QUOTE_DATA: [{"desc":"Nombre Item","feat":"Característica","cant":1,"und":"p
     window.iniciarLive = async function() {
         const btn = document.getElementById('btn-live-start');
         if (btn) { btn.disabled = true; btn.innerHTML = '<i class="ph-bold ph-spinner-gap" style="animation:spin 1s linear infinite;"></i>'; }
-        _liveSetStatus('Conectando con Gemini...', '');
+        _liveSetStatus('Iniciando Agente IA...', '');
         document.getElementById('live-transcript').innerHTML = '';
 
         // Construir system instruction (misma lógica que sendAIMessage)
@@ -2021,23 +2021,7 @@ $$$QUOTE_DATA: [{"desc":"Nombre Item","feat":"Característica","cant":1,"und":"p
     window.toggleLiveMute = function() {
         if (!_liveSession) return;
         _liveMuted = !_liveMuted;
-        // Desconectar/reconectar el ScriptProcessor no es directo; controlamos via flag en GeminiLive
-        if (_liveSession.processor) {
-            if (_liveMuted) {
-                _liveSession.processor.onaudioprocess = null;
-            } else {
-                // Restaurar el handler original
-                const s = _liveSession;
-                s.processor.onaudioprocess = (e) => {
-                    if (!s.ws || s.ws.readyState !== WebSocket.OPEN || !s.ready) return;
-                    const f32 = e.inputBuffer.getChannelData(0);
-                    const resampled = s._resample(f32, s.nativeRate, 16000);
-                    const pcm16 = s._f32ToPcm16(resampled);
-                    const b64 = s._toBase64(pcm16.buffer);
-                    s.ws.send(JSON.stringify({ realtimeInput: { mediaChunks: [{ mimeType:'audio/pcm;rate=16000', data:b64 }] } }));
-                };
-            }
-        }
+        if (_liveSession.mute) _liveSession.mute(_liveMuted);
         const icon = _liveMuted ? '<i class="ph-bold ph-microphone-slash"></i>' : '<i class="ph-bold ph-microphone"></i>';
         const btn = document.getElementById('btn-live-mute');
         if (btn) { btn.classList.toggle('muted', _liveMuted); btn.innerHTML = icon; }
