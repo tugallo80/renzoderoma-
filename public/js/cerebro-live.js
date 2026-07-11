@@ -54,7 +54,11 @@ class CerebroLive {
 
         this._setState('ready');
         if (this.onReady) this.onReady();
-        this._startListening();
+
+        // Saludo automático para confirmar que el audio funciona
+        setTimeout(() => {
+            if (this.active) this._speak('Hola CEO, estoy listo. ¿En qué te ayudo?');
+        }, 700);
     }
 
     // ─── Configurar SpeechRecognition ────────────────────────────────────────
@@ -153,24 +157,41 @@ class CerebroLive {
         this._setState('speaking');
         window.speechSynthesis.cancel();
 
-        const utt = new SpeechSynthesisUtterance(text);
-        utt.lang  = navigator.language || 'es-BO';
-        utt.rate  = 0.96;
-        utt.pitch = 1.05;
-
-        const voices = window.speechSynthesis.getVoices();
-        const esp = voices.find(v => v.lang.startsWith('es') && v.localService)
-                 || voices.find(v => v.lang.startsWith('es'))
-                 || null;
-        if (esp) utt.voice = esp;
-
-        utt.onend = utt.onerror = () => {
+        const done = () => {
             this._speaking = false;
-            if (this.active && !this._muted) this._scheduleRestart(300);
+            if (this.active && !this._muted) this._scheduleRestart(400);
             else this._setState('listening');
         };
 
-        window.speechSynthesis.speak(utt);
+        const utt = new SpeechSynthesisUtterance(text);
+        utt.lang   = 'es';
+        utt.rate   = 0.94;
+        utt.pitch  = 1.05;
+        utt.volume = 1.0;
+
+        // Esperar a que las voces estén disponibles y elegir español
+        const trySpeak = () => {
+            const voices = window.speechSynthesis.getVoices();
+            const esp = voices.find(v => v.lang.startsWith('es') && v.localService)
+                     || voices.find(v => v.lang.startsWith('es'))
+                     || null;
+            if (esp) utt.voice = esp;
+            utt.onend   = done;
+            utt.onerror = done;
+            window.speechSynthesis.speak(utt);
+        };
+
+        const voices = window.speechSynthesis.getVoices();
+        if (voices.length > 0) {
+            trySpeak();
+        } else {
+            window.speechSynthesis.onvoiceschanged = () => {
+                window.speechSynthesis.onvoiceschanged = null;
+                trySpeak();
+            };
+            // Fallback si onvoiceschanged no dispara
+            setTimeout(trySpeak, 500);
+        }
     }
 
     // ─── Control público ─────────────────────────────────────────────────────
