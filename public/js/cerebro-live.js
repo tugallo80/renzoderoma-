@@ -29,6 +29,7 @@ class CerebroLive {
         this.onAISpeech    = null;   // (text)
         this.onStateChange = null;   // ('connecting'|'ready'|'listening'|'thinking'|'speaking'|'error'|'closed')
         this.onError       = null;   // (msg)
+        this.onAction      = null;   // async ({type, data}) — acciones sobre Firebase
     }
 
     // ─── Iniciar sesión ──────────────────────────────────────────────────────
@@ -141,9 +142,21 @@ class CerebroLive {
                 || '';
 
             this._thinking = false;
-            if (aiText.trim()) {
-                if (this.onAISpeech) this.onAISpeech(aiText);
-                this._speak(aiText);
+
+            // Parsear y ejecutar bloques de acción — se eliminan del texto hablado
+            let spokenText = aiText;
+            if (aiText.trim() && this.onAction) {
+                const actionRe = /(ACTUALIZAR_CAMPO|CREAR_CLIENTE|AGREGAR_MATERIAL):\s*(\{[^\n\r]+\})/g;
+                let m;
+                while ((m = actionRe.exec(aiText)) !== null) {
+                    try { await this.onAction({ type: m[1], data: JSON.parse(m[2]) }); } catch(_) {}
+                    spokenText = spokenText.replace(m[0], '').trim();
+                }
+            }
+
+            if (spokenText.trim()) {
+                if (this.onAISpeech) this.onAISpeech(spokenText);
+                this._speak(spokenText);
             } else {
                 this._scheduleRestart(300);
             }
