@@ -204,6 +204,11 @@
         .btn-eq-mute.muted { background:#3a1010; color:var(--red); border-color:var(--red); }
         .btn-eq-end { width:76px; height:76px; border-radius:50%; background:var(--red); color:white; border:none; font-size:34px; display:flex; align-items:center; justify-content:center; cursor:pointer; box-shadow:0 6px 28px rgba(255,59,48,0.5); transition:transform 0.15s; }
         .btn-eq-end:active { transform:scale(0.9); }
+
+        /* ── Botón flotante Llamar Asesor ── */
+        #btn-llamar-asesor { position:fixed; top:20px; left:20px; background:linear-gradient(145deg,#22c55e,#15803d); color:white; border:none; border-radius:50%; width:45px; height:45px; display:flex; align-items:center; justify-content:center; font-size:22px; cursor:pointer; z-index:9000; box-shadow:0 4px 15px rgba(34,197,94,0.5); animation:call-pulse 2.2s ease-in-out infinite; transition:transform 0.15s; }
+        #btn-llamar-asesor:active { transform:scale(0.90); }
+        #btn-llamar-asesor:disabled { animation:none; background:#2a2a2a; box-shadow:none; color:#555; cursor:not-allowed; }
     </style>
     <link rel="stylesheet" href="/css/responsive.css?v=1">
 </head>
@@ -259,7 +264,6 @@
                 <div class="ia-tabs">
                     <button id="tab-gen" class="ia-tab-btn active" onclick="setIAMode('general')"><i class="ph-bold ph-chats"></i> CONSULTOR</button>
                     <button id="tab-flash" class="ia-tab-btn" onclick="setIAMode('flash')"><i class="ph-bold ph-lightning"></i> FLASH</button>
-                    <button id="tab-live" class="ia-tab-btn" onclick="setIAMode('live')" style="color:#af52de;"><i class="ph-bold ph-waveform"></i> EN VIVO</button>
                 </div>
             </div>
             
@@ -308,35 +312,6 @@
                 <button class="btn-flash-save" onclick="prepararCreacionFlash()"><i class="ph-bold ph-rocket-launch"></i> Generar e Inyectar Proyecto</button>
             </div>
 
-            <!-- ── GEMINI LIVE PANEL ── -->
-            <div class="live-body" id="live-panel">
-                <div style="width:76px;height:76px;border-radius:50%;border:2px solid rgba(124,58,237,0.4);display:flex;align-items:center;justify-content:center;flex-shrink:0;">
-                    <img loading="lazy" decoding="async" src="LOGO-IA-RUBIK.jpg" style="width:62px;height:62px;border-radius:50%;object-fit:contain;background:#fff;" onerror="this.style.background='#af52de'">
-                </div>
-                <div id="live-status" style="color:#8e8e93;font-size:12px;font-weight:700;letter-spacing:1px;text-transform:uppercase;text-align:center;flex-shrink:0;">Toca para hablar en vivo</div>
-                <div style="color:rgba(255,255,255,0.45);font-size:13px;text-align:center;line-height:1.5;flex-shrink:0;">Conversación directa con el<br>Cerebro Ejecutivo Rubik</div>
-                <div id="live-start-ui" style="display:flex;align-items:center;justify-content:center;flex-shrink:0;">
-                    <button id="btn-live-start" onclick="iniciarLive()" style="width:88px;height:88px;border-radius:50%;background:linear-gradient(145deg,#22c55e,#15803d);color:white;border:none;font-size:36px;display:flex;align-items:center;justify-content:center;cursor:pointer;animation:call-pulse 2.2s ease-in-out infinite;">
-                        <i class="ph-fill ph-phone-call"></i>
-                    </button>
-                </div>
-                <div id="live-transcript"></div>
-            </div>
-
-            <!-- Full-screen equalizer overlay (shown during active call) -->
-            <div id="live-call-screen">
-                <div class="eq-status" id="live-eq-status">Conectando...</div>
-                <canvas id="live-eq-canvas"></canvas>
-                <div class="eq-last-msg" id="live-eq-msg"></div>
-                <div class="eq-controls">
-                    <button class="btn-eq-mute" id="btn-live-mute" onclick="toggleLiveMute()" title="Silenciar">
-                        <i class="ph-bold ph-microphone"></i>
-                    </button>
-                    <button class="btn-eq-end" onclick="terminarLive()" title="Colgar">
-                        <i class="ph-bold ph-phone-x"></i>
-                    </button>
-                </div>
-            </div>
         </div>
     </div>
 
@@ -1765,48 +1740,7 @@ $$$QUOTE_DATA: [{"desc":"Nombre Item","feat":"Característica","cant":1,"und":"p
     let _liveSession = null;
     let _liveMuted   = false;
 
-    // Extender setIAMode para manejar la pestaña Live
-    const _origSetIAMode = window.setIAMode;
-    window.setIAMode = function(mode) {
-        // Apagar Live si cambia de pestaña
-        if (mode !== 'live' && _liveSession) terminarLive();
-
-        if (mode === 'live') {
-            // Apagar modo conversación si estaba activo (evita que SpeechRecognition
-            // capture lo que se habla con Gemini y dispare sendAIMessage)
-            if (typeof _convMode !== 'undefined' && _convMode) {
-                window.toggleConvMode && window.toggleConvMode();
-            }
-            // Silenciar TTS robótico — Gemini Live tiene su propia voz natural
-            if (typeof VoiceUtils !== 'undefined' && VoiceUtils.ttsEnabled()) {
-                VoiceUtils.ttsToggle();
-                const ttsBtn = document.getElementById('btn-tts-ia');
-                if (ttsBtn) { ttsBtn.style.color = 'var(--gray,#888)'; ttsBtn.innerHTML = '<i class="ph-bold ph-speaker-slash"></i>'; }
-            }
-        }
-
-        // Ocultar/mostrar panel Live
-        const lp = document.getElementById('live-panel');
-        if (lp) lp.classList.toggle('active', mode === 'live');
-
-        // Tabs
-        document.querySelectorAll('.ia-tab-btn').forEach(b => b.classList.remove('active'));
-        const tabEl = document.getElementById('tab-' + (mode === 'general' ? 'gen' : mode === 'flash' ? 'flash' : 'live'));
-        if (tabEl) tabEl.classList.add('active');
-
-        if (mode === 'live') {
-            // Ocultar el resto
-            document.getElementById('ai-chat-box').style.display  = 'none';
-            document.getElementById('chat-footer').style.display  = 'none';
-            document.getElementById('flash-table-view').classList.remove('active');
-            document.getElementById('flash-footer').style.display = 'none';
-            currentIAMode = 'live';
-        } else {
-            _origSetIAMode(mode);
-        }
-    };
-
-    // Cerrar Live también al cerrar el modal
+    // Cerrar Live también al cerrar el modal IA
     const _origCloseAIChat = window.closeAIChat;
     window.closeAIChat = function() {
         if (_liveSession) terminarLive();
@@ -1919,8 +1853,9 @@ $$$QUOTE_DATA: [{"desc":"Nombre Item","feat":"Característica","cant":1,"und":"p
     }
 
     window.iniciarLive = async function() {
-        const btn = document.getElementById('btn-live-start');
-        if (btn) { btn.disabled = true; btn.innerHTML = '<i class="ph-bold ph-spinner-gap" style="animation:spin 1s linear infinite;"></i>'; }
+        if (_liveSession) return; // ya hay una sesión activa
+        const btn = document.getElementById('btn-llamar-asesor');
+        if (btn) { btn.disabled = true; btn.style.animation = 'none'; btn.innerHTML = '<i class="ph-bold ph-spinner-gap" style="animation:spin 1s linear infinite;"></i>'; }
         _liveSetStatus('Iniciando Agente IA...', '');
 
         // Prompt base inmediato — no espera Firebase
@@ -1982,9 +1917,7 @@ $$$QUOTE_DATA: [{"desc":"Nombre Item","feat":"Característica","cant":1,"und":"p
         };
 
         _liveSession.onReady = () => {
-            document.getElementById('live-start-ui').style.display = 'none';
-            const screen = document.getElementById('live-call-screen');
-            screen.style.display = 'flex';
+            document.getElementById('live-call-screen').style.display = 'flex';
             _eqStart();
         };
 
@@ -1995,9 +1928,8 @@ $$$QUOTE_DATA: [{"desc":"Nombre Item","feat":"Característica","cant":1,"und":"p
             _liveSetStatus('Error: ' + msg, 'st-error');
             _eqStop();
             document.getElementById('live-call-screen').style.display = 'none';
-            document.getElementById('live-start-ui').style.display = 'block';
-            const btn2 = document.getElementById('btn-live-start');
-            if (btn2) { btn2.disabled = false; btn2.innerHTML = '<i class="ph-fill ph-phone-call"></i>'; }
+            const btn2 = document.getElementById('btn-llamar-asesor');
+            if (btn2) { btn2.disabled = false; btn2.style.animation = ''; btn2.innerHTML = '<i class="ph-fill ph-phone-call"></i>'; }
             _liveSession = null;
         };
 
@@ -2010,10 +1942,8 @@ $$$QUOTE_DATA: [{"desc":"Nombre Item","feat":"Característica","cant":1,"und":"p
         _eqStop();
         _eqSetState('idle');
         document.getElementById('live-call-screen').style.display = 'none';
-        document.getElementById('live-start-ui').style.display = 'block';
-        _liveSetStatus('Toca para hablar en vivo', '');
-        const btn = document.getElementById('btn-live-start');
-        if (btn) { btn.disabled = false; btn.innerHTML = '<i class="ph-fill ph-phone-call"></i>'; }
+        const btn = document.getElementById('btn-llamar-asesor');
+        if (btn) { btn.disabled = false; btn.style.animation = ''; btn.innerHTML = '<i class="ph-fill ph-phone-call"></i>'; }
         const mute = document.getElementById('btn-live-mute');
         if (mute) { mute.classList.remove('muted'); mute.innerHTML = '<i class="ph-bold ph-microphone"></i>'; }
         const eqMsg = document.getElementById('live-eq-msg');
@@ -2030,5 +1960,25 @@ $$$QUOTE_DATA: [{"desc":"Nombre Item","feat":"Característica","cant":1,"und":"p
         _liveSetStatus(_liveMuted ? 'Micrófono silenciado' : 'Escuchando...', _liveMuted ? '' : 'st-listening');
     };
     </script>
+
+    <!-- Botón flotante — Llamar al Asesor IA (esquina superior izquierda) -->
+    <button id="btn-llamar-asesor" onclick="iniciarLive()" title="Llamar Asesor IA">
+        <i class="ph-fill ph-phone-call"></i>
+    </button>
+
+    <!-- Equalizer full-screen overlay — llamada activa desde el dashboard -->
+    <div id="live-call-screen">
+        <div class="eq-status" id="live-eq-status">Conectando...</div>
+        <canvas id="live-eq-canvas"></canvas>
+        <div class="eq-last-msg" id="live-eq-msg"></div>
+        <div class="eq-controls">
+            <button class="btn-eq-mute" id="btn-live-mute" onclick="toggleLiveMute()" title="Silenciar">
+                <i class="ph-bold ph-microphone"></i>
+            </button>
+            <button class="btn-eq-end" onclick="terminarLive()" title="Colgar">
+                <i class="ph-bold ph-phone-x"></i>
+            </button>
+        </div>
+    </div>
 </body>
 </html>
