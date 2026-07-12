@@ -60,7 +60,7 @@ class CerebroLive {
 
         // Saludo automático para confirmar que el audio funciona
         setTimeout(() => {
-            if (this.active) this._speak('Hola CEO, estoy listo. ¿En qué te ayudo?');
+            if (this.active) this._speak('Hola jefe, ¿en qué lo puedo ayudar?');
         }, 700);
     }
 
