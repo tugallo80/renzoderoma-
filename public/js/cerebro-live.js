@@ -154,7 +154,8 @@ class CerebroLive {
                 }
             }
 
-            if (spokenText.trim()) {
+            spokenText = this._cleanForSpeech(spokenText);
+            if (spokenText) {
                 if (this.onAISpeech) this.onAISpeech(spokenText);
                 this._speak(spokenText);
             } else {
@@ -286,6 +287,24 @@ class CerebroLive {
         if (this._currentSource) { try { this._currentSource.stop(); } catch(_) {} this._currentSource = null; }
         if (this._audioCtx) { try { this._audioCtx.close(); } catch(_) {} this._audioCtx = null; }
         this._setState('closed');
+    }
+
+    // Elimina markdown y símbolos que suenan raro al ser leídos en voz alta
+    _cleanForSpeech(text) {
+        return text
+            .replace(/```[\s\S]*?```/g, '')          // bloques de código
+            .replace(/`([^`]+)`/g, '$1')              // código inline
+            .replace(/\*{1,3}([^*\n]+)\*{1,3}/g, '$1') // negrita / cursiva
+            .replace(/_{1,3}([^_\n]+)_{1,3}/g, '$1') // subrayado markdown
+            .replace(/^#{1,6}\s+/gm, '')              // encabezados
+            .replace(/→|←|⟶|⟹|►|▶/g, ',')          // flechas → coma
+            .replace(/^[-•*]\s+/gm, '')               // viñetas
+            .replace(/^\d+\.\s+/gm, '')               // listas numeradas
+            .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')  // links markdown
+            .replace(/\|/g, ', ')                     // tablas
+            .replace(/\n+/g, ' ')                     // saltos de línea → espacio
+            .replace(/\s{2,}/g, ' ')
+            .trim();
     }
 
     _setState(s) { if (this.onStateChange) this.onStateChange(s); }
