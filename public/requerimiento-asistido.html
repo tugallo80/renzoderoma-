@@ -669,17 +669,15 @@
             // Llamar a IA para estructurar el ítem
             setLoader(true, 'Analizando con IA...');
             const token = await firebase.auth().currentUser.getIdToken();
-            const prompt = buildPromptIA(desc, dims, imgUrl);
 
             let apuDesc = '';
             let imgBase64 = null;
             if (tempFotoDataUrl) {
                 imgBase64 = tempFotoDataUrl.split(',')[1];
-            } else if (imgUrl) {
-                // Si solo tenemos URL, mandamos sin imagen (IA usa descripción)
             }
 
-            const body = { model: 'gemini-2.5-flash', text: prompt };
+            const prompt = buildPromptIA(desc, dims, imgUrl, !!imgBase64);
+            const body = { text: prompt, advancedModel: !!imgBase64 };
             if (imgBase64) body.image = imgBase64;
 
             const res = await fetch('/api/gemini', {
@@ -785,21 +783,31 @@
     }
 
     // ── Prompt para la IA ─────────────────────────────────────────────
-    function buildPromptIA(desc, dims, imgUrl) {
+    function buildPromptIA(desc, dims, imgUrl, hasImage) {
         const dimsTexto = dims.map(dimLabel).join(', ');
+        const imgInstruccion = hasImage ? `
+IMAGEN ADJUNTA — INSTRUCCIÓN CRÍTICA:
+Se adjunta un plano/diseño técnico. ANTES de escribir cualquier otra cosa, realizá estos pasos en orden:
+PASO 1 — LEER COTAS: Examiná la imagen con cuidado y listá CADA número de medida anotado que veas (dimensiones, cotas, rótulos numéricos). Reportá el valor exacto como aparece escrito. NO estimes ni inferás medidas a ojo — solo transcribí los números que están escritos.
+PASO 2 — DECLARAR UNIDADES: Indicá en qué unidad parecen estar (mm, cm, m) basándote en el contexto del diseño.
+PASO 3 — MEDIDAS TOTALES: Identificá ancho total, alto total y cualquier medida parcial relevante.
+REGLA ABSOLUTA: Si ves un número anotado como "1055.0", reportá "1055.0" exactamente — nunca lo conviertas a "9.74m" ni ningún otro valor no visible en la imagen.
+
+` : '';
         return `Sos un experto en señalética, publicidad exterior e impresión gráfica de Bolivia (Rubik Studio).
 El operador describe un ítem que necesita cotizar. Tu tarea es estructurar la información como si fuera un APU (Análisis de Precio Unitario) profesional pero en texto legible, que luego el cliente completará con medidas.
-
+${imgInstruccion}
 DESCRIPCIÓN DEL ÍTEM:
 "${desc}"
 
 DIMENSIONES QUE SE SOLICITARÁN AL CLIENTE: ${dimsTexto}
 
 Por favor respondé con:
-1. NOMBRE TÉCNICO DEL ÍTEM (conciso, profesional)
-2. CARACTERÍSTICAS TÉCNICAS (materiales, acabados, proceso, especificaciones clave, en lista)
-3. COMPONENTES APU (materiales base, mano de obra, equipos, subcontratos — lista con unidad)
-4. NOTA PARA EL CLIENTE (instrucción breve sobre cómo medir correctamente este tipo de ítem)
+1. MEDIDAS LEÍDAS DEL PLANO (solo si hay imagen — lista exacta de cotas encontradas con su valor y posición)
+2. NOMBRE TÉCNICO DEL ÍTEM (conciso, profesional)
+3. CARACTERÍSTICAS TÉCNICAS (materiales, acabados, proceso, especificaciones clave — usando las medidas exactas del plano)
+4. COMPONENTES APU (materiales base con cantidades calculadas sobre las medidas reales, mano de obra, equipos, subcontratos — lista con unidad y cantidad)
+5. NOTA PARA EL CLIENTE (instrucción breve sobre cómo medir correctamente este tipo de ítem)
 
 Sé preciso, profesional y breve. Usá terminología de la industria publicitaria boliviana.`;
     }

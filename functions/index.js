@@ -418,8 +418,13 @@ MATERIALES — ESPEJOS/VIDRIO: Para paneles de espejo la estructura es tubín me
             messages = [{ role: "user", content: geminiPartsToClaudeContent(body.parts) }];
         } else if (typeof body.prompt === "string" || typeof body.text === "string") {
             const content = [];
-            if (body.image?.data) {
-                content.push({ type: "image", source: { type: "base64", media_type: body.image.mimeType || "image/jpeg", data: body.image.data } });
+            if (body.image) {
+                // Acepta string base64 puro O objeto { data, mimeType }
+                const imgData = typeof body.image === "string" ? body.image : body.image?.data;
+                const imgMime = (typeof body.image === "object" && body.image?.mimeType) ? body.image.mimeType : "image/jpeg";
+                if (imgData) {
+                    content.push({ type: "image", source: { type: "base64", media_type: imgMime, data: imgData } });
+                }
             }
             content.push({ type: "text", text: body.prompt || body.text });
             messages = [{ role: "user", content }];
