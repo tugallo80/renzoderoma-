@@ -998,14 +998,15 @@ Recuerda aplicar siempre: [REGLA_UTILIDAD].`
 
         async function getContextDB() {
             if (_ctxCache && (Date.now() - _ctxCacheTs) < CTX_TTL_MS) return _ctxCache;
-            let contextDB = { proyectos: [], clientes: [], materiales: [], mo: [], items: [], personal: [], licitaciones: [], ingresos: [] };
+            let contextDB = { proyectos: [], clientes: [], materiales: [], mo: [], items: [], personal: [], licitaciones: [], ingresos: [], compras_total: 0, compras_recientes: [] };
             try {
-                const [pSnap, cSnap, bdSnap, persSnap, ingSnap] = await Promise.all([
+                const [pSnap, cSnap, bdSnap, persSnap, ingSnap, comprasSnap] = await Promise.all([
                     db.ref('proyectos').once('value'),
                     db.ref('clientes').once('value'),
                     db.ref('base_datos').once('value'),
                     db.ref('personal').once('value'),
-                    db.ref('ingresos').once('value')
+                    db.ref('ingresos').once('value'),
+                    db.ref('compras_facturadas').once('value'),
                 ]);
                 const clienteNombres = {};
                 if(cSnap.exists()) cSnap.forEach(c => {
@@ -1044,6 +1045,15 @@ Recuerda aplicar siempre: [REGLA_UTILIDAD].`
                 }
                 if(persSnap.exists()) persSnap.forEach(p => contextDB.personal.push(`${p.val().nombre||''} (${p.val().tipo||''} - ${p.val().especialidad||''})`));
                 if(ingSnap.exists()) ingSnap.forEach(i => contextDB.ingresos.push({ proyecto: i.val().proyecto||'', monto: i.val().monto||0, fecha: i.val().fecha||'', facturado: i.val().is_facturado||false }));
+                if(comprasSnap.exists()) {
+                    comprasSnap.forEach(c => {
+                        const d = c.val();
+                        const monto = parseFloat(d.monto||d.total||0);
+                        contextDB.compras_total += monto;
+                        if(d.proveedor||d.descripcion) contextDB.compras_recientes.push(`${d.proveedor||d.descripcion||'compra'}: ${monto} Bs${d.fecha?' ('+d.fecha.substring(0,10)+')':''}`);
+                    });
+                    contextDB.compras_recientes = contextDB.compras_recientes.slice(-20);
+                }
             } catch(e) { console.warn('Context load partial:', e); }
             _ctxCache = contextDB;
             _ctxCacheTs = Date.now();
@@ -1852,53 +1862,89 @@ $$$QUOTE_DATA: [{"desc":"Nombre Item","feat":"Característica","cant":1,"und":"p
         if (eq) eq.textContent = (role === 'user' ? '🎤 ' : '🤖 ') + text;
     }
 
+    // Pie de prompt para modo voz: instrucciones + acciones disponibles
+    function _liveVoiceFooter() {
+        return '\n\nMODO VOZ: Respuestas CORTAS, máximo 2 oraciones. Sin markdown, sin asteriscos, sin listas.' +
+            '\n\nACCIONES DISPONIBLES (incluí el bloque JSON en línea separada AL FINAL de tu respuesta, solo cuando el CEO lo pida explícitamente):' +
+            '\nACTUALIZAR_CAMPO: {"ref":"proyectos/CID/PID","campo":"estado","val":"activo"}' +
+            '\nCREAR_CLIENTE: {"nombre":"Empresa SA","wsp":"59176868833"}' +
+            '\nAGREGAR_MATERIAL: {"nombre":"Lona mate 440g","precio":35,"unidad":"m2"}' +
+            '\nUsá IDs exactos del contexto. Confirmá los datos antes de ejecutar.';
+    }
+
+    // Carga contexto Firebase en background y lo inyecta en la sesión activa
+    async function _loadLiveContext() {
+        try {
+            const [contextDB, snapPrompt, snapTags, snapReglas] = await Promise.all([
+                getContextDB(),
+                db.ref('config_ia/prompts/index_consultor').once('value').catch(() => ({ exists: () => false })),
+                db.ref('config_ia/custom_tags').once('value').catch(() => ({ exists: () => false })),
+                db.ref('config_ia/reglas_tecnicas').once('value').catch(() => ({ exists: () => false })),
+            ]);
+
+            let sp = (snapPrompt.exists() && snapPrompt.val()) ? snapPrompt.val() : (dicDefaultPrompts['index_consultor'] || '');
+            if (snapTags.exists()) Object.entries(snapTags.val()).forEach(([k,v]) => { sp = sp.replace(new RegExp('\\['+k+'\\]','g'), v); });
+            if (snapReglas.exists()) {
+                const activas = Object.values(snapReglas.val()).filter(r => r.activa !== false);
+                if (activas.length) sp += '\n\nREGLAS TÉCNICAS:\n' + activas.map(r => `• ${r.nombre}: ${r.texto}`).join('\n');
+            }
+
+            sp = sp
+                .replace('[CONTEXTO_CLIENTES]',    JSON.stringify(contextDB.clientes))
+                .replace('[CONTEXTO_PROYECTOS]',   JSON.stringify(contextDB.proyectos))
+                .replace('[CONTEXTO_LICITACIONES]',JSON.stringify(contextDB.licitaciones))
+                .replace('[CONTEXTO_INGRESOS]',    JSON.stringify(contextDB.ingresos))
+                .replace('[CONTEXTO_MATERIALES]',  contextDB.materiales.join('; '))
+                .replace('[CONTEXTO_MO]',          contextDB.mo.join('; '))
+                .replace('[CONTEXTO_ITEMS]',       contextDB.items.join('; '))
+                .replace('[CONTEXTO_PERSONAL]',    contextDB.personal.join(', '));
+
+            if (contextDB.compras_recientes && contextDB.compras_recientes.length) {
+                sp += '\n- Compras/facturas recientes: ' + contextDB.compras_recientes.join(' | ');
+                sp += '\n- Total compras facturadas: ' + contextDB.compras_total + ' Bs';
+            }
+
+            sp += _liveVoiceFooter();
+
+            if (_liveSession) {
+                _liveSession._sysPrompt = sp;
+                console.log('[Live] Contexto inyectado: ' + contextDB.materiales.length + ' materiales, ' + contextDB.proyectos.length + ' proyectos, ' + contextDB.licitaciones.length + ' licitaciones');
+            }
+        } catch(e) {
+            console.warn('[Live] Context load error:', e);
+        }
+    }
+
     window.iniciarLive = async function() {
         if (_liveSession) return; // ya hay una sesión activa
         const btn = document.getElementById('btn-llamar-asesor');
         if (btn) { btn.disabled = true; btn.style.animation = 'none'; btn.innerHTML = '<i class="ph-bold ph-spinner-gap" style="animation:spin 1s linear infinite;"></i>'; }
         _liveSetStatus('Iniciando Agente IA...', '');
 
-        // Prompt base inmediato — no espera Firebase
-        const _basePrompt = 'Eres el Cerebro Ejecutivo de Rubik Bolivia, empresa de señalética y publicidad en Bolivia. ' +
-            'Asistente de voz directo y conciso. Máximo 3 oraciones por respuesta. Sin markdown ni listas largas.';
-
-        // Cargar contexto completo con timeout de 4s — si falla, usa base
-        let sysPrompt = _basePrompt;
-        try {
-            const _timeout = new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 4000));
-            const _loadCtx = async () => {
-                const contextDB = await getContextDB();
-                const [snapPrompt, snapTags, snapReglas] = await Promise.all([
-                    db.ref('config_ia/prompts/index_consultor').once('value'),
-                    db.ref('config_ia/custom_tags').once('value'),
-                    db.ref('config_ia/reglas_tecnicas').once('value')
-                ]);
-                let sp = (snapPrompt.exists() && snapPrompt.val()) ? snapPrompt.val() : (dicDefaultPrompts['index_consultor'] || _basePrompt);
-                if (snapTags.exists()) {
-                    Object.entries(snapTags.val()).forEach(([k,v]) => {
-                        sp = sp.replace(new RegExp('\\['+k+'\\]','g'), v);
-                    });
-                }
-                if (snapReglas.exists()) {
-                    const activas = Object.values(snapReglas.val()).filter(r => r.activa !== false);
-                    if (activas.length) sp += '\n\nREGLAS TÉCNICAS:\n' + activas.map(r=>`• ${r.nombre}: ${r.texto}`).join('\n');
-                }
-                sp = sp
-                    .replace('[CONTEXTO_CLIENTES]',    JSON.stringify(contextDB.clientes))
-                    .replace('[CONTEXTO_PROYECTOS]',   JSON.stringify(contextDB.proyectos))
-                    .replace('[CONTEXTO_LICITACIONES]',JSON.stringify(contextDB.licitaciones))
-                    .replace('[CONTEXTO_INGRESOS]',    JSON.stringify(contextDB.ingresos))
-                    .replace('[CONTEXTO_MATERIALES]',  contextDB.materiales.join('; '))
-                    .replace('[CONTEXTO_MO]',          contextDB.mo.join('; '))
-                    .replace('[CONTEXTO_ITEMS]',       contextDB.items.join('; '))
-                    .replace('[CONTEXTO_PERSONAL]',    contextDB.personal.join(', '));
-                sp += '\n\nIMPORTANTE: Estás en modo de voz. Respuestas CORTAS y DIRECTAS. Sin markdown.';
-                return sp;
-            };
-            sysPrompt = await Promise.race([_loadCtx(), _timeout]);
-        } catch(_) { /* usa _basePrompt */ }
+        // Iniciar INMEDIATAMENTE con todo el conocimiento de dominio
+        // Los datos de Firebase se inyectan async vía _loadLiveContext() después del onReady
+        const initialPrompt = (dicDefaultPrompts['index_consultor'] || 'Eres el Cerebro Ejecutivo de Rubik Bolivia.')
+            .replace(/\[CONTEXTO_\w+\]/g, '(datos cargando en 3-5 segundos)') +
+            _liveVoiceFooter();
 
         _liveSession = new CerebroLive();
+
+        // Ejecutar acciones sobre Firebase cuando Claude las incluya en la respuesta
+        _liveSession.onAction = async (action) => {
+            try {
+                if (action.type === 'ACTUALIZAR_CAMPO') {
+                    const d = action.data;
+                    if (d.ref && d.campo !== undefined) { await db.ref(d.ref + '/' + d.campo).set(d.val); _ctxCache = null; }
+                } else if (action.type === 'CREAR_CLIENTE') {
+                    await db.ref('clientes').push({ ...action.data, fecha_creacion: new Date().toISOString().substring(0,10) });
+                    _ctxCache = null;
+                } else if (action.type === 'AGREGAR_MATERIAL') {
+                    const d = action.data;
+                    const key = (d.nombre||'').toUpperCase().replace(/[.#$[\]/\s]+/g,'_').slice(0,80);
+                    if (key) { await db.ref('base_datos/materiales/'+key).update({ n:key, desc:d.nombre||key, u:d.unidad||'und', p:parseFloat(d.precio)||0, und:d.unidad||'und', pu:parseFloat(d.precio)||0 }); _ctxCache = null; }
+                }
+            } catch(e) { console.error('[Live action]', e.message); }
+        };
 
         _liveSession.onStateChange = (s) => {
             const labels = {
@@ -1919,6 +1965,8 @@ $$$QUOTE_DATA: [{"desc":"Nombre Item","feat":"Característica","cant":1,"und":"p
         _liveSession.onReady = () => {
             document.getElementById('live-call-screen').style.display = 'flex';
             _eqStart();
+            // Cargar datos reales en background — no bloquea ni la voz ni el saludo
+            _loadLiveContext();
         };
 
         _liveSession.onUserSpeech = (txt) => _liveAddMsg('user', txt);
@@ -1933,7 +1981,7 @@ $$$QUOTE_DATA: [{"desc":"Nombre Item","feat":"Característica","cant":1,"und":"p
             _liveSession = null;
         };
 
-        await _liveSession.start(sysPrompt);
+        await _liveSession.start(initialPrompt);
     };
 
     window.terminarLive = function() {
