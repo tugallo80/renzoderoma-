@@ -1749,6 +1749,23 @@ $$$QUOTE_DATA: [{"desc":"Nombre Item","feat":"Característica","cant":1,"und":"p
     // ═══════════════════════════════════════════════════════════════
     let _liveSession = null;
     let _liveMuted   = false;
+    let _wakeLock    = null;
+
+    async function _requestWakeLock() {
+        try {
+            if ('wakeLock' in navigator) {
+                _wakeLock = await navigator.wakeLock.request('screen');
+                _wakeLock.addEventListener('release', () => { _wakeLock = null; });
+            }
+        } catch(_) {}
+    }
+    function _releaseWakeLock() {
+        if (_wakeLock) { _wakeLock.release().catch(()=>{}); _wakeLock = null; }
+    }
+    // Re-adquirir wake lock si la pestaña vuelve a ser visible durante una llamada activa
+    document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible' && _liveSession) _requestWakeLock();
+    });
 
     // Cerrar Live también al cerrar el modal IA
     const _origCloseAIChat = window.closeAIChat;
@@ -1865,6 +1882,7 @@ $$$QUOTE_DATA: [{"desc":"Nombre Item","feat":"Característica","cant":1,"und":"p
     // Pie de prompt para modo voz: instrucciones + acciones disponibles
     function _liveVoiceFooter() {
         return '\n\nMODO VOZ: Respuestas CORTAS, máximo 2 oraciones. Sin markdown, sin asteriscos, sin listas.' +
+            '\nSIN PREÁMBULOS: Nunca empieces con "Claro", "Por supuesto", "Entendido", "Perfecto" ni frases de relleno. Ve directo al dato o la respuesta.' +
             '\n\nACCIONES DISPONIBLES (incluí el bloque JSON en línea separada AL FINAL de tu respuesta, solo cuando el CEO lo pida explícitamente):' +
             '\nACTUALIZAR_CAMPO: {"ref":"proyectos/CID/PID","campo":"estado","val":"activo"}' +
             '\nCREAR_CLIENTE: {"nombre":"Empresa SA","wsp":"59176868833"}' +
@@ -1965,6 +1983,7 @@ $$$QUOTE_DATA: [{"desc":"Nombre Item","feat":"Característica","cant":1,"und":"p
         _liveSession.onReady = () => {
             document.getElementById('live-call-screen').style.display = 'flex';
             _eqStart();
+            _requestWakeLock();
             // Cargar datos reales en background — no bloquea ni la voz ni el saludo
             _loadLiveContext();
         };
@@ -1987,6 +2006,7 @@ $$$QUOTE_DATA: [{"desc":"Nombre Item","feat":"Característica","cant":1,"und":"p
     window.terminarLive = function() {
         if (_liveSession) { _liveSession.stop(); _liveSession = null; }
         _liveMuted = false;
+        _releaseWakeLock();
         _eqStop();
         _eqSetState('idle');
         document.getElementById('live-call-screen').style.display = 'none';
