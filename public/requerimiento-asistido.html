@@ -248,6 +248,16 @@
         <label class="inp-lbl">Nota interna (no la ve el cliente)</label>
         <input type="text" id="inp-nota-interna" class="inp-std" placeholder="Ej: Confirmar si van con caja o sin caja trasera">
 
+        <!-- Panel de medidas del plano — solo visible cuando hay imagen cargada -->
+        <div id="medidas-plano-wrap" style="display:none; margin-top:18px; background:rgba(0,122,255,0.06); border:1.5px solid rgba(0,122,255,0.25); border-radius:14px; padding:14px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+                <span style="font-size:11px; font-weight:900; color:var(--blue); text-transform:uppercase; letter-spacing:0.5px;">📐 Medidas del plano</span>
+                <button onclick="leerCotasDelPlano()" id="btn-leer-cotas" style="font-size:11px; font-weight:800; color:var(--blue); background:var(--blue); color:#fff; border:none; border-radius:8px; padding:6px 12px; cursor:pointer; display:flex; align-items:center; gap:5px;"><i class="ph-fill ph-scan"></i> Leer con IA</button>
+            </div>
+            <textarea id="inp-medidas-plano" class="inp-std" rows="5" style="font-size:12px; font-family:monospace;" placeholder="Presioná 'Leer con IA' para extraer las cotas del plano, o escribilas vos manualmente:&#10;&#10;Ej:&#10;1055.0 → ancho total fachada&#10;942.5 → alto total&#10;200.0 → diámetro reloj&#10;400×125 → óvalo logo"></textarea>
+            <div style="font-size:10px; color:var(--gray); margin-top:6px; font-weight:700;">✏️ Corregí cualquier medida mal leída antes de estructurar — estas se usarán EXACTAMENTE en el APU.</div>
+        </div>
+
         <button class="btn-main btn-purple" onclick="procesarItemConIA()" id="btn-procesar-ia" style="margin-top:18px;">
             <i class="ph-fill ph-sparkle"></i> Estructurar con IA
         </button>
@@ -500,6 +510,8 @@
         prev.style.display = 'block';
         hint.style.display = 'none';
         if (btn) { btn.style.display = 'flex'; }
+        const wrap = document.getElementById('medidas-plano-wrap');
+        if (wrap) wrap.style.display = 'block';
     }
     function _ocultarFotoPreview() {
         const prev = document.getElementById('foto-preview');
@@ -510,6 +522,8 @@
         hint.style.display = 'flex';
         if (btn) { btn.style.display = 'none'; }
         tempFotoFile = null; tempFotoDataUrl = null;
+        const wrap = document.getElementById('medidas-plano-wrap');
+        if (wrap) { wrap.style.display = 'none'; document.getElementById('inp-medidas-plano').value = ''; }
     }
 
     function quitarFoto(ev) {
@@ -610,6 +624,55 @@
         }
     });
 
+    // ── Leer cotas del plano (OCR separado) ──────────────────────────
+    async function leerCotasDelPlano() {
+        if (!tempFotoDataUrl) return alert('Subí una imagen del plano primero.');
+        const btn = document.getElementById('btn-leer-cotas');
+        const ta  = document.getElementById('inp-medidas-plano');
+        btn.disabled = true; btn.innerHTML = '<i class="ph-fill ph-circle-notch"></i> Leyendo...';
+        ta.value = '';
+        try {
+            const token = await firebase.auth().currentUser.getIdToken();
+            const imgBase64 = tempFotoDataUrl.split(',')[1];
+            const prompt = `Sos un lector experto de planos técnicos de construcción y diseño.
+
+TAREA: Analizá la imagen y transcribí CADA número de medida/cota que veas anotado en ella.
+
+REGLAS ABSOLUTAS:
+- Solo escribí números que ESTÉN VISIBLES escritos en la imagen. Jamás inventes ni estimes.
+- Si ves "1055.0", escribí "1055.0" exactamente.
+- Si ves "942.5", escribí "942.5" exactamente.
+- No conviertas unidades (si dice 1055, no lo pongas como 10.55m).
+- Incluí TODAS las cotas: totales, parciales, diámetros, espesores — todo.
+
+FORMATO DE SALIDA (una medida por línea):
+[valor tal como aparece] → [descripción de qué mide, según su posición en el plano]
+
+Ejemplo de salida correcta:
+1055.0 → ancho total de la fachada
+942.5 → alto total
+50.0 → ancho de columna lateral
+506.7 → ancho del vano central
+200.0 → diámetro del reloj
+400.0 × 125.0 → dimensiones del óvalo
+
+Ahora analizá la imagen adjunta y listá todas las cotas visibles:`;
+
+            const res = await fetch('/api/gemini', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+                body: JSON.stringify({ text: prompt, image: imgBase64, advancedModel: true })
+            });
+            const json = await res.json();
+            const texto = json.text || json.candidates?.[0]?.content?.parts?.[0]?.text || '(no se detectaron cotas)';
+            ta.value = texto.trim();
+        } catch(e) {
+            alert('Error al leer cotas: ' + e.message);
+        } finally {
+            btn.disabled = false; btn.innerHTML = '<i class="ph-fill ph-scan"></i> Leer con IA';
+        }
+    }
+
     // ── Subir foto a Storage ──────────────────────────────────────────
     async function subirFoto(file) {
         const ext = file.type.includes('png') ? 'png' : 'jpg';
@@ -676,9 +739,11 @@
                 imgBase64 = tempFotoDataUrl.split(',')[1];
             }
 
-            const prompt = buildPromptIA(desc, dims, imgUrl, !!imgBase64);
-            const body = { text: prompt, advancedModel: !!imgBase64 };
-            if (imgBase64) body.image = imgBase64;
+            const medidasConfirmadas = (document.getElementById('inp-medidas-plano')?.value || '').trim() || null;
+            const prompt = buildPromptIA(desc, dims, imgUrl, !!imgBase64, medidasConfirmadas);
+            // Si hay medidas confirmadas ya no necesitamos que la IA lea el plano — solo el texto basta
+            const body = { text: prompt, advancedModel: true };
+            if (imgBase64 && !medidasConfirmadas) body.image = imgBase64;
 
             const res = await fetch('/api/gemini', {
                 method: 'POST',
@@ -783,33 +848,43 @@
     }
 
     // ── Prompt para la IA ─────────────────────────────────────────────
-    function buildPromptIA(desc, dims, imgUrl, hasImage) {
+    function buildPromptIA(desc, dims, imgUrl, hasImage, medidasConfirmadas) {
         const dimsTexto = dims.map(dimLabel).join(', ');
-        const imgInstruccion = hasImage ? `
-IMAGEN ADJUNTA — INSTRUCCIÓN CRÍTICA:
-Se adjunta un plano/diseño técnico. ANTES de escribir cualquier otra cosa, realizá estos pasos en orden:
-PASO 1 — LEER COTAS: Examiná la imagen con cuidado y listá CADA número de medida anotado que veas (dimensiones, cotas, rótulos numéricos). Reportá el valor exacto como aparece escrito. NO estimes ni inferás medidas a ojo — solo transcribí los números que están escritos.
-PASO 2 — DECLARAR UNIDADES: Indicá en qué unidad parecen estar (mm, cm, m) basándote en el contexto del diseño.
-PASO 3 — MEDIDAS TOTALES: Identificá ancho total, alto total y cualquier medida parcial relevante.
-REGLA ABSOLUTA: Si ves un número anotado como "1055.0", reportá "1055.0" exactamente — nunca lo conviertas a "9.74m" ni ningún otro valor no visible en la imagen.
 
-` : '';
-        return `Sos un experto en señalética, publicidad exterior e impresión gráfica de Bolivia (Rubik Studio).
-El operador describe un ítem que necesita cotizar. Tu tarea es estructurar la información como si fuera un APU (Análisis de Precio Unitario) profesional pero en texto legible, que luego el cliente completará con medidas.
-${imgInstruccion}
-DESCRIPCIÓN DEL ÍTEM:
+        const materialesSection = `
+REGLA CRÍTICA — MATERIALES: El operador especificó los materiales EXACTOS a usar. Respetá al pie de la letra cada material, estructura y proceso que describe. No los sustituyás, no agregues alternativas ni "mejores opciones". Si dice "tubín y foam adhesivado", usás tubín y foam adhesivado. Si dice "drywall", usás drywall. Si dice "lona impresa", usás lona impresa. La descripción del operador ES la especificación técnica final.`;
+
+        let medidasSection = '';
+        if (medidasConfirmadas) {
+            medidasSection = `
+MEDIDAS CONFIRMADAS DEL PLANO — USAR EXACTAMENTE:
+${medidasConfirmadas}
+
+REGLA: Calculá todas las cantidades de materiales usando SOLO estas medidas. No uses otras dimensiones. Si la descripción menciona calcular volúmenes o superficies, hacélo matemáticamente con estos valores.`;
+        } else if (hasImage) {
+            medidasSection = `
+IMAGEN ADJUNTA: Se adjunta el plano/diseño. Leé las cotas anotadas con máxima precisión. Transcribí cada número exactamente como aparece escrito. No estimes a ojo.`;
+        }
+
+        return `Sos un experto APU en señalética, publicidad exterior e impresión gráfica de Bolivia (Rubik Studio).
+${materialesSection}
+${medidasSection}
+
+DESCRIPCIÓN DEL ÍTEM (especificación del operador — SEGUIR AL PIE DE LA LETRA):
 "${desc}"
 
-DIMENSIONES QUE SE SOLICITARÁN AL CLIENTE: ${dimsTexto}
+DIMENSIONES QUE COMPLETARÁ EL CLIENTE: ${dimsTexto}
 
-Por favor respondé con:
-1. MEDIDAS LEÍDAS DEL PLANO (solo si hay imagen — lista exacta de cotas encontradas con su valor y posición)
-2. NOMBRE TÉCNICO DEL ÍTEM (conciso, profesional)
-3. CARACTERÍSTICAS TÉCNICAS (materiales, acabados, proceso, especificaciones clave — usando las medidas exactas del plano)
-4. COMPONENTES APU (materiales base con cantidades calculadas sobre las medidas reales, mano de obra, equipos, subcontratos — lista con unidad y cantidad)
-5. NOTA PARA EL CLIENTE (instrucción breve sobre cómo medir correctamente este tipo de ítem)
+Respondé con:
+1. NOMBRE TÉCNICO DEL ÍTEM
+2. ESPECIFICACIONES TÉCNICAS (materiales exactos según descripción, proceso, acabados)
+3. APU — COMPONENTES con cantidades calculadas sobre las medidas confirmadas:
+   - Materiales (nombre, unidad, cantidad, precio unit. estimado Bs)
+   - Mano de obra (rol específico, unidad, cantidad)
+   - Equipos/subcontratos si aplica
+4. NOTA PARA EL CLIENTE (cómo medir este ítem)
 
-Sé preciso, profesional y breve. Usá terminología de la industria publicitaria boliviana.`;
+Sé preciso y breve. Usá terminología de la industria publicitaria boliviana.`;
     }
 
     // ── Generar precio IA cuando hay medidas ─────────────────────────

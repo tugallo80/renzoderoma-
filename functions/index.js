@@ -384,6 +384,10 @@ exports.geminiProxy = onRequest(GEMINI_PROXY_OPTS, async (req, res) => {
         // Sufijo de dominio que se agrega a todo system prompt de presupuesto/cotización
         const DOMAIN_SUFFIX = `
 
+ADHERENCIA A ESPECIFICACIONES DEL USUARIO: Cuando el usuario especifica materiales, estructuras o procesos, seguílos EXACTAMENTE. No los sustituyás ni los "mejorés". Si dice tubín + foam, usás tubín + foam. Si dice drywall, usás drywall. Si dice lona impresa, usás lona impresa. La descripción del usuario ES la especificación técnica final.
+
+MEDIDAS: Si el usuario proporciona medidas confirmadas, usá SOLO esas medidas para calcular cantidades. No estimes ni uses otras dimensiones. Hacé la aritmética explícitamente (superficie = ancho × alto, perímetro = 2×(a+b), etc.).
+
 RUBROS DE MANO DE OBRA — BOLIVIA (Santa Cruz): Usá SIEMPRE rubros específicos al trabajo. Ejemplos críticos:
 - Espejos/vidrio → VIDRERO (corte, biselado, colocación con silicona) — jornal 150-200 Bs
 - Soldadura → SOLDADOR ESTRUCTURAL — jornal 200-280 Bs
@@ -391,6 +395,7 @@ RUBROS DE MANO DE OBRA — BOLIVIA (Santa Cruz): Usá SIEMPRE rubros específico
 - Pintura → PINTOR — jornal 120-160 Bs
 - Lona/tensado → TENSADOR — m2 8-12 Bs
 - Instalación general → INSTALADOR — jornal 100-150 Bs
+- Foam/revestimiento → OFICIAL ROTULISTA — jornal 120-160 Bs
 NUNCA usar "MANO DE OBRA" genérico.
 
 MATERIALES — ESPEJOS/VIDRIO: Para paneles de espejo la estructura es tubín metálico + espejos. NO incluir plancha galvanizada ni MDF a menos que el usuario lo pida. El área de espejo = área total del panel MENOS las aperturas (huecos TV, ventanas, etc.). Calculá siempre esa resta.`;
