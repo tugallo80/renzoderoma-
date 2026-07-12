@@ -845,6 +845,71 @@ exports.whatsappWebhook = onRequest(WA_OPTS, async (req, res) => {
 });
 
 // ─────────────────────────────────────────────────────────
+// TTS PROXY — Google Cloud Text-to-Speech Neural2 voices
+// Usa ADC (metadata server) — no requiere secretos adicionales.
+// Requiere que la Cloud Text-to-Speech API esté habilitada en el proyecto GCP.
+// ─────────────────────────────────────────────────────────
+exports.ttsProxy = onRequest({
+    timeoutSeconds: 15,
+    memory: "256MiB",
+    region: "us-central1",
+    invoker: "public",
+    cors: false,
+}, async (req, res) => {
+    applyCors(req, res);
+    if (req.method === "OPTIONS") return res.status(204).send("");
+    if (req.method !== "POST") return res.status(405).json({ error: "Método no permitido" });
+
+    const decoded = await requireAuth(req, res);
+    if (!decoded) return;
+
+    try {
+        const { text, voice } = req.body || {};
+        if (!text || typeof text !== "string") return res.status(400).json({ error: "Falta campo text" });
+
+        // ADC via metadata server (disponible en todos los Cloud Functions / Cloud Run)
+        const tokenResp = await fetch(
+            "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token",
+            { headers: { "Metadata-Flavor": "Google" } }
+        );
+        const { access_token } = await tokenResp.json();
+
+        const ttsResp = await fetch("https://texttospeech.googleapis.com/v1/text:synthesize", {
+            method: "POST",
+            headers: {
+                "Authorization": "Bearer " + access_token,
+                "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+                input: { text: text.slice(0, 5000) },
+                voice: {
+                    languageCode: "es-US",
+                    name: voice || "es-US-Neural2-B",
+                },
+                audioConfig: {
+                    audioEncoding: "MP3",
+                    speakingRate: 0.94,
+                    pitch: 0.0,
+                },
+            }),
+        });
+
+        if (!ttsResp.ok) {
+            const errData = await ttsResp.json().catch(() => ({}));
+            console.error("TTS API error:", ttsResp.status, errData);
+            return res.status(ttsResp.status).json({ error: errData?.error?.message || "TTS error" });
+        }
+
+        const data = await ttsResp.json();
+        return res.status(200).json({ audioContent: data.audioContent });
+
+    } catch (e) {
+        console.error("ttsProxy error:", e);
+        return res.status(500).json({ error: e.message });
+    }
+});
+
+// ─────────────────────────────────────────────────────────
 // PROXY IMÁGENES (Firebase Storage → PDF sin CORS)
 // ─────────────────────────────────────────────────────────
 exports.proxyImagen = onRequest(

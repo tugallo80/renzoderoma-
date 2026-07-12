@@ -20,6 +20,8 @@ class CerebroLive {
         this._thinking          = false;
         this._sysPrompt         = '';
         this._pendingRestart    = null;
+        this._audioCtx          = null;
+        this._currentSource     = null;
 
         // Callbacks (mismos que GeminiLive para compatibilidad)
         this.onReady       = null;   // ()
@@ -151,25 +153,79 @@ class CerebroLive {
         }
     }
 
-    // ─── SpeechSynthesis ────────────────────────────────────────────────────
-    _speak(text) {
+    // ─── TTS via Google Cloud Neural2 + fallback SpeechSynthesis ────────────
+    async _speak(text) {
         this._speaking = true;
         this._setState('speaking');
         window.speechSynthesis.cancel();
 
         const done = () => {
+            this._currentSource = null;
             this._speaking = false;
             if (this.active && !this._muted) this._scheduleRestart(400);
             else this._setState('listening');
         };
 
+        // Intentar Google Cloud TTS (Neural2 — voz natural masculina)
+        try {
+            let headers = { 'Content-Type': 'application/json' };
+            try {
+                const user = firebase.auth().currentUser;
+                if (user) headers['Authorization'] = 'Bearer ' + await user.getIdToken();
+            } catch(_) {}
+
+            const resp = await fetch('/api/tts', {
+                method: 'POST',
+                headers,
+                body: JSON.stringify({ text })
+            });
+
+            if (resp.ok) {
+                const data = await resp.json();
+                if (data.audioContent) {
+                    await this._playMp3(data.audioContent, done);
+                    return;
+                }
+            }
+        } catch(_) {}
+
+        // Fallback: SpeechSynthesis del navegador
+        this._speakFallback(text, done);
+    }
+
+    async _playMp3(b64, onEnd) {
+        try {
+            const binary = atob(b64);
+            const bytes = new Uint8Array(binary.length);
+            for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+
+            if (!this._audioCtx || this._audioCtx.state === 'closed') {
+                this._audioCtx = new AudioContext();
+            }
+            if (this._audioCtx.state === 'suspended') {
+                await this._audioCtx.resume();
+            }
+
+            const audioBuffer = await this._audioCtx.decodeAudioData(bytes.buffer);
+            const source = this._audioCtx.createBufferSource();
+            source.buffer = audioBuffer;
+            source.connect(this._audioCtx.destination);
+            source.onended = onEnd;
+            this._currentSource = source;
+            source.start();
+        } catch(e) {
+            console.warn('MP3 playback error, usando fallback:', e.message);
+            onEnd();
+        }
+    }
+
+    _speakFallback(text, done) {
         const utt = new SpeechSynthesisUtterance(text);
         utt.lang   = 'es';
         utt.rate   = 0.94;
         utt.pitch  = 1.05;
         utt.volume = 1.0;
 
-        // Esperar a que las voces estén disponibles y elegir español
         const trySpeak = () => {
             const voices = window.speechSynthesis.getVoices();
             const esp = voices.find(v => v.lang.startsWith('es') && v.localService)
@@ -189,7 +245,6 @@ class CerebroLive {
                 window.speechSynthesis.onvoiceschanged = null;
                 trySpeak();
             };
-            // Fallback si onvoiceschanged no dispara
             setTimeout(trySpeak, 500);
         }
     }
@@ -200,6 +255,7 @@ class CerebroLive {
         if (isMuted) {
             if (this.recognition) { try { this.recognition.abort(); } catch(_) {} }
             window.speechSynthesis.cancel();
+            if (this._currentSource) { try { this._currentSource.stop(); } catch(_) {} this._currentSource = null; }
             this._speaking = false;
         } else {
             if (this.active) this._scheduleRestart(200);
@@ -214,6 +270,8 @@ class CerebroLive {
         if (this._pendingRestart) { clearTimeout(this._pendingRestart); this._pendingRestart = null; }
         if (this.recognition) { try { this.recognition.abort(); } catch(_) {} this.recognition = null; }
         window.speechSynthesis.cancel();
+        if (this._currentSource) { try { this._currentSource.stop(); } catch(_) {} this._currentSource = null; }
+        if (this._audioCtx) { try { this._audioCtx.close(); } catch(_) {} this._audioCtx = null; }
         this._setState('closed');
     }
 
