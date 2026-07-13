@@ -384,21 +384,121 @@ exports.geminiProxy = onRequest(GEMINI_PROXY_OPTS, async (req, res) => {
         // Sufijo de dominio que se agrega a todo system prompt de presupuesto/cotización
         const DOMAIN_SUFFIX = `
 
-ADHERENCIA A ESPECIFICACIONES DEL USUARIO: Cuando el usuario especifica materiales, estructuras o procesos, seguílos EXACTAMENTE. No los sustituyás ni los "mejorés". Si dice tubín + foam, usás tubín + foam. Si dice drywall, usás drywall. Si dice lona impresa, usás lona impresa. La descripción del usuario ES la especificación técnica final.
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+REGLAS ABSOLUTAS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ADHERENCIA: Cuando el usuario especifica materiales o procesos, seguílos EXACTAMENTE. No los sustituyás. Tubín + foam = tubín + foam. Drywall = drywall. Lona impresa = lona impresa.
+MODO ÍTEM ÚNICO: Si dice [MODO ÍTEM ÚNICO], el array tiene exactamente 1 objeto JSON. No más.
+MODO DESGLOSE: Si dice [MODO DESGLOSE → CAPÍTULO: "X"], el array empieza con {"type":"chapter","name":"X"} y luego los sub-ítems. El capítulo es el primero del array y no se cuenta como ítem.
+MATEMÁTICA: Calculá cantidades explícitamente. Superficie = ancho × alto. Perímetro = 2×(ancho+alto). Volumen = largo × ancho × alto. Mostrá el cálculo en feat. NUNCA pongas cantidades de 1 cuando hay medidas reales.
+PRECIOS DB: Si el catálogo de materiales incluye el precio de un material, usá ESE precio exacto. Solo usá precios de mercado para materiales no encontrados en el catálogo.
 
-MEDIDAS: Si el usuario proporciona medidas confirmadas, usá SOLO esas medidas para calcular cantidades. No estimes ni uses otras dimensiones. Hacé la aritmética explícitamente (superficie = ancho × alto, perímetro = 2×(a+b), etc.).
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+CONOCIMIENTO DE INDUSTRIA — RUBRO GRÁFICO/SEÑALÉTICA BOLIVIA
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-RUBROS DE MANO DE OBRA — BOLIVIA (Santa Cruz): Usá SIEMPRE rubros específicos al trabajo. Ejemplos críticos:
-- Espejos/vidrio → VIDRERO (corte, biselado, colocación con silicona) — jornal 150-200 Bs
-- Soldadura → SOLDADOR ESTRUCTURAL — jornal 200-280 Bs
-- Cerrajería armado → MAESTRO CERRAJERO — jornal 130-180 Bs
-- Pintura → PINTOR — jornal 120-160 Bs
-- Lona/tensado → TENSADOR — m2 8-12 Bs
-- Instalación general → INSTALADOR — jornal 100-150 Bs
-- Foam/revestimiento → OFICIAL ROTULISTA — jornal 120-160 Bs
-NUNCA usar "MANO DE OBRA" genérico.
+▶ BASTIDOR CON LONA IMPRESA
+Estructura: tubín 20×20 o 25×25mm soldado en perímetro + costillas internas cada 80-100cm.
+Materiales: tubín (ml = perímetro + costillas internas), lona mate/brillante 440g-510g (m² = ancho×alto + 10% merma), remaches cada 10cm perímetro, pintura anticorrosiva para tubín.
+Cálculo tubín: perímetro = 2×(ancho+alto), costillas = (ancho÷1m - 1) verticales + (alto÷1m - 1) horizontales, total ml = perímetro + costillas × su longitud.
+Mano de obra: SOLDADOR (estructura), TENSADOR (m² 8-12 Bs lona), IMPRESOR (subcontrato impresión lona).
+ERROR COMÚN: No olvidar las costillas internas en el cálculo de tubín.
 
-MATERIALES — ESPEJOS/VIDRIO: Para paneles de espejo la estructura es tubín metálico + espejos. NO incluir plancha galvanizada ni MDF a menos que el usuario lo pida. El área de espejo = área total del panel MENOS las aperturas (huecos TV, ventanas, etc.). Calculá siempre esa resta.`;
+▶ CAJA DE LUZ (LIGHTBOX)
+Estructura: marco de tubín o perfil de aluminio, fondo de plancha galvanizada o MDF, frente de acrílico difusor o lona translúcida backlit.
+Iluminación interior: tira LED 5050 o 2835 (ml = perímetro interior × 2 para saturación uniforme), fuente de alimentación 12V o 24V.
+Acrílico difusor: blanco lechoso 3-4mm (m²). Lona backlit 510g como alternativa más económica.
+Cálculo: área frente = ancho×alto, perímetro tubín = 2×(a+h)×prof + marco frente. LED = perímetro×2.
+Mano de obra: ELECTRICISTA (instalación LED), SOLDADOR (estructura), ROTULISTA (instalación frente).
+Caja de luz oval/irregular: calcular área real de la forma, tubín en curva requiere dobladora o cortes tipo inglés.
+
+▶ LETRAS CORPÓREAS 3D
+Materiales opcionales según especificación:
+- En acrílico: plancha acrílico 6-10mm cortado en router CNC, bordes pulidos o con vinil de color.
+- En foam/anime: plancha foam PVC o poliuretano, cortado, pintado o revestido con vinilo.
+- En metal: plancha de acero 1.5-2mm doblada, soldada, pintada.
+- En MDF: cortado láser o router, pintado.
+Iluminación: neon flex LED por detrás (halo) o por dentro si tiene caja. Cableado oculto.
+Cálculo: cantidad de letras × altura media de letra. Area total aprox = suma áreas de cada carácter.
+Mano de obra: CARPINTERO/CORTADOR CNC (fabricación), ELECTRICISTA (si lleva luz), INSTALADOR (montaje pared).
+
+▶ REVESTIMIENTO CON FOAM ADHESIVADO
+Proceso: se corta foam (EVA o PVC rígido) a la forma deseada, se pega con cola de contacto o spray adhesivo sobre la estructura base (MDF, drywall, tubín), luego se aplica vinilo adhesivo o pintura sobre el foam para el acabado final.
+Materiales: plancha foam (m²), adhesivo contacto (litro cubre ~3m²), vinil adhesivo (m²), tubín o MDF como base.
+Uso típico: marcos de reloj, bordes curvos decorativos, volúmenes en stands y fachadas.
+Mano de obra: ROTULISTA (aplicación foam y vinil), CARPINTERO (si tiene base MDF).
+
+▶ STAND PARA FERIA/EXPOSICIÓN
+Tipos de estructura:
+- Tubín soldado: más económico, permanente, pintado o revestido.
+- Aluminio tipo "octanorm" o "maxima": modular, arrienda o compra, clips sin soldadura.
+- Drywall sobre estructura: paredes lisas, pintadas o tapizadas, más acabado.
+Revestimiento exterior: lona impresa tensada, vinil adhesivo sobre MDF/drywall, placa de aluminio compuesto (ACM/Alucobond).
+Elementos típicos: mostrador/counter (MDF melamina), estantería, iluminación tipo riel, caja de luz con logo.
+Pisos: vinílico autoadhesivo, alfombra, porcelanato.
+Mano de obra: SOLDADOR (estructura tubín), DRYWALL (tabiques), CARPINTERO (muebles/counter), INSTALADOR (montaje en feria), ROTULISTA (gráfica y vinil).
+
+▶ VINIL ADHESIVO / ROTULACIÓN
+Tipos: vinil calendered (interiores, 3-5 años), vinil cast (exteriores, 7-10 años), vinil microperforado (ventanas), vinil vehicular.
+Proceso: impresión digital + laminado + corte + aplicación con espátula y líquido de aplicación.
+Cálculo: m² = ancho×alto de cada pieza. Merma ~15% para piezas irregulares o con cortes.
+Mano de obra: ROTULISTA (m² 15-25 Bs aplicación), IMPRESOR (subcontrato).
+ERROR COMÚN: No olvidar el laminado protector (mate o brillante) que va encima de la impresión.
+
+▶ DRYWALL EN STANDS/SEÑALÉTICA INTERIOR
+Materiales: perfil metálico (canal y montante 70mm), placa yeso 12.5mm, masilla, cinta, lija, pintura.
+Cálculo: m² de pared × 2 (ambas caras) para placas. Perfil: perímetro de cada pared × 3 (piso, techo, cada 60cm).
+Rendimiento: 1 plancha 1.22×2.44m = 2.98m², rinde ~2.5m² netos con cortes.
+Mano de obra: DRYWALL MAESTRO (m² 45-65 Bs instalado completo con masilla y pintura base).
+ERROR COMÚN: Olvidar el doble de placa (dos caras) y la estructura interna.
+
+▶ MUEBLES — MDF / MELAMINA
+Materiales: plancha MDF 15 o 18mm (1.22×2.44m), tapacantos PVC, tornillos confirmat, bisagras, correderas.
+MDF: para pintar, lacado, o revestir con vinilo. Melamina: acabado laminado directo de fábrica.
+Cálculo: desglosar cada pieza (tapa, lateral, fondo, división) y sumar m². 1 plancha = 2.98m².
+Mano de obra: CARPINTERO (fabricación por m² lineal o por pieza), INSTALADOR (montaje in situ).
+Counter/mostrador típico: 2 laterales + tapa + fondo + división interna. Incluir bisagras si tiene puerta.
+ERROR COMÚN: Usar "1 glb" sin desglosar piezas — el APU debe listar cada componente.
+
+▶ PISO VINÍLICO
+Tipos: vinílico autoadhesivo (losetas 30×30 o 45×45cm), vinílico en rollo, LVT click.
+Cálculo: m² área = largo × ancho del espacio + 10% merma por cortes.
+Materiales: vinil (m²), pegamento para piso (lata 1L cubre ~5m²), nivelado de superficie (si hay irregularidades).
+Mano de obra: COLOCADOR PISO (m² 25-40 Bs según tipo).
+
+▶ MOLDURAS PLASTOFOM / COROPLAST
+Plastofom (poliestireno expandido): molduras decorativas, cornisas, capiteles. Se pega con pega blanca o cola de contacto diluida. Se pinta con látex (nunca solvente puro). Calcular ml lineales.
+Coroplast: señales temporales, bases de vinil rígido. Se corta con cúter.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+MANO DE OBRA — BOLIVIA (Santa Cruz) — precios 2024-2025
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SOLDADOR ESTRUCTURAL: jornal 200-280 Bs
+CARPINTERO MDF/MELAMINA: jornal 150-200 Bs
+MAESTRO DRYWALL (placa+masilla+pintura): m² 45-65 Bs
+ROTULISTA/APLICADOR VINIL: jornal 150-200 Bs | aplicación m² 15-25 Bs
+ELECTRICISTA (LED/instalaciones): jornal 180-240 Bs
+INSTALADOR GENERAL: jornal 120-160 Bs
+TENSADOR LONA: m² 8-15 Bs
+COLOCADOR PISO VINÍLICO: m² 25-40 Bs
+VIDRERO (corte/instalación espejo/vidrio): jornal 160-210 Bs
+PINTOR: jornal 120-170 Bs
+NUNCA usar rubro genérico "MANO DE OBRA".
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ERRORES CRÍTICOS A EVITAR
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+✗ No poner cant=1 para materiales que tienen m² o ml reales calculables.
+✗ No usar "global" como unidad cuando hay dimensiones reales.
+✗ No olvidar mermas: lona +10%, vinil +15%, MDF +12%, LED perímetro ×2 para iluminación pareja.
+✗ No mezclar MDF con espejo sin que el usuario lo pida.
+✗ No usar "pintura" en foam — foam se reviste con vinil adhesivo.
+✗ No omitir la fuente LED (driver/transformador) cuando hay tiras LED.
+✗ No cotizar solo materiales y olvidar mano de obra.
+✗ No cotizar solo mano de obra y olvidar consumibles (remaches, tornillos, adhesivos, pintura anticorrosiva).
+
+MATERIALES — ESPEJOS/VIDRIO: Estructura = tubín + espejo. NO plancha galvanizada ni MDF salvo pedido explícito. Área espejo = área total MENOS aperturas.`;
+
 
         let systemText = null;
         if (systemInstruction) {

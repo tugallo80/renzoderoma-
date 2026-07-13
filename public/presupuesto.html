@@ -2050,6 +2050,23 @@ Devolvé exactamente este formato (sin texto adicional):
             <div style="margin-top:6px;">
                 <input type="text" class="ia-inp-acab" placeholder="Acabado / branding (ej: impresión UV, neon flex, pintura duco, vinilo)" style="width:100%;background:#000;color:#fff;border:1px solid #444;padding:6px 8px;border-radius:4px;font-size:11px;box-sizing:border-box;">
             </div>
+            <!-- Modo de salida -->
+            <div style="margin-top:10px; padding:10px; background:#111; border-radius:6px; border:1px solid #2a2a2a;">
+                <div style="font-size:10px; color:#888; margin-bottom:6px; font-weight:700; text-transform:uppercase; letter-spacing:.5px;">Modo de salida IA</div>
+                <div style="display:flex; gap:0; border:1px solid #444; border-radius:6px; overflow:hidden;">
+                    <label id="lbl-unico-${idActual}" style="flex:1;display:flex;align-items:center;justify-content:center;gap:6px;padding:8px;cursor:pointer;font-size:11px;font-weight:700;background:#6c47d9;color:#fff;transition:.15s;">
+                        <input type="radio" name="ia-modo-${idActual}" class="ia-inp-modo" value="unico" checked style="display:none;" onchange="window._toggleModoRow(${idActual})">
+                        <i class="ph-bold ph-cube"></i> Un solo ítem
+                    </label>
+                    <label id="lbl-desglose-${idActual}" style="flex:1;display:flex;align-items:center;justify-content:center;gap:6px;padding:8px;cursor:pointer;font-size:11px;font-weight:700;background:#222;color:#888;border-left:1px solid #444;transition:.15s;">
+                        <input type="radio" name="ia-modo-${idActual}" class="ia-inp-modo" value="desglose" style="display:none;" onchange="window._toggleModoRow(${idActual})">
+                        <i class="ph-bold ph-list-bullets"></i> Desglosar en ítems
+                    </label>
+                </div>
+                <div id="ia-cap-wrap-${idActual}" style="display:none; margin-top:8px;">
+                    <input type="text" class="ia-inp-capitulo" placeholder="Nombre del capítulo (ej: MUEBLE RECEPCIÓN, ESTRUCTURA FACHADA, PISO VINÍLICO...)" style="width:100%;background:#000;color:#fff;border:1.5px solid #6c47d9;padding:8px;border-radius:4px;font-size:12px;box-sizing:border-box;">
+                </div>
+            </div>
             <div style="display:flex; align-items:center; gap:10px; margin-top:10px;">
                 <input type="file" id="ia-file-${idActual}" accept="image/*" multiple style="display:none" onchange="window.handleIARowPhoto(this, ${idActual})">
                 <button type="button" onclick="document.getElementById('ia-file-${idActual}').click()" style="background:#333; color:#fff; border:none; padding:5px 10px; border-radius:4px; cursor:pointer; font-size:11px;"><i class="ph-bold ph-camera"></i> Subir Foto(s)</button>
@@ -2081,6 +2098,22 @@ Devolvé exactamente este formato (sin texto adicional):
         container.appendChild(row);
         container.scrollTop = container.scrollHeight;
     }
+
+    window._toggleModoRow = function(id) {
+        const sel = document.querySelector(`input[name="ia-modo-${id}"]:checked`)?.value || 'unico';
+        const capWrap = document.getElementById(`ia-cap-wrap-${id}`);
+        const lblU = document.getElementById(`lbl-unico-${id}`);
+        const lblD = document.getElementById(`lbl-desglose-${id}`);
+        if (sel === 'desglose') {
+            if (capWrap) capWrap.style.display = 'block';
+            if (lblU) { lblU.style.background = '#222'; lblU.style.color = '#888'; }
+            if (lblD) { lblD.style.background = '#6c47d9'; lblD.style.color = '#fff'; }
+        } else {
+            if (capWrap) capWrap.style.display = 'none';
+            if (lblU) { lblU.style.background = '#6c47d9'; lblU.style.color = '#fff'; }
+            if (lblD) { lblD.style.background = '#222'; lblD.style.color = '#888'; }
+        }
+    };
 
     // LÓGICA DE SUBIDA MÚLTIPLE (BOTÓN EXAMINAR)
     window.handleIARowPhoto = function(inp, id) {
@@ -2496,9 +2529,16 @@ F3. MATERIALES POR PIEZAS COMPLEJAS — preguntar si no se especifica:
             const mat  = row.querySelector('.ia-inp-mat')?.value?.trim()  || '';
             const est  = row.querySelector('.ia-inp-est')?.value?.trim()  || '';
             const acab = row.querySelector('.ia-inp-acab')?.value?.trim() || '';
+            const modo = row.querySelector('.ia-inp-modo:checked')?.value || 'unico';
+            const capitulo = row.querySelector('.ia-inp-capitulo')?.value?.trim() || name.toUpperCase();
 
             if(name) {
-                textPrompt += `ÍTEM ${index+1}: ${name} (Cantidad: ${cant}).\nInstrucciones del usuario: ${prompt}\n`;
+                if (modo === 'unico') {
+                    textPrompt += `ÍTEM ${index+1}: ${name} (Cantidad: ${cant}). [MODO ÍTEM ÚNICO — Generá EXACTAMENTE 1 objeto JSON en el array, sin capitulos, sin desgloses. Todo el APU va dentro de ese único ítem.]\n`;
+                } else {
+                    textPrompt += `ÍTEM ${index+1}: ${name} (Cantidad: ${cant}). [MODO DESGLOSE — Generá múltiples ítems agrupados bajo el capítulo "${capitulo}". El array para este ítem DEBE empezar con {"type":"chapter","name":"${capitulo}"} seguido de los sub-ítems.]\n`;
+                }
+                textPrompt += `Instrucciones del usuario: ${prompt}\n`;
                 if (mat || est || acab) {
                     textPrompt += 'Contexto del ítem:';
                     if (mat)  textPrompt += `\nMateriales: ${mat}`;
@@ -2578,14 +2618,15 @@ CAMPOS OBLIGATORIOS por ítem:
 - "util": 50
 - "ind": 10
 
-CAPÍTULOS — OBLIGATORIO cuando el resultado tiene 4 o más ítems:
-Cuando vayas a generar 4 o más objetos de ítem, agrupalos en CAPÍTULOS temáticos.
+MODO ÍTEM ÚNICO vs DESGLOSE — REGLA CRÍTICA:
+Cada ítem en el prompt tiene un marcador [MODO ÍTEM ÚNICO] o [MODO DESGLOSE → CAPÍTULO: "X"].
+- [MODO ÍTEM ÚNICO]: generá EXACTAMENTE 1 objeto JSON para ese ítem. TODO el APU consolidado adentro. SIN capítulo antes. SIN sub-ítems separados. Un solo objeto.
+- [MODO DESGLOSE → CAPÍTULO: "X"]: empezá con {"type":"chapter","name":"X"} y luego los sub-ítems. El capítulo va primero en el array.
+Si no hay marcador, usá criterio: ítems simples (lona, vinil, letrero básico) → 1 ítem. Proyectos complejos (stand, mueble complejo, fachada completa) → desglose automático CON capítulo.
+
+CAPÍTULOS:
 Un capítulo se representa así: {"type":"chapter","name":"NOMBRE DEL CAPÍTULO"}
 Va INMEDIATAMENTE ANTES de los ítems de ese grupo en el array.
-Nombres de capítulo recomendados (usá los que apliquen):
-  "ESTRUCTURA METÁLICA" | "REVESTIMIENTO Y ACABADOS" | "GRÁFICA E IMPRESIÓN"
-  "INSTALACIÓN ELÉCTRICA" | "MUEBLES Y ACCESORIOS" | "SEÑALÉTICA"
-  "MONTAJE Y DESMONTAJE" | "ILUMINACIÓN" | "CARPINTERÍA"
 Los ítems dentro de un capítulo NO llevan el campo "type".
 NUNCA pongas "type":"item" en los ítems normales — solo "type":"chapter" para separadores.
 
