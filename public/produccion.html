@@ -253,6 +253,7 @@
         <div id="prod-viewer-nav">
             <button class="pv-btn" onclick="cerrarVisorProd()"><i class="ph-bold ph-caret-left"></i> Atrás</button>
             <div style="display:flex;gap:8px;">
+                <button id="pv-annotate-btn" class="pv-btn admin-only" onclick="openPANFromViewer()" style="display:none;background:#ffd60a;color:#000;border-color:#ffd60a;font-weight:900;"><i class="ph-bold ph-pencil-line"></i> Anotar</button>
                 <button class="pv-btn green" onclick="guardarFotoProd()"><i class="ph-bold ph-download-simple"></i> Guardar</button>
                 <button class="pv-btn whatsapp" onclick="compartirFotoProd()"><i class="ph-bold ph-whatsapp-logo"></i> Enviar</button>
             </div>
@@ -630,7 +631,10 @@
             let btnUploadArt = !isWorker ? `<button class="piece-img-btn" onclick="openPieceUploadModal(${itemIdx}, ${apuTypeArg}, ${apuIdx}, ${mIdx})"><i class="ph-bold ph-upload"></i> Foto Arte</button>` : '';
 
             const annCount = Array.isArray(m.anns) ? m.anns.length : (m.anns && typeof m.anns === 'object' ? Object.keys(m.anns).length : 0);
-            const annotBtn = m.img && !isWorker ? `<button onclick="openPAN(${itemIdx},${apuTypeArg},${apuIdx},${mIdx},'${m.img}')" style="background:none;border:1px solid #ffd60a;color:#ffd60a;border-radius:4px;padding:2px 5px;font-size:9px;cursor:pointer;margin-top:3px;font-weight:700;display:flex;align-items:center;gap:2px;white-space:nowrap;"><i class="ph-bold ph-pencil-line"></i>${annCount > 0 ? ' ('+annCount+')' : ' Anotar'}</button>` : '';
+            const panPath = apuType
+                ? `proyectos/${cid}/${pid}/presupuesto/items/${itemIdx}/apu/${apuType}/${apuIdx}/measures/${mIdx}/anns`
+                : `proyectos/${cid}/${pid}/presupuesto/items/${itemIdx}/measures/${mIdx}/anns`;
+            const annotBtn = m.img && !isWorker ? `<button onclick="openPAN('${m.img}','${panPath}','pia-${piaKey}')" style="background:none;border:1px solid #ffd60a;color:#ffd60a;border-radius:4px;padding:2px 5px;font-size:9px;cursor:pointer;margin-top:3px;font-weight:700;display:flex;align-items:center;gap:2px;white-space:nowrap;"><i class="ph-bold ph-pencil-line"></i>${annCount > 0 ? ' ('+annCount+')' : ' Anotar'}</button>` : '';
             const imgContent = m.img ? `<div style="position:relative;width:50px;height:50px;flex-shrink:0;">${btnTrashImg}<img loading="lazy" decoding="async" src="${m.img}" style="width:100%;height:100%;object-fit:cover;border-radius:6px;cursor:pointer;border:1px solid var(--border);" onclick="viewFullImage('${m.img}')"></div>${annotBtn}` : btnUploadArt;
             let imgHtml = `<div id="pia-${piaKey}" style="display:flex;flex-direction:column;align-items:center;flex-shrink:0;">${imgContent}</div>`;
 
@@ -799,7 +803,9 @@
                     let btnTrash = !isWorker ? `<i class="ph-fill ph-x-circle img-del" onclick="deleteGeneralImage(${idx}, '${img.i}', '${img.type}', '${img.t||''}')"></i>` : '';
                     let lblHtml = img.type === 'apu_corte' ? `<div style="position:absolute; bottom:0; background:rgba(0,0,0,0.6); color:white; font-size:8px; width:100%; text-align:center; white-space:nowrap; overflow:hidden; padding:2px 0;">Plano</div>`
                                : img.type === 'foto' ? `<div style="position:absolute; bottom:0; background:rgba(88,86,214,0.85); color:white; font-size:8px; width:100%; text-align:center; white-space:nowrap; overflow:hidden; padding:2px 0;">📐 ${img.lbl||'CAD'}</div>` : '';
-                    html += `<div class="img-box">${btnTrash}<img loading="lazy" decoding="async" src="${img.src}" onclick="viewFullImage('${img.src}')">${lblHtml}</div>`;
+                    const imgAnnKey = img.type === 'apu_corte' ? `apu_${img.t}_${img.i}` : `${img.type}_${img.i}`;
+                    const imgAnnPath = `proyectos/${cid}/${pid}/presupuesto/items/${idx}/img_anns/${imgAnnKey}`;
+                    html += `<div class="img-box">${btnTrash}<img loading="lazy" decoding="async" src="${img.src}" onclick="viewFullImage('${img.src}','${imgAnnPath}')">${lblHtml}</div>`;
                 });
                 if(!isWorker) html += `<div class="btn-add-img" onclick="openGeneralUpload(${idx})"><i class="ph-bold ph-plus"></i><span style="font-size:8px; font-weight:800;">Añadir Foto</span></div>`;
                 html += `</div>`;
@@ -1860,26 +1866,28 @@
 
     // ── Notas de fabricación ─────────────────────────────────────────────────
     const _notasSaveTimers = {};
-    // ── ANOTADOR DE PIEZAS (PAN) ─────────────────────────────────────────────
-    let _panAnns = [];       // [{id,text,ax,ay,bx,by}] coords in px relative to pan-stage
-    let _panTarget = null;   // {itemIdx,apuType,apuIdx,measureIdx}
+    // ── ANOTADOR GENÉRICO (PAN) ───────────────────────────────────────────────
+    // openPAN(imgUrl, savePath, piaId?) — works for ANY image in the page
+    let _panAnns = [];
+    let _panSavePath = null;
+    let _panPiaId = null;
     let _panNextId = 1;
     let _panSaveTimer = null;
 
-    function openPAN(itemIdx, apuType, apuIdx, measureIdx, imgUrl) {
-        _panTarget = { itemIdx, apuType, apuIdx, measureIdx };
+    function openPAN(imgUrl, savePath, piaId) {
+        _panSavePath = savePath;
+        _panPiaId = piaId || null;
         document.getElementById('pan-img').src = imgUrl;
-        // Load existing annotations
-        let m = null;
-        if (apuType) { m = allItems[itemIdx]?.apu?.[apuType]?.[apuIdx]?.measures?.[measureIdx]; }
-        else { m = allItems[itemIdx]?.measures?.[measureIdx]; }
-        const raw = m?.anns;
-        _panAnns = Array.isArray(raw) ? JSON.parse(JSON.stringify(raw))
-                 : (raw && typeof raw === 'object') ? Object.values(raw).filter(Boolean)
-                 : [];
-        _panNextId = _panAnns.length ? Math.max(..._panAnns.map(a => parseInt(a.id)||0)) + 1 : 1;
         document.getElementById('mod-pan').style.display = 'flex';
-        requestAnimationFrame(_panRender);
+        // Load annotations from Firebase
+        db.ref(savePath).once('value', snap => {
+            const raw = snap.val();
+            _panAnns = Array.isArray(raw) ? JSON.parse(JSON.stringify(raw))
+                     : (raw && typeof raw === 'object') ? Object.values(raw).filter(Boolean)
+                     : [];
+            _panNextId = _panAnns.length ? Math.max(..._panAnns.map(a => parseInt(a.id)||0)) + 1 : 1;
+            requestAnimationFrame(_panRender);
+        });
     }
 
     function cerrarPAN() {
@@ -1887,7 +1895,7 @@
         document.getElementById('pan-img').src = '';
         document.getElementById('pan-svg').innerHTML = '';
         document.getElementById('pan-layer').innerHTML = '';
-        _panAnns = []; _panTarget = null;
+        _panAnns = []; _panSavePath = null; _panPiaId = null;
     }
 
     function addPAN() {
@@ -2029,29 +2037,19 @@
     }
 
     function _panSave() {
-        if (!_panTarget) return;
+        if (!_panSavePath) return;
         clearTimeout(_panSaveTimer);
         _panSaveTimer = setTimeout(() => {
-            const { itemIdx, apuType, apuIdx, measureIdx } = _panTarget;
             window._suppressRenderTasks = true;
             const data = _panAnns.length ? _panAnns : null;
-            const path = apuType
-                ? `proyectos/${cid}/${pid}/presupuesto/items/${itemIdx}/apu/${apuType}/${apuIdx}/measures/${measureIdx}/anns`
-                : `proyectos/${cid}/${pid}/presupuesto/items/${itemIdx}/measures/${measureIdx}/anns`;
-            db.ref(path).set(data);
-            // Update memory
-            if (allItems[itemIdx]) {
-                const m = apuType
-                    ? allItems[itemIdx]?.apu?.[apuType]?.[apuIdx]?.measures?.[measureIdx]
-                    : allItems[itemIdx]?.measures?.[measureIdx];
-                if (m) m.anns = data;
-            }
-            // Update annotation badge in piece row
-            const piaKey = `${itemIdx}-${apuType||'0'}-${apuIdx||'0'}-${measureIdx}`;
-            const pia = document.getElementById('pia-' + piaKey);
-            if (pia) {
-                const btn = pia.querySelector('button[onclick*="openPAN"]');
-                if (btn) { const sp = btn.querySelector('i'); if (sp) btn.lastChild.textContent = _panAnns.length > 0 ? ` (${_panAnns.length})` : ' Anotar'; }
+            db.ref(_panSavePath).set(data);
+            // Update badge in piece row (if opened from there)
+            if (_panPiaId) {
+                const pia = document.getElementById(_panPiaId);
+                if (pia) {
+                    const btn = pia.querySelector('button[onclick*="openPAN"]');
+                    if (btn) btn.lastChild.textContent = _panAnns.length > 0 ? ` (${_panAnns.length})` : ' Anotar';
+                }
             }
         }, 600);
     }
@@ -2456,7 +2454,23 @@ SALIDA: responde SOLO con JSON válido sin texto fuera:
         } 
     }
 
-    async function pasteImageClick() { /* nativo - preservado */ }
+    async function pasteImageClick() {
+        try {
+            const items = await navigator.clipboard.read();
+            for (const item of items) {
+                for (const type of item.types) {
+                    if (type.startsWith('image/')) {
+                        const blob = await item.getType(type);
+                        processPhotoUpload({ files: [new File([blob], 'paste.jpg', { type })] });
+                        return;
+                    }
+                }
+            }
+            alert('No hay imagen en el portapapeles. Copiá una imagen primero.');
+        } catch(e) {
+            alert('Permiso denegado. Usá Ctrl+V directamente sobre la página.');
+        }
+    }
     async function pastePieceImageClick() {
         try {
             const items = await navigator.clipboard.read();
@@ -2506,7 +2520,10 @@ SALIDA: responde SOLO con JSON válido sin texto fuera:
         if (!pia) return;
         const apuTypeArg = apuType ? `'${apuType}'` : null;
         const trash = !isWorker ? `<i class="ph-fill ph-x-circle img-del" style="top:-8px;right:-8px;font-size:20px;" onclick="deleteMeasureImg(${itemIdx},${apuTypeArg},${apuIdx||'0'},${measureIdx})"></i>` : '';
-        const annotBtn = !isWorker ? `<button onclick="openPAN(${itemIdx},${apuTypeArg},${apuIdx||'0'},${measureIdx},'${url}')" style="background:none;border:1px solid #ffd60a;color:#ffd60a;border-radius:4px;padding:2px 5px;font-size:9px;cursor:pointer;margin-top:3px;font-weight:700;display:flex;align-items:center;gap:2px;white-space:nowrap;"><i class="ph-bold ph-pencil-line"></i> Anotar</button>` : '';
+        const injectPanPath = apuType
+            ? `proyectos/${cid}/${pid}/presupuesto/items/${itemIdx}/apu/${apuType}/${apuIdx}/measures/${measureIdx}/anns`
+            : `proyectos/${cid}/${pid}/presupuesto/items/${itemIdx}/measures/${measureIdx}/anns`;
+        const annotBtn = !isWorker ? `<button onclick="openPAN('${url}','${injectPanPath}','pia-${piaKey}')" style="background:none;border:1px solid #ffd60a;color:#ffd60a;border-radius:4px;padding:2px 5px;font-size:9px;cursor:pointer;margin-top:3px;font-weight:700;display:flex;align-items:center;gap:2px;white-space:nowrap;"><i class="ph-bold ph-pencil-line"></i> Anotar</button>` : '';
         pia.innerHTML = `<div style="position:relative;width:50px;height:50px;flex-shrink:0;">${trash}<img loading="lazy" src="${url}" style="width:100%;height:100%;object-fit:cover;border-radius:6px;cursor:pointer;border:1px solid var(--border);" onclick="viewFullImage('${url}')"></div>${annotBtn}`;
     }
 
@@ -2532,9 +2549,18 @@ SALIDA: responde SOLO con JSON válido sin texto fuera:
         else grid.appendChild(div);
     }
 
-    function viewFullImage(url) {
+    let _viewerAnnPath = null;
+    function viewFullImage(url, annPath) {
+        _viewerAnnPath = annPath || null;
         document.getElementById('prod-viewer-img').src = url;
         document.getElementById('prod-viewer').style.display = 'flex';
+        const btn = document.getElementById('pv-annotate-btn');
+        if (btn) btn.style.display = (_viewerAnnPath && !isWorker) ? 'inline-flex' : 'none';
+    }
+    function openPANFromViewer() {
+        if (!_viewerAnnPath) return;
+        const url = document.getElementById('prod-viewer-img').src;
+        openPAN(url, _viewerAnnPath, null);
     }
     function cerrarVisorProd() {
         document.getElementById('prod-viewer').style.display = 'none';
