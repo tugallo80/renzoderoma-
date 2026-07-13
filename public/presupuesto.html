@@ -1074,6 +1074,8 @@
     let _panEditIsNew = false;
     let _panMeasActive = false;
     let _panMeasPt1 = null;
+    let _panMeasUnit = 'm';
+    let _panNoteActive = false;
 
     function openPAN(imgUrl, savePath, _unused, itemIdx) {
         _panSavePath = savePath;
@@ -1103,9 +1105,12 @@
         document.getElementById('pan-svg').innerHTML = '';
         document.getElementById('pan-layer').innerHTML = '';
         _panMeasActive = false; _panMeasPt1 = null;
+        _panNoteActive = false;
         const ov = document.getElementById('pan-meas-overlay'); if (ov) ov.style.display = 'none';
         const mb = document.getElementById('pan-meas-btn');
         if (mb) { mb.style.background = '#2c2c2e'; mb.style.color = '#fff'; mb.style.borderColor = '#444'; }
+        const nb = document.getElementById('pan-note-btn');
+        if (nb) { nb.style.background = '#2c2c2e'; nb.style.color = '#fff'; nb.style.borderColor = '#444'; }
         _panAnns = []; _panSavePath = null; _panItemIdx = null;
     }
 
@@ -1113,7 +1118,7 @@
         const stage = document.getElementById('pan-stage');
         const W = stage.clientWidth, H = stage.clientHeight;
         const id = String(_panNextId++);
-        _panAnns.push({ id, text: 'Nueva nota', ax: W * 0.38, ay: H * 0.42, bx: W * 0.54, by: H * 0.28, color: _panDefColor, bw: 140 });
+        _panAnns.push({ id, text: '', ax: W * 0.38, ay: H * 0.42, bx: W * 0.54, by: H * 0.28, color: _panDefColor, bw: 140 });
         _panRender(); _panSave();
         setTimeout(() => _panOpenEditDialog(id, true), 80);
     }
@@ -1169,7 +1174,24 @@
     window.cerrarPAN = cerrarPAN;
     window.addPAN = addPAN;
 
+    window.togglePanUnit = function() {
+        _panMeasUnit = _panMeasUnit === 'm' ? 'cm' : 'm';
+        const btn = document.getElementById('pan-unit-btn');
+        if (btn) btn.textContent = _panMeasUnit;
+        _panRender();
+    };
+
+    window.togglePanNote = function() {
+        _panNoteActive = !_panNoteActive;
+        if (_panNoteActive && _panMeasActive) window.togglePanMeas();
+        const btn = document.getElementById('pan-note-btn');
+        if (!btn) return;
+        if (_panNoteActive) { btn.style.background='#ffd60a'; btn.style.color='#000'; btn.style.borderColor='#ffd60a'; }
+        else { btn.style.background='#2c2c2e'; btn.style.color='#fff'; btn.style.borderColor='#444'; }
+    };
+
     window.togglePanMeas = function() {
+        if (_panMeasActive === false && _panNoteActive) window.togglePanNote();
         _panMeasActive = !_panMeasActive;
         _panMeasPt1 = null;
         const oldDot = document.getElementById('pan-meas-dot'); if (oldDot) oldDot.remove();
@@ -1202,11 +1224,28 @@
                 const {x: ax, y: ay} = _panMeasPt1;
                 _panMeasPt1 = null;
                 const oldDot = document.getElementById('pan-meas-dot'); if (oldDot) oldDot.remove();
-                _panAnns.push({id, type:'meas', ax, ay, bx:x, by:y, text:'', color:_panDefColor});
+                _panAnns.push({id, type:'meas', ax, ay, bx:x, by:y, text:'', color:_panDefColor, unit:_panMeasUnit});
                 _panRender();
                 window.togglePanMeas();
                 setTimeout(() => _panOpenEditDialog(id, true), 80);
             }
+        });
+    })();
+
+    // Note placement: tap on stage when in note mode
+    (function() {
+        const stage = document.getElementById('pan-stage');
+        if (!stage) return;
+        stage.addEventListener('pointerdown', e => {
+            if (!_panNoteActive) return;
+            if (e.target.closest('[data-pan-anchor],[data-pan-box],[data-pan-resize],[data-meas-anchor]')) return;
+            const sr = stage.getBoundingClientRect();
+            const x = e.clientX - sr.left, y = e.clientY - sr.top;
+            const id = String(_panNextId++);
+            _panAnns.push({ id, text: '', ax: x, ay: y, bx: x + 25, by: Math.max(10, y - 70), color: _panDefColor, bw: 140 });
+            _panRender(); _panSave();
+            window.togglePanNote();
+            setTimeout(() => _panOpenEditDialog(id, true), 80);
         });
     })();
 
@@ -1339,14 +1378,19 @@
                     svg.appendChild(t);
                 });
                 const mx = (ann.ax + ann.bx)/2, my = (ann.ay + ann.by)/2;
+                const labelUnit = ann.unit || _panMeasUnit;
+                const labelTxt = (ann.text || '?') + ' ' + labelUnit;
+                const svgLbl = document.createElementNS('http://www.w3.org/2000/svg','text');
+                svgLbl.setAttribute('x', mx); svgLbl.setAttribute('y', my - 7);
+                svgLbl.setAttribute('text-anchor','middle'); svgLbl.setAttribute('fill', color);
+                svgLbl.setAttribute('font-size','13'); svgLbl.setAttribute('font-weight','900');
+                svgLbl.setAttribute('font-family','sans-serif');
+                svgLbl.setAttribute('stroke','rgba(0,0,0,0.75)'); svgLbl.setAttribute('stroke-width','3');
+                svgLbl.setAttribute('paint-order','stroke'); svgLbl.textContent = labelTxt;
+                svg.appendChild(svgLbl);
                 const lbl = document.createElement('div');
-                lbl.setAttribute('data-pan-box', ann.id);
-                lbl.style.cssText = `position:absolute;left:${mx}px;top:${my}px;transform:translate(-50%,-50%);background:rgba(20,20,20,.60);border:1.5px solid ${color};border-radius:6px;padding:3px 8px;cursor:grab;z-index:4;user-select:none;touch-action:none;white-space:nowrap;`;
-                lbl.innerHTML = `<span style="color:${color};font-size:12px;font-weight:900;">${ann.text || '?'}</span>
-                    <i class="ph-bold ph-x" style="color:#ff4d4d;font-size:12px;cursor:pointer;margin-left:5px;" onclick="deletePAN('${ann.id}')"></i>
-                    <div style="display:flex;align-items:center;gap:4px;margin-top:2px;">
-                        <button onclick="editPAN('${ann.id}')" style="background:none;border:1px solid ${color};color:${color};border-radius:4px;padding:1px 5px;font-size:9px;cursor:pointer;font-weight:700;"><i class="ph-bold ph-pencil-simple"></i> Editar</button>
-                    </div>`;
+                lbl.style.cssText = `position:absolute;left:${mx}px;top:${my+6}px;transform:translateX(-50%);z-index:4;user-select:none;touch-action:none;display:flex;gap:2px;`;
+                lbl.innerHTML = `<button onclick="editPAN('${ann.id}')" style="background:rgba(20,20,20,.8);border:1px solid ${color};color:${color};border-radius:3px;padding:1px 5px;font-size:9px;cursor:pointer;font-weight:700;"><i class="ph-bold ph-pencil-simple"></i></button><button onclick="deletePAN('${ann.id}')" style="background:rgba(20,20,20,.8);border:1px solid #ff4d4d;color:#ff4d4d;border-radius:3px;padding:1px 5px;font-size:9px;cursor:pointer;"><i class="ph-bold ph-x"></i></button>`;
                 layer.appendChild(lbl);
                 ['a','b'].forEach((pt, i) => {
                     const px = i===0 ? ann.ax : ann.bx, py = i===0 ? ann.ay : ann.by;
@@ -1375,7 +1419,7 @@
             box.setAttribute('data-pan-box', ann.id);
             box.style.cssText = `position:absolute;left:${ann.bx}px;top:${ann.by}px;width:${bw}px;background:rgba(20,20,20,.60);border:2px solid ${color};border-radius:10px;padding:7px 9px 18px 9px;cursor:grab;z-index:4;user-select:none;touch-action:none;`;
             box.innerHTML = `<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:5px;margin-bottom:4px;">
-                <span class="pan-text" style="color:#fff;font-size:12px;font-weight:700;line-height:1.35;flex:1;white-space:pre-wrap;word-break:break-word;overflow-wrap:break-word;">${ann.text}</span>
+                <span class="pan-text" style="color:#fff;font-size:${Math.max(7,Math.min(12,(ann.bw||140)/140*12)).toFixed(1)}px;font-weight:700;line-height:1.35;flex:1;white-space:pre-wrap;word-break:break-word;overflow-wrap:break-word;">${ann.text}</span>
                 <i class="ph-bold ph-x" style="color:#ff4d4d;font-size:13px;cursor:pointer;flex-shrink:0;" onclick="deletePAN('${ann.id}')"></i>
             </div>
             <button onclick="editPAN('${ann.id}')" style="background:none;border:1px solid ${color};color:${color};border-radius:5px;padding:2px 7px;font-size:9px;cursor:pointer;font-weight:700;display:flex;align-items:center;gap:2px;"><i class="ph-bold ph-pencil-simple"></i> Editar</button>
@@ -6133,7 +6177,8 @@ async function ejecutarCopia(targetPid, targetPname, el) {
         <div style="display:flex;gap:5px;flex-shrink:0;">
             <button id="pan-meas-btn" onclick="togglePanMeas()" style="background:#2c2c2e;border:1.5px solid #444;color:#fff;font-size:11px;font-weight:900;cursor:pointer;border-radius:7px;padding:6px 8px;display:flex;align-items:center;gap:3px;white-space:nowrap;"><i class="ph-bold ph-ruler"></i> Medida</button>
             <button onclick="_panExportToItem()" style="background:#30d158;border:none;color:#fff;font-size:11px;font-weight:900;cursor:pointer;border-radius:7px;padding:6px 9px;display:flex;align-items:center;gap:4px;white-space:nowrap;"><i class="ph-bold ph-floppy-disk"></i> Guardar</button>
-            <button onclick="addPAN()" style="background:#ffd60a;border:none;color:#000;font-size:12px;font-weight:900;cursor:pointer;border-radius:7px;padding:6px 9px;display:flex;align-items:center;gap:4px;"><i class="ph-bold ph-plus"></i> Nota</button>
+            <button id="pan-unit-btn" onclick="togglePanUnit()" style="background:#2c2c2e;border:1.5px solid #444;color:#ffd60a;font-size:11px;font-weight:900;cursor:pointer;border-radius:7px;padding:6px 9px;white-space:nowrap;">m</button>
+            <button id="pan-note-btn" onclick="togglePanNote()" style="background:#2c2c2e;border:1.5px solid #444;color:#fff;font-size:11px;font-weight:900;cursor:pointer;border-radius:7px;padding:6px 8px;display:flex;align-items:center;gap:3px;white-space:nowrap;"><i class="ph-bold ph-note-pencil"></i> Nota</button>
         </div>
     </div>
     <div id="pan-stage" style="flex:1;position:relative;overflow:hidden;">
