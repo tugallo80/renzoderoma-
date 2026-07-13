@@ -69,8 +69,10 @@
         .t-qty { background: var(--text); color: var(--bg); padding: 4px 8px; border-radius: 8px; font-size: 12px; font-weight: 800; white-space: nowrap; }
         .t-feat { font-size: 11px; color: var(--gray); margin-bottom: 10px; line-height: 1.4; text-transform: uppercase; }
 
-        .img-grid { display: flex; gap: 8px; overflow-x: auto; margin-bottom: 15px; padding-bottom: 5px; align-items: center; }
+        .img-grid { display: flex; gap: 8px; overflow-x: auto; margin-bottom: 15px; padding-bottom: 5px; align-items: flex-start; }
         .img-box { position: relative; width: 80px; height: 80px; flex-shrink: 0; border-radius: 8px; border: 1px solid var(--border); background:#eee;}
+        .img-op-wrap { display:flex; flex-direction:column; align-items:center; gap:3px; flex-shrink:0; }
+        .img-op-desc { width:80px; font-size:9px; background:var(--card); border:1px solid var(--border); border-radius:5px; color:var(--text); padding:3px 5px; resize:none; min-height:30px; line-height:1.3; font-family:inherit; }
         .img-box img { width: 100%; height: 100%; object-fit: cover; border-radius: 8px; cursor: pointer; }
         .img-del { position: absolute; top: -6px; right: -6px; background: white; color: var(--red); border-radius: 50%; font-size: 16px; cursor: pointer; box-shadow: 0 2px 5px rgba(0,0,0,0.2); z-index: 10; }
         .btn-add-img { width: 80px; height: 80px; flex-shrink: 0; border-radius: 8px; border: 2px dashed var(--blue); background: rgba(0,122,255,0.05); color: var(--blue); display: flex; flex-direction:column; align-items: center; justify-content: center; font-size: 24px; cursor: pointer; }
@@ -845,7 +847,13 @@
                                : img.type === 'foto' ? `<div style="position:absolute; bottom:0; background:rgba(88,86,214,0.85); color:white; font-size:8px; width:100%; text-align:center; white-space:nowrap; overflow:hidden; padding:2px 0;">📐 ${img.lbl||'CAD'}</div>` : '';
                     const imgAnnKey = img.type === 'apu_corte' ? `apu_${img.t}_${img.i}` : `${img.type}_${img.i}`;
                     const imgAnnPath = `proyectos/${cid}/${pid}/presupuesto/items/${idx}/img_anns/${imgAnnKey}`;
-                    html += `<div class="img-box">${btnTrash}<img loading="lazy" decoding="async" src="${img.src}" onclick="viewFullImage('${img.src}','${imgAnnPath}')">${lblHtml}</div>`;
+                    const imgBox = `<div class="img-box">${btnTrash}<img loading="lazy" decoding="async" src="${img.src}" onclick="viewFullImage('${img.src}','${imgAnnPath}')">${lblHtml}</div>`;
+                    if (img.type === 'op' && !isWorker) {
+                        const descVal = ((item.op_img_desc || {})[img.i] || '').replace(/`/g,"'").replace(/\$/g,'&#36;');
+                        html += `<div class="img-op-wrap">${imgBox}<textarea class="img-op-desc" placeholder="Describí esta foto..." onchange="saveOpImgDesc('${idx}','${img.i}',this.value)">${descVal}</textarea></div>`;
+                    } else {
+                        html += imgBox;
+                    }
                 });
                 if(!isWorker) html += `<div class="btn-add-img" onclick="openGeneralUpload(${idx})"><i class="ph-bold ph-plus"></i><span style="font-size:8px; font-weight:800;">Añadir Foto</span></div>`;
                 html += `</div>`;
@@ -1906,6 +1914,17 @@
 
     // ── Notas de fabricación ─────────────────────────────────────────────────
     const _notasSaveTimers = {};
+    const _opImgDescTimers = {};
+    window.saveOpImgDesc = function(idx, key, value) {
+        if (!allItems[idx]) return;
+        if (!allItems[idx].op_img_desc) allItems[idx].op_img_desc = {};
+        allItems[idx].op_img_desc[key] = value;
+        clearTimeout(_opImgDescTimers[`${idx}_${key}`]);
+        _opImgDescTimers[`${idx}_${key}`] = setTimeout(() => {
+            window._suppressRenderTasks = true;
+            db.ref(`proyectos/${cid}/${pid}/presupuesto/items/${idx}/op_img_desc/${key}`).set(value || null);
+        }, 800);
+    };
     // ── ANOTADOR GENÉRICO (PAN) ───────────────────────────────────────────────
     // openPAN(imgUrl, savePath, piaId?, itemIdx?) — works for ANY image
     let _panAnns = [];
@@ -2523,16 +2542,24 @@
                 });
             }
 
+            // Recopilar descripciones de fotos de producción
+            const opImgDesc = item.op_img_desc || {};
+            const opDescLines = Object.entries(opImgDesc)
+                .filter(([, v]) => v && v.trim())
+                .map(([, v]) => `  • ${v.trim()}`)
+                .join('\n');
+
             const userText = `ÍTEM: ${item.desc || 'Sin descripción'}
-CARACTERÍSTICAS: ${item.feat || 'No especificadas'}
+CARACTERÍSTICAS ACTUALES (del presupuesto): ${item.feat || 'No especificadas'}
 CANTIDAD: ${item.cant || 1} ${item.und || 'glb'}
 NOTAS DE FABRICACIÓN: ${item.notas || 'Sin notas adicionales'}${medidas}${apuRef}
 ${annotations.length ? 'ANOTACIONES DE PLANO CAD: ' + annotations.join(' | ') : ''}
+${opDescLines ? 'DESCRIPCIONES DE FOTOS DE PRODUCCIÓN (lo que se está fabricando realmente):\n' + opDescLines : ''}
 
 BASE DE DATOS DE MATERIALES (precios Bolivia):
 ${matsCtx || 'No disponible'}
 
-${imgParts.length > 0 ? `Analiza las ${imgParts.length} imagen(es) adjunta(s).` : 'No hay imágenes — calcula basándote en descripción y características.'}`;
+${imgParts.length > 0 ? `Analiza las ${imgParts.length} imagen(es) adjunta(s) y las descripciones de fotos.` : 'No hay imágenes — calcula basándote en descripción y características.'}`;
 
             // 4. System instruction del motor de producción
             const sysInst = `Eres RUBIK PROD-AI, motor de cálculo de producción de Rubik Bolivia (señalética, carpintería, metalmecánica, impresión gran formato — Santa Cruz, Bolivia).
@@ -2559,7 +2586,7 @@ MANO DE OBRA (jornales 8h):
 GEOMETRÍA: Usa trigonometría exacta (Pitágoras, seno/coseno). Si faltan medidas en la imagen, dedúcelas de proporciones o medidas parciales. Descomponer en formas básicas.
 
 SALIDA: responde SOLO con JSON válido sin texto fuera:
-{"resumen_analisis":"string","materiales":[{"nombre":"string","u":"unidad","q":número,"calculo":"cómo calculaste","p_ref":precio_Bs}],"mano_obra":[{"d":"actividad","u":"jornal","q":número}],"notas_ia":"supuestos y factores aplicados"}`;
+{"descripcion_produccion":"Descripción técnica precisa de lo que SE ESTÁ FABRICANDO REALMENTE según imágenes y descripciones. Redactar en 2-3 oraciones claras para trabajadores y cliente. Diferenciá de las características del presupuesto si la realidad es distinta.","resumen_analisis":"string","materiales":[{"nombre":"string","u":"unidad","q":número,"calculo":"cómo calculaste","p_ref":precio_Bs}],"mano_obra":[{"d":"actividad","u":"jornal","q":número}],"notas_ia":"supuestos y factores aplicados"}`;
 
             // 5. Llamar API con claude-opus-4-8
             const user = firebase.auth().currentUser;
@@ -2595,6 +2622,16 @@ SALIDA: responde SOLO con JSON válido sin texto fuera:
             window._suppressRenderTasks = true;
             await db.ref(`proyectos/${cid}/${pid}/presupuesto/items/${idx}/prod_apu_ia`).set(parsed);
             if (allItems[idx]) allItems[idx].prod_apu_ia = parsed;
+
+            // 7. Reescribir características si la IA generó descripción de producción
+            if (parsed.descripcion_produccion) {
+                const newFeat = parsed.descripcion_produccion;
+                window._suppressRenderTasks = true;
+                await db.ref(`proyectos/${cid}/${pid}/presupuesto/items/${idx}/feat`).set(newFeat);
+                if (allItems[idx]) allItems[idx].feat = newFeat;
+                const featEl = document.getElementById(`prod-feat-${idx}`);
+                if (featEl) featEl.value = newFeat;
+            }
 
             const zone = document.getElementById(`ia-zone-${idx}`);
             if (zone) zone.innerHTML = buildIAApuHTML(idx, parsed);
