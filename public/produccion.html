@@ -199,6 +199,7 @@
         /* ── Motor IA Producción ── */
         .btn-ia-prod { background: linear-gradient(135deg,#5856d6,#af52de); color:#fff; border:none; border-radius:10px; padding:10px 16px; font-size:12px; font-weight:900; cursor:pointer; display:flex; align-items:center; gap:6px; width:100%; justify-content:center; margin-top:8px; transition:0.2s; }
         .btn-ia-prod:disabled { opacity:0.55; cursor:wait; }
+        .btn-cotiz-prod { background:linear-gradient(135deg,#1c7a3a,#30d158); color:#fff; border:none; border-radius:10px; padding:9px 16px; font-size:12px; font-weight:900; cursor:pointer; display:flex; align-items:center; gap:6px; width:100%; justify-content:center; margin-top:6px; transition:0.2s; }
         .ia-apu-box { background:rgba(88,86,214,0.06); border:1px solid rgba(88,86,214,0.3); border-radius:12px; padding:14px; margin-top:10px; }
         .ia-apu-title { font-size:11px; font-weight:900; color:#5856d6; text-transform:uppercase; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center; }
         .ia-mat-row { display:grid; grid-template-columns:2fr 1fr; gap:6px; padding:5px 0; border-bottom:1px dashed rgba(0,0,0,0.07); font-size:11px; align-items:start; }
@@ -388,6 +389,29 @@
             <div style="display:flex;gap:8px;">
                 <button onclick="cancelPanEdit()" style="flex:1;padding:12px;border-radius:12px;border:1px solid #444;background:#2c2c2e;color:#fff;font-weight:800;cursor:pointer;font-size:13px;">Cancelar</button>
                 <button onclick="confirmPanEdit()" style="flex:2;padding:12px;border-radius:12px;border:none;background:#ffd60a;color:#000;font-weight:900;cursor:pointer;font-size:15px;">✓ Guardar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Cotizador IA de Producción -->
+    <div id="mod-prod-cotizador" style="display:none;position:fixed;inset:0;z-index:9400;background:rgba(0,0,0,.88);align-items:flex-start;justify-content:center;padding-top:36px;backdrop-filter:blur(4px);">
+        <div style="width:92%;max-width:600px;background:#111;border:1px solid #333;color:#fff;border-radius:20px;padding:18px;max-height:86vh;overflow-y:auto;position:relative;">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+                <div style="font-size:15px;font-weight:900;color:#30d158;display:flex;align-items:center;gap:8px;"><i class="ph-bold ph-calculator"></i> Cotizador IA de Producción</div>
+                <i class="ph-bold ph-x" style="font-size:20px;cursor:pointer;color:#aaa;" onclick="cerrarCotizadorProd()"></i>
+            </div>
+            <div id="cotiz-item-info" style="background:#1c1c1e;border-radius:10px;padding:10px 12px;margin-bottom:10px;font-size:12px;color:#aaa;"></div>
+            <textarea id="cotiz-instrucciones" placeholder="Instrucciones adicionales para la IA (opcional)..." rows="2" style="width:100%;background:#2c2c2e;color:#fff;border:1.5px solid #444;border-radius:8px;padding:8px;font-size:12px;resize:none;box-sizing:border-box;margin-bottom:10px;font-family:inherit;outline:none;"></textarea>
+            <div id="cotiz-progress" style="display:none;text-align:center;padding:24px 0;">
+                <div style="width:36px;height:36px;border:4px solid #333;border-top-color:#30d158;border-radius:50%;animation:spin .8s linear infinite;margin:0 auto 10px;"></div>
+                <div style="font-size:12px;color:#aaa;font-weight:700;">Cotizando con IA... esto puede tardar 20-40 seg</div>
+            </div>
+            <div id="cotiz-result" style="display:none;"></div>
+            <div style="margin-top:12px;">
+                <button id="cotiz-gen-btn" onclick="generarCotizacionProd()" style="width:100%;padding:12px;border-radius:12px;border:none;background:linear-gradient(135deg,#1c7a3a,#30d158);color:#fff;font-weight:900;cursor:pointer;font-size:14px;">✨ Generar Cotización</button>
+            </div>
+            <div id="cotiz-apply-btns" style="display:none;margin-top:8px;">
+                <button onclick="aplicarCotizacionProd()" style="width:100%;padding:12px;border-radius:12px;border:none;background:#ffd60a;color:#000;font-weight:900;cursor:pointer;font-size:13px;">✅ Aplicar APU y Precio al Ítem</button>
             </div>
         </div>
     </div>
@@ -885,6 +909,9 @@
                 const hasProdIA = !!(item.prod_apu_ia?.materiales?.length || item.prod_apu_ia?.mano_obra?.length);
                 html += `<button class="btn-ia-prod" id="btn-ia-prod-${idx}" onclick="recalcularConIA(${idx})">
                     <i class="ph-bold ph-magic-wand"></i> ${hasProdIA ? 'Recalcular APU con IA' : '✨ Calcular APU con IA'}
+                </button>
+                <button class="btn-cotiz-prod" onclick="abrirCotizadorProd('${idx}')">
+                    <i class="ph-bold ph-calculator"></i> Cotizar con IA
                 </button>`;
                 html += `<div id="ia-zone-${idx}">`;
                 if (hasProdIA) {
@@ -2020,6 +2047,7 @@
         const txt = document.getElementById('pan-edit-text').value.trim();
         ann.text = txt || ann.text;
         ann.color = _panEditColor;
+        _panEditIsNew = false; // clear BEFORE cancelPanEdit so it doesn't delete the annotation
         window.cancelPanEdit();
         _panRender(); _panSave();
     };
@@ -2258,13 +2286,13 @@
             // Small anchor dot
             const anchor = document.createElement('div');
             anchor.setAttribute('data-pan-anchor', ann.id);
-            anchor.style.cssText = `position:absolute;left:${ann.ax-6}px;top:${ann.ay-6}px;width:12px;height:12px;background:${color};border:2px solid #000;border-radius:50%;cursor:grab;z-index:5;box-shadow:0 0 0 3px rgba(${shadowRgb},.30);touch-action:none;opacity:.85;`;
+            anchor.style.cssText = `position:absolute;left:${ann.ax-7}px;top:${ann.ay-7}px;width:14px;height:14px;background:${color};border:2px solid #000;border-radius:50%;cursor:grab;z-index:5;box-shadow:0 0 0 3px rgba(${shadowRgb},.30);touch-action:none;opacity:.85;`;
             layer.appendChild(anchor);
             // Text box (draggable, resizable)
             const bw = ann.bw || 140;
             const box = document.createElement('div');
             box.setAttribute('data-pan-box', ann.id);
-            box.style.cssText = `position:absolute;left:${ann.bx}px;top:${ann.by}px;width:${bw}px;background:rgba(20,20,20,.60);border:2px solid ${color};border-radius:10px;padding:7px 9px 16px 9px;cursor:grab;z-index:4;user-select:none;touch-action:none;overflow:hidden;`;
+            box.style.cssText = `position:absolute;left:${ann.bx}px;top:${ann.by}px;width:${bw}px;background:rgba(20,20,20,.60);border:2px solid ${color};border-radius:10px;padding:7px 9px 18px 9px;cursor:grab;z-index:4;user-select:none;touch-action:none;`;
             box.innerHTML = `<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:5px;margin-bottom:4px;">
                 <span class="pan-text" style="color:#fff;font-size:12px;font-weight:700;line-height:1.35;flex:1;white-space:pre-wrap;word-break:break-word;overflow-wrap:break-word;">${ann.text}</span>
                 <i class="ph-bold ph-x" style="color:#ff4d4d;font-size:13px;cursor:pointer;flex-shrink:0;" onclick="deletePAN('${ann.id}')"></i>
@@ -2317,8 +2345,8 @@
                 const ann = _panAnns.find(a => a.id === id); if (!ann) return;
                 ann.ax = origAX + (e.clientX - startX);
                 ann.ay = origAY + (e.clientY - startY);
-                el.style.left = (ann.ax - 6) + 'px';
-                el.style.top  = (ann.ay - 6) + 'px';
+                el.style.left = (ann.ax - 7) + 'px';
+                el.style.top  = (ann.ay - 7) + 'px';
                 _panUpdateLine(ann);
             });
             el.addEventListener('pointerup', () => { el.style.cursor = 'grab'; _panSave(); });
@@ -2661,7 +2689,207 @@ SALIDA: responde SOLO con JSON válido sin texto fuera:
         });
     };
     
-    function deleteGeneralImage(itemIdx, imgIdx, type, apuT) { 
+    // ── Cotizador IA de Producción ────────────────────────────────────────────
+    let _cotizProdIdx = null;
+    let _cotizProdResult = null;
+
+    window.abrirCotizadorProd = function(idx) {
+        _cotizProdIdx = idx;
+        _cotizProdResult = null;
+        const item = allItems[idx];
+        if (!item) return;
+        document.getElementById('cotiz-item-info').innerHTML =
+            `<div style="font-weight:900;font-size:13px;color:#fff;margin-bottom:3px;">${item.desc || 'Sin descripción'}</div>` +
+            `<div style="color:#888;">${item.cant||1} ${item.und||'glb'}${item.feat ? ' · ' + item.feat.split('\n')[0] : ''}</div>`;
+        document.getElementById('cotiz-instrucciones').value = '';
+        document.getElementById('cotiz-progress').style.display = 'none';
+        document.getElementById('cotiz-result').style.display = 'none';
+        document.getElementById('cotiz-result').innerHTML = '';
+        document.getElementById('cotiz-apply-btns').style.display = 'none';
+        document.getElementById('cotiz-gen-btn').style.display = '';
+        document.getElementById('mod-prod-cotizador').style.display = 'flex';
+    };
+
+    window.cerrarCotizadorProd = function() {
+        document.getElementById('mod-prod-cotizador').style.display = 'none';
+        _cotizProdIdx = null; _cotizProdResult = null;
+    };
+
+    window.generarCotizacionProd = async function() {
+        const idx = _cotizProdIdx;
+        const item = allItems[idx];
+        if (!item) return;
+        const genBtn = document.getElementById('cotiz-gen-btn');
+        const progress = document.getElementById('cotiz-progress');
+        const resultDiv = document.getElementById('cotiz-result');
+        const applyBtns = document.getElementById('cotiz-apply-btns');
+        genBtn.style.display = 'none';
+        progress.style.display = 'block';
+        resultDiv.style.display = 'none';
+        resultDiv.innerHTML = '';
+        applyBtns.style.display = 'none';
+        try {
+            // Recopilar imágenes (hasta 6)
+            const imgParts = [];
+            const addImg = async url => {
+                if (!url || imgParts.length >= 6) return;
+                try { const b64 = await _fetchBase64(url); if (b64) imgParts.push({ inlineData: { mimeType:'image/jpeg', data:b64 } }); } catch(e) {}
+            };
+            if (item.img) await addImg(item.img);
+            for (const k of Object.keys(item.op_images || {})) await addImg(item.op_images[k]);
+            for (const k of Object.keys(item.cortes || {})) await addImg(item.cortes[k]);
+            if (item.fotos && typeof item.fotos === 'object')
+                for (const f of Object.values(item.fotos)) await addImg(typeof f === 'string' ? f : f?.url);
+
+            // Base de datos de materiales y mano de obra
+            let matsCtx = '', moCtx = '';
+            try {
+                const [ms, mos] = await Promise.all([
+                    firebase.database().ref('base_datos/materiales').once('value'),
+                    firebase.database().ref('base_datos/mano_obra').once('value')
+                ]);
+                const mats = ms.val() || {}, mo = mos.val() || {};
+                matsCtx = Object.values(mats).filter(m=>m&&(m.n||m.desc)).slice(0,200)
+                    .map(m=>`${m.n||m.desc}: ${m.p||0}Bs/${m.u||'und'}${m.pw?` (${m.pw}×${m.ph||'?'}m)`:''}`).join('\n');
+                moCtx = Object.values(mo).filter(m=>m&&m.d).slice(0,50)
+                    .map(m=>`${m.d}: ${m.p||0}Bs/${m.u||'jornal'}`).join('\n');
+            } catch(e) {}
+
+            const opDescLines = Object.entries(item.op_img_desc || {})
+                .filter(([,v])=>v&&v.trim()).map(([,v])=>`• ${v.trim()}`).join('\n');
+            let medidas = '';
+            if (item.measures?.length)
+                medidas = item.measures.map(m=>`${m.desc||'sin desc'}: ${m.b||0}×${m.h||0}m (c:${m.c||1})`).join(', ');
+            const instr = document.getElementById('cotiz-instrucciones').value.trim();
+
+            const sysPrompt = `Eres RUBIK PROD-QUOTER, cotizador de producción de Rubik Bolivia (señalética, carpintería, metalmecánica, impresión gran formato — Santa Cruz, Bolivia).
+
+MISIÓN: Analizar imágenes/datos del ítem y generar APU completo con precios de mercado boliviano.
+
+BASE DE PRECIOS — MATERIALES:
+${matsCtx || 'Tubín 20x20x1: 55Bs/barra(6m), Tubín 40x40x1.5: 95Bs/barra, Plancha galv 1.22×2.44: 180Bs, MDF 15mm 1.83×2.44: 280Bs, Melamina 15mm: 320Bs, Acrílico 3mm 1.22×2.44: 420Bs, Lona frontlit: 18Bs/m², Vinil adhesivo: 25Bs/m², Impresión GF: 45Bs/m², Neon flex LED: 45Bs/ml, Pintura anticorrosiva: 85Bs/lt, Soldadura E6011: 65Bs/kg, Disco corte 4½": 12Bs, Tornillo autorroscante: 0.5Bs/pza'}
+BASE DE PRECIOS — MANO DE OBRA:
+${moCtx || 'Soldador: 280Bs/jornal, Carpintero: 240Bs/jornal, Rotulador/vinilador: 200Bs/jornal, Instalador: 220Bs/jornal, Ayudante general: 140Bs/jornal'}
+
+REGLAS CRÍTICAS DE CÁLCULO:
+- Tubería/perfiles: barras 6m → metros lineales reales ÷ 6 → redondear ARRIBA → +10% desperdicio cortes
+- Plancha galv/acero: 1.22×2.44m → distribución óptima piezas → +12% desperdicio
+- MDF/melamina: 1.83×2.44m → layout → +18% desperdicio; acrílico: 1.22×2.44m +10%
+- Lona/vinil: rollo 1.52m → ml de corte + 5% sangría
+- Pintura anticorrosiva: ~12m²/litro, 2 manos → calcular superficie total
+- Soldadura: 0.2kg/m lineal según espesor del material
+- util: 50 (siempre entero), ind: 10 (siempre entero)
+
+feat: 4-6 líneas descriptivas para el cliente, cada una empieza con "- ", sin fórmulas ni cantidades técnicas.
+
+SALIDA: responde SOLO con array JSON válido sin texto fuera:
+[{"desc":"nombre","cant":1,"und":"glb","feat":"- línea 1\n- línea 2","apu":{"mat":[{"d":"NOMBRE","u":"unidad","q":cantidad,"p":precio_bs}],"mo":[{"d":"actividad","u":"jornal","q":cantidad,"p":precio_bs}],"eq":[],"sub":[]},"util":50,"ind":10}]`;
+
+            const userPrompt = `ÍTEM A COTIZAR:
+Nombre: ${item.desc||'Sin descripción'}
+Cantidad: ${item.cant||1} ${item.und||'glb'}
+Características actuales: ${item.feat||'Sin especificar'}
+Notas de fabricación: ${item.notas||'Sin notas'}${medidas?'\nMedidas: '+medidas:''}${opDescLines?'\nFotos de producción:\n'+opDescLines:''}${instr?'\nInstrucciones adicionales: '+instr:''}
+
+${imgParts.length>0?`Analiza las ${imgParts.length} imagen(es) adjunta(s).`:'Sin imágenes — cotizá basándote en los datos del ítem.'}`;
+
+            const user = firebase.auth().currentUser;
+            const token = user ? await user.getIdToken() : null;
+            const headers = { 'Content-Type':'application/json' };
+            if (token) headers['Authorization'] = 'Bearer ' + token;
+
+            const resp = await fetch('/api/gemini', {
+                method:'POST', headers,
+                body: JSON.stringify({
+                    model:'gemini-2.5-flash', advancedModel:true,
+                    contents:[{ role:'user', parts:[...imgParts, { text:userPrompt }] }],
+                    systemInstruction:{ parts:[{ text:sysPrompt }] },
+                    generationConfig:{ maxOutputTokens:8192, temperature:0.2 }
+                })
+            });
+            if (!resp.ok) throw new Error('Error API ' + resp.status);
+            const apiResult = await resp.json();
+            const raw = apiResult?.candidates?.[0]?.content?.parts?.[0]?.text || '[]';
+            let parsed;
+            try { parsed = JSON.parse(raw.replace(/^```json\n?/,'').replace(/\n?```$/,'').trim()); }
+            catch(e) { const m = raw.match(/\[[\s\S]*\]/); parsed = m ? JSON.parse(m[0]) : null; }
+            if (!Array.isArray(parsed) || !parsed.length) throw new Error('La IA no devolvió una cotización válida.');
+
+            _cotizProdResult = parsed[0];
+            const apu = _cotizProdResult.apu || {};
+            const util = _cotizProdResult.util || 50, ind = _cotizProdResult.ind || 10;
+            const matTotal = (apu.mat||[]).reduce((s,r)=>s+(r.q||0)*(r.p||0),0);
+            const moTotal  = (apu.mo||[]).reduce((s,r)=>s+(r.q||0)*(r.p||0),0);
+            const eqTotal  = (apu.eq||[]).reduce((s,r)=>s+(r.q||0)*(r.p||0),0);
+            const subTotal = (apu.sub||[]).reduce((s,r)=>s+(r.q||0)*(r.p||0),0);
+            const directo  = matTotal + moTotal + eqTotal + subTotal;
+            const pu = directo * (1 + util/100) * (1 + ind/100);
+            _cotizProdResult._pu = Math.round(pu * 100) / 100;
+            _cotizProdResult._cant = Number(item.cant) || 1;
+
+            // Render resultado
+            const fmt = n => Number(n||0).toFixed(2);
+            let h = '';
+            const featText = (_cotizProdResult.feat||'').replace(/\\n/g,'\n');
+            if (featText) h += `<div style="background:#1c1c1e;border-radius:12px;padding:12px;margin-bottom:10px;">
+                <div style="font-size:10px;color:#888;font-weight:800;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;">Características (para el cliente)</div>
+                <div style="font-size:12px;color:#fff;line-height:1.6;white-space:pre-line;">${featText}</div></div>`;
+            h += `<div style="background:#1c1c1e;border-radius:12px;padding:12px;margin-bottom:10px;">
+                <div style="font-size:10px;color:#888;font-weight:800;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px;">Materiales</div>`;
+            (apu.mat||[]).forEach(r=>{ h+=`<div style="display:flex;justify-content:space-between;font-size:11px;color:#ddd;padding:3px 0;border-bottom:1px solid #2a2a2e;gap:8px;"><span style="flex:1;">${r.d} · ${r.q} ${r.u}</span><span style="white-space:nowrap;font-weight:700;">${fmt((r.q||0)*(r.p||0))} Bs</span></div>`; });
+            h += `<div style="font-size:10px;color:#888;font-weight:800;text-transform:uppercase;margin:8px 0 4px;">Mano de Obra</div>`;
+            (apu.mo||[]).forEach(r=>{ h+=`<div style="display:flex;justify-content:space-between;font-size:11px;color:#ddd;padding:3px 0;border-bottom:1px solid #2a2a2e;gap:8px;"><span style="flex:1;">${r.d} · ${r.q} ${r.u}</span><span style="white-space:nowrap;font-weight:700;">${fmt((r.q||0)*(r.p||0))} Bs</span></div>`; });
+            if ((apu.eq||[]).length) {
+                h += `<div style="font-size:10px;color:#888;font-weight:800;text-transform:uppercase;margin:8px 0 4px;">Equipos</div>`;
+                (apu.eq||[]).forEach(r=>{ h+=`<div style="display:flex;justify-content:space-between;font-size:11px;color:#ddd;padding:3px 0;border-bottom:1px solid #2a2a2e;gap:8px;"><span style="flex:1;">${r.d} · ${r.q} ${r.u}</span><span style="white-space:nowrap;font-weight:700;">${fmt((r.q||0)*(r.p||0))} Bs</span></div>`; });
+            }
+            h += `<div style="margin-top:10px;padding-top:8px;border-top:2px solid #444;">
+                <div style="display:flex;justify-content:space-between;font-size:12px;color:#aaa;padding:2px 0;"><span>Subtotal directo</span><span>${fmt(directo)} Bs</span></div>
+                <div style="display:flex;justify-content:space-between;font-size:13px;font-weight:900;color:#30d158;padding:4px 0;"><span>P.U. (${util}% util + ${ind}% ind)</span><span>${fmt(pu)} Bs</span></div>
+                <div style="display:flex;justify-content:space-between;font-size:15px;font-weight:900;color:#ffd60a;padding:4px 0;border-top:1px solid #444;margin-top:4px;"><span>TOTAL (${_cotizProdResult._cant} und)</span><span>${fmt(pu * _cotizProdResult._cant)} Bs</span></div>
+            </div></div>`;
+            resultDiv.innerHTML = h;
+            progress.style.display = 'none';
+            resultDiv.style.display = 'block';
+            applyBtns.style.display = 'block';
+        } catch(e) {
+            console.error('generarCotizacionProd:', e);
+            progress.style.display = 'none';
+            resultDiv.innerHTML = `<div style="color:#ff4d4d;font-size:12px;padding:10px;background:#2c0000;border-radius:8px;">Error: ${e.message}</div>`;
+            resultDiv.style.display = 'block';
+            genBtn.style.display = '';
+        }
+    };
+
+    window.aplicarCotizacionProd = async function() {
+        const idx = _cotizProdIdx;
+        const r = _cotizProdResult;
+        if (!r || !allItems[idx]) return;
+        if (!confirm('¿Aplicar el APU y precio al ítem? Se actualizará el APU de producción, el precio unitario y las características.')) return;
+        const apu = r.apu || {};
+        const matRows = (apu.mat||[]).map(m=>({d:m.d||'Material',u:m.u||'und',q:Number(m.q)||0,p:Number(m.p)||0}));
+        const moRows  = (apu.mo||[]).map(m=>({d:m.d||'MO',u:m.u||'jornal',q:Number(m.q)||0,p:Number(m.p)||0}));
+        const newFeat = (r.feat||'').replace(/\\n/g,'\n').trim();
+        const pu = r._pu || 0;
+        window._suppressRenderTasks = true;
+        const ref = db.ref(`proyectos/${cid}/${pid}/presupuesto/items/${idx}`);
+        const updates = { 'prod_apu/mat': matRows, 'prod_apu/mo': moRows, 'pu': pu };
+        if (newFeat) updates['feat'] = newFeat;
+        await ref.update(updates);
+        if (allItems[idx]) {
+            if (!allItems[idx].prod_apu) allItems[idx].prod_apu = {};
+            allItems[idx].prod_apu.mat = matRows;
+            allItems[idx].prod_apu.mo  = moRows;
+            allItems[idx].pu = pu;
+            if (newFeat) allItems[idx].feat = newFeat;
+        }
+        const featEl = document.getElementById(`prod-feat-${idx}`);
+        if (featEl && newFeat) featEl.value = newFeat;
+        cerrarCotizadorProd();
+        alert('✅ Cotización aplicada: APU, precio y características actualizados.');
+    };
+
+    function deleteGeneralImage(itemIdx, imgIdx, type, apuT) {
         if(!confirm("¿Borrar esta imagen/plano?")) return; 
         if(type === 'main') { db.ref(`proyectos/${cid}/${pid}/presupuesto/items/${itemIdx}/img`).remove(); } 
         else if (type === 'op') { db.ref(`proyectos/${cid}/${pid}/presupuesto/items/${itemIdx}/op_images/${imgIdx}`).remove(); } 
