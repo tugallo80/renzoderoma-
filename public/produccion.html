@@ -208,6 +208,10 @@
         .btn-apply-apu { background:rgba(52,199,89,0.12); color:var(--green); border:1px solid rgba(52,199,89,0.3); border-radius:8px; padding:6px 12px; font-size:11px; font-weight:800; cursor:pointer; white-space:nowrap; }
         .item-notas-inp { width:100%; background:var(--card); color:var(--text); border:1px solid var(--border); border-radius:8px; padding:8px; font-size:11px; resize:vertical; min-height:48px; font-family:inherit; box-sizing:border-box; outline:none; }
         .item-notas-inp:focus { border-color:var(--blue); }
+        .pan-cswatch { width:22px;height:22px;border-radius:50%;cursor:pointer;flex-shrink:0;box-sizing:border-box;outline-offset:2px; }
+        .pan-sbtn { background:#2c2c2e;color:#fff;border:1.5px solid #444;border-radius:6px;padding:3px 8px;cursor:pointer;font-weight:800;transition:.15s; }
+        .pan-sbtn-active { background:#ffd60a!important;color:#000!important;border-color:#ffd60a!important; }
+        @keyframes spin { to { transform:rotate(360deg); } }
 
         /* ══ VISTA MÓVIL ══════════════════════════════════════════════════════ */
         body[data-view="mobile"] { padding: 10px; padding-bottom: 85px; }
@@ -335,18 +339,64 @@
 
     <!-- Modal Anotador de Piezas (PAN) -->
     <div id="mod-pan" style="display:none;position:fixed;inset:0;z-index:5500;background:#111;flex-direction:column;touch-action:none;">
-        <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 16px;background:#000;flex-shrink:0;padding-top:max(12px,env(safe-area-inset-top));">
-            <button onclick="cerrarPAN()" style="background:none;border:none;color:#fff;font-size:14px;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:6px;"><i class="ph-bold ph-caret-left"></i> Volver</button>
-            <span style="color:#fff;font-size:13px;font-weight:800;letter-spacing:.3px;"><i class="ph-bold ph-pencil-line" style="color:#ffd60a;"></i> Notas de la Pieza</span>
-            <button onclick="addPAN()" style="background:#ffd60a;border:none;color:#000;font-size:12px;font-weight:900;cursor:pointer;border-radius:8px;padding:7px 12px;display:flex;align-items:center;gap:5px;"><i class="ph-bold ph-plus"></i> Nota</button>
+        <!-- Header: nav + controles -->
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;background:#000;flex-shrink:0;padding-top:max(10px,env(safe-area-inset-top));gap:8px;">
+            <button onclick="cerrarPAN()" style="background:none;border:none;color:#fff;font-size:13px;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:5px;flex-shrink:0;"><i class="ph-bold ph-caret-left"></i> Volver</button>
+            <!-- Color swatches -->
+            <div style="display:flex;gap:5px;align-items:center;flex:1;justify-content:center;overflow-x:auto;padding:0 4px;">
+                <span style="color:#666;font-size:9px;white-space:nowrap;">Color:</span>
+                <div onclick="setPanDefColor('#ffd60a',this)" class="pan-cswatch" style="background:#ffd60a;outline:2px solid #fff;" title="Amarillo"></div>
+                <div onclick="setPanDefColor('#ffffff',this)" class="pan-cswatch" style="background:#ffffff;" title="Blanco"></div>
+                <div onclick="setPanDefColor('#ff3b30',this)" class="pan-cswatch" style="background:#ff3b30;" title="Rojo"></div>
+                <div onclick="setPanDefColor('#30d158',this)" class="pan-cswatch" style="background:#30d158;" title="Verde"></div>
+                <div onclick="setPanDefColor('#0a84ff',this)" class="pan-cswatch" style="background:#0a84ff;" title="Azul"></div>
+                <div onclick="setPanDefColor('#ff9f0a',this)" class="pan-cswatch" style="background:#ff9f0a;" title="Naranja"></div>
+                <span style="color:#666;font-size:9px;margin-left:6px;white-space:nowrap;">Txt:</span>
+                <button onclick="setPanDefSize(11,this)" class="pan-sbtn pan-sbtn-active" style="font-size:10px;">S</button>
+                <button onclick="setPanDefSize(13,this)" class="pan-sbtn" style="font-size:12px;">M</button>
+                <button onclick="setPanDefSize(16,this)" class="pan-sbtn" style="font-size:14px;">L</button>
+            </div>
+            <div style="display:flex;gap:6px;flex-shrink:0;">
+                <button onclick="_panExportToItem()" style="background:#30d158;border:none;color:#fff;font-size:11px;font-weight:900;cursor:pointer;border-radius:7px;padding:6px 10px;display:flex;align-items:center;gap:4px;white-space:nowrap;"><i class="ph-bold ph-floppy-disk"></i> Guardar</button>
+                <button onclick="addPAN()" style="background:#ffd60a;border:none;color:#000;font-size:12px;font-weight:900;cursor:pointer;border-radius:7px;padding:6px 10px;display:flex;align-items:center;gap:4px;"><i class="ph-bold ph-plus"></i> Nota</button>
+            </div>
         </div>
         <div id="pan-stage" style="flex:1;position:relative;overflow:hidden;">
             <img id="pan-img" style="position:absolute;max-width:100%;max-height:100%;left:50%;top:50%;transform:translate(-50%,-50%);pointer-events:none;user-select:none;border-radius:0;">
             <svg id="pan-svg" style="position:absolute;inset:0;width:100%;height:100%;pointer-events:none;overflow:visible;"></svg>
             <div id="pan-layer" style="position:absolute;inset:0;"></div>
+            <!-- Loader -->
+            <div id="pan-loader" style="display:none;position:absolute;inset:0;background:rgba(0,0,0,.7);align-items:center;justify-content:center;flex-direction:column;gap:12px;">
+                <div style="width:40px;height:40px;border:4px solid #333;border-top-color:#ffd60a;border-radius:50%;animation:spin .8s linear infinite;"></div>
+                <span style="color:#fff;font-size:13px;font-weight:700;">Guardando...</span>
+            </div>
         </div>
-        <div style="background:#000;padding:8px 16px;padding-bottom:max(8px,env(safe-area-inset-bottom));flex-shrink:0;">
-            <div style="font-size:10px;color:#666;text-align:center;">Arrastrá el punto amarillo ● para mover la punta · Arrastrá el cuadro para mover la nota</div>
+        <div style="background:#000;padding:6px 14px;padding-bottom:max(6px,env(safe-area-inset-bottom));flex-shrink:0;">
+            <div style="font-size:10px;color:#555;text-align:center;">● Arrastrá el punto para mover la punta · Arrastrá el cuadro para mover la nota</div>
+        </div>
+    </div>
+
+    <!-- PAN Edit Dialog -->
+    <div id="pan-edit-dialog" style="display:none;position:fixed;inset:0;z-index:6000;background:rgba(0,0,0,.75);align-items:flex-end;justify-content:center;" onclick="if(event.target===this)cancelPanEdit()">
+        <div style="background:#1c1c1e;border-radius:20px 20px 0 0;padding:20px 18px;width:100%;max-width:480px;padding-bottom:max(20px,env(safe-area-inset-bottom));">
+            <div style="font-size:14px;font-weight:900;color:#fff;margin-bottom:12px;text-align:center;">Editar Nota</div>
+            <textarea id="pan-edit-text" rows="3" style="width:100%;background:#2c2c2e;color:#fff;border:1.5px solid #444;border-radius:10px;padding:10px;font-size:14px;resize:none;box-sizing:border-box;font-weight:700;outline:none;"></textarea>
+            <div style="margin-top:12px;margin-bottom:8px;">
+                <div style="font-size:9px;color:#888;margin-bottom:6px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;">Color de línea</div>
+                <div id="pan-ed-colors" style="display:flex;gap:8px;flex-wrap:wrap;"></div>
+            </div>
+            <div style="margin-top:10px;margin-bottom:14px;">
+                <div style="font-size:9px;color:#888;margin-bottom:6px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;">Tamaño de texto</div>
+                <div style="display:flex;gap:6px;">
+                    <button onclick="setPanEditSize(11)" data-sz="11" class="pan-sz-btn" style="flex:1;padding:10px;border-radius:8px;border:1.5px solid #444;background:#2c2c2e;color:#fff;cursor:pointer;font-size:12px;font-weight:800;">S</button>
+                    <button onclick="setPanEditSize(13)" data-sz="13" class="pan-sz-btn" style="flex:1;padding:10px;border-radius:8px;border:1.5px solid #444;background:#2c2c2e;color:#fff;cursor:pointer;font-size:14px;font-weight:800;">M</button>
+                    <button onclick="setPanEditSize(16)" data-sz="16" class="pan-sz-btn" style="flex:1;padding:10px;border-radius:8px;border:1.5px solid #444;background:#2c2c2e;color:#fff;cursor:pointer;font-size:17px;font-weight:800;">L</button>
+                </div>
+            </div>
+            <div style="display:flex;gap:8px;">
+                <button onclick="cancelPanEdit()" style="flex:1;padding:12px;border-radius:12px;border:1px solid #444;background:#2c2c2e;color:#fff;font-weight:800;cursor:pointer;font-size:13px;">Cancelar</button>
+                <button onclick="confirmPanEdit()" style="flex:2;padding:12px;border-radius:12px;border:none;background:#ffd60a;color:#000;font-weight:900;cursor:pointer;font-size:15px;">✓ Guardar</button>
+            </div>
         </div>
     </div>
 
@@ -634,7 +684,7 @@
             const panPath = apuType
                 ? `proyectos/${cid}/${pid}/presupuesto/items/${itemIdx}/apu/${apuType}/${apuIdx}/measures/${mIdx}/anns`
                 : `proyectos/${cid}/${pid}/presupuesto/items/${itemIdx}/measures/${mIdx}/anns`;
-            const annotBtn = m.img && !isWorker ? `<button onclick="openPAN('${m.img}','${panPath}','pia-${piaKey}')" style="background:none;border:1px solid #ffd60a;color:#ffd60a;border-radius:4px;padding:2px 5px;font-size:9px;cursor:pointer;margin-top:3px;font-weight:700;display:flex;align-items:center;gap:2px;white-space:nowrap;"><i class="ph-bold ph-pencil-line"></i>${annCount > 0 ? ' ('+annCount+')' : ' Anotar'}</button>` : '';
+            const annotBtn = m.img && !isWorker ? `<button onclick="openPAN('${m.img}','${panPath}','pia-${piaKey}','${itemIdx}')" style="background:none;border:1px solid #ffd60a;color:#ffd60a;border-radius:4px;padding:2px 5px;font-size:9px;cursor:pointer;margin-top:3px;font-weight:700;display:flex;align-items:center;gap:2px;white-space:nowrap;"><i class="ph-bold ph-pencil-line"></i>${annCount > 0 ? ' ('+annCount+')' : ' Anotar'}</button>` : '';
             const imgContent = m.img ? `<div style="position:relative;width:50px;height:50px;flex-shrink:0;">${btnTrashImg}<img loading="lazy" decoding="async" src="${m.img}" style="width:100%;height:100%;object-fit:cover;border-radius:6px;cursor:pointer;border:1px solid var(--border);" onclick="viewFullImage('${m.img}')"></div>${annotBtn}` : btnUploadArt;
             let imgHtml = `<div id="pia-${piaKey}" style="display:flex;flex-direction:column;align-items:center;flex-shrink:0;">${imgContent}</div>`;
 
@@ -1867,19 +1917,31 @@
     // ── Notas de fabricación ─────────────────────────────────────────────────
     const _notasSaveTimers = {};
     // ── ANOTADOR GENÉRICO (PAN) ───────────────────────────────────────────────
-    // openPAN(imgUrl, savePath, piaId?) — works for ANY image in the page
+    // openPAN(imgUrl, savePath, piaId?, itemIdx?) — works for ANY image
     let _panAnns = [];
     let _panSavePath = null;
     let _panPiaId = null;
+    let _panItemIdx = null;
     let _panNextId = 1;
     let _panSaveTimer = null;
+    let _panDefColor = '#ffd60a';
+    let _panDefFontSize = 12;
+    let _panEditAnnId = null;
+    let _panEditColor = '#ffd60a';
+    let _panEditFontSize = 12;
 
-    function openPAN(imgUrl, savePath, piaId) {
+    function openPAN(imgUrl, savePath, piaId, itemIdx) {
         _panSavePath = savePath;
         _panPiaId = piaId || null;
+        _panItemIdx = itemIdx != null ? String(itemIdx) : null;
+        // Try to extract itemIdx from path if not provided
+        if (!_panItemIdx) {
+            const m = (savePath||'').match(/\/items\/([^\/]+)\//);
+            if (m) _panItemIdx = m[1];
+        }
         document.getElementById('pan-img').src = imgUrl;
         document.getElementById('mod-pan').style.display = 'flex';
-        // Load annotations from Firebase
+        document.getElementById('pan-loader').style.display = 'none';
         db.ref(savePath).once('value', snap => {
             const raw = snap.val();
             _panAnns = Array.isArray(raw) ? JSON.parse(JSON.stringify(raw))
@@ -1895,41 +1957,157 @@
         document.getElementById('pan-img').src = '';
         document.getElementById('pan-svg').innerHTML = '';
         document.getElementById('pan-layer').innerHTML = '';
-        _panAnns = []; _panSavePath = null; _panPiaId = null;
+        _panAnns = []; _panSavePath = null; _panPiaId = null; _panItemIdx = null;
     }
 
     function addPAN() {
         const stage = document.getElementById('pan-stage');
         const W = stage.clientWidth, H = stage.clientHeight;
         const id = String(_panNextId++);
-        // Place anchor at 35% of image, box at 55%
-        _panAnns.push({ id, text: 'Nueva nota', ax: W * 0.35, ay: H * 0.4, bx: W * 0.52, by: H * 0.3 });
-        _panRender();
-        _panSave();
-        // Auto-open edit for the new note
-        setTimeout(() => _panEditPrompt(id), 80);
+        _panAnns.push({ id, text: 'Nueva nota', ax: W * 0.38, ay: H * 0.42, bx: W * 0.54, by: H * 0.28, color: _panDefColor, fontSize: _panDefFontSize });
+        _panRender(); _panSave();
+        setTimeout(() => _panOpenEditDialog(id), 80);
     }
 
-    function _panEditPrompt(id) {
+    // ── Color / size toolbar helpers ──
+    window.setPanDefColor = function(c, el) {
+        _panDefColor = c;
+        document.querySelectorAll('.pan-cswatch').forEach(s => s.style.outline = '');
+        if (el) el.style.outline = '2px solid #fff';
+    };
+    window.setPanDefSize = function(s, el) {
+        _panDefFontSize = s;
+        document.querySelectorAll('.pan-sbtn').forEach(b => b.classList.remove('pan-sbtn-active'));
+        if (el) el.classList.add('pan-sbtn-active');
+    };
+
+    // ── Edit dialog ──
+    const PAN_COLORS = ['#ffd60a','#ffffff','#ff3b30','#30d158','#0a84ff','#ff9f0a','#ff375f'];
+
+    function _panOpenEditDialog(id) {
         const ann = _panAnns.find(a => a.id === id);
         if (!ann) return;
-        const newText = prompt('Texto de la nota:', ann.text);
-        if (newText === null) return;
-        ann.text = newText.trim() || ann.text;
-        // Update span in DOM without full re-render
-        const box = document.querySelector(`[data-pan-box="${id}"]`);
-        if (box) { const sp = box.querySelector('.pan-text'); if (sp) sp.textContent = ann.text; }
-        _panSave();
+        _panEditAnnId = id;
+        _panEditColor = ann.color || '#ffd60a';
+        _panEditFontSize = ann.fontSize || 12;
+        document.getElementById('pan-edit-text').value = ann.text;
+        // Build color swatches
+        document.getElementById('pan-ed-colors').innerHTML = PAN_COLORS.map(c =>
+            `<div onclick="setPanEditColor('${c}',this)" style="width:26px;height:26px;border-radius:50%;background:${c};cursor:pointer;box-sizing:border-box;outline:${c===_panEditColor?'2px solid #fff':'none'};outline-offset:2px;border:2px solid rgba(255,255,255,.15);"></div>`
+        ).join('');
+        // Highlight active size
+        document.querySelectorAll('.pan-sz-btn').forEach(b => {
+            const sz = parseInt(b.getAttribute('data-sz'));
+            b.style.background = sz === _panEditFontSize ? '#ffd60a' : '#2c2c2e';
+            b.style.color = sz === _panEditFontSize ? '#000' : '#fff';
+            b.style.borderColor = sz === _panEditFontSize ? '#ffd60a' : '#444';
+        });
+        document.getElementById('pan-edit-dialog').style.display = 'flex';
     }
-
-    window.deletePAN = function(id) {
-        _panAnns = _panAnns.filter(a => a.id !== id);
+    window.setPanEditColor = function(c, el) {
+        _panEditColor = c;
+        document.querySelectorAll('#pan-ed-colors div').forEach(d => d.style.outline = '');
+        if (el) el.style.outline = '2px solid #fff';
+    };
+    window.setPanEditSize = function(s) {
+        _panEditFontSize = s;
+        document.querySelectorAll('.pan-sz-btn').forEach(b => {
+            const sz = parseInt(b.getAttribute('data-sz'));
+            b.style.background = sz === s ? '#ffd60a' : '#2c2c2e';
+            b.style.color = sz === s ? '#000' : '#fff';
+            b.style.borderColor = sz === s ? '#ffd60a' : '#444';
+        });
+    };
+    window.confirmPanEdit = function() {
+        const ann = _panAnns.find(a => a.id === _panEditAnnId);
+        if (!ann) return;
+        const txt = document.getElementById('pan-edit-text').value.trim();
+        if (txt) ann.text = txt;
+        ann.color = _panEditColor;
+        ann.fontSize = _panEditFontSize;
+        window.cancelPanEdit();
         _panRender(); _panSave();
     };
-    window.editPAN = function(id) { _panEditPrompt(id); };
+    window.cancelPanEdit = function() {
+        document.getElementById('pan-edit-dialog').style.display = 'none';
+        _panEditAnnId = null;
+    };
+
+    window.deletePAN = function(id) { _panAnns = _panAnns.filter(a => a.id !== id); _panRender(); _panSave(); };
+    window.editPAN = function(id) { _panOpenEditDialog(id); };
     window.openPAN = openPAN;
     window.cerrarPAN = cerrarPAN;
     window.addPAN = addPAN;
+
+    // ── Export annotated image to item ──
+    window._panExportToItem = async function() {
+        if (!_panItemIdx) { alert('No se puede identificar el ítem.'); return; }
+        const stageEl = document.getElementById('pan-stage');
+        const imgEl   = document.getElementById('pan-img');
+        if (!imgEl.complete || !imgEl.naturalWidth) { alert('La imagen aún carga. Esperá un momento.'); return; }
+        const stageRect = stageEl.getBoundingClientRect();
+        const imgRect   = imgEl.getBoundingClientRect();
+        const canvas = document.createElement('canvas');
+        canvas.width  = imgEl.naturalWidth;
+        canvas.height = imgEl.naturalHeight;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(imgEl, 0, 0);
+        const sX = imgEl.naturalWidth  / imgRect.width;
+        const sY = imgEl.naturalHeight / imgRect.height;
+        const offX = imgRect.left - stageRect.left;
+        const offY = imgRect.top  - stageRect.top;
+        _panAnns.forEach(ann => {
+            const color = ann.color || '#ffd60a';
+            const fs    = (ann.fontSize || 12) * sX;
+            const ax = (ann.ax - offX) * sX;
+            const ay = (ann.ay - offY) * sY;
+            const boxEl  = document.querySelector(`[data-pan-box="${ann.id}"]`);
+            const boxRect = boxEl ? boxEl.getBoundingClientRect() : null;
+            const bCX = boxRect ? ((boxRect.left + boxRect.width/2  - stageRect.left - offX) * sX) : ax + 80*sX;
+            const bCY = boxRect ? ((boxRect.top  + boxRect.height/2 - stageRect.top  - offY) * sY) : ay - 30*sY;
+            const bx  = boxRect ? ((boxRect.left - stageRect.left - offX) * sX) : ax + 10*sX;
+            const by  = boxRect ? ((boxRect.top  - stageRect.top  - offY) * sY) : ay - 50*sY;
+            const bw  = boxRect ? boxRect.width  * sX : 140*sX;
+            const bh  = boxRect ? boxRect.height * sY : 55*sY;
+            // line
+            ctx.beginPath(); ctx.setLineDash([5*sX, 3*sX]);
+            ctx.strokeStyle = color; ctx.lineWidth = 2*sX;
+            ctx.moveTo(ax, ay); ctx.lineTo(bCX, bCY); ctx.stroke();
+            // anchor
+            ctx.setLineDash([]); ctx.beginPath();
+            ctx.fillStyle = color; ctx.arc(ax, ay, 8*sX, 0, Math.PI*2); ctx.fill();
+            ctx.strokeStyle = 'rgba(0,0,0,.8)'; ctx.lineWidth = 2*sX; ctx.stroke();
+            // box background
+            ctx.setLineDash([]); const r = 8*sX;
+            ctx.beginPath();
+            ctx.moveTo(bx+r,by); ctx.lineTo(bx+bw-r,by); ctx.quadraticCurveTo(bx+bw,by,bx+bw,by+r);
+            ctx.lineTo(bx+bw,by+bh-r); ctx.quadraticCurveTo(bx+bw,by+bh,bx+bw-r,by+bh);
+            ctx.lineTo(bx+r,by+bh); ctx.quadraticCurveTo(bx,by+bh,bx,by+bh-r);
+            ctx.lineTo(bx,by+r); ctx.quadraticCurveTo(bx,by,bx+r,by); ctx.closePath();
+            ctx.fillStyle = 'rgba(20,20,20,.88)'; ctx.fill();
+            ctx.strokeStyle = color; ctx.lineWidth = 2*sX; ctx.stroke();
+            // text
+            ctx.fillStyle = '#fff'; ctx.font = `bold ${fs}px sans-serif`;
+            ctx.fillText(ann.text, bx+8*sX, by+fs+8*sY, bw-16*sX);
+        });
+        document.getElementById('pan-loader').style.display = 'flex';
+        canvas.toBlob(async blob => {
+            try {
+                const b64 = await new Promise(res => { const r = new FileReader(); r.onload = e => res(e.target.result); r.readAsDataURL(blob); });
+                const snap = await storage.ref(`produccion/artes/${pid}_ann_${Date.now()}.jpg`).putString(b64, 'data_url');
+                const url  = await snap.ref.getDownloadURL();
+                window._suppressRenderTasks = true;
+                await db.ref(`proyectos/${cid}/${pid}/presupuesto/items/${_panItemIdx}/op_images`).push(url);
+                _injectImageInDOM(_panItemIdx, url);
+                document.getElementById('pan-loader').style.display = 'none';
+                cerrarPAN();
+                alert('✅ Imagen con notas guardada en el ítem.');
+            } catch(e) {
+                document.getElementById('pan-loader').style.display = 'none';
+                alert('Error al guardar: ' + (e.message || e));
+            }
+        }, 'image/jpeg', 0.92);
+    };
 
     function _panRender() {
         const svg = document.getElementById('pan-svg');
@@ -1939,31 +2117,35 @@
         layer.innerHTML = '';
 
         _panAnns.forEach(ann => {
+            const color = ann.color || _panDefColor;
+            const fs = ann.fontSize || _panDefFontSize;
+            const shadowRgb = color === '#ffffff' ? '200,200,200' : color.replace('#','').match(/.{2}/g).map(h=>parseInt(h,16)).join(',');
+
             // SVG line
             const line = document.createElementNS('http://www.w3.org/2000/svg','line');
             line.setAttribute('data-line', ann.id);
-            line.setAttribute('stroke','#ffd60a');
+            line.setAttribute('stroke', color);
             line.setAttribute('stroke-width','2');
             line.setAttribute('stroke-dasharray','5,3');
             line.setAttribute('x1', ann.ax); line.setAttribute('y1', ann.ay);
             line.setAttribute('x2', ann.bx + 80); line.setAttribute('y2', ann.by + 24);
             svg.appendChild(line);
 
-            // Anchor dot (draggable yellow circle)
+            // Anchor dot (draggable colored circle)
             const anchor = document.createElement('div');
             anchor.setAttribute('data-pan-anchor', ann.id);
-            anchor.style.cssText = `position:absolute;left:${ann.ax-10}px;top:${ann.ay-10}px;width:20px;height:20px;background:#ffd60a;border:2.5px solid #000;border-radius:50%;cursor:grab;z-index:4;box-shadow:0 0 0 3px rgba(255,214,10,.35);touch-action:none;`;
+            anchor.style.cssText = `position:absolute;left:${ann.ax-10}px;top:${ann.ay-10}px;width:20px;height:20px;background:${color};border:2.5px solid #000;border-radius:50%;cursor:grab;z-index:4;box-shadow:0 0 0 3px rgba(${shadowRgb},.35);touch-action:none;`;
             layer.appendChild(anchor);
 
             // Text box (draggable)
             const box = document.createElement('div');
             box.setAttribute('data-pan-box', ann.id);
-            box.style.cssText = `position:absolute;left:${ann.bx}px;top:${ann.by}px;min-width:110px;max-width:210px;background:rgba(20,20,20,.92);border:2px solid #ffd60a;border-radius:10px;padding:8px 10px;cursor:grab;z-index:4;user-select:none;touch-action:none;`;
+            box.style.cssText = `position:absolute;left:${ann.bx}px;top:${ann.by}px;min-width:110px;max-width:210px;background:rgba(20,20,20,.92);border:2px solid ${color};border-radius:10px;padding:8px 10px;cursor:grab;z-index:4;user-select:none;touch-action:none;`;
             box.innerHTML = `<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:6px;margin-bottom:6px;">
-                <span class="pan-text" style="color:#fff;font-size:12px;font-weight:700;line-height:1.4;flex:1;white-space:pre-wrap;word-break:break-word;">${ann.text}</span>
+                <span class="pan-text" style="color:#fff;font-size:${fs}px;font-weight:700;line-height:1.4;flex:1;white-space:pre-wrap;word-break:break-word;">${ann.text}</span>
                 <i class="ph-bold ph-x" style="color:#ff4d4d;font-size:15px;cursor:pointer;flex-shrink:0;" onclick="deletePAN('${ann.id}')"></i>
             </div>
-            <button onclick="editPAN('${ann.id}')" style="background:none;border:1px solid #ffd60a;color:#ffd60a;border-radius:5px;padding:3px 8px;font-size:10px;cursor:pointer;font-weight:700;display:flex;align-items:center;gap:3px;"><i class="ph-bold ph-pencil-simple"></i> Editar</button>`;
+            <button onclick="editPAN('${ann.id}')" style="background:none;border:1px solid ${color};color:${color};border-radius:5px;padding:3px 8px;font-size:10px;cursor:pointer;font-weight:700;display:flex;align-items:center;gap:3px;"><i class="ph-bold ph-pencil-simple"></i> Editar</button>`;
             layer.appendChild(box);
         });
 
@@ -2523,7 +2705,7 @@ SALIDA: responde SOLO con JSON válido sin texto fuera:
         const injectPanPath = apuType
             ? `proyectos/${cid}/${pid}/presupuesto/items/${itemIdx}/apu/${apuType}/${apuIdx}/measures/${measureIdx}/anns`
             : `proyectos/${cid}/${pid}/presupuesto/items/${itemIdx}/measures/${measureIdx}/anns`;
-        const annotBtn = !isWorker ? `<button onclick="openPAN('${url}','${injectPanPath}','pia-${piaKey}')" style="background:none;border:1px solid #ffd60a;color:#ffd60a;border-radius:4px;padding:2px 5px;font-size:9px;cursor:pointer;margin-top:3px;font-weight:700;display:flex;align-items:center;gap:2px;white-space:nowrap;"><i class="ph-bold ph-pencil-line"></i> Anotar</button>` : '';
+        const annotBtn = !isWorker ? `<button onclick="openPAN('${url}','${injectPanPath}','pia-${piaKey}','${itemIdx}')" style="background:none;border:1px solid #ffd60a;color:#ffd60a;border-radius:4px;padding:2px 5px;font-size:9px;cursor:pointer;margin-top:3px;font-weight:700;display:flex;align-items:center;gap:2px;white-space:nowrap;"><i class="ph-bold ph-pencil-line"></i> Anotar</button>` : '';
         pia.innerHTML = `<div style="position:relative;width:50px;height:50px;flex-shrink:0;">${trash}<img loading="lazy" src="${url}" style="width:100%;height:100%;object-fit:cover;border-radius:6px;cursor:pointer;border:1px solid var(--border);" onclick="viewFullImage('${url}')"></div>${annotBtn}`;
     }
 
@@ -2537,13 +2719,15 @@ SALIDA: responde SOLO con JSON válido sin texto fuera:
             window.allItems = allItems;
         }
         // 2. Inyectar en DOM para verla de inmediato sin esperar render
-        const body = document.getElementById(`task-body-pi_${idx}`);
+        const body = document.getElementById(`task-body-${idx}`);
         if (!body) return;
         const grid = body.querySelector('.img-grid');
         if (!grid) return;
         const div = document.createElement('div');
         div.className = 'img-box';
-        div.innerHTML = `<i class="ph-fill ph-x-circle img-del" onclick="deleteGeneralImage(${idx}, 'new', 'op', '')"></i><img loading="lazy" decoding="async" src="${url}" onclick="viewFullImage('${url}')">`;
+        const _injKey = `op_local_${Date.now()}`;
+        const _injPath = `proyectos/${cid}/${pid}/presupuesto/items/${idx}/img_anns/op_${_injKey}`;
+        div.innerHTML = `<i class="ph-fill ph-x-circle img-del" onclick="deleteGeneralImage(${idx}, 'new', 'op', '')"></i><img loading="lazy" decoding="async" src="${url}" onclick="viewFullImage('${url}','${_injPath}')">`;
         const btnAdd = grid.querySelector('.btn-add-img');
         if (btnAdd) grid.insertBefore(div, btnAdd);
         else grid.appendChild(div);
@@ -2560,7 +2744,8 @@ SALIDA: responde SOLO con JSON válido sin texto fuera:
     function openPANFromViewer() {
         if (!_viewerAnnPath) return;
         const url = document.getElementById('prod-viewer-img').src;
-        openPAN(url, _viewerAnnPath, null);
+        const mIdx = (_viewerAnnPath.match(/\/items\/([^\/]+)\//) || [])[1] || null;
+        openPAN(url, _viewerAnnPath, null, mIdx);
     }
     function cerrarVisorProd() {
         document.getElementById('prod-viewer').style.display = 'none';
