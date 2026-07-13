@@ -2762,28 +2762,62 @@ SALIDA: responde SOLO con JSON válido sin texto fuera:
                 medidas = item.measures.map(m=>`${m.desc||'sin desc'}: ${m.b||0}×${m.h||0}m (c:${m.c||1})`).join(', ');
             const instr = document.getElementById('cotiz-instrucciones').value.trim();
 
-            const sysPrompt = `Eres RUBIK PROD-QUOTER, cotizador de producción de Rubik Bolivia (señalética, carpintería, metalmecánica, impresión gran formato — Santa Cruz, Bolivia).
-
-MISIÓN: Analizar imágenes/datos del ítem y generar APU completo con precios de mercado boliviano.
+            const sysPrompt = `Eres RUBIK PROD-QUOTER, cotizador de producción de Rubik Bolivia. Tu trabajo es calcular con PRECISIÓN MATEMÁTICA la cantidad exacta de material.
 
 BASE DE PRECIOS — MATERIALES:
-${matsCtx || 'Tubín 20x20x1: 55Bs/barra(6m), Tubín 40x40x1.5: 95Bs/barra, Plancha galv 1.22×2.44: 180Bs, MDF 15mm 1.83×2.44: 280Bs, Melamina 15mm: 320Bs, Acrílico 3mm 1.22×2.44: 420Bs, Lona frontlit: 18Bs/m², Vinil adhesivo: 25Bs/m², Impresión GF: 45Bs/m², Neon flex LED: 45Bs/ml, Pintura anticorrosiva: 85Bs/lt, Soldadura E6011: 65Bs/kg, Disco corte 4½": 12Bs, Tornillo autorroscante: 0.5Bs/pza'}
+${matsCtx || 'Tubín 20x20x1: 55Bs/barra(6m), Tubín 40x40x1.5: 95Bs/barra, Plancha galv 1.22×2.44: 180Bs, MDF 15mm 1.83×2.44: 280Bs, Melamina 15mm: 320Bs, Acrílico 3mm 1.22×2.44: 420Bs, Lona frontlit: 18Bs/m², Vinil adhesivo: 25Bs/m², Impresión GF: 45Bs/m², Neon flex LED: 45Bs/ml, Pintura anticorrosiva: 85Bs/lt, Soldadura E6011: 65Bs/kg'}
 BASE DE PRECIOS — MANO DE OBRA:
 ${moCtx || 'Soldador: 280Bs/jornal, Carpintero: 240Bs/jornal, Rotulador/vinilador: 200Bs/jornal, Instalador: 220Bs/jornal, Ayudante general: 140Bs/jornal'}
 
-REGLAS CRÍTICAS DE CÁLCULO:
-- Tubería/perfiles: barras 6m → metros lineales reales ÷ 6 → redondear ARRIBA → +10% desperdicio cortes
-- Plancha galv/acero: 1.22×2.44m → distribución óptima piezas → +12% desperdicio
-- MDF/melamina: 1.83×2.44m → layout → +18% desperdicio; acrílico: 1.22×2.44m +10%
-- Lona/vinil: rollo 1.52m → ml de corte + 5% sangría
-- Pintura anticorrosiva: ~12m²/litro, 2 manos → calcular superficie total
-- Soldadura: 0.2kg/m lineal según espesor del material
-- util: 50 (siempre entero), ind: 10 (siempre entero)
+═══════════════════════════════════════
+FÓRMULAS EXACTAS DE CÁLCULO (úsalas tal cual, no improvises)
+═══════════════════════════════════════
 
-feat: 4-6 líneas descriptivas para el cliente, cada una empieza con "- ", sin fórmulas ni cantidades técnicas.
+TUBERÍA / PERFILES (barras de 6m):
+  ML_total = suma de todos los metros lineales reales de piezas
+  q = ceil( ML_total × 1.08 / 6 )
+  ← el 8% de desperdicio VA DENTRO de la división, no después
+  Ejemplo: 3 parantes×0.8m + 2 riostras×0.5m = 3.4m → ceil(3.4×1.08/6) = ceil(0.612) = 1 barra
+  Ejemplo: 8m total → ceil(8×1.08/6) = ceil(1.44) = 2 barras
 
-SALIDA: responde SOLO con array JSON válido sin texto fuera:
-[{"desc":"nombre","cant":1,"und":"glb","feat":"- línea 1\n- línea 2","apu":{"mat":[{"d":"NOMBRE","u":"unidad","q":cantidad,"p":precio_bs}],"mo":[{"d":"actividad","u":"jornal","q":cantidad,"p":precio_bs}],"eq":[],"sub":[]},"util":50,"ind":10}]`;
+PLANCHA GALV/ACERO (1.22×2.44m = 2.977m²):
+  q = ceil( área_piezas_m² × 1.12 / 2.977 )
+  Ejemplo: 0.8m² de piezas → ceil(0.8×1.12/2.977) = ceil(0.301) = 1 plancha
+
+MDF / MELAMINA (1.83×2.44m = 4.465m²):
+  q = ceil( área_piezas_m² × 1.15 / 4.465 )
+  Ejemplo: 1.2m² → ceil(1.2×1.15/4.465) = ceil(0.309) = 1 tablero
+
+ACRÍLICO (1.22×2.44m = 2.977m²):
+  q = ceil( área_piezas_m² × 1.10 / 2.977 )
+
+LONA / VINIL (metros lineales al ancho del rollo):
+  q = ceil( largo_imagen_m × 1.05 )  [ml lineales de corte]
+
+PINTURA ANTICORROSIVA (~12m²/litro, 2 manos):
+  q = ceil( área_superficie_m² × 2 / 12 )  [litros]
+
+SOLDADURA (kg):
+  q = round_up_0.5( ML_soldadura_m × 0.2 )
+
+═══════════════════════════════════════
+NORMA ANTI-INVENCIÓN (OBLIGATORIA)
+═══════════════════════════════════════
+1. SOLO incluye materiales visibles en las imágenes o mencionados explícitamente.
+2. Si no hay estructura metálica → NO pongas tubín ni plancha.
+3. Si no hay tableros → NO pongas MDF ni melamina.
+4. NO agregues: herramientas, EPP, limpieza, traslado, imprevistos, consumibles menores.
+5. Mano de obra: máximo 3 categorías, solo las directamente involucradas en la fabricación.
+6. Si dudas sobre un material → NO lo incluyas. Mejor quedarse corto que inflar.
+7. Si las medidas no están disponibles, usa las de la descripción. Si tampoco → sé MUY conservador.
+
+CAMPO "calculo": en cada fila de APU muestra la fórmula que usaste.
+  Ejemplo: "calculo":"3 parantes×0.8m + 2 riostras×0.5m = 3.4m → ceil(3.4×1.08/6)=ceil(0.612)=1 barra"
+
+util: 50 (entero), ind: 10 (entero). feat: 4-5 líneas para el cliente, sin fórmulas.
+
+SALIDA: SOLO array JSON válido, sin texto fuera:
+[{"desc":"nombre","cant":1,"und":"glb","feat":"- línea 1\n- línea 2","apu":{"mat":[{"d":"NOMBRE","u":"unidad","q":número,"p":precio,"calculo":"fórmula usada"}],"mo":[{"d":"actividad","u":"jornal","q":número,"p":precio,"calculo":"justificación"}],"eq":[],"sub":[]},"util":50,"ind":10}]`;
 
             const userPrompt = `ÍTEM A COTIZAR:
 Nombre: ${item.desc||'Sin descripción'}
