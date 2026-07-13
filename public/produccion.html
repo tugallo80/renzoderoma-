@@ -332,6 +332,23 @@
         </div>
     </div>
 
+    <!-- Modal Anotador de Piezas (PAN) -->
+    <div id="mod-pan" style="display:none;position:fixed;inset:0;z-index:5500;background:#111;flex-direction:column;touch-action:none;">
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 16px;background:#000;flex-shrink:0;padding-top:max(12px,env(safe-area-inset-top));">
+            <button onclick="cerrarPAN()" style="background:none;border:none;color:#fff;font-size:14px;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:6px;"><i class="ph-bold ph-caret-left"></i> Volver</button>
+            <span style="color:#fff;font-size:13px;font-weight:800;letter-spacing:.3px;"><i class="ph-bold ph-pencil-line" style="color:#ffd60a;"></i> Notas de la Pieza</span>
+            <button onclick="addPAN()" style="background:#ffd60a;border:none;color:#000;font-size:12px;font-weight:900;cursor:pointer;border-radius:8px;padding:7px 12px;display:flex;align-items:center;gap:5px;"><i class="ph-bold ph-plus"></i> Nota</button>
+        </div>
+        <div id="pan-stage" style="flex:1;position:relative;overflow:hidden;">
+            <img id="pan-img" style="position:absolute;max-width:100%;max-height:100%;left:50%;top:50%;transform:translate(-50%,-50%);pointer-events:none;user-select:none;border-radius:0;">
+            <svg id="pan-svg" style="position:absolute;inset:0;width:100%;height:100%;pointer-events:none;overflow:visible;"></svg>
+            <div id="pan-layer" style="position:absolute;inset:0;"></div>
+        </div>
+        <div style="background:#000;padding:8px 16px;padding-bottom:max(8px,env(safe-area-inset-bottom));flex-shrink:0;">
+            <div style="font-size:10px;color:#666;text-align:center;">Arrastrá el punto amarillo ● para mover la punta · Arrastrá el cuadro para mover la nota</div>
+        </div>
+    </div>
+
     <!-- Modal IA Scanner de artes -->
     <div id="mod-ia-scan" class="modal" style="z-index:9600;">
         <div class="modal-box" style="max-width:500px; max-height:90vh; overflow-y:auto;">
@@ -606,11 +623,17 @@
 
             totalCalculated += subTotal;
             
-            let btnTrashImg = !isWorker ? `<i class="ph-fill ph-x-circle img-del" style="top:-8px; right:-8px; font-size:20px;" onclick="deleteMeasureImg(${itemIdx}, ${apuType ? `'${apuType}'` : null}, ${apuIdx}, ${mIdx})"></i>` : '';
-            let btnUploadArt = !isWorker ? `<button class="piece-img-btn" onclick="openPieceUploadModal(${itemIdx}, ${apuType ? `'${apuType}'` : null}, ${apuIdx}, ${mIdx})"><i class="ph-bold ph-upload"></i> Foto Arte</button>` : '';
+            const apuTypeArg = apuType ? `'${apuType}'` : null;
+            const piaKey = `${itemIdx}-${apuType||'0'}-${apuIdx||'0'}-${mIdx}`;
 
-            let imgHtml = m.img ? `<div style="position:relative; width:50px; height:50px; flex-shrink:0;">${btnTrashImg}<img loading="lazy" decoding="async" src="${m.img}" style="width:100%; height:100%; object-fit:cover; border-radius:6px; cursor:pointer; border:1px solid var(--border);" onclick="viewFullImage('${m.img}')"></div>` : btnUploadArt;
-            
+            let btnTrashImg = !isWorker ? `<i class="ph-fill ph-x-circle img-del" style="top:-8px; right:-8px; font-size:20px;" onclick="deleteMeasureImg(${itemIdx}, ${apuTypeArg}, ${apuIdx}, ${mIdx})"></i>` : '';
+            let btnUploadArt = !isWorker ? `<button class="piece-img-btn" onclick="openPieceUploadModal(${itemIdx}, ${apuTypeArg}, ${apuIdx}, ${mIdx})"><i class="ph-bold ph-upload"></i> Foto Arte</button>` : '';
+
+            const annCount = Array.isArray(m.anns) ? m.anns.length : (m.anns && typeof m.anns === 'object' ? Object.keys(m.anns).length : 0);
+            const annotBtn = m.img && !isWorker ? `<button onclick="openPAN(${itemIdx},${apuTypeArg},${apuIdx},${mIdx},'${m.img}')" style="background:none;border:1px solid #ffd60a;color:#ffd60a;border-radius:4px;padding:2px 5px;font-size:9px;cursor:pointer;margin-top:3px;font-weight:700;display:flex;align-items:center;gap:2px;white-space:nowrap;"><i class="ph-bold ph-pencil-line"></i>${annCount > 0 ? ' ('+annCount+')' : ' Anotar'}</button>` : '';
+            const imgContent = m.img ? `<div style="position:relative;width:50px;height:50px;flex-shrink:0;">${btnTrashImg}<img loading="lazy" decoding="async" src="${m.img}" style="width:100%;height:100%;object-fit:cover;border-radius:6px;cursor:pointer;border:1px solid var(--border);" onclick="viewFullImage('${m.img}')"></div>${annotBtn}` : btnUploadArt;
+            let imgHtml = `<div id="pia-${piaKey}" style="display:flex;flex-direction:column;align-items:center;flex-shrink:0;">${imgContent}</div>`;
+
             let driveBadge = m.drive ? `<a href="${m.drive}" target="_blank" style="font-size:9px; color:var(--blue); font-weight:800; background:rgba(0,122,255,0.1); padding:2px 6px; border-radius:4px; text-decoration:none; display:inline-block; margin-top:4px;"><i class="ph-bold ph-link"></i> Link Drive</a>` : '';
 
             let badgeStatus = '';
@@ -620,7 +643,6 @@
             }
 
             const notaVal = (m.nota || '').replace(/`/g, "'").replace(/\$/g, '&#36;');
-            const apuTypeArg = apuType ? `'${apuType}'` : null;
             const notaHtml = !isWorker
                 ? `<textarea class="item-notas-inp" style="font-size:10px;min-height:34px;margin-top:6px;" placeholder="Nota de esta pieza..." onchange="saveNotaPieza(${itemIdx},${apuTypeArg},${apuIdx},${mIdx},this.value)">${notaVal}</textarea>`
                 : (notaVal ? `<div style="font-size:10px;color:var(--gray);margin-top:4px;">${notaVal}</div>` : '');
@@ -1838,6 +1860,202 @@
 
     // ── Notas de fabricación ─────────────────────────────────────────────────
     const _notasSaveTimers = {};
+    // ── ANOTADOR DE PIEZAS (PAN) ─────────────────────────────────────────────
+    let _panAnns = [];       // [{id,text,ax,ay,bx,by}] coords in px relative to pan-stage
+    let _panTarget = null;   // {itemIdx,apuType,apuIdx,measureIdx}
+    let _panNextId = 1;
+    let _panSaveTimer = null;
+
+    function openPAN(itemIdx, apuType, apuIdx, measureIdx, imgUrl) {
+        _panTarget = { itemIdx, apuType, apuIdx, measureIdx };
+        document.getElementById('pan-img').src = imgUrl;
+        // Load existing annotations
+        let m = null;
+        if (apuType) { m = allItems[itemIdx]?.apu?.[apuType]?.[apuIdx]?.measures?.[measureIdx]; }
+        else { m = allItems[itemIdx]?.measures?.[measureIdx]; }
+        const raw = m?.anns;
+        _panAnns = Array.isArray(raw) ? JSON.parse(JSON.stringify(raw))
+                 : (raw && typeof raw === 'object') ? Object.values(raw).filter(Boolean)
+                 : [];
+        _panNextId = _panAnns.length ? Math.max(..._panAnns.map(a => parseInt(a.id)||0)) + 1 : 1;
+        document.getElementById('mod-pan').style.display = 'flex';
+        requestAnimationFrame(_panRender);
+    }
+
+    function cerrarPAN() {
+        document.getElementById('mod-pan').style.display = 'none';
+        document.getElementById('pan-img').src = '';
+        document.getElementById('pan-svg').innerHTML = '';
+        document.getElementById('pan-layer').innerHTML = '';
+        _panAnns = []; _panTarget = null;
+    }
+
+    function addPAN() {
+        const stage = document.getElementById('pan-stage');
+        const W = stage.clientWidth, H = stage.clientHeight;
+        const id = String(_panNextId++);
+        // Place anchor at 35% of image, box at 55%
+        _panAnns.push({ id, text: 'Nueva nota', ax: W * 0.35, ay: H * 0.4, bx: W * 0.52, by: H * 0.3 });
+        _panRender();
+        _panSave();
+        // Auto-open edit for the new note
+        setTimeout(() => _panEditPrompt(id), 80);
+    }
+
+    function _panEditPrompt(id) {
+        const ann = _panAnns.find(a => a.id === id);
+        if (!ann) return;
+        const newText = prompt('Texto de la nota:', ann.text);
+        if (newText === null) return;
+        ann.text = newText.trim() || ann.text;
+        // Update span in DOM without full re-render
+        const box = document.querySelector(`[data-pan-box="${id}"]`);
+        if (box) { const sp = box.querySelector('.pan-text'); if (sp) sp.textContent = ann.text; }
+        _panSave();
+    }
+
+    window.deletePAN = function(id) {
+        _panAnns = _panAnns.filter(a => a.id !== id);
+        _panRender(); _panSave();
+    };
+    window.editPAN = function(id) { _panEditPrompt(id); };
+    window.openPAN = openPAN;
+    window.cerrarPAN = cerrarPAN;
+    window.addPAN = addPAN;
+
+    function _panRender() {
+        const svg = document.getElementById('pan-svg');
+        const layer = document.getElementById('pan-layer');
+        if (!svg || !layer) return;
+        svg.innerHTML = '';
+        layer.innerHTML = '';
+
+        _panAnns.forEach(ann => {
+            // SVG line
+            const line = document.createElementNS('http://www.w3.org/2000/svg','line');
+            line.setAttribute('data-line', ann.id);
+            line.setAttribute('stroke','#ffd60a');
+            line.setAttribute('stroke-width','2');
+            line.setAttribute('stroke-dasharray','5,3');
+            line.setAttribute('x1', ann.ax); line.setAttribute('y1', ann.ay);
+            line.setAttribute('x2', ann.bx + 80); line.setAttribute('y2', ann.by + 24);
+            svg.appendChild(line);
+
+            // Anchor dot (draggable yellow circle)
+            const anchor = document.createElement('div');
+            anchor.setAttribute('data-pan-anchor', ann.id);
+            anchor.style.cssText = `position:absolute;left:${ann.ax-10}px;top:${ann.ay-10}px;width:20px;height:20px;background:#ffd60a;border:2.5px solid #000;border-radius:50%;cursor:grab;z-index:4;box-shadow:0 0 0 3px rgba(255,214,10,.35);touch-action:none;`;
+            layer.appendChild(anchor);
+
+            // Text box (draggable)
+            const box = document.createElement('div');
+            box.setAttribute('data-pan-box', ann.id);
+            box.style.cssText = `position:absolute;left:${ann.bx}px;top:${ann.by}px;min-width:110px;max-width:210px;background:rgba(20,20,20,.92);border:2px solid #ffd60a;border-radius:10px;padding:8px 10px;cursor:grab;z-index:4;user-select:none;touch-action:none;`;
+            box.innerHTML = `<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:6px;margin-bottom:6px;">
+                <span class="pan-text" style="color:#fff;font-size:12px;font-weight:700;line-height:1.4;flex:1;white-space:pre-wrap;word-break:break-word;">${ann.text}</span>
+                <i class="ph-bold ph-x" style="color:#ff4d4d;font-size:15px;cursor:pointer;flex-shrink:0;" onclick="deletePAN('${ann.id}')"></i>
+            </div>
+            <button onclick="editPAN('${ann.id}')" style="background:none;border:1px solid #ffd60a;color:#ffd60a;border-radius:5px;padding:3px 8px;font-size:10px;cursor:pointer;font-weight:700;display:flex;align-items:center;gap:3px;"><i class="ph-bold ph-pencil-simple"></i> Editar</button>`;
+            layer.appendChild(box);
+        });
+
+        _panSetupDrag();
+        // Recompute lines after boxes are laid out
+        requestAnimationFrame(() => _panAnns.forEach(a => _panUpdateLine(a)));
+    }
+
+    function _panUpdateLine(ann) {
+        const stage = document.getElementById('pan-stage');
+        const svg   = document.getElementById('pan-svg');
+        const line  = svg.querySelector(`[data-line="${ann.id}"]`);
+        const box   = document.querySelector(`[data-pan-box="${ann.id}"]`);
+        if (!line || !box || !stage) return;
+        const sr = stage.getBoundingClientRect();
+        const br = box.getBoundingClientRect();
+        const bCX = br.left - sr.left + br.width / 2;
+        const bCY = br.top  - sr.top  + br.height / 2;
+        line.setAttribute('x1', ann.ax); line.setAttribute('y1', ann.ay);
+        line.setAttribute('x2', bCX);   line.setAttribute('y2', bCY);
+    }
+
+    function _panSetupDrag() {
+        const layer = document.getElementById('pan-layer');
+        // Anchor drag
+        layer.querySelectorAll('[data-pan-anchor]').forEach(el => {
+            const id = el.getAttribute('data-pan-anchor');
+            let startX, startY, origAX, origAY;
+            el.addEventListener('pointerdown', e => {
+                e.stopPropagation();
+                const ann = _panAnns.find(a => a.id === id); if (!ann) return;
+                startX = e.clientX; startY = e.clientY; origAX = ann.ax; origAY = ann.ay;
+                el.setPointerCapture(e.pointerId);
+                el.style.cursor = 'grabbing';
+            });
+            el.addEventListener('pointermove', e => {
+                if (!el.hasPointerCapture(e.pointerId)) return;
+                const ann = _panAnns.find(a => a.id === id); if (!ann) return;
+                ann.ax = origAX + (e.clientX - startX);
+                ann.ay = origAY + (e.clientY - startY);
+                el.style.left = (ann.ax - 10) + 'px';
+                el.style.top  = (ann.ay - 10) + 'px';
+                _panUpdateLine(ann);
+            });
+            el.addEventListener('pointerup', () => { el.style.cursor = 'grab'; _panSave(); });
+        });
+
+        // Box drag
+        layer.querySelectorAll('[data-pan-box]').forEach(el => {
+            const id = el.getAttribute('data-pan-box');
+            let startX, startY, origBX, origBY;
+            el.addEventListener('pointerdown', e => {
+                if (e.target.closest('button, i')) return;
+                e.stopPropagation();
+                const ann = _panAnns.find(a => a.id === id); if (!ann) return;
+                startX = e.clientX; startY = e.clientY; origBX = ann.bx; origBY = ann.by;
+                el.setPointerCapture(e.pointerId);
+                el.style.cursor = 'grabbing';
+            });
+            el.addEventListener('pointermove', e => {
+                if (!el.hasPointerCapture(e.pointerId)) return;
+                const ann = _panAnns.find(a => a.id === id); if (!ann) return;
+                ann.bx = origBX + (e.clientX - startX);
+                ann.by = origBY + (e.clientY - startY);
+                el.style.left = ann.bx + 'px';
+                el.style.top  = ann.by + 'px';
+                _panUpdateLine(ann);
+            });
+            el.addEventListener('pointerup', () => { el.style.cursor = 'grab'; _panSave(); });
+        });
+    }
+
+    function _panSave() {
+        if (!_panTarget) return;
+        clearTimeout(_panSaveTimer);
+        _panSaveTimer = setTimeout(() => {
+            const { itemIdx, apuType, apuIdx, measureIdx } = _panTarget;
+            window._suppressRenderTasks = true;
+            const data = _panAnns.length ? _panAnns : null;
+            const path = apuType
+                ? `proyectos/${cid}/${pid}/presupuesto/items/${itemIdx}/apu/${apuType}/${apuIdx}/measures/${measureIdx}/anns`
+                : `proyectos/${cid}/${pid}/presupuesto/items/${itemIdx}/measures/${measureIdx}/anns`;
+            db.ref(path).set(data);
+            // Update memory
+            if (allItems[itemIdx]) {
+                const m = apuType
+                    ? allItems[itemIdx]?.apu?.[apuType]?.[apuIdx]?.measures?.[measureIdx]
+                    : allItems[itemIdx]?.measures?.[measureIdx];
+                if (m) m.anns = data;
+            }
+            // Update annotation badge in piece row
+            const piaKey = `${itemIdx}-${apuType||'0'}-${apuIdx||'0'}-${measureIdx}`;
+            const pia = document.getElementById('pia-' + piaKey);
+            if (pia) {
+                const btn = pia.querySelector('button[onclick*="openPAN"]');
+                if (btn) { const sp = btn.querySelector('i'); if (sp) btn.lastChild.textContent = _panAnns.length > 0 ? ` (${_panAnns.length})` : ' Anotar'; }
+            }
+        }, 600);
+    }
+
     function saveNotasItem(idx, val) {
         if (allItems[idx]) allItems[idx].notas = val;
         clearTimeout(_notasSaveTimers[idx]);
@@ -2239,7 +2457,23 @@ SALIDA: responde SOLO con JSON válido sin texto fuera:
     }
 
     async function pasteImageClick() { /* nativo - preservado */ }
-    async function pastePieceImageClick() { /* nativo - preservado */ }
+    async function pastePieceImageClick() {
+        try {
+            const items = await navigator.clipboard.read();
+            for (const item of items) {
+                for (const type of item.types) {
+                    if (type.startsWith('image/')) {
+                        const blob = await item.getType(type);
+                        processPiecePhotoUpload({ files: [new File([blob], 'paste.jpg', { type })] });
+                        return;
+                    }
+                }
+            }
+            alert('No hay imagen en el portapapeles. Copiá una imagen primero.');
+        } catch(e) {
+            alert('Permiso denegado por el navegador. Usá Ctrl+V directamente sobre la página.');
+        }
+    }
     document.addEventListener('paste', async e => { if(document.getElementById('mod-photo').style.display === 'flex' && targetItemIdx !== null) { if(e.clipboardData.files.length > 0) { processPhotoUpload({files: [e.clipboardData.files[0]]}); } } else if (document.getElementById('mod-piece-art').style.display === 'flex' && currentUploadTarget) { if(e.clipboardData.files.length > 0) { processPiecePhotoUpload({files: [e.clipboardData.files[0]]}); } } });
     
     async function savePieceImageUrl(url) {
@@ -2248,6 +2482,32 @@ SALIDA: responde SOLO con JSON válido sin texto fuera:
         window._suppressRenderTasks = true;
         if(apuType) { await db.ref(`proyectos/${cid}/${pid}/presupuesto/items/${itemIdx}/apu/${apuType}/${apuIdx}/measures/${measureIdx}/img`).set(url); }
         else { await db.ref(`proyectos/${cid}/${pid}/presupuesto/items/${itemIdx}/measures/${measureIdx}/img`).set(url); }
+        _injectPieceImageInDOM(currentUploadTarget, url);
+    }
+
+    function _injectPieceImageInDOM(target, url) {
+        const { itemIdx, apuType, apuIdx, measureIdx } = target;
+        // Update allItems memory
+        if (allItems[itemIdx]) {
+            let m;
+            if (apuType) {
+                const apu = allItems[itemIdx]?.apu?.[apuType]?.[apuIdx];
+                if (apu) { if (!apu.measures) apu.measures = {}; if (!apu.measures[measureIdx]) apu.measures[measureIdx] = {}; m = apu.measures[measureIdx]; }
+            } else {
+                if (!allItems[itemIdx].measures) allItems[itemIdx].measures = {};
+                if (!allItems[itemIdx].measures[measureIdx]) allItems[itemIdx].measures[measureIdx] = {};
+                m = allItems[itemIdx].measures[measureIdx];
+            }
+            if (m) m.img = url;
+        }
+        // Update DOM
+        const piaKey = `${itemIdx}-${apuType||'0'}-${apuIdx||'0'}-${measureIdx}`;
+        const pia = document.getElementById('pia-' + piaKey);
+        if (!pia) return;
+        const apuTypeArg = apuType ? `'${apuType}'` : null;
+        const trash = !isWorker ? `<i class="ph-fill ph-x-circle img-del" style="top:-8px;right:-8px;font-size:20px;" onclick="deleteMeasureImg(${itemIdx},${apuTypeArg},${apuIdx||'0'},${measureIdx})"></i>` : '';
+        const annotBtn = !isWorker ? `<button onclick="openPAN(${itemIdx},${apuTypeArg},${apuIdx||'0'},${measureIdx},'${url}')" style="background:none;border:1px solid #ffd60a;color:#ffd60a;border-radius:4px;padding:2px 5px;font-size:9px;cursor:pointer;margin-top:3px;font-weight:700;display:flex;align-items:center;gap:2px;white-space:nowrap;"><i class="ph-bold ph-pencil-line"></i> Anotar</button>` : '';
+        pia.innerHTML = `<div style="position:relative;width:50px;height:50px;flex-shrink:0;">${trash}<img loading="lazy" src="${url}" style="width:100%;height:100%;object-fit:cover;border-radius:6px;cursor:pointer;border:1px solid var(--border);" onclick="viewFullImage('${url}')"></div>${annotBtn}`;
     }
 
     // Actualiza allItems en memoria Y el DOM para que la imagen aparezca de inmediato
