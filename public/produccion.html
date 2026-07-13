@@ -619,7 +619,13 @@
                 if(m.status === 'impreso') badgeStatus = '<span style="color:var(--green); font-size:10px; font-weight:900;">✅ IMPRESO</span>';
             }
 
-            html += `<div class="piece-row"><div class="piece-info"><div class="piece-name">${m.d || 'Pieza'} ${badgeStatus}</div><div class="piece-math">${mathStr} | <b>Total: ${stripZeros(subTotal)} ${unitStr}</b></div>${driveBadge}</div>${isGraphic ? imgHtml : ''}</div>`;
+            const notaVal = (m.nota || '').replace(/`/g, "'").replace(/\$/g, '&#36;');
+            const apuTypeArg = apuType ? `'${apuType}'` : null;
+            const notaHtml = !isWorker
+                ? `<textarea class="item-notas-inp" style="font-size:10px;min-height:34px;margin-top:6px;" placeholder="Nota de esta pieza..." onchange="saveNotaPieza(${itemIdx},${apuTypeArg},${apuIdx},${mIdx},this.value)">${notaVal}</textarea>`
+                : (notaVal ? `<div style="font-size:10px;color:var(--gray);margin-top:4px;">${notaVal}</div>` : '');
+
+            html += `<div class="piece-row"><div class="piece-info"><div class="piece-name">${m.d || 'Pieza'} ${badgeStatus}</div><div class="piece-math">${mathStr} | <b>Total: ${stripZeros(subTotal)} ${unitStr}</b></div>${driveBadge}${notaHtml}</div>${isGraphic ? imgHtml : ''}</div>`;
         });
         html += `<div style="text-align:right; font-size:11px; font-weight:900; margin-top:5px; color:var(--text);">Total Desglose: ${stripZeros(totalCalculated)}</div></div>`;
         return html;
@@ -1841,6 +1847,14 @@
         }, 800);
     }
 
+    function saveNotaPieza(itemIdx, apuType, apuIdx, measureIdx, val) {
+        window._suppressRenderTasks = true;
+        const path = apuType
+            ? `proyectos/${cid}/${pid}/presupuesto/items/${itemIdx}/apu/${apuType}/${apuIdx}/measures/${measureIdx}/nota`
+            : `proyectos/${cid}/${pid}/presupuesto/items/${itemIdx}/measures/${measureIdx}/nota`;
+        db.ref(path).set(val || null);
+    }
+
     // ── Motor IA Producción ──────────────────────────────────────────────────
     function buildIAApuHTML(idx, data) {
         let html = `<div class="ia-apu-box">
@@ -2229,6 +2243,7 @@ SALIDA: responde SOLO con JSON válido sin texto fuera:
     document.addEventListener('paste', async e => { if(document.getElementById('mod-photo').style.display === 'flex' && targetItemIdx !== null) { if(e.clipboardData.files.length > 0) { processPhotoUpload({files: [e.clipboardData.files[0]]}); } } else if (document.getElementById('mod-piece-art').style.display === 'flex' && currentUploadTarget) { if(e.clipboardData.files.length > 0) { processPiecePhotoUpload({files: [e.clipboardData.files[0]]}); } } });
     
     async function savePieceImageUrl(url) {
+        if (!currentUploadTarget) return;
         let { itemIdx, apuType, apuIdx, measureIdx } = currentUploadTarget;
         window._suppressRenderTasks = true;
         if(apuType) { await db.ref(`proyectos/${cid}/${pid}/presupuesto/items/${itemIdx}/apu/${apuType}/${apuIdx}/measures/${measureIdx}/img`).set(url); }
