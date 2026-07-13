@@ -209,9 +209,8 @@
         .item-notas-inp { width:100%; background:var(--card); color:var(--text); border:1px solid var(--border); border-radius:8px; padding:8px; font-size:11px; resize:vertical; min-height:48px; font-family:inherit; box-sizing:border-box; outline:none; }
         .item-notas-inp:focus { border-color:var(--blue); }
         .pan-cswatch { width:22px;height:22px;border-radius:50%;cursor:pointer;flex-shrink:0;box-sizing:border-box;outline-offset:2px; }
-        .pan-sbtn { background:#2c2c2e;color:#fff;border:1.5px solid #444;border-radius:6px;padding:3px 8px;cursor:pointer;font-weight:800;transition:.15s; }
-        .pan-sbtn-active { background:#ffd60a!important;color:#000!important;border-color:#ffd60a!important; }
         @keyframes spin { to { transform:rotate(360deg); } }
+        .pan-resize-h { position:absolute;bottom:0;right:0;width:18px;height:18px;cursor:se-resize;touch-action:none;z-index:5;display:flex;align-items:flex-end;justify-content:flex-end;padding:2px;opacity:.55; }
 
         /* ══ VISTA MÓVIL ══════════════════════════════════════════════════════ */
         body[data-view="mobile"] { padding: 10px; padding-bottom: 85px; }
@@ -351,20 +350,19 @@
                 <div onclick="setPanDefColor('#30d158',this)" class="pan-cswatch" style="background:#30d158;" title="Verde"></div>
                 <div onclick="setPanDefColor('#0a84ff',this)" class="pan-cswatch" style="background:#0a84ff;" title="Azul"></div>
                 <div onclick="setPanDefColor('#ff9f0a',this)" class="pan-cswatch" style="background:#ff9f0a;" title="Naranja"></div>
-                <span style="color:#666;font-size:9px;margin-left:6px;white-space:nowrap;">Txt:</span>
-                <button onclick="setPanDefSize(11,this)" class="pan-sbtn pan-sbtn-active" style="font-size:10px;">S</button>
-                <button onclick="setPanDefSize(13,this)" class="pan-sbtn" style="font-size:12px;">M</button>
-                <button onclick="setPanDefSize(16,this)" class="pan-sbtn" style="font-size:14px;">L</button>
             </div>
-            <div style="display:flex;gap:6px;flex-shrink:0;">
-                <button onclick="_panExportToItem()" style="background:#30d158;border:none;color:#fff;font-size:11px;font-weight:900;cursor:pointer;border-radius:7px;padding:6px 10px;display:flex;align-items:center;gap:4px;white-space:nowrap;"><i class="ph-bold ph-floppy-disk"></i> Guardar</button>
-                <button onclick="addPAN()" style="background:#ffd60a;border:none;color:#000;font-size:12px;font-weight:900;cursor:pointer;border-radius:7px;padding:6px 10px;display:flex;align-items:center;gap:4px;"><i class="ph-bold ph-plus"></i> Nota</button>
+            <div style="display:flex;gap:5px;flex-shrink:0;">
+                <button id="pan-meas-btn" onclick="togglePanMeas()" style="background:#2c2c2e;border:1.5px solid #444;color:#fff;font-size:11px;font-weight:900;cursor:pointer;border-radius:7px;padding:6px 8px;display:flex;align-items:center;gap:3px;white-space:nowrap;"><i class="ph-bold ph-ruler"></i> Medida</button>
+                <button onclick="_panExportToItem()" style="background:#30d158;border:none;color:#fff;font-size:11px;font-weight:900;cursor:pointer;border-radius:7px;padding:6px 9px;display:flex;align-items:center;gap:4px;white-space:nowrap;"><i class="ph-bold ph-floppy-disk"></i> Guardar</button>
+                <button onclick="addPAN()" style="background:#ffd60a;border:none;color:#000;font-size:12px;font-weight:900;cursor:pointer;border-radius:7px;padding:6px 9px;display:flex;align-items:center;gap:4px;"><i class="ph-bold ph-plus"></i> Nota</button>
             </div>
         </div>
         <div id="pan-stage" style="flex:1;position:relative;overflow:hidden;">
             <img id="pan-img" style="position:absolute;max-width:100%;max-height:100%;left:50%;top:50%;transform:translate(-50%,-50%);pointer-events:none;user-select:none;border-radius:0;">
             <svg id="pan-svg" style="position:absolute;inset:0;width:100%;height:100%;pointer-events:none;overflow:visible;"></svg>
             <div id="pan-layer" style="position:absolute;inset:0;"></div>
+            <!-- transparent overlay for measurement tap-to-place mode -->
+            <div id="pan-meas-overlay" style="display:none;position:absolute;inset:0;z-index:20;cursor:crosshair;"></div>
             <!-- Loader -->
             <div id="pan-loader" style="display:none;position:absolute;inset:0;background:rgba(0,0,0,.7);align-items:center;justify-content:center;flex-direction:column;gap:12px;">
                 <div style="width:40px;height:40px;border:4px solid #333;border-top-color:#ffd60a;border-radius:50%;animation:spin .8s linear infinite;"></div>
@@ -372,26 +370,18 @@
             </div>
         </div>
         <div style="background:#000;padding:6px 14px;padding-bottom:max(6px,env(safe-area-inset-bottom));flex-shrink:0;">
-            <div style="font-size:10px;color:#555;text-align:center;">● Arrastrá el punto para mover la punta · Arrastrá el cuadro para mover la nota</div>
+            <div style="font-size:10px;color:#555;text-align:center;">● Arrastrá el punto para mover la punta · Arrastrá el cuadro para mover la nota · Arrastrá la esquina del cuadro para redimensionar</div>
         </div>
     </div>
 
     <!-- PAN Edit Dialog -->
     <div id="pan-edit-dialog" style="display:none;position:fixed;inset:0;z-index:6000;background:rgba(0,0,0,.75);align-items:flex-end;justify-content:center;" onclick="if(event.target===this)cancelPanEdit()">
         <div style="background:#1c1c1e;border-radius:20px 20px 0 0;padding:20px 18px;width:100%;max-width:480px;padding-bottom:max(20px,env(safe-area-inset-bottom));">
-            <div style="font-size:14px;font-weight:900;color:#fff;margin-bottom:12px;text-align:center;">Editar Nota</div>
+            <div class="pan-ed-title" style="font-size:14px;font-weight:900;color:#fff;margin-bottom:12px;text-align:center;">Editar Nota</div>
             <textarea id="pan-edit-text" rows="3" style="width:100%;background:#2c2c2e;color:#fff;border:1.5px solid #444;border-radius:10px;padding:10px;font-size:14px;resize:none;box-sizing:border-box;font-weight:700;outline:none;"></textarea>
             <div style="margin-top:12px;margin-bottom:8px;">
                 <div style="font-size:9px;color:#888;margin-bottom:6px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;">Color de línea</div>
                 <div id="pan-ed-colors" style="display:flex;gap:8px;flex-wrap:wrap;"></div>
-            </div>
-            <div style="margin-top:10px;margin-bottom:14px;">
-                <div style="font-size:9px;color:#888;margin-bottom:6px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;">Tamaño de texto</div>
-                <div style="display:flex;gap:6px;">
-                    <button onclick="setPanEditSize(11)" data-sz="11" class="pan-sz-btn" style="flex:1;padding:10px;border-radius:8px;border:1.5px solid #444;background:#2c2c2e;color:#fff;cursor:pointer;font-size:12px;font-weight:800;">S</button>
-                    <button onclick="setPanEditSize(13)" data-sz="13" class="pan-sz-btn" style="flex:1;padding:10px;border-radius:8px;border:1.5px solid #444;background:#2c2c2e;color:#fff;cursor:pointer;font-size:14px;font-weight:800;">M</button>
-                    <button onclick="setPanEditSize(16)" data-sz="16" class="pan-sz-btn" style="flex:1;padding:10px;border-radius:8px;border:1.5px solid #444;background:#2c2c2e;color:#fff;cursor:pointer;font-size:17px;font-weight:800;">L</button>
-                </div>
             </div>
             <div style="display:flex;gap:8px;">
                 <button onclick="cancelPanEdit()" style="flex:1;padding:12px;border-radius:12px;border:1px solid #444;background:#2c2c2e;color:#fff;font-weight:800;cursor:pointer;font-size:13px;">Cancelar</button>
@@ -1925,10 +1915,11 @@
     let _panNextId = 1;
     let _panSaveTimer = null;
     let _panDefColor = '#ffd60a';
-    let _panDefFontSize = 12;
     let _panEditAnnId = null;
     let _panEditColor = '#ffd60a';
-    let _panEditFontSize = 12;
+    let _panEditIsNew = false;
+    let _panMeasActive = false;
+    let _panMeasPt1 = null;
 
     function openPAN(imgUrl, savePath, piaId, itemIdx) {
         _panSavePath = savePath;
@@ -1939,7 +1930,9 @@
             const m = (savePath||'').match(/\/items\/([^\/]+)\//);
             if (m) _panItemIdx = m[1];
         }
-        document.getElementById('pan-img').src = imgUrl;
+        const panImg = document.getElementById('pan-img');
+        panImg.crossOrigin = 'anonymous';
+        panImg.src = imgUrl;
         document.getElementById('mod-pan').style.display = 'flex';
         document.getElementById('pan-loader').style.display = 'none';
         db.ref(savePath).once('value', snap => {
@@ -1957,6 +1950,10 @@
         document.getElementById('pan-img').src = '';
         document.getElementById('pan-svg').innerHTML = '';
         document.getElementById('pan-layer').innerHTML = '';
+        _panMeasActive = false; _panMeasPt1 = null;
+        const ov = document.getElementById('pan-meas-overlay'); if (ov) ov.style.display = 'none';
+        const mb = document.getElementById('pan-meas-btn');
+        if (mb) { mb.style.background = '#2c2c2e'; mb.style.color = '#fff'; mb.style.borderColor = '#444'; }
         _panAnns = []; _panSavePath = null; _panPiaId = null; _panItemIdx = null;
     }
 
@@ -1964,9 +1961,9 @@
         const stage = document.getElementById('pan-stage');
         const W = stage.clientWidth, H = stage.clientHeight;
         const id = String(_panNextId++);
-        _panAnns.push({ id, text: 'Nueva nota', ax: W * 0.38, ay: H * 0.42, bx: W * 0.54, by: H * 0.28, color: _panDefColor, fontSize: _panDefFontSize });
+        _panAnns.push({ id, text: 'Nueva nota', ax: W * 0.38, ay: H * 0.42, bx: W * 0.54, by: H * 0.28, color: _panDefColor, bw: 140 });
         _panRender(); _panSave();
-        setTimeout(() => _panOpenEditDialog(id), 80);
+        setTimeout(() => _panOpenEditDialog(id, true), 80);
     }
 
     // ── Color / size toolbar helpers ──
@@ -1975,33 +1972,22 @@
         document.querySelectorAll('.pan-cswatch').forEach(s => s.style.outline = '');
         if (el) el.style.outline = '2px solid #fff';
     };
-    window.setPanDefSize = function(s, el) {
-        _panDefFontSize = s;
-        document.querySelectorAll('.pan-sbtn').forEach(b => b.classList.remove('pan-sbtn-active'));
-        if (el) el.classList.add('pan-sbtn-active');
-    };
 
     // ── Edit dialog ──
     const PAN_COLORS = ['#ffd60a','#ffffff','#ff3b30','#30d158','#0a84ff','#ff9f0a','#ff375f'];
 
-    function _panOpenEditDialog(id) {
+    function _panOpenEditDialog(id, isNew) {
         const ann = _panAnns.find(a => a.id === id);
         if (!ann) return;
         _panEditAnnId = id;
+        _panEditIsNew = !!isNew;
         _panEditColor = ann.color || '#ffd60a';
-        _panEditFontSize = ann.fontSize || 12;
-        document.getElementById('pan-edit-text').value = ann.text;
+        document.getElementById('pan-edit-text').value = ann.type === 'meas' ? (ann.text || '') : ann.text;
+        document.getElementById('pan-edit-dialog').querySelector('.pan-ed-title').textContent = ann.type === 'meas' ? 'Valor de medida' : 'Editar Nota';
         // Build color swatches
         document.getElementById('pan-ed-colors').innerHTML = PAN_COLORS.map(c =>
             `<div onclick="setPanEditColor('${c}',this)" style="width:26px;height:26px;border-radius:50%;background:${c};cursor:pointer;box-sizing:border-box;outline:${c===_panEditColor?'2px solid #fff':'none'};outline-offset:2px;border:2px solid rgba(255,255,255,.15);"></div>`
         ).join('');
-        // Highlight active size
-        document.querySelectorAll('.pan-sz-btn').forEach(b => {
-            const sz = parseInt(b.getAttribute('data-sz'));
-            b.style.background = sz === _panEditFontSize ? '#ffd60a' : '#2c2c2e';
-            b.style.color = sz === _panEditFontSize ? '#000' : '#fff';
-            b.style.borderColor = sz === _panEditFontSize ? '#ffd60a' : '#444';
-        });
         document.getElementById('pan-edit-dialog').style.display = 'flex';
     }
     window.setPanEditColor = function(c, el) {
@@ -2009,28 +1995,23 @@
         document.querySelectorAll('#pan-ed-colors div').forEach(d => d.style.outline = '');
         if (el) el.style.outline = '2px solid #fff';
     };
-    window.setPanEditSize = function(s) {
-        _panEditFontSize = s;
-        document.querySelectorAll('.pan-sz-btn').forEach(b => {
-            const sz = parseInt(b.getAttribute('data-sz'));
-            b.style.background = sz === s ? '#ffd60a' : '#2c2c2e';
-            b.style.color = sz === s ? '#000' : '#fff';
-            b.style.borderColor = sz === s ? '#ffd60a' : '#444';
-        });
-    };
     window.confirmPanEdit = function() {
         const ann = _panAnns.find(a => a.id === _panEditAnnId);
         if (!ann) return;
         const txt = document.getElementById('pan-edit-text').value.trim();
-        if (txt) ann.text = txt;
+        ann.text = txt || ann.text;
         ann.color = _panEditColor;
-        ann.fontSize = _panEditFontSize;
         window.cancelPanEdit();
         _panRender(); _panSave();
     };
     window.cancelPanEdit = function() {
+        if (_panEditIsNew && _panEditAnnId) {
+            _panAnns = _panAnns.filter(a => a.id !== _panEditAnnId);
+            _panRender();
+        }
         document.getElementById('pan-edit-dialog').style.display = 'none';
         _panEditAnnId = null;
+        _panEditIsNew = false;
     };
 
     window.deletePAN = function(id) { _panAnns = _panAnns.filter(a => a.id !== id); _panRender(); _panSave(); };
@@ -2039,28 +2020,112 @@
     window.cerrarPAN = cerrarPAN;
     window.addPAN = addPAN;
 
+    window.togglePanMeas = function() {
+        _panMeasActive = !_panMeasActive;
+        _panMeasPt1 = null;
+        // Remove any temp dot
+        const oldDot = document.getElementById('pan-meas-dot'); if (oldDot) oldDot.remove();
+        const btn = document.getElementById('pan-meas-btn');
+        const ov  = document.getElementById('pan-meas-overlay');
+        if (_panMeasActive) {
+            if (btn) { btn.style.background='#ffd60a'; btn.style.color='#000'; btn.style.borderColor='#ffd60a'; }
+            if (ov) ov.style.display = 'block';
+        } else {
+            if (btn) { btn.style.background='#2c2c2e'; btn.style.color='#fff'; btn.style.borderColor='#444'; }
+            if (ov) ov.style.display = 'none';
+        }
+    };
+
+    // Measurement overlay tap handler
+    (function() {
+        const ov = document.getElementById('pan-meas-overlay');
+        if (!ov) return;
+        ov.addEventListener('pointerdown', e => {
+            const stage = document.getElementById('pan-stage');
+            const sr = stage.getBoundingClientRect();
+            const x = e.clientX - sr.left, y = e.clientY - sr.top;
+            if (!_panMeasPt1) {
+                _panMeasPt1 = {x, y};
+                const dot = document.createElement('div');
+                dot.id = 'pan-meas-dot';
+                dot.style.cssText = `position:absolute;left:${x-6}px;top:${y-6}px;width:12px;height:12px;background:${_panDefColor};border:2px solid #000;border-radius:50%;pointer-events:none;z-index:21;opacity:.9;`;
+                stage.appendChild(dot);
+            } else {
+                const id = String(_panNextId++);
+                const {x: ax, y: ay} = _panMeasPt1;
+                _panMeasPt1 = null;
+                const oldDot = document.getElementById('pan-meas-dot'); if (oldDot) oldDot.remove();
+                _panAnns.push({id, type:'meas', ax, ay, bx:x, by:y, text:'', color:_panDefColor});
+                _panRender();
+                window.togglePanMeas(); // exit meas mode
+                setTimeout(() => _panOpenEditDialog(id, true), 80);
+            }
+        });
+    })();
+
     // ── Export annotated image to item ──
     window._panExportToItem = async function() {
         if (!_panItemIdx) { alert('No se puede identificar el ítem.'); return; }
+        document.getElementById('pan-loader').style.display = 'flex';
         const stageEl = document.getElementById('pan-stage');
         const imgEl   = document.getElementById('pan-img');
-        if (!imgEl.complete || !imgEl.naturalWidth) { alert('La imagen aún carga. Esperá un momento.'); return; }
+        if (!imgEl.complete || !imgEl.naturalWidth) {
+            document.getElementById('pan-loader').style.display = 'none';
+            alert('La imagen aún carga. Esperá un momento.'); return;
+        }
+        // Reload image with CORS to avoid tainted-canvas error
+        const corsImg = await new Promise((res, rej) => {
+            const i = new Image();
+            i.crossOrigin = 'anonymous';
+            i.onload = () => res(i);
+            i.onerror = () => rej(new Error('No se pudo cargar imagen con CORS'));
+            i.src = imgEl.src + (imgEl.src.includes('?') ? '&' : '?') + '_cc=' + Date.now();
+        }).catch(err => { document.getElementById('pan-loader').style.display = 'none'; alert(err.message); return null; });
+        if (!corsImg) return;
         const stageRect = stageEl.getBoundingClientRect();
         const imgRect   = imgEl.getBoundingClientRect();
         const canvas = document.createElement('canvas');
-        canvas.width  = imgEl.naturalWidth;
-        canvas.height = imgEl.naturalHeight;
+        canvas.width  = corsImg.naturalWidth;
+        canvas.height = corsImg.naturalHeight;
         const ctx = canvas.getContext('2d');
-        ctx.drawImage(imgEl, 0, 0);
-        const sX = imgEl.naturalWidth  / imgRect.width;
-        const sY = imgEl.naturalHeight / imgRect.height;
+        ctx.drawImage(corsImg, 0, 0);
+        const sX = corsImg.naturalWidth  / imgRect.width;
+        const sY = corsImg.naturalHeight / imgRect.height;
         const offX = imgRect.left - stageRect.left;
         const offY = imgRect.top  - stageRect.top;
+        const fs = 13 * sX;
         _panAnns.forEach(ann => {
             const color = ann.color || '#ffd60a';
-            const fs    = (ann.fontSize || 12) * sX;
             const ax = (ann.ax - offX) * sX;
             const ay = (ann.ay - offY) * sY;
+            if (ann.type === 'meas') {
+                // Measurement: line with end ticks
+                const bxM = (ann.bx - offX) * sX, byM = (ann.by - offY) * sY;
+                const dx = bxM - ax, dy = byM - ay;
+                const len = Math.sqrt(dx*dx + dy*dy) || 1;
+                const nx = -dy/len * 9*sX, ny = dx/len * 9*sX;
+                ctx.setLineDash([]); ctx.strokeStyle = color; ctx.lineWidth = 2.5*sX;
+                ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bxM, byM); ctx.stroke();
+                ctx.beginPath(); ctx.moveTo(ax+nx, ay+ny); ctx.lineTo(ax-nx, ay-ny); ctx.stroke();
+                ctx.beginPath(); ctx.moveTo(bxM+nx, byM+ny); ctx.lineTo(bxM-nx, byM-ny); ctx.stroke();
+                const label = ann.text || '?';
+                ctx.font = `bold ${fs}px sans-serif`;
+                const tw = ctx.measureText(label).width;
+                const mx2 = (ax + bxM)/2, my2 = (ay + byM)/2;
+                const pad = 7*sX, r2 = 4*sX, bw2 = tw+pad*2, bh2 = 18*sX;
+                ctx.fillStyle = 'rgba(20,20,20,.75)';
+                ctx.beginPath();
+                ctx.moveTo(mx2-bw2/2+r2,my2-bh2/2); ctx.lineTo(mx2+bw2/2-r2,my2-bh2/2);
+                ctx.quadraticCurveTo(mx2+bw2/2,my2-bh2/2,mx2+bw2/2,my2-bh2/2+r2);
+                ctx.lineTo(mx2+bw2/2,my2+bh2/2-r2); ctx.quadraticCurveTo(mx2+bw2/2,my2+bh2/2,mx2+bw2/2-r2,my2+bh2/2);
+                ctx.lineTo(mx2-bw2/2+r2,my2+bh2/2); ctx.quadraticCurveTo(mx2-bw2/2,my2+bh2/2,mx2-bw2/2,my2+bh2/2-r2);
+                ctx.lineTo(mx2-bw2/2,my2-bh2/2+r2); ctx.quadraticCurveTo(mx2-bw2/2,my2-bh2/2,mx2-bw2/2+r2,my2-bh2/2);
+                ctx.closePath(); ctx.fill();
+                ctx.strokeStyle = color; ctx.lineWidth = 1.5*sX; ctx.stroke();
+                ctx.fillStyle = color; ctx.fillText(label, mx2-tw/2, my2+5*sX);
+                return;
+            }
+            // Callout annotation
             const boxEl  = document.querySelector(`[data-pan-box="${ann.id}"]`);
             const boxRect = boxEl ? boxEl.getBoundingClientRect() : null;
             const bCX = boxRect ? ((boxRect.left + boxRect.width/2  - stageRect.left - offX) * sX) : ax + 80*sX;
@@ -2069,28 +2134,27 @@
             const by  = boxRect ? ((boxRect.top  - stageRect.top  - offY) * sY) : ay - 50*sY;
             const bw  = boxRect ? boxRect.width  * sX : 140*sX;
             const bh  = boxRect ? boxRect.height * sY : 55*sY;
-            // line
+            // dashed line
             ctx.beginPath(); ctx.setLineDash([5*sX, 3*sX]);
             ctx.strokeStyle = color; ctx.lineWidth = 2*sX;
             ctx.moveTo(ax, ay); ctx.lineTo(bCX, bCY); ctx.stroke();
-            // anchor
+            // anchor dot
             ctx.setLineDash([]); ctx.beginPath();
-            ctx.fillStyle = color; ctx.arc(ax, ay, 8*sX, 0, Math.PI*2); ctx.fill();
-            ctx.strokeStyle = 'rgba(0,0,0,.8)'; ctx.lineWidth = 2*sX; ctx.stroke();
-            // box background
+            ctx.fillStyle = color; ctx.arc(ax, ay, 5*sX, 0, Math.PI*2); ctx.fill();
+            ctx.strokeStyle = 'rgba(0,0,0,.8)'; ctx.lineWidth = 1.5*sX; ctx.stroke();
+            // box
             ctx.setLineDash([]); const r = 8*sX;
             ctx.beginPath();
             ctx.moveTo(bx+r,by); ctx.lineTo(bx+bw-r,by); ctx.quadraticCurveTo(bx+bw,by,bx+bw,by+r);
             ctx.lineTo(bx+bw,by+bh-r); ctx.quadraticCurveTo(bx+bw,by+bh,bx+bw-r,by+bh);
             ctx.lineTo(bx+r,by+bh); ctx.quadraticCurveTo(bx,by+bh,bx,by+bh-r);
             ctx.lineTo(bx,by+r); ctx.quadraticCurveTo(bx,by,bx+r,by); ctx.closePath();
-            ctx.fillStyle = 'rgba(20,20,20,.88)'; ctx.fill();
+            ctx.fillStyle = 'rgba(20,20,20,.60)'; ctx.fill();
             ctx.strokeStyle = color; ctx.lineWidth = 2*sX; ctx.stroke();
             // text
             ctx.fillStyle = '#fff'; ctx.font = `bold ${fs}px sans-serif`;
             ctx.fillText(ann.text, bx+8*sX, by+fs+8*sY, bw-16*sX);
         });
-        document.getElementById('pan-loader').style.display = 'flex';
         canvas.toBlob(async blob => {
             try {
                 const b64 = await new Promise(res => { const r = new FileReader(); r.onload = e => res(e.target.result); r.readAsDataURL(blob); });
@@ -2118,40 +2182,87 @@
 
         _panAnns.forEach(ann => {
             const color = ann.color || _panDefColor;
-            const fs = ann.fontSize || _panDefFontSize;
-            const shadowRgb = color === '#ffffff' ? '200,200,200' : color.replace('#','').match(/.{2}/g).map(h=>parseInt(h,16)).join(',');
 
-            // SVG line
+            if (ann.type === 'meas') {
+                // ── Measurement annotation ──
+                const dx = ann.bx - ann.ax, dy = ann.by - ann.ay;
+                const len = Math.sqrt(dx*dx + dy*dy) || 1;
+                const nx = -dy/len * 8, ny = dx/len * 8;
+                // Main line
+                const ml = document.createElementNS('http://www.w3.org/2000/svg','line');
+                ml.setAttribute('data-meas-line', ann.id);
+                ml.setAttribute('stroke', color); ml.setAttribute('stroke-width','2.5');
+                ml.setAttribute('x1', ann.ax); ml.setAttribute('y1', ann.ay);
+                ml.setAttribute('x2', ann.bx); ml.setAttribute('y2', ann.by);
+                svg.appendChild(ml);
+                // Ticks
+                [[ann.ax, ann.ay],[ann.bx, ann.by]].forEach(([px, py]) => {
+                    const t = document.createElementNS('http://www.w3.org/2000/svg','line');
+                    t.setAttribute('stroke', color); t.setAttribute('stroke-width','2.5');
+                    t.setAttribute('x1', px+nx); t.setAttribute('y1', py+ny);
+                    t.setAttribute('x2', px-nx); t.setAttribute('y2', py-ny);
+                    svg.appendChild(t);
+                });
+                // Text label at midpoint (draggable div on layer)
+                const mx = (ann.ax + ann.bx)/2, my = (ann.ay + ann.by)/2;
+                const lbl = document.createElement('div');
+                lbl.setAttribute('data-pan-box', ann.id);
+                lbl.style.cssText = `position:absolute;left:${mx}px;top:${my}px;transform:translate(-50%,-50%);background:rgba(20,20,20,.60);border:1.5px solid ${color};border-radius:6px;padding:3px 8px;cursor:grab;z-index:4;user-select:none;touch-action:none;white-space:nowrap;`;
+                lbl.innerHTML = `<span style="color:${color};font-size:12px;font-weight:900;">${ann.text || '?'}</span>
+                    <i class="ph-bold ph-x" style="color:#ff4d4d;font-size:12px;cursor:pointer;margin-left:5px;" onclick="deletePAN('${ann.id}')"></i>
+                    <div style="display:flex;align-items:center;gap:4px;margin-top:2px;">
+                        <button onclick="editPAN('${ann.id}')" style="background:none;border:1px solid ${color};color:${color};border-radius:4px;padding:1px 5px;font-size:9px;cursor:pointer;font-weight:700;"><i class="ph-bold ph-pencil-simple"></i> Editar</button>
+                    </div>`;
+                layer.appendChild(lbl);
+                // Anchor dots A & B
+                ['a','b'].forEach((pt, i) => {
+                    const px = i===0 ? ann.ax : ann.bx, py = i===0 ? ann.ay : ann.by;
+                    const dot = document.createElement('div');
+                    dot.setAttribute('data-meas-anchor', `${ann.id}-${pt}`);
+                    dot.style.cssText = `position:absolute;left:${px-6}px;top:${py-6}px;width:12px;height:12px;background:${color};border:2px solid #000;border-radius:50%;cursor:grab;z-index:5;touch-action:none;opacity:.85;`;
+                    layer.appendChild(dot);
+                });
+                return;
+            }
+
+            // ── Callout annotation ──
+            const shadowRgb = color === '#ffffff' ? '200,200,200' : color.replace('#','').match(/.{2}/g).map(h=>parseInt(h,16)).join(',');
+            // SVG dashed line
             const line = document.createElementNS('http://www.w3.org/2000/svg','line');
             line.setAttribute('data-line', ann.id);
             line.setAttribute('stroke', color);
             line.setAttribute('stroke-width','2');
             line.setAttribute('stroke-dasharray','5,3');
             line.setAttribute('x1', ann.ax); line.setAttribute('y1', ann.ay);
-            line.setAttribute('x2', ann.bx + 80); line.setAttribute('y2', ann.by + 24);
+            line.setAttribute('x2', ann.bx + (ann.bw||140)/2); line.setAttribute('y2', ann.by + 24);
             svg.appendChild(line);
-
-            // Anchor dot (draggable colored circle)
+            // Small anchor dot
             const anchor = document.createElement('div');
             anchor.setAttribute('data-pan-anchor', ann.id);
-            anchor.style.cssText = `position:absolute;left:${ann.ax-10}px;top:${ann.ay-10}px;width:20px;height:20px;background:${color};border:2.5px solid #000;border-radius:50%;cursor:grab;z-index:4;box-shadow:0 0 0 3px rgba(${shadowRgb},.35);touch-action:none;`;
+            anchor.style.cssText = `position:absolute;left:${ann.ax-6}px;top:${ann.ay-6}px;width:12px;height:12px;background:${color};border:2px solid #000;border-radius:50%;cursor:grab;z-index:5;box-shadow:0 0 0 3px rgba(${shadowRgb},.30);touch-action:none;opacity:.85;`;
             layer.appendChild(anchor);
-
-            // Text box (draggable)
+            // Text box (draggable, resizable)
+            const bw = ann.bw || 140;
             const box = document.createElement('div');
             box.setAttribute('data-pan-box', ann.id);
-            box.style.cssText = `position:absolute;left:${ann.bx}px;top:${ann.by}px;min-width:110px;max-width:210px;background:rgba(20,20,20,.92);border:2px solid ${color};border-radius:10px;padding:8px 10px;cursor:grab;z-index:4;user-select:none;touch-action:none;`;
-            box.innerHTML = `<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:6px;margin-bottom:6px;">
-                <span class="pan-text" style="color:#fff;font-size:${fs}px;font-weight:700;line-height:1.4;flex:1;white-space:pre-wrap;word-break:break-word;">${ann.text}</span>
-                <i class="ph-bold ph-x" style="color:#ff4d4d;font-size:15px;cursor:pointer;flex-shrink:0;" onclick="deletePAN('${ann.id}')"></i>
+            box.style.cssText = `position:absolute;left:${ann.bx}px;top:${ann.by}px;width:${bw}px;background:rgba(20,20,20,.60);border:2px solid ${color};border-radius:10px;padding:7px 9px 16px 9px;cursor:grab;z-index:4;user-select:none;touch-action:none;overflow:hidden;`;
+            box.innerHTML = `<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:5px;margin-bottom:4px;">
+                <span class="pan-text" style="color:#fff;font-size:12px;font-weight:700;line-height:1.35;flex:1;white-space:pre-wrap;word-break:break-word;overflow-wrap:break-word;">${ann.text}</span>
+                <i class="ph-bold ph-x" style="color:#ff4d4d;font-size:13px;cursor:pointer;flex-shrink:0;" onclick="deletePAN('${ann.id}')"></i>
             </div>
-            <button onclick="editPAN('${ann.id}')" style="background:none;border:1px solid ${color};color:${color};border-radius:5px;padding:3px 8px;font-size:10px;cursor:pointer;font-weight:700;display:flex;align-items:center;gap:3px;"><i class="ph-bold ph-pencil-simple"></i> Editar</button>`;
+            <button onclick="editPAN('${ann.id}')" style="background:none;border:1px solid ${color};color:${color};border-radius:5px;padding:2px 7px;font-size:9px;cursor:pointer;font-weight:700;display:flex;align-items:center;gap:2px;"><i class="ph-bold ph-pencil-simple"></i> Editar</button>
+            <div class="pan-resize-h" data-pan-resize="${ann.id}">
+                <svg width="10" height="10" viewBox="0 0 10 10" style="pointer-events:none;">
+                    <line x1="2" y1="10" x2="10" y2="2" stroke="#aaa" stroke-width="1.5"/>
+                    <line x1="5" y1="10" x2="10" y2="5" stroke="#aaa" stroke-width="1.5"/>
+                    <line x1="8" y1="10" x2="10" y2="8" stroke="#aaa" stroke-width="1.5"/>
+                </svg>
+            </div>`;
             layer.appendChild(box);
         });
 
         _panSetupDrag();
-        // Recompute lines after boxes are laid out
-        requestAnimationFrame(() => _panAnns.forEach(a => _panUpdateLine(a)));
+        requestAnimationFrame(() => _panAnns.forEach(a => { if (a.type !== 'meas') _panUpdateLine(a); }));
     }
 
     function _panUpdateLine(ann) {
@@ -2170,7 +2281,8 @@
 
     function _panSetupDrag() {
         const layer = document.getElementById('pan-layer');
-        // Anchor drag
+
+        // Callout anchor drag
         layer.querySelectorAll('[data-pan-anchor]').forEach(el => {
             const id = el.getAttribute('data-pan-anchor');
             let startX, startY, origAX, origAY;
@@ -2186,19 +2298,49 @@
                 const ann = _panAnns.find(a => a.id === id); if (!ann) return;
                 ann.ax = origAX + (e.clientX - startX);
                 ann.ay = origAY + (e.clientY - startY);
-                el.style.left = (ann.ax - 10) + 'px';
-                el.style.top  = (ann.ay - 10) + 'px';
+                el.style.left = (ann.ax - 6) + 'px';
+                el.style.top  = (ann.ay - 6) + 'px';
                 _panUpdateLine(ann);
             });
             el.addEventListener('pointerup', () => { el.style.cursor = 'grab'; _panSave(); });
         });
 
-        // Box drag
+        // Measurement endpoint drag
+        layer.querySelectorAll('[data-meas-anchor]').forEach(el => {
+            const key = el.getAttribute('data-meas-anchor');
+            const [id, pt] = key.split('-');
+            let startX, startY, origX, origY;
+            el.addEventListener('pointerdown', e => {
+                e.stopPropagation();
+                const ann = _panAnns.find(a => a.id === id); if (!ann) return;
+                startX = e.clientX; startY = e.clientY;
+                origX = pt === 'a' ? ann.ax : ann.bx;
+                origY = pt === 'a' ? ann.ay : ann.by;
+                el.setPointerCapture(e.pointerId);
+                el.style.cursor = 'grabbing';
+            });
+            el.addEventListener('pointermove', e => {
+                if (!el.hasPointerCapture(e.pointerId)) return;
+                const ann = _panAnns.find(a => a.id === id); if (!ann) return;
+                const newX = origX + (e.clientX - startX);
+                const newY = origY + (e.clientY - startY);
+                if (pt === 'a') { ann.ax = newX; ann.ay = newY; }
+                else { ann.bx = newX; ann.by = newY; }
+                el.style.left = (newX - 6) + 'px';
+                el.style.top  = (newY - 6) + 'px';
+                // live-update main SVG line
+                const ml = document.getElementById('pan-svg').querySelector(`[data-meas-line="${id}"]`);
+                if (ml) { ml.setAttribute('x1', ann.ax); ml.setAttribute('y1', ann.ay); ml.setAttribute('x2', ann.bx); ml.setAttribute('y2', ann.by); }
+            });
+            el.addEventListener('pointerup', () => { _panRender(); _panSave(); });
+        });
+
+        // Box / label drag
         layer.querySelectorAll('[data-pan-box]').forEach(el => {
             const id = el.getAttribute('data-pan-box');
             let startX, startY, origBX, origBY;
             el.addEventListener('pointerdown', e => {
-                if (e.target.closest('button, i')) return;
+                if (e.target.closest('button, i, .pan-resize-h')) return;
                 e.stopPropagation();
                 const ann = _panAnns.find(a => a.id === id); if (!ann) return;
                 startX = e.clientX; startY = e.clientY; origBX = ann.bx; origBY = ann.by;
@@ -2212,9 +2354,35 @@
                 ann.by = origBY + (e.clientY - startY);
                 el.style.left = ann.bx + 'px';
                 el.style.top  = ann.by + 'px';
-                _panUpdateLine(ann);
+                if (ann.type !== 'meas') _panUpdateLine(ann);
             });
             el.addEventListener('pointerup', () => { el.style.cursor = 'grab'; _panSave(); });
+        });
+
+        // Resize handle drag (callout boxes only)
+        layer.querySelectorAll('[data-pan-resize]').forEach(el => {
+            const id = el.getAttribute('data-pan-resize');
+            let startX, origW;
+            el.addEventListener('pointerdown', e => {
+                e.stopPropagation();
+                const ann = _panAnns.find(a => a.id === id);
+                const box = document.querySelector(`[data-pan-box="${id}"]`);
+                if (!ann || !box) return;
+                startX = e.clientX;
+                origW = box.offsetWidth;
+                el.setPointerCapture(e.pointerId);
+            });
+            el.addEventListener('pointermove', e => {
+                if (!el.hasPointerCapture(e.pointerId)) return;
+                const ann = _panAnns.find(a => a.id === id);
+                const box = document.querySelector(`[data-pan-box="${id}"]`);
+                if (!ann || !box) return;
+                const newW = Math.max(80, origW + (e.clientX - startX));
+                ann.bw = newW;
+                box.style.width = newW + 'px';
+                _panUpdateLine(ann);
+            });
+            el.addEventListener('pointerup', () => _panSave());
         });
     }
 
