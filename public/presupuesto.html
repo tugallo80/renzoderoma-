@@ -283,7 +283,7 @@
     <div id="mod-chap-pick" class="modal" style="display:none;z-index:9700;align-items:flex-end;">
         <div style="background:var(--card);width:100%;max-width:520px;border-radius:20px 20px 0 0;padding:18px 16px 24px;max-height:70vh;overflow-y:auto;">
             <div style="font-size:14px;font-weight:900;color:var(--text);margin-bottom:14px;display:flex;align-items:center;justify-content:space-between;">
-                <span>📂 ¿En qué capítulo agregar el ítem?</span>
+                <span id="chap-pick-title">📂 ¿En qué capítulo agregar el ítem?</span>
                 <i class="ph-bold ph-x" style="font-size:18px;cursor:pointer;color:var(--gray);" onclick="document.getElementById('mod-chap-pick').style.display='none'"></i>
             </div>
             <div id="chap-pick-list"></div>
@@ -760,6 +760,7 @@
             else if (currentChapIdx >= 0) { chapTotals[currentChapIdx] += (stripZeros(item.cant) * stripZeros(item.pu)); }
         });
 
+        const hasChapters = data.some(it => it.type === 'chapter');
         let isCollapsed = false;
         data.forEach((item, i) => {
             if(item.type === 'chapter') {
@@ -793,7 +794,7 @@
                     <button class="btn-mini" style="background:#af52de; flex:1; padding:4px;" onclick="pasteComputo(${i}, null, null)" title="Pegar Cómputo">PEGAR</button>
                 </div>
 
-                </div><div class="val-box"><span class="lbl">P.UNIT</span><input id="pu-${i}" class="inp-num" type="number" step="any" value="${visualPu}" oninput="upd(${i}, 'pu', this.value)"><button class="btn-mini btn-orange" onclick="openApu(${i})">APU</button></div><div class="val-box"><span class="lbl">CARACTERÍSTICAS</span><textarea id="feat-${i}" class="feat-area" onchange="upd(${i}, 'feat', this.value)">${item.feat || ''}</textarea></div></div><div class="item-foot"><div class="total-lbl" id="tot-lbl-${i}" style="${activo ? '' : 'text-decoration:line-through; color:var(--gray);'}">TOTAL: ${fMoney(sub)}</div><i class="ph-bold ${eyeIcon} icon-btn" style="color:${eyeColor}" onclick="toggleActivo(${i})" title="${activo ? 'Desactivar ítem' : 'Activar ítem'}"></i><i class="ph-bold ph-image-square icon-btn" style="color:${iconColor}" onclick="openPhotoOpt(${i})"></i><i class="ph-bold ph-cube icon-btn" style="color:var(--blue)" onclick="abrirRenderItem(${i})" title="Render Axonométrico IA"></i>${item.iaPrompt ? `<i class="ph-bold ph-magic-wand icon-btn" style="color:var(--purple)" onclick="abrirRegenIA(${i})" title="Re-generar con IA"></i>` : ''}<i class="ph-bold ph-brain icon-btn" style="color:${(item.ctx_img||item.ctx_mat||item.ctx_est)?'var(--blue)':'var(--gray)'}" onclick="toggleCtxPanel(${i})" title="Contexto IA"></i><i class="ph-bold ph-copy icon-btn" onclick="dup(${i})"></i>${_copyMode ? `<i id="copy-chk-${i}" class="ph-bold ${_copySelected.has(i)?'ph-check-square':'ph-square'} icon-btn" style="color:${_copySelected.has(i)?'var(--green)':'var(--gray)'};font-size:17px;" onclick="toggleCopySelect(${i})" title="Seleccionar para copiar"></i>` : ''}<i class="ph-bold ph-trash icon-btn" style="color:var(--red)" onclick="del(${i})"></i></div></div>${_buildCtxPanel(i, item)}</div>`;
+                </div><div class="val-box"><span class="lbl">P.UNIT</span><input id="pu-${i}" class="inp-num" type="number" step="any" value="${visualPu}" oninput="upd(${i}, 'pu', this.value)"><button class="btn-mini btn-orange" onclick="openApu(${i})">APU</button></div><div class="val-box"><span class="lbl">CARACTERÍSTICAS</span><textarea id="feat-${i}" class="feat-area" onchange="upd(${i}, 'feat', this.value)">${item.feat || ''}</textarea></div></div><div class="item-foot"><div class="total-lbl" id="tot-lbl-${i}" style="${activo ? '' : 'text-decoration:line-through; color:var(--gray);'}">TOTAL: ${fMoney(sub)}</div><i class="ph-bold ${eyeIcon} icon-btn" style="color:${eyeColor}" onclick="toggleActivo(${i})" title="${activo ? 'Desactivar ítem' : 'Activar ítem'}"></i><i class="ph-bold ph-image-square icon-btn" style="color:${iconColor}" onclick="openPhotoOpt(${i})"></i><i class="ph-bold ph-cube icon-btn" style="color:var(--blue)" onclick="abrirRenderItem(${i})" title="Render Axonométrico IA"></i>${item.iaPrompt ? `<i class="ph-bold ph-magic-wand icon-btn" style="color:var(--purple)" onclick="abrirRegenIA(${i})" title="Re-generar con IA"></i>` : ''}<i class="ph-bold ph-brain icon-btn" style="color:${(item.ctx_img||item.ctx_mat||item.ctx_est)?'var(--blue)':'var(--gray)'}" onclick="toggleCtxPanel(${i})" title="Contexto IA"></i><i class="ph-bold ph-copy icon-btn" onclick="dup(${i})"></i>${_copyMode ? `<i id="copy-chk-${i}" class="ph-bold ${_copySelected.has(i)?'ph-check-square':'ph-square'} icon-btn" style="color:${_copySelected.has(i)?'var(--green)':'var(--gray)'};font-size:17px;" onclick="toggleCopySelect(${i})" title="Seleccionar para copiar"></i>` : ''}${hasChapters ? `<i class="ph-bold ph-folder-open icon-btn" style="color:var(--orange)" onclick="moveToChap(${i})" title="Mover a capítulo"></i>` : ''}<i class="ph-bold ph-trash icon-btn" style="color:var(--red)" onclick="del(${i})"></i></div></div>${_buildCtxPanel(i, item)}</div>`;
             }
         });
         
@@ -821,31 +822,64 @@
 
     function toggleChapter(i) { data[i].collapsed = !data[i].collapsed; saveDB(); render(); }
     function toggleActivo(i) { data[i].activo = data[i].activo === false ? true : false; saveDB(); render(); }
+    let _chapPickSrcIdx = null; // null = agregar nuevo ítem, number = mover ítem existente
+
+    function _openChapPick(title, onSelect) {
+        const chapters = data.reduce((acc, it, i) => { if (it.type === 'chapter') acc.push({i, name: it.name}); return acc; }, []);
+        document.getElementById('chap-pick-title').textContent = title;
+        const listEl = document.getElementById('chap-pick-list');
+        listEl.innerHTML = chapters.map(ch =>
+            `<div class="chap-pick-opt" onclick="_chapPickSelect(${ch.i})">📂 ${(ch.name||'Capítulo').replace(/</g,'&lt;')}</div>`
+        ).join('') +
+        `<div class="chap-pick-opt" style="color:var(--gray);font-weight:700;" onclick="_chapPickSelect(-1)">+ Sin capítulo (al final)</div>`;
+        document.getElementById('mod-chap-pick').style.display = 'flex';
+    }
+
+    function _chapPickSelect(chapIdx) {
+        document.getElementById('mod-chap-pick').style.display = 'none';
+        if (_chapPickSrcIdx === null) {
+            // Agregar nuevo ítem
+            const newItem = {type:'item', desc:'', und:'glb', cant:1, pu:0, feat:'', apu:{mat:[], mo:[], eq:[], sub:[]}};
+            _insertAtChap(chapIdx, newItem);
+            saveDB(); render();
+        } else {
+            // Mover ítem existente
+            const srcIdx = _chapPickSrcIdx;
+            _chapPickSrcIdx = null;
+            const item = data.splice(srcIdx, 1)[0];
+            // chapIdx puede haberse desplazado si srcIdx estaba antes
+            const adjChap = (chapIdx >= 0 && srcIdx < chapIdx) ? chapIdx - 1 : chapIdx;
+            _insertAtChap(adjChap, item);
+            saveDB(true); render();
+        }
+    }
+
+    function _insertAtChap(chapIdx, item) {
+        if (chapIdx < 0) {
+            data.push(item);
+        } else {
+            let insertAt = chapIdx + 1;
+            while (insertAt < data.length && data[insertAt].type !== 'chapter') insertAt++;
+            data.splice(insertAt, 0, item);
+        }
+    }
+
     function addItem() {
         const chapters = data.reduce((acc, it, i) => { if (it.type === 'chapter') acc.push({i, name: it.name}); return acc; }, []);
         if (!chapters.length) {
             data.push({type:'item', desc:'', und:'glb', cant:1, pu:0, feat:'', apu:{mat:[], mo:[], eq:[], sub:[]}});
             saveDB(); render(); return;
         }
-        const listEl = document.getElementById('chap-pick-list');
-        listEl.innerHTML = chapters.map(ch =>
-            `<div class="chap-pick-opt" onclick="_addItemInChapter(${ch.i})">📂 ${(ch.name||'Capítulo').replace(/</g,'&lt;')}</div>`
-        ).join('') +
-        `<div class="chap-pick-opt" style="color:var(--gray);font-weight:700;" onclick="_addItemInChapter(-1)">+ Sin capítulo (al final)</div>`;
-        document.getElementById('mod-chap-pick').style.display = 'flex';
+        _chapPickSrcIdx = null;
+        _openChapPick('📂 ¿En qué capítulo agregar el ítem?');
     }
-    function _addItemInChapter(chapIdx) {
-        document.getElementById('mod-chap-pick').style.display = 'none';
-        const newItem = {type:'item', desc:'', und:'glb', cant:1, pu:0, feat:'', apu:{mat:[], mo:[], eq:[], sub:[]}};
-        if (chapIdx < 0) {
-            data.push(newItem);
-        } else {
-            let insertAt = chapIdx + 1;
-            while (insertAt < data.length && data[insertAt].type !== 'chapter') insertAt++;
-            data.splice(insertAt, 0, newItem);
-        }
-        saveDB(); render();
+
+    function moveToChap(itemIdx) {
+        _chapPickSrcIdx = itemIdx;
+        const desc = (data[itemIdx] && data[itemIdx].desc || 'ítem').slice(0, 28);
+        _openChapPick(`📦 Mover "${desc}" a...`);
     }
+
     function addChapter() { data.push({type:'chapter', name:'CAPÍTULO', collapsed: false}); saveDB(); render(); }
     function del(i) { if(confirm("¿Borrar?")) { clearTimeout(saveTimeout); data.splice(i,1); saveDB(true); render(); } }
     function dup(i) { data.splice(i+1, 0, JSON.parse(JSON.stringify(data[i]))); saveDB(true); render(); }
