@@ -425,6 +425,12 @@
     <div class="ia-prog-msg" id="ia-prog-msg">Iniciando...</div>
     <div class="ia-prog-sub" id="ia-prog-sub">Esto puede tardar 20–40 segundos</div>
 </div>
+<div id="ia-dest-chap-sec" style="display:none;margin-bottom:10px;">
+    <div style="font-size:11px;font-weight:800;color:#888;margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px;">Capítulo destino</div>
+    <select id="ia-dest-chap-sel" style="width:100%;background:#1c1c1e;color:#fff;border:1.5px solid #555;border-radius:8px;padding:9px 10px;font-size:12px;font-weight:700;outline:none;cursor:pointer;">
+        <option value="-1">+ Al final (sin capítulo específico)</option>
+    </select>
+</div>
 <button class="btn btn-dark" id="btn-ia-generate" onclick="generateIABudget()" style="background:var(--purple); width:100%; padding:15px; font-size:14px; justify-content:center;"><i class="ph-bold ph-check-circle"></i> Generar Presupuesto Completo</button>
         </div>
     </div>
@@ -794,7 +800,7 @@
                     <button class="btn-mini" style="background:#af52de; flex:1; padding:4px;" onclick="pasteComputo(${i}, null, null)" title="Pegar Cómputo">PEGAR</button>
                 </div>
 
-                </div><div class="val-box"><span class="lbl">P.UNIT</span><input id="pu-${i}" class="inp-num" type="number" step="any" value="${visualPu}" oninput="upd(${i}, 'pu', this.value)"><button class="btn-mini btn-orange" onclick="openApu(${i})">APU</button></div><div class="val-box"><span class="lbl">CARACTERÍSTICAS</span><textarea id="feat-${i}" class="feat-area" onchange="upd(${i}, 'feat', this.value)">${item.feat || ''}</textarea></div></div><div class="item-foot"><div class="total-lbl" id="tot-lbl-${i}" style="${activo ? '' : 'text-decoration:line-through; color:var(--gray);'}">TOTAL: ${fMoney(sub)}</div><i class="ph-bold ${eyeIcon} icon-btn" style="color:${eyeColor}" onclick="toggleActivo(${i})" title="${activo ? 'Desactivar ítem' : 'Activar ítem'}"></i><i class="ph-bold ph-image-square icon-btn" style="color:${iconColor}" onclick="openPhotoOpt(${i})"></i><i class="ph-bold ph-cube icon-btn" style="color:var(--blue)" onclick="abrirRenderItem(${i})" title="Render Axonométrico IA"></i>${item.iaPrompt ? `<i class="ph-bold ph-magic-wand icon-btn" style="color:var(--purple)" onclick="abrirRegenIA(${i})" title="Re-generar con IA"></i>` : ''}<i class="ph-bold ph-brain icon-btn" style="color:${(item.ctx_img||item.ctx_mat||item.ctx_est)?'var(--blue)':'var(--gray)'}" onclick="toggleCtxPanel(${i})" title="Contexto IA"></i><i class="ph-bold ph-copy icon-btn" onclick="dup(${i})"></i>${_copyMode ? `<i id="copy-chk-${i}" class="ph-bold ${_copySelected.has(i)?'ph-check-square':'ph-square'} icon-btn" style="color:${_copySelected.has(i)?'var(--green)':'var(--gray)'};font-size:17px;" onclick="toggleCopySelect(${i})" title="Seleccionar para copiar"></i>` : ''}${hasChapters ? `<i class="ph-bold ph-folder-open icon-btn" style="color:var(--orange)" onclick="moveToChap(${i})" title="Mover a capítulo"></i>` : ''}<i class="ph-bold ph-trash icon-btn" style="color:var(--red)" onclick="del(${i})"></i></div></div>${_buildCtxPanel(i, item)}</div>`;
+                </div><div class="val-box"><span class="lbl">P.UNIT</span><input id="pu-${i}" class="inp-num" type="number" step="any" value="${visualPu}" oninput="upd(${i}, 'pu', this.value)"><button class="btn-mini btn-orange" onclick="openApu(${i})">APU</button></div><div class="val-box"><span class="lbl">CARACTERÍSTICAS</span><textarea id="feat-${i}" class="feat-area" onchange="upd(${i}, 'feat', this.value)">${item.feat || ''}</textarea></div></div><div class="item-foot"><div class="total-lbl" id="tot-lbl-${i}" style="${activo ? '' : 'text-decoration:line-through; color:var(--gray);'}">TOTAL: ${fMoney(sub)}</div><i class="ph-bold ${eyeIcon} icon-btn" style="color:${eyeColor}" onclick="toggleActivo(${i})" title="${activo ? 'Desactivar ítem' : 'Activar ítem'}"></i><i class="ph-bold ph-image-square icon-btn" style="color:${iconColor}" onclick="openPhotoOpt(${i})"></i><i class="ph-bold ph-cube icon-btn" style="color:var(--blue)" onclick="abrirRenderItem(${i})" title="Render Axonométrico IA"></i>${item.iaPrompt ? `<i class="ph-bold ph-magic-wand icon-btn" style="color:var(--purple)" onclick="abrirRegenIA(${i})" title="Re-generar con IA"></i>` : ''}<i class="ph-bold ph-brain icon-btn" style="color:${(item.ctx_img||item.ctx_mat||item.ctx_est)?'var(--blue)':'var(--gray)'}" onclick="toggleCtxPanel(${i})" title="Contexto IA"></i><i class="ph-bold ph-copy icon-btn" onclick="dup(${i})"></i>${_copyMode ? `<i id="copy-chk-${i}" class="ph-bold ${_copySelected.has(i)?'ph-check-square':'ph-square'} icon-btn" style="color:${_copySelected.has(i)?'var(--green)':'var(--gray)'};font-size:17px;" onclick="toggleCopySelect(${i})" title="Seleccionar para copiar"></i>` : ''}${hasChapters ? `<button onclick="moveToChap(${i})" style="background:rgba(255,159,10,0.15);color:var(--orange);border:1px solid rgba(255,159,10,0.4);border-radius:7px;padding:3px 8px;font-size:10px;font-weight:800;cursor:pointer;white-space:nowrap;display:flex;align-items:center;gap:3px;"><i class="ph-bold ph-folder-open"></i> Mover</button>` : ''}<i class="ph-bold ph-trash icon-btn" style="color:var(--red)" onclick="del(${i})"></i></div></div>${_buildCtxPanel(i, item)}</div>`;
             }
         });
         
@@ -854,13 +860,13 @@
         }
     }
 
-    function _insertAtChap(chapIdx, item) {
+    function _insertAtChap(chapIdx, ...items) {
         if (chapIdx < 0) {
-            data.push(item);
+            data.push(...items);
         } else {
             let insertAt = chapIdx + 1;
             while (insertAt < data.length && data[insertAt].type !== 'chapter') insertAt++;
-            data.splice(insertAt, 0, item);
+            data.splice(insertAt, 0, ...items);
         }
     }
 
@@ -2281,8 +2287,25 @@
         document.getElementById('ia-imgs-preview').innerHTML = '';
         const container = document.getElementById('ia-items-container');
         if(container) container.innerHTML = '';
-        
+
         if(document.getElementById('ia-pdf-filename')) document.getElementById('ia-pdf-filename').style.display = 'none';
+
+        // Poblar selector de capítulo destino
+        const destSec = document.getElementById('ia-dest-chap-sec');
+        const destSel = document.getElementById('ia-dest-chap-sel');
+        const chapters = data.filter(it => it.type === 'chapter');
+        if (destSec && destSel) {
+            if (chapters.length) {
+                destSel.innerHTML = '<option value="-1">+ Al final (sin capítulo específico)</option>' +
+                    data.reduce((html, it, i) => {
+                        if (it.type === 'chapter') html += `<option value="${i}">${(it.name || 'Capítulo').replace(/</g,'&lt;')}</option>`;
+                        return html;
+                    }, '');
+                destSec.style.display = 'block';
+            } else {
+                destSec.style.display = 'none';
+            }
+        }
 
         addIARow();
         document.getElementById('mod-ia-budget').style.display = 'flex';
@@ -3425,12 +3448,19 @@ EJEMPLO SIN CAPÍTULOS (menos de 4 ítems):
                 }
             }
 
+            // Leer capítulo destino elegido por el usuario (si hay capítulos)
+            const _iaDestSelEl = document.getElementById('ia-dest-chap-sel');
+            const _iaDestSec = document.getElementById('ia-dest-chap-sec');
+            const _iaDestIdx = (_iaDestSelEl && _iaDestSec && _iaDestSec.style.display !== 'none')
+                ? parseInt(_iaDestSelEl.value) : -1;
+
             // Contador de ítems reales (excluye capítulos) para mapear con _iaRowData
             let _itemCounter = 0;
+            const _iaNewBlock = [];
             items.forEach((it) => {
-                // Capítulo: insertarlo directamente como separador
+                // Capítulo: agregarlo al bloque
                 if (it.type === 'chapter') {
-                    data.push({ type: 'chapter', name: (it.name || 'CAPÍTULO').toUpperCase(), collapsed: false });
+                    _iaNewBlock.push({ type: 'chapter', name: (it.name || 'CAPÍTULO').toUpperCase(), collapsed: false });
                     return;
                 }
 
@@ -3464,8 +3494,9 @@ EJEMPLO SIN CAPÍTULOS (menos de 4 ítems):
                     iaPrompt: JSON.stringify({ nombre: _descOriginal || _descIA, instrucciones: _rowOriginal.instrucciones || '' })
                 };
                 if (_imgUrl) _newItem.img = _imgUrl;
-                data.push(_newItem);
+                _iaNewBlock.push(_newItem);
             });
+            _insertAtChap(_iaDestIdx, ..._iaNewBlock);
             saveDB(true);
             render();
             cerrarModalIABudget();
