@@ -139,6 +139,12 @@
         .prod-apu-input.inp-num { width: 70px; text-align: right; }
         .prod-apu-input.inp-und { width: 55px; text-align: center; }
         .prod-apu-input.inp-price { width: 75px; text-align: right; border-color: var(--orange); }
+        .bd-ac-wrap { flex:1; min-width:120px; position:relative; }
+        .bd-ac-wrap .prod-apu-input { width:100%; box-sizing:border-box; flex:none; min-width:0; }
+        .bd-dd { position:absolute; top:100%; left:0; right:0; z-index:9500; background:#1c1c1e; border:1px solid #444; border-radius:8px; box-shadow:0 4px 20px rgba(0,0,0,.7); max-height:200px; overflow-y:auto; display:none; margin-top:2px; }
+        .bd-dd-item { padding:7px 10px; cursor:pointer; font-size:11px; border-bottom:1px solid #2a2a2c; }
+        .bd-dd-item:hover,.bd-dd-item:active { background:#2c2c2e; }
+        .bd-dd-item:last-child { border-bottom:none; }
         .prod-prov-chip { display:inline-flex; align-items:center; gap:3px; font-size:10px; font-weight:700; padding:3px 7px; border-radius:20px; cursor:pointer; white-space:nowrap; max-width:110px; overflow:hidden; text-overflow:ellipsis; background:var(--blue)22; color:var(--blue); border:1px solid var(--blue)44; transition:background .2s; }
         .prod-prov-chip:hover { background:var(--blue)44; }
         .prod-prov-chip.prod-prov-empty { background:var(--border); color:var(--text-muted); border-color:var(--border); }
@@ -402,6 +408,15 @@
                 <i class="ph-bold ph-x" style="font-size:20px;cursor:pointer;color:#aaa;" onclick="cerrarCotizadorProd()"></i>
             </div>
             <div id="cotiz-item-info" style="background:#1c1c1e;border-radius:10px;padding:10px 12px;margin-bottom:10px;font-size:12px;color:#aaa;"></div>
+            <!-- Fotos para la IA -->
+            <div style="margin-bottom:10px;">
+                <div style="font-size:10px;font-weight:900;color:#666;margin-bottom:5px;text-transform:uppercase;letter-spacing:.5px;">Fotos para la IA</div>
+                <div id="cotiz-photos-grid" style="display:flex;flex-wrap:wrap;gap:6px;padding:6px;border:1.5px dashed #333;border-radius:10px;min-height:52px;align-content:flex-start;">
+                    <label style="width:50px;height:50px;border:1.5px dashed #444;border-radius:8px;display:flex;align-items:center;justify-content:center;cursor:pointer;color:#888;font-size:22px;flex-shrink:0;background:#1c1c1e;" title="Agregar foto">
+                        +<input type="file" accept="image/*" multiple style="display:none;" onchange="cotizUploadPhotos(this)">
+                    </label>
+                </div>
+            </div>
             <textarea id="cotiz-instrucciones" placeholder="Instrucciones adicionales para la IA (opcional)..." rows="2" style="width:100%;background:#2c2c2e;color:#fff;border:1.5px solid #444;border-radius:8px;padding:8px;font-size:12px;resize:none;box-sizing:border-box;margin-bottom:10px;font-family:inherit;outline:none;"></textarea>
             <div id="cotiz-progress" style="display:none;text-align:center;padding:24px 0;">
                 <div style="width:36px;height:36px;border:4px solid #333;border-top-color:#30d158;border-radius:50%;animation:spin .8s linear infinite;margin:0 auto 10px;"></div>
@@ -1267,8 +1282,12 @@
         }
 
         return `<div class="prod-apu-row" id="prod-apu-mat-row-${idx}-${mIdx}">
-            <input class="prod-apu-input inp-desc" type="text" placeholder="Descripción material" value="${(m.d||'').replace(/"/g,'&quot;')}"
-                oninput="prodApuUpdateMat(${idx},${mIdx},'d',this.value)">
+            <div class="bd-ac-wrap">
+                <input class="prod-apu-input inp-desc" type="text" placeholder="Descripción material" value="${(m.d||'').replace(/"/g,'&quot;')}"
+                    oninput="prodApuUpdateMat(${idx},${mIdx},'d',this.value);_bdSearch(this,${idx},${mIdx},'mat')"
+                    onblur="_bdHide('bd-dd-mat-${idx}-${mIdx}')">
+                <div id="bd-dd-mat-${idx}-${mIdx}" class="bd-dd"></div>
+            </div>
             <input class="prod-apu-input inp-num" type="number" placeholder="Cant" value="${m.q||''}"
                 oninput="prodApuUpdateMat(${idx},${mIdx},'q',this.value)">
             <select class="prod-apu-input inp-und" onchange="prodApuUpdateMat(${idx},${mIdx},'u',this.value)">${undsOpt}</select>
@@ -1524,8 +1543,12 @@
         const und = (m.u || 'hr').toLowerCase();
         const esPorArea = und === 'm2' || und === 'ml';
         return `<div class="prod-apu-row" id="prod-apu-mo-row-${idx}-${mIdx}">
-            <input class="prod-apu-input inp-desc" type="text" placeholder="Trabajo / Operario" value="${(m.d||'').replace(/"/g,'&quot;')}"
-                oninput="prodApuUpdateMo(${idx},${mIdx},'d',this.value)">
+            <div class="bd-ac-wrap">
+                <input class="prod-apu-input inp-desc" type="text" placeholder="Trabajo / Operario" value="${(m.d||'').replace(/"/g,'&quot;')}"
+                    oninput="prodApuUpdateMo(${idx},${mIdx},'d',this.value);_bdSearch(this,${idx},${mIdx},'mo')"
+                    onblur="_bdHide('bd-dd-mo-${idx}-${mIdx}')">
+                <div id="bd-dd-mo-${idx}-${mIdx}" class="bd-dd"></div>
+            </div>
             <input class="prod-apu-input inp-num" type="number" placeholder="Cant" value="${m.q||''}"
                 oninput="prodApuUpdateMo(${idx},${mIdx},'q',this.value)" id="prod-apu-mo-q-${idx}-${mIdx}">
             <select class="prod-apu-input inp-und" id="prod-apu-mo-und-${idx}-${mIdx}" onchange="event.stopPropagation(); _onMoUndChange(${idx},${mIdx},this.value)">${undsOpt}</select>
@@ -1969,6 +1992,8 @@
     let _panMeasPt1 = null;
     let _panMeasUnit = 'm';
     let _panNoteActive = false;
+    let _panReturnToCotiz = false;
+    let _bdMateriales = null, _bdManoObra = null;
 
     function openPAN(imgUrl, savePath, piaId, itemIdx) {
         _panSavePath = savePath;
@@ -1995,6 +2020,8 @@
     }
 
     function cerrarPAN() {
+        const wasFromCotiz = _panReturnToCotiz;
+        _panReturnToCotiz = false;
         document.getElementById('mod-pan').style.display = 'none';
         document.getElementById('pan-img').src = '';
         document.getElementById('pan-svg').innerHTML = '';
@@ -2007,6 +2034,10 @@
         const nb = document.getElementById('pan-note-btn');
         if (nb) { nb.style.background = '#2c2c2e'; nb.style.color = '#fff'; nb.style.borderColor = '#444'; }
         _panAnns = []; _panSavePath = null; _panPiaId = null; _panItemIdx = null;
+        if (wasFromCotiz) {
+            document.getElementById('mod-prod-cotizador').style.display = 'flex';
+            _cotizRefreshPhotos(_cotizProdIdx);
+        }
     }
 
     function addPAN() {
@@ -2745,11 +2776,65 @@ SALIDA: responde SOLO con JSON válido sin texto fuera:
         document.getElementById('cotiz-apply-btns').style.display = 'none';
         document.getElementById('cotiz-gen-btn').style.display = '';
         document.getElementById('mod-prod-cotizador').style.display = 'flex';
+        _cotizRefreshPhotos(idx);
     };
 
     window.cerrarCotizadorProd = function() {
         document.getElementById('mod-prod-cotizador').style.display = 'none';
         _cotizProdIdx = null; _cotizProdResult = null;
+    };
+
+    // ── Cotizador photos ──────────────────────────────────────────────────────
+    function _cotizRefreshPhotos(idx) {
+        const grid = document.getElementById('cotiz-photos-grid');
+        if (!grid) return;
+        const item = allItems[idx] || {};
+        const ops = item.op_images || {};
+        const addLabel = grid.querySelector('label');
+        grid.innerHTML = '';
+        if (addLabel) grid.appendChild(addLabel);
+        Object.entries(ops).forEach(([k, url]) => {
+            if (!url) return;
+            const wrap = document.createElement('div');
+            wrap.style.cssText = 'position:relative;width:50px;height:50px;flex-shrink:0;';
+            const eu = url.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+            wrap.innerHTML = `<img src="${url}" style="width:50px;height:50px;object-fit:cover;border-radius:8px;border:1px solid #333;">` +
+                `<div onmousedown="cotizAnnotatePhoto('${eu}','${k}')" style="position:absolute;inset:0;background:rgba(0,0,0,.55);border-radius:8px;display:flex;align-items:center;justify-content:center;cursor:pointer;">` +
+                `<span style="color:#ffd60a;font-size:8px;font-weight:900;text-align:center;line-height:1.3;">✎<br>Anotar</span></div>`;
+            grid.appendChild(wrap);
+        });
+    }
+
+    window.cotizUploadPhotos = async function(input) {
+        const idx = _cotizProdIdx;
+        if (idx == null || !input.files.length) return;
+        const label = input.closest('label');
+        if (label) label.style.opacity = '0.5';
+        for (const file of input.files) {
+            try {
+                const dataUrl = await new Promise((res, rej) => {
+                    const fr = new FileReader(); fr.onload = e => res(e.target.result); fr.onerror = rej; fr.readAsDataURL(file);
+                });
+                const storageSnap = await storage.ref(`produccion/cotiz/${pid}_ph_${Date.now()}.jpg`).putString(dataUrl, 'data_url');
+                const url = await storageSnap.ref.getDownloadURL();
+                window._suppressRenderTasks = true;
+                const ref = db.ref(`proyectos/${cid}/${pid}/presupuesto/items/${idx}/op_images`).push();
+                await ref.set(url);
+                if (!allItems[idx]) allItems[idx] = {};
+                if (!allItems[idx].op_images) allItems[idx].op_images = {};
+                allItems[idx].op_images[ref.key] = url;
+            } catch(e) { alert('Error subiendo foto: ' + (e.message || e)); }
+        }
+        _cotizRefreshPhotos(idx);
+        if (label) label.style.opacity = '1';
+        input.value = '';
+    };
+
+    window.cotizAnnotatePhoto = function(url, opKey) {
+        _panReturnToCotiz = true;
+        document.getElementById('mod-prod-cotizador').style.display = 'none';
+        const panPath = `proyectos/${cid}/${pid}/presupuesto/items/${_cotizProdIdx}/pan_cotiz_${opKey}`;
+        openPAN(url, panPath, null, _cotizProdIdx);
     };
 
     window.generarCotizacionProd = async function() {
@@ -2982,6 +3067,77 @@ ${imgParts.length>0?`Analiza las ${imgParts.length} imagen(es) adjunta(s).`:'Sin
         if (featEl && newFeat) featEl.value = newFeat;
         cerrarCotizadorProd();
         alert('✅ Cotización aplicada: APU, precio y características actualizados.');
+    };
+
+    // ── Base datos autocomplete ───────────────────────────────────────────────
+    async function _loadBD() {
+        if (!_bdMateriales) {
+            const snap = await db.ref('base_datos/materiales').once('value');
+            _bdMateriales = snap.val() ? Object.values(snap.val()).filter(Boolean) : [];
+        }
+        if (!_bdManoObra) {
+            const snap = await db.ref('base_datos/mano_obra').once('value');
+            _bdManoObra = snap.val() ? Object.values(snap.val()).filter(Boolean) : [];
+        }
+    }
+
+    window._bdSearch = async function(inputEl, idx, mIdx, type) {
+        const ddId = `bd-dd-${type}-${idx}-${mIdx}`;
+        const dd = document.getElementById(ddId);
+        if (!dd) return;
+        const q = inputEl.value.trim().toLowerCase();
+        if (q.length < 1) { dd.style.display = 'none'; return; }
+        await _loadBD();
+        const list = type === 'mat' ? (_bdMateriales || []) : (_bdManoObra || []);
+        const getName = item => type === 'mat' ? (item.n || item.desc || '') : (item.d || '');
+        const getPrice = item => parseFloat(item.p || item.pu || 0) || 0;
+        const getUnit = item => item.u || item.und || '';
+        const filtered = list
+            .filter(item => getName(item).toLowerCase().includes(q))
+            .sort((a, b) => getPrice(a) - getPrice(b))
+            .slice(0, 15);
+        if (!filtered.length) { dd.style.display = 'none'; return; }
+        dd.innerHTML = filtered.map(item => {
+            const name = getName(item).replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+            const price = getPrice(item);
+            const unit = getUnit(item).replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+            return `<div class="bd-dd-item" data-name="${name}" data-price="${price}" data-unit="${unit}"
+                onmousedown="_bdSelect(${idx},${mIdx},'${type}',this)">
+                <div style="font-weight:700;color:#fff;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${getName(item)}</div>
+                <div style="color:#aaa;font-size:10px;margin-top:1px;">${price.toFixed(2)} Bs / ${unit}</div>
+            </div>`;
+        }).join('');
+        dd.style.display = 'block';
+    };
+
+    window._bdHide = function(ddId) {
+        setTimeout(() => { const dd = document.getElementById(ddId); if (dd) dd.style.display = 'none'; }, 200);
+    };
+
+    window._bdSelect = function(idx, mIdx, type, el) {
+        const name = el.dataset.name;
+        const price = parseFloat(el.dataset.price) || 0;
+        const unit = el.dataset.unit;
+        const ddId = `bd-dd-${type}-${idx}-${mIdx}`;
+        const dd = document.getElementById(ddId);
+        if (dd) dd.style.display = 'none';
+        const wrap = dd ? dd.parentElement : null;
+        if (wrap) { const inp = wrap.querySelector('.inp-desc'); if (inp) inp.value = name; }
+        if (type === 'mat') {
+            prodApuUpdateMat(idx, mIdx, 'd', name);
+            prodApuUpdateMat(idx, mIdx, 'p', price);
+            const priceEl = document.querySelector(`#prod-apu-mat-row-${idx}-${mIdx} .inp-price`);
+            if (priceEl) priceEl.value = price;
+            const sel = document.querySelector(`#prod-apu-mat-row-${idx}-${mIdx} .inp-und`);
+            if (sel && unit) { for (const o of sel.options) if (o.value === unit) { sel.value = unit; break; } prodApuUpdateMat(idx, mIdx, 'u', sel.value); }
+        } else {
+            prodApuUpdateMo(idx, mIdx, 'd', name);
+            prodApuUpdateMo(idx, mIdx, 'p', price);
+            const priceEl = document.getElementById(`prod-apu-mo-price-${idx}-${mIdx}`);
+            if (priceEl) priceEl.value = price;
+            const sel = document.getElementById(`prod-apu-mo-und-${idx}-${mIdx}`);
+            if (sel && unit) { for (const o of sel.options) if (o.value === unit) { sel.value = unit; break; } window._onMoUndChange(idx, mIdx, sel.value); }
+        }
     };
 
     function deleteGeneralImage(itemIdx, imgIdx, type, apuT) {
