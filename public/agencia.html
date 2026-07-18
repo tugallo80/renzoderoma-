@@ -30,7 +30,7 @@
         :root { --bg: #f4f4f7; --card: #fff; --text: #1a1a1a; --blue: #007aff; --green: #34c759; --red: #ff3b30; --orange: #ff9500; --gray: #8e8e93; --border: #d1d1d6; }
         body.dark-mode { --bg: #000; --card: #1c1c1e; --text: #fff; --border: #333; }
         * { box-sizing: border-box; }
-        body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 16px; padding-bottom: 120px; -webkit-tap-highlight-color: transparent; }
+        body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 16px; padding-bottom: 200px; -webkit-tap-highlight-color: transparent; }
 
         .nav { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; gap: 8px; }
         .btn-nav { background: var(--card); border: 1px solid var(--border); padding: 8px 14px; border-radius: 20px; font-weight: 700; color: var(--blue); cursor: pointer; display: flex; align-items: center; gap: 5px; font-size: 13px; }
@@ -148,11 +148,21 @@
         .grupo-line { flex: 1; height: 1px; }
         .grupo-txt { font-size: 10px; font-weight: 900; text-transform: uppercase; letter-spacing: 0.6px; white-space: nowrap; }
 
-        /* Socio filter */
-        .socio-bar { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; align-items: center; padding: 4px 0; }
-        .socio-chip { padding: 6px 12px; border-radius: 16px; font-size: 11px; font-weight: 800; border: 1.5px solid var(--border); background: var(--bg); color: var(--gray); cursor: pointer; transition: 0.15s; white-space: nowrap; }
+        /* Paquete + Socio filter bars */
+        .paq-filter-bar, .socio-bar { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; align-items: center; padding: 4px 0; }
+        .filter-lbl { font-size: 10px; font-weight: 800; color: var(--gray); text-transform: uppercase; letter-spacing: 0.4px; flex-shrink: 0; }
+        .paq-filter-chip, .socio-chip { padding: 6px 12px; border-radius: 16px; font-size: 11px; font-weight: 800; border: 1.5px solid var(--border); background: var(--bg); color: var(--gray); cursor: pointer; transition: 0.15s; white-space: nowrap; }
+        .paq-filter-chip:active, .socio-chip:active { transform: scale(0.95); }
         .socio-chip.active { background: rgba(0,122,255,0.1); color: var(--blue); border-color: var(--blue); }
-        .socio-chip:active { transform: scale(0.95); }
+
+        /* Floating mini-totals */
+        .float-totals { position: fixed; bottom: 64px; left: 0; right: 0; background: var(--card); border-top: 1.5px solid var(--border); padding: 8px 12px; display: flex; align-items: stretch; gap: 0; z-index: 150; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+        .ft-item { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 2px 14px; flex-shrink: 0; min-width: 80px; }
+        .ft-item + .ft-item { border-left: 1px solid var(--border); }
+        .ft-lbl { font-size: 9px; font-weight: 800; color: var(--gray); text-transform: uppercase; letter-spacing: 0.4px; white-space: nowrap; max-width: 130px; overflow: hidden; text-overflow: ellipsis; margin-bottom: 1px; }
+        .ft-val { font-size: 13px; font-weight: 900; color: var(--text); white-space: nowrap; }
+        .ft-item.ft-grand .ft-lbl { color: var(--blue); }
+        .ft-item.ft-grand .ft-val { color: var(--blue); font-size: 15px; }
 
         /* Brief preview */
         .brief-sec-row { background: var(--bg); border-radius: 10px; padding: 10px 12px; margin-bottom: 8px; display: flex; flex-direction: column; gap: 4px; }
@@ -169,7 +179,7 @@
             @page { margin: 0; size: A4 portrait; }
             body { padding: 12mm 10mm 18mm 10mm !important; background: #fff !important; color: #000; padding-bottom: 120px; }
             .nav, .action-bar, .add-sec-btn, .add-item-btn, .sec-del-btn, .td-del, .logo-add-btn,
-            #meta-paq-field, #socio-filter-bar, .sec-paq-pill { display: none !important; }
+            #meta-paq-field, #socio-filter-bar, #paq-filter-bar, .sec-paq-pill, .float-totals { display: none !important; }
             .meta-card, .sec-card, .totals-card { border: 1px solid #ccc; break-inside: avoid; box-shadow: none; border-radius: 0; margin-bottom: 8px; }
             .meta-inp, .td-inp, .sec-name-inp, .fee-inp { border: none; background: transparent; padding: 0; }
             .items-table thead th, .items-table tbody td { padding: 4px 6px; font-size: 11px; }
@@ -208,7 +218,9 @@
         </div>
     </div>
 
-    <!-- Socio filter bar (visible when items have socios) -->
+    <!-- Package filter bar -->
+    <div id="paq-filter-bar"></div>
+    <!-- Socio filter bar -->
     <div id="socio-filter-bar"></div>
 
     <!-- Sections container -->
@@ -248,6 +260,26 @@
         <div class="total-row grand">
             <span class="total-lbl">TOTAL GENERAL (Bs.)</span>
             <span class="total-val" id="tot-general">0,00</span>
+        </div>
+    </div>
+
+    <!-- Floating mini-totals (above action bar) -->
+    <div id="float-totals" class="float-totals">
+        <div class="ft-item">
+            <span class="ft-lbl">Sub-Total</span>
+            <span class="ft-val" id="ft-subtotal">0,00</span>
+        </div>
+        <div class="ft-item" id="ft-paq-item" style="display:none;">
+            <span class="ft-lbl" id="ft-paq-lbl">Paquete</span>
+            <span class="ft-val" id="ft-paq-val">0,00</span>
+        </div>
+        <div class="ft-item" id="ft-socio-item" style="display:none;">
+            <span class="ft-lbl" id="ft-socio-lbl">Socio</span>
+            <span class="ft-val" id="ft-socio-val">0,00</span>
+        </div>
+        <div class="ft-item ft-grand">
+            <span class="ft-lbl">Total c/Fee+Imp</span>
+            <span class="ft-val" id="ft-grand">0,00</span>
         </div>
     </div>
 
@@ -484,7 +516,7 @@
             });
             renderLogos();
             renderSecciones();
-            recalcTotals();
+            recalcTotals(); // also calls recalcFloatTotals internally
         }).catch(err => console.error('Error cargando datos:', err));
     }
 
@@ -692,34 +724,45 @@
                 <div style="font-size:13px;font-weight:700;margin-bottom:4px;">Sin secciones aún</div>
                 <div style="font-size:12px;line-height:1.5;">Cada sección es una categoría o proveedor.<br>Creá una y usá <b>IA Proveedor</b> para importar su cotización.</div>
             </div>`;
+            renderFiltrosPaquetes();
+            renderFiltroSocios();
             return;
         }
         readSeccionesFromDOM();
 
         const paquetes = _meta.paquetes || [];
         const assignedIds = new Set(paquetes.map(p => p.id));
-        const hasGroups = _secciones.some(s => s.paquete && assignedIds.has(s.paquete));
+
+        // Apply active filters
+        let filteredSecs = _secciones;
+        if (_filtroPaquete) filteredSecs = filteredSecs.filter(s => s.paquete === _filtroPaquete);
+        if (_filtroSocio) filteredSecs = filteredSecs.filter(s => s.items.some(it => it.socio === _filtroSocio));
+
+        // Only group by package when no package filter is active (otherwise already in one package)
+        const hasGroups = !_filtroPaquete && filteredSecs.some(s => s.paquete && assignedIds.has(s.paquete));
 
         if (!hasGroups) {
-            container.innerHTML = _secciones.map(sec => renderSecCard(sec)).join('');
+            container.innerHTML = filteredSecs.map(sec => renderSecCard(sec)).join('');
+            renderFiltrosPaquetes();
             renderFiltroSocios();
             return;
         }
 
         let html = '';
         paquetes.forEach(paq => {
-            const secs = _secciones.filter(s => s.paquete === paq.id);
+            const secs = filteredSecs.filter(s => s.paquete === paq.id);
             if (secs.length > 0) {
                 html += grupoHeader(paq.nombre, paq.color);
                 html += secs.map(sec => renderSecCard(sec)).join('');
             }
         });
-        const sinSecs = _secciones.filter(s => !s.paquete || !assignedIds.has(s.paquete));
+        const sinSecs = filteredSecs.filter(s => !s.paquete || !assignedIds.has(s.paquete));
         if (sinSecs.length > 0) {
             if (html) html += grupoHeader('SIN ASIGNAR', null);
             html += sinSecs.map(sec => renderSecCard(sec)).join('');
         }
         container.innerHTML = html;
+        renderFiltrosPaquetes();
         renderFiltroSocios();
     }
 
@@ -739,26 +782,103 @@
 
     function escHtml(s) { return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 
-    // ── Socio filter ───────────────────────────────────────────────────────
+    // ── Filters ────────────────────────────────────────────────────────────
+    function _visibleSecs() {
+        let secs = _secciones;
+        if (_filtroPaquete) secs = secs.filter(s => s.paquete === _filtroPaquete);
+        if (_filtroSocio) secs = secs.filter(s => s.items.some(it => it.socio === _filtroSocio));
+        return secs;
+    }
+
     function setFiltroSocio(socio) {
         _filtroSocio = socio;
-        _secciones.forEach(sec => {
-            const tbody = document.querySelector(`#sec-${sec.id} .items-table tbody`);
-            if (tbody) tbody.innerHTML = sec.items.map(it => renderItemRow(sec.id, it)).join('');
-        });
-        document.querySelectorAll('.socio-chip').forEach(ch => ch.classList.toggle('active', ch.dataset.socio === socio));
+        renderSecciones();
+        recalcFloatTotals();
+    }
+
+    function setFiltroPaquete(id) {
+        _filtroPaquete = id;
+        _filtroSocio = ''; // reset socio filter when switching package
+        renderSecciones();
+        recalcFloatTotals();
     }
 
     function renderFiltroSocios() {
         const bar = document.getElementById('socio-filter-bar');
         if (!bar) return;
-        const socios = [...new Set(_secciones.flatMap(s => s.items.map(i => i.socio)).filter(Boolean))];
+        // Get socios from sections visible under current package filter
+        const baseSecs = _filtroPaquete ? _secciones.filter(s => s.paquete === _filtroPaquete) : _secciones;
+        const socios = [...new Set(baseSecs.flatMap(s => s.items.map(i => i.socio)).filter(Boolean))];
         if (socios.length === 0) { bar.innerHTML = ''; return; }
         bar.innerHTML = `<div class="socio-bar">
-            <span style="font-size:10px;font-weight:800;color:var(--gray);text-transform:uppercase;letter-spacing:0.4px;flex-shrink:0;">Socio:</span>
-            <button class="socio-chip ${!_filtroSocio ? 'active' : ''}" data-socio="" onclick="setFiltroSocio('')">Todos</button>
-            ${socios.map(s => `<button class="socio-chip ${_filtroSocio===s?'active':''}" data-socio="${escHtml(s)}" onclick="setFiltroSocio('${escHtml(s)}')">${escHtml(s)}</button>`).join('')}
+            <span class="filter-lbl">Socio:</span>
+            <button class="socio-chip ${!_filtroSocio ? 'active' : ''}" data-socio="" onclick="setFiltroSocio(this.dataset.socio)">Todos</button>
+            ${socios.map(s => `<button class="socio-chip ${_filtroSocio===s?'active':''}" data-socio="${escHtml(s)}" onclick="setFiltroSocio(this.dataset.socio)">${escHtml(s)}</button>`).join('')}
         </div>`;
+    }
+
+    function renderFiltrosPaquetes() {
+        const bar = document.getElementById('paq-filter-bar');
+        if (!bar) return;
+        const paquetes = _meta.paquetes || [];
+        const usedIds = new Set(_secciones.map(s => s.paquete).filter(Boolean));
+        const visible = paquetes.filter(p => usedIds.has(p.id));
+        if (visible.length < 2) { bar.innerHTML = ''; return; }
+        const todosActive = !_filtroPaquete;
+        bar.innerHTML = `<div class="paq-filter-bar">
+            <span class="filter-lbl">Paquete:</span>
+            <button class="paq-filter-chip" data-paq="" onclick="setFiltroPaquete(this.dataset.paq)"
+                style="${todosActive ? 'background:rgba(0,122,255,0.1);color:var(--blue);border-color:var(--blue);' : ''}">Todos</button>
+            ${visible.map(p => {
+                const act = _filtroPaquete === p.id;
+                return `<button class="paq-filter-chip" data-paq="${p.id}" onclick="setFiltroPaquete(this.dataset.paq)"
+                    style="${act ? `background:${hexRgba(p.color,0.12)};color:${p.color};border-color:${p.color};` : ''}">${escHtml(p.nombre)}</button>`;
+            }).join('')}
+        </div>`;
+    }
+
+    function recalcFloatTotals() {
+        let projSub = 0, paqSub = 0, socioSub = 0;
+        _secciones.forEach(sec => {
+            sec.items.forEach(it => {
+                const amt = fNum(it.cantidad) * fNum(it.costo_unitario) * fNum(it.dias);
+                projSub += amt;
+                if (_filtroPaquete && sec.paquete === _filtroPaquete) paqSub += amt;
+                if (_filtroSocio && it.socio === _filtroSocio) socioSub += amt;
+            });
+        });
+        const feePct = fNum(document.getElementById('inp-fee-pct').value);
+        const impPct = fNum(document.getElementById('inp-imp-pct').value);
+        const grand = (projSub * (1 + feePct/100)) * (1 + impPct/100);
+
+        const ftSub = document.getElementById('ft-subtotal');
+        const ftGrand = document.getElementById('ft-grand');
+        if (ftSub) ftSub.textContent = fMoney(projSub);
+        if (ftGrand) ftGrand.textContent = fMoney(grand);
+
+        const paqItem = document.getElementById('ft-paq-item');
+        if (paqItem) {
+            if (_filtroPaquete) {
+                const p = getPaq(_filtroPaquete);
+                const lbl = document.getElementById('ft-paq-lbl');
+                const val = document.getElementById('ft-paq-val');
+                if (lbl) lbl.textContent = p ? p.nombre.split(' — ')[0] : 'Paquete';
+                if (lbl && p) lbl.style.color = p.color;
+                if (val) { val.textContent = fMoney(paqSub); val.style.color = p ? p.color : ''; }
+                paqItem.style.display = '';
+            } else paqItem.style.display = 'none';
+        }
+
+        const socioItem = document.getElementById('ft-socio-item');
+        if (socioItem) {
+            if (_filtroSocio) {
+                const lbl = document.getElementById('ft-socio-lbl');
+                const val = document.getElementById('ft-socio-val');
+                if (lbl) lbl.textContent = _filtroSocio;
+                if (val) val.textContent = fMoney(socioSub);
+                socioItem.style.display = '';
+            } else socioItem.style.display = 'none';
+        }
     }
 
     function onSecNameChange(secId, val) {
@@ -807,12 +927,14 @@
         document.getElementById('tot-base').textContent = fMoney(base);
         document.getElementById('tot-imp').textContent = fMoney(impAmt);
         document.getElementById('tot-general').textContent = fMoney(total);
+        recalcFloatTotals();
     }
 
     // ── AI Import ──────────────────────────────────────────────────────────
     let _iaFile = null;
     let _iaProposedSecs = []; // [{seccion: 'NOMBRE', items: [...]}]
     let _filtroSocio = '';
+    let _filtroPaquete = '';
 
     function abrirModalIA() {
         _iaFile = null; _iaProposedSecs = [];
