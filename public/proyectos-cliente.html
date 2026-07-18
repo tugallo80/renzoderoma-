@@ -154,6 +154,15 @@
             </select>
             <label class="inp-lbl">Fecha del Proyecto</label>
             <input type="month" id="inp-fecha" class="inp-std">
+            <div id="agencia-toggle-wrap" style="display:flex;align-items:center;gap:10px;margin:14px 0 4px 0;padding:12px 14px;border-radius:12px;border:1.5px solid var(--border);background:var(--bg);cursor:pointer;" onclick="toggleAgencia()">
+                <div id="agencia-toggle-pill" style="width:44px;height:26px;border-radius:13px;background:var(--border);transition:0.2s;position:relative;flex-shrink:0;">
+                    <div id="agencia-toggle-knob" style="width:22px;height:22px;border-radius:50%;background:#fff;position:absolute;top:2px;left:2px;transition:0.2s;box-shadow:0 1px 4px rgba(0,0,0,0.2);"></div>
+                </div>
+                <div>
+                    <div style="font-size:13px;font-weight:800;">Modo Agencia</div>
+                    <div style="font-size:11px;color:var(--gray);font-weight:600;">Formato de cotización para proyectos como agencia</div>
+                </div>
+            </div>
             <button class="btn-act btn-primary" id="btn-save" onclick="saveProject()"><span id="save-text">Guardar Proyecto</span></button>
             <button class="btn-act btn-cancel" onclick="closeModals()">Cancelar</button>
         </div>
@@ -614,7 +623,14 @@
         closeModals();
     }
 
-    function openProject(pid, pname) { if (window._lpFired) { window._lpFired = false; return; } localStorage.setItem('rubik_current_pid', pid); localStorage.setItem('rubik_current_pname', pname); window.location.href = 'dashboard-proyecto.html'; }
+    function openProject(pid, pname) {
+        if (window._lpFired) { window._lpFired = false; return; }
+        const proj = globalProjectsArr.find(p => p.pid === pid);
+        localStorage.setItem('rubik_current_pid', pid);
+        localStorage.setItem('rubik_current_pname', pname);
+        localStorage.setItem('rubik_project_tipo', (proj && proj.tipo) || '');
+        window.location.href = 'dashboard-proyecto.html';
+    }
 
     // ── Long press para móvil (equivalente al clic derecho de PC) ──
     let _lpTimer = null;
@@ -654,10 +670,28 @@
         else { if(!clientContact.email) return alert("El cliente no tiene correo registrado."); window.open(`mailto:${clientContact.email}?subject=${encodeURIComponent(`Actualización Proyecto: ${actionData.name}`)}&body=${msg}`, '_blank'); }
     }
 
+    let _modoAgencia = false;
+    function toggleAgencia() {
+        _modoAgencia = !_modoAgencia;
+        const pill = document.getElementById('agencia-toggle-pill');
+        const knob = document.getElementById('agencia-toggle-knob');
+        pill.style.background = _modoAgencia ? 'var(--orange)' : 'var(--border)';
+        knob.style.transform = _modoAgencia ? 'translateX(18px)' : 'translateX(0)';
+    }
+    function _setAgenciaToggle(val) {
+        _modoAgencia = !!val;
+        const pill = document.getElementById('agencia-toggle-pill');
+        const knob = document.getElementById('agencia-toggle-knob');
+        if (pill) { pill.style.background = _modoAgencia ? 'var(--orange)' : 'var(--border)'; }
+        if (knob) { knob.style.transform = _modoAgencia ? 'translateX(18px)' : 'translateX(0)'; }
+    }
+
     function openModal() {
         currentEditPid = null; tempImgFile = null; existingImgUrl = null; document.getElementById('form-title').innerText = "Nuevo Proyecto";
         document.getElementById('inp-name').value = ''; document.getElementById('inp-status').value = 'planificacion';
         document.getElementById('inp-fecha').value = _CURRENT_MONTH;
+        _setAgenciaToggle(false);
+        document.getElementById('agencia-toggle-wrap').style.display = 'flex';
         document.getElementById('preview-img').style.display = 'none'; document.getElementById('icon-cam').style.display = 'block'; document.getElementById('txt-cam').style.display = 'block';
         document.getElementById('modal-actions').style.display = 'none'; document.getElementById('modal-add').style.display = 'flex';
     }
@@ -665,10 +699,11 @@
     function goToEditProject() {
         currentEditPid = actionPid; tempImgFile = null; existingImgUrl = actionData.img; document.getElementById('form-title').innerText = "Editar Proyecto";
         document.getElementById('inp-name').value = actionData.name; document.getElementById('inp-status').value = actionData.status || 'planificacion';
-        // Load existing fecha_creacion into the month picker (or default to current month)
         const proj = globalProjectsArr.find(p => p.pid === actionPid);
         const fechaExistente = proj && proj.fecha_creacion ? proj.fecha_creacion.substring(0, 7) : _CURRENT_MONTH;
         document.getElementById('inp-fecha').value = fechaExistente;
+        _setAgenciaToggle(proj && proj.tipo === 'agencia');
+        document.getElementById('agencia-toggle-wrap').style.display = 'flex';
         if(existingImgUrl) { document.getElementById('preview-img').src = existingImgUrl; document.getElementById('preview-img').style.display = 'block'; document.getElementById('icon-cam').style.display = 'none'; document.getElementById('txt-cam').style.display = 'none'; }
         else { document.getElementById('preview-img').style.display = 'none'; document.getElementById('icon-cam').style.display = 'block'; document.getElementById('txt-cam').style.display = 'block'; }
         document.getElementById('modal-actions').style.display = 'none'; document.getElementById('modal-add').style.display = 'flex';
@@ -716,6 +751,7 @@
             const fechaVal = document.getElementById('inp-fecha').value; // "YYYY-MM"
             const fechaISO = fechaVal ? fechaVal + '-01T00:00:00.000Z' : new Date().toISOString();
             const payload = { nombre: name, estado: status, fecha_creacion: fechaISO };
+            if (_modoAgencia) payload.tipo = 'agencia'; else payload.tipo = null;
             if(finalImgUrl) payload.img = finalImgUrl;
 
             if(currentEditPid) {
