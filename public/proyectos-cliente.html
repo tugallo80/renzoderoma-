@@ -349,7 +349,8 @@
                     estado: typeof p.estado === 'string' ? p.estado : null,
                     img: typeof p.img === 'string' ? p.img : null,
                     orden: typeof p.orden === 'number' ? p.orden : null,
-                    visible_cliente: p.visible_cliente === false ? false : null
+                    visible_cliente: p.visible_cliente === false ? false : null,
+                    tipo: typeof p.tipo === 'string' ? p.tipo : null
                 };
             });
             if (Object.keys(slim).length > 0) {
@@ -411,7 +412,7 @@
         if (!dataObj || typeof dataObj !== 'object') return '';
         return Object.entries(dataObj)
             .filter(([, p]) => p && typeof p === 'object' && typeof p.nombre === 'string')
-            .map(([pid, p]) => `${pid}:${p.nombre}:${p.estado||''}:${p.img||''}`)
+            .map(([pid, p]) => `${pid}:${p.nombre}:${p.estado||''}:${p.img||''}:${p.tipo||''}`)
             .sort().join('|');
     }
 
