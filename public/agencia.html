@@ -212,13 +212,14 @@
     <div id="mod-ia" class="modal" onclick="if(event.target===this)cerrarModalIA()">
         <div class="modal-box">
             <h3 class="modal-title"><i class="ph-bold ph-robot" style="color:var(--blue);"></i> Importar Cotización de Proveedor</h3>
-            <p style="font-size:13px; color:var(--gray); margin:0 0 12px 0;">Subí la cotización del proveedor (PDF o imagen) y la IA la leerá y propondrá los ítems para agregar.</p>
+            <p style="font-size:13px; color:var(--gray); margin:0 0 12px 0;">Subí la cotización del proveedor (<b>Excel, PDF o imagen</b>) — la IA extrae todos los ítems y te los muestra para revisar antes de agregar.</p>
 
             <label class="inp-lbl">Archivo de cotización (PDF o imagen)</label>
             <label style="display:block; border:2px dashed var(--border); border-radius:12px; padding:20px; text-align:center; cursor:pointer; color:var(--gray); font-size:13px; font-weight:600;" id="ia-file-label">
                 <i class="ph-bold ph-upload-simple" style="font-size:24px; display:block; margin-bottom:6px;"></i>
                 <span id="ia-file-name">Tocar para seleccionar</span>
-                <input type="file" id="ia-file-inp" accept="image/*,application/pdf" style="display:none" onchange="onIAFileSelect(this)">
+                <div style="font-size:10px; color:var(--gray); margin-top:4px; font-weight:600;">PDF · Imagen · Excel (.xlsx) · CSV</div>
+                <input type="file" id="ia-file-inp" accept="image/*,application/pdf,.xlsx,.xls,.csv" style="display:none" onchange="onIAFileSelect(this)">
             </label>
 
             <label class="inp-lbl">Sección destino</label>
@@ -457,7 +458,11 @@
     function renderSecciones() {
         const container = document.getElementById('secciones-container');
         if (_secciones.length === 0) {
-            container.innerHTML = '';
+            container.innerHTML = `<div style="background:var(--card);border-radius:16px;border:1px dashed var(--border);padding:20px;margin-bottom:14px;text-align:center;color:var(--gray);">
+                <i class="ph-bold ph-folders" style="font-size:32px;display:block;margin-bottom:8px;opacity:0.4;"></i>
+                <div style="font-size:13px;font-weight:700;margin-bottom:4px;">Sin secciones aún</div>
+                <div style="font-size:12px;line-height:1.5;">Cada sección es una categoría o proveedor.<br>Creá una y usá <b>IA Proveedor</b> para importar su cotización.</div>
+            </div>`;
             return;
         }
         // Preserve existing input values before re-render
@@ -602,33 +607,44 @@
         progMsg.textContent = 'Leyendo archivo...';
 
         try {
-            const base64 = await fileToBase64(_iaFile);
-            const mime = _iaFile.type || 'application/octet-stream';
             const ctx = document.getElementById('ia-extra-ctx').value.trim();
+            const fname = _iaFile.name.toLowerCase();
+            const isExcel = fname.endsWith('.xlsx') || fname.endsWith('.xls') || fname.endsWith('.csv');
 
             const sysPrompt = `Sos un asistente especializado en leer cotizaciones de proveedores para eventos, stands y producción audiovisual.
-Tu tarea es extraer TODOS los ítems de la cotización adjunta y devolver un JSON con este formato exacto:
+Tu tarea es extraer TODOS los ítems de la cotización y devolver un JSON con este formato exacto:
 {
   "items": [
     {"detalle": "descripción del ítem", "cantidad": 1, "costo_unitario": 0, "dias": 1, "total": 0, "obs": "observaciones"}
   ]
 }
 Reglas:
-- "detalle": nombre/descripción del ítem
+- "detalle": nombre/descripción del ítem — NUNCA dejes detalle vacío; si no hay nombre claro, usá la fila como descripción
 - "cantidad": cantidad numérica (por defecto 1)
-- "costo_unitario": precio unitario en Bs. (número sin formato)
+- "costo_unitario": precio unitario en Bs. (número sin formato, sin comas ni símbolo)
 - "dias": número de días/noches (por defecto 1)
 - "total": cantidad × costo_unitario × dias
 - "obs": observaciones o notas adicionales del ítem
-- Si el total aparece en el documento pero no hay desglose de cantidad×cu×dias, ponés cantidad=1, cu=total, dias=1
-- Devolvé SOLO el JSON, sin texto adicional, sin markdown.`;
+- Si el total aparece pero no hay desglose de cant×cu×dias, ponés cantidad=1, cu=total, dias=1
+- Ignorá filas de encabezado, totales, subtotales, y celdas vacías
+- Devolvé SOLO el JSON válido, sin texto adicional, sin markdown, sin bloque de código`;
 
-            const userText = ctx ? `Cotización adjunta. Contexto adicional: ${ctx}` : 'Cotización adjunta. Extraé todos los ítems.';
-
-            const parts = [
-                { inlineData: { data: base64.split(',')[1], mimeType: mime } },
-                { text: userText }
-            ];
+            let parts;
+            if (isExcel) {
+                progMsg.textContent = 'Leyendo Excel...';
+                const excelText = await excelToText(_iaFile);
+                const userText = `Cotización en formato tabla:\n\n${excelText}${ctx ? '\n\nContexto adicional: ' + ctx : ''}`;
+                parts = [{ text: userText }];
+            } else {
+                progMsg.textContent = 'Leyendo archivo...';
+                const base64 = await fileToBase64(_iaFile);
+                const mime = _iaFile.type || 'application/octet-stream';
+                const userText = ctx ? `Cotización adjunta. Contexto adicional: ${ctx}` : 'Cotización adjunta. Extraé todos los ítems.';
+                parts = [
+                    { inlineData: { data: base64.split(',')[1], mimeType: mime } },
+                    { text: userText }
+                ];
+            }
 
             progMsg.textContent = 'Analizando con IA...';
 
@@ -728,6 +744,29 @@ Reglas:
             reader.onload = e => res(e.target.result);
             reader.onerror = rej;
             reader.readAsDataURL(file);
+        });
+    }
+
+    async function excelToText(file) {
+        return new Promise((res, rej) => {
+            const reader = new FileReader();
+            reader.onload = e => {
+                try {
+                    const wb = XLSX.read(e.target.result, { type: 'array' });
+                    const lines = [];
+                    wb.SheetNames.forEach(sheetName => {
+                        const ws = wb.Sheets[sheetName];
+                        const csv = XLSX.utils.sheet_to_csv(ws, { blankrows: false });
+                        if (csv.trim()) {
+                            lines.push(`=== Hoja: ${sheetName} ===`);
+                            lines.push(csv);
+                        }
+                    });
+                    res(lines.join('\n'));
+                } catch(e2) { rej(e2); }
+            };
+            reader.onerror = rej;
+            reader.readAsArrayBuffer(file);
         });
     }
 
