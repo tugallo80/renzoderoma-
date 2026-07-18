@@ -375,7 +375,11 @@
     }
 
     function fMoney(num) { return parseFloat(num || 0).toLocaleString('es-BO', {minimumFractionDigits: 2, maximumFractionDigits: 2}); }
-    function abrirModulo(mod) { window.location.href = mod + '.html?cid=' + cid + '&pid=' + pid; }
+    const _proyTipo = localStorage.getItem('rubik_project_tipo') || '';
+    function abrirModulo(mod) {
+        const dest = (mod === 'presupuesto' && _proyTipo === 'agencia') ? 'agencia' : mod;
+        window.location.href = dest + '.html?cid=' + cid + '&pid=' + pid;
+    }
 
     function abrirReqAsistido() {
         localStorage.setItem('rubik_req_backref', 'dashboard-proyecto.html');

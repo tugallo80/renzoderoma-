@@ -1,0 +1,810 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Presupuesto Agencia - Rubik</title>
+    <script src="https://unpkg.com/@phosphor-icons/web" defer></script>
+    <script src="https://www.gstatic.com/firebasejs/9.1.3/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.1.3/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.1.3/firebase-database-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.1.3/firebase-storage-compat.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <script>
+        window._rubikFirebaseConfig = window._rubikFirebaseConfig || {
+            apiKey: "AIzaSyDXYlofy31cDP14xVAVxWo_7TqXdSgsIjA",
+            authDomain: "rubik-bolivia.firebaseapp.com",
+            databaseURL: "https://rubik-bolivia-default-rtdb.firebaseio.com",
+            projectId: "rubik-bolivia",
+            storageBucket: "rubik-bolivia.firebasestorage.app",
+            messagingSenderId: "4153087958",
+            appId: "1:4153087958:web:cf2dd16106580ed6437677"
+        };
+        if (!firebase.apps.length) firebase.initializeApp(window._rubikFirebaseConfig);
+    </script>
+    <script src="/js/firecache.js?v=7"></script>
+    <script src="/js/auth-guard.js?v=3"></script>
+
+    <style>
+        :root { --bg: #f4f4f7; --card: #fff; --text: #1a1a1a; --blue: #007aff; --green: #34c759; --red: #ff3b30; --orange: #ff9500; --gray: #8e8e93; --border: #d1d1d6; }
+        body.dark-mode { --bg: #000; --card: #1c1c1e; --text: #fff; --border: #333; }
+        * { box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 16px; padding-bottom: 120px; -webkit-tap-highlight-color: transparent; }
+
+        .nav { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; gap: 8px; }
+        .btn-nav { background: var(--card); border: 1px solid var(--border); padding: 8px 14px; border-radius: 20px; font-weight: 700; color: var(--blue); cursor: pointer; display: flex; align-items: center; gap: 5px; font-size: 13px; }
+        .nav-title { font-size: 15px; font-weight: 900; flex: 1; text-align: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+        /* Meta header card */
+        .meta-card { background: var(--card); border-radius: 18px; border: 1px solid var(--border); padding: 16px; margin-bottom: 14px; position: relative; }
+        .meta-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+        .meta-field { display: flex; flex-direction: column; gap: 3px; }
+        .meta-lbl { font-size: 9px; font-weight: 800; color: var(--gray); text-transform: uppercase; letter-spacing: 0.5px; }
+        .meta-inp { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; font-size: 13px; font-weight: 600; color: var(--text); width: 100%; outline: none; }
+        .meta-inp:focus { border-color: var(--blue); }
+
+        /* Logos */
+        .logos-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 12px; }
+        .logo-thumb { width: 44px; height: 44px; border-radius: 8px; object-fit: contain; border: 1px solid var(--border); background: var(--bg); cursor: pointer; }
+        .logo-add-btn { width: 44px; height: 44px; border-radius: 8px; border: 1.5px dashed var(--blue); background: transparent; display: flex; align-items: center; justify-content: center; cursor: pointer; color: var(--blue); font-size: 20px; flex-shrink: 0; }
+
+        /* Section cards */
+        .sec-card { background: var(--card); border-radius: 18px; border: 1px solid var(--border); margin-bottom: 14px; overflow: hidden; }
+        .sec-header { display: flex; align-items: center; gap: 8px; padding: 13px 16px; border-bottom: 1px solid var(--border); background: rgba(0,122,255,0.04); }
+        .sec-name-inp { flex: 1; background: transparent; border: none; font-size: 14px; font-weight: 900; color: var(--blue); outline: none; text-transform: uppercase; letter-spacing: 0.3px; }
+        .sec-name-inp::placeholder { color: rgba(0,122,255,0.4); }
+        .sec-del-btn { background: none; border: none; color: var(--red); font-size: 18px; cursor: pointer; padding: 4px; display: flex; align-items: center; }
+
+        /* Items table */
+        .items-table { width: 100%; border-collapse: collapse; }
+        .items-table thead th { font-size: 9px; font-weight: 800; color: var(--gray); text-transform: uppercase; padding: 6px 8px; border-bottom: 1px solid var(--border); text-align: left; white-space: nowrap; }
+        .items-table tbody td { padding: 6px 8px; border-bottom: 1px solid rgba(0,0,0,0.04); vertical-align: top; }
+        .items-table tbody tr:last-child td { border-bottom: none; }
+        .items-table tbody tr:hover td { background: rgba(0,0,0,0.015); }
+        .td-inp { background: var(--bg); border: 1px solid transparent; border-radius: 6px; padding: 5px 7px; font-size: 12px; font-weight: 600; color: var(--text); width: 100%; outline: none; min-width: 0; }
+        .td-inp:focus { border-color: var(--blue); background: var(--card); }
+        .td-total { font-size: 12px; font-weight: 800; color: var(--text); white-space: nowrap; }
+        .td-del { width: 28px; }
+        .td-del-btn { background: none; border: none; color: var(--red); font-size: 16px; cursor: pointer; padding: 2px; display: flex; align-items: center; }
+        .col-detalle { min-width: 120px; }
+        .col-cant { width: 55px; }
+        .col-cu { width: 80px; }
+        .col-dias { width: 50px; }
+        .col-total { width: 90px; }
+        .col-obs { min-width: 100px; }
+
+        .add-item-btn { width: 100%; background: none; border: none; border-top: 1px solid var(--border); padding: 10px 16px; font-size: 12px; font-weight: 700; color: var(--blue); cursor: pointer; display: flex; align-items: center; gap: 6px; }
+        .add-item-btn:active { background: rgba(0,122,255,0.05); }
+
+        /* Footer totals */
+        .totals-card { background: var(--card); border-radius: 18px; border: 1px solid var(--border); padding: 16px; margin-bottom: 14px; }
+        .total-row { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--border); gap: 12px; }
+        .total-row:last-child { border-bottom: none; }
+        .total-lbl { font-size: 13px; font-weight: 700; color: var(--gray); }
+        .total-val { font-size: 15px; font-weight: 900; color: var(--text); white-space: nowrap; }
+        .total-row.highlight .total-lbl { color: var(--blue); font-weight: 900; }
+        .total-row.highlight .total-val { color: var(--blue); font-size: 18px; }
+        .total-row.grand .total-lbl { color: var(--text); font-weight: 900; font-size: 15px; }
+        .total-row.grand .total-val { color: var(--text); font-size: 22px; }
+        .fee-input-wrap { display: flex; align-items: center; gap: 6px; }
+        .fee-inp { width: 60px; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 6px 8px; font-size: 13px; font-weight: 700; color: var(--orange); text-align: center; outline: none; }
+        .fee-inp:focus { border-color: var(--orange); }
+
+        /* Action bar */
+        .action-bar { position: fixed; bottom: 0; left: 0; right: 0; background: var(--card); border-top: 1px solid var(--border); padding: 12px 16px; display: flex; gap: 8px; z-index: 200; }
+        .act-btn { flex: 1; padding: 12px 8px; border-radius: 12px; border: none; font-size: 12px; font-weight: 800; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 5px; }
+        .act-btn-blue { background: var(--blue); color: #fff; }
+        .act-btn-green { background: var(--green); color: #fff; }
+        .act-btn-orange { background: var(--orange); color: #fff; }
+        .act-btn-gray { background: var(--bg); color: var(--text); border: 1px solid var(--border); }
+        .act-btn:active { opacity: 0.8; transform: scale(0.97); }
+
+        /* Add section button */
+        .add-sec-btn { width: 100%; background: rgba(0,122,255,0.07); border: 1.5px dashed var(--blue); border-radius: 14px; padding: 14px; font-size: 13px; font-weight: 800; color: var(--blue); cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; margin-bottom: 14px; }
+
+        /* Modals */
+        .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 1000; justify-content: center; align-items: flex-end; backdrop-filter: blur(4px); }
+        .modal-box { background: var(--card); width: 100%; max-width: 500px; padding: 20px; border-radius: 20px 20px 0 0; color: var(--text); max-height: 85vh; overflow-y: auto; }
+        .modal-title { font-size: 16px; font-weight: 900; margin: 0 0 14px 0; }
+        .inp-lbl { font-size: 10px; font-weight: 800; color: var(--gray); text-transform: uppercase; display: block; margin-bottom: 5px; margin-top: 10px; }
+        .inp-std { width: 100%; padding: 12px 14px; border: 1px solid var(--border); background: var(--bg); color: var(--text); border-radius: 12px; font-size: 14px; font-weight: 600; outline: none; }
+        .inp-std:focus { border-color: var(--blue); }
+        .btn-primary { background: var(--blue); color: #fff; border: none; padding: 14px; border-radius: 12px; font-size: 14px; font-weight: 800; width: 100%; cursor: pointer; margin-top: 12px; }
+        .btn-cancel-sm { background: none; border: none; color: var(--gray); font-size: 14px; font-weight: 700; width: 100%; padding: 12px; cursor: pointer; }
+
+        /* AI import progress */
+        .ai-prog-box { background: rgba(0,0,0,0.04); border-radius: 12px; padding: 14px; margin-top: 12px; display: none; }
+        .ai-prog-msg { font-size: 13px; font-weight: 600; color: var(--gray); text-align: center; }
+        .ai-spinner { width: 28px; height: 28px; border: 3px solid var(--border); border-top-color: var(--blue); border-radius: 50%; animation: spin 0.8s linear infinite; margin: 0 auto 8px auto; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* AI proposed items preview */
+        .ai-preview-table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 12px; }
+        .ai-preview-table th { font-size: 9px; font-weight: 800; color: var(--gray); text-transform: uppercase; padding: 5px 6px; border-bottom: 1px solid var(--border); text-align: left; }
+        .ai-preview-table td { padding: 5px 6px; border-bottom: 1px solid rgba(0,0,0,0.04); }
+        .ai-preview-table td.num { text-align: right; font-weight: 700; }
+
+        /* Print styles */
+        @media print {
+            .nav, .action-bar, .add-sec-btn, .add-item-btn, .sec-del-btn, .td-del, .logo-add-btn { display: none !important; }
+            body { padding: 0; background: #fff; color: #000; }
+            .meta-card, .sec-card, .totals-card { border: 1px solid #ccc; break-inside: avoid; box-shadow: none; border-radius: 0; margin-bottom: 8px; }
+            .meta-inp, .td-inp, .sec-name-inp, .fee-inp { border: none; background: transparent; padding: 0; }
+            .items-table thead th, .items-table tbody td { padding: 4px 6px; font-size: 11px; }
+        }
+    </style>
+    <link rel="stylesheet" href="/css/responsive.css?v=1">
+</head>
+<body>
+
+    <!-- Navigation -->
+    <div class="nav">
+        <button class="btn-nav" onclick="volverDashboard()"><i class="ph-bold ph-caret-left"></i> Dashboard</button>
+        <div class="nav-title" id="nav-title">Presupuesto Agencia</div>
+        <button class="btn-nav" onclick="guardarTodo()" style="color:var(--green);"><i class="ph-bold ph-floppy-disk"></i> Guardar</button>
+    </div>
+
+    <!-- Meta header -->
+    <div class="meta-card">
+        <div id="logos-row" class="logos-row" style="justify-content:flex-end; margin-bottom:10px;">
+            <input type="file" id="logo-file-inp" accept="image/*" style="display:none" onchange="uploadLogo(this)">
+            <button class="logo-add-btn" onclick="document.getElementById('logo-file-inp').click()" title="Agregar logo"><i class="ph-bold ph-plus"></i></button>
+        </div>
+        <div class="meta-grid">
+            <div class="meta-field"><label class="meta-lbl">Cliente</label><input class="meta-inp" id="meta-cliente" placeholder="Nombre del cliente" oninput="debounceSave()"></div>
+            <div class="meta-field"><label class="meta-lbl">Producto / Stand</label><input class="meta-inp" id="meta-producto" placeholder="Ej: Stand Expo" oninput="debounceSave()"></div>
+            <div class="meta-field"><label class="meta-lbl">Actividad</label><input class="meta-inp" id="meta-actividad" placeholder="Ej: Fexpocruz 2026" oninput="debounceSave()"></div>
+            <div class="meta-field"><label class="meta-lbl">Duración</label><input class="meta-inp" id="meta-duracion" placeholder="Ej: 10 Días" oninput="debounceSave()"></div>
+            <div class="meta-field"><label class="meta-lbl">Horas por Día</label><input class="meta-inp" id="meta-horas" placeholder="Ej: No Aplica" oninput="debounceSave()"></div>
+            <div class="meta-field"><label class="meta-lbl">Plaza / Ciudad</label><input class="meta-inp" id="meta-plazas" placeholder="Ej: Santa Cruz" oninput="debounceSave()"></div>
+            <div class="meta-field" style="grid-column:span 2;"><label class="meta-lbl">Fecha del Evento</label><input class="meta-inp" id="meta-fecha" placeholder="Ej: 18 al 27 de septiembre" oninput="debounceSave()"></div>
+        </div>
+    </div>
+
+    <!-- Sections container -->
+    <div id="secciones-container"></div>
+
+    <!-- Add section button -->
+    <button class="add-sec-btn" onclick="agregarSeccion()">
+        <i class="ph-bold ph-plus-circle"></i> Agregar Sección
+    </button>
+
+    <!-- Totals -->
+    <div class="totals-card" id="totals-card">
+        <div class="total-row">
+            <span class="total-lbl">Sub-Total (Bs.)</span>
+            <span class="total-val" id="tot-subtotal">0,00</span>
+        </div>
+        <div class="total-row">
+            <div class="fee-input-wrap">
+                <span class="total-lbl">Fee Agencia</span>
+                <input type="number" class="fee-inp" id="inp-fee-pct" value="11" min="0" max="100" step="0.1" oninput="recalcTotals(); debounceSave()">
+                <span class="total-lbl">%</span>
+            </div>
+            <span class="total-val" style="color:var(--orange);" id="tot-fee">0,00</span>
+        </div>
+        <div class="total-row highlight">
+            <span class="total-lbl">Base (Sub-Total + Fee)</span>
+            <span class="total-val" id="tot-base">0,00</span>
+        </div>
+        <div class="total-row">
+            <div class="fee-input-wrap">
+                <span class="total-lbl">Impuestos</span>
+                <input type="number" class="fee-inp" id="inp-imp-pct" value="19.04" min="0" max="100" step="0.01" style="color:var(--red);" oninput="recalcTotals(); debounceSave()">
+                <span class="total-lbl">%</span>
+            </div>
+            <span class="total-val" style="color:var(--red);" id="tot-imp">0,00</span>
+        </div>
+        <div class="total-row grand">
+            <span class="total-lbl">TOTAL GENERAL (Bs.)</span>
+            <span class="total-val" id="tot-general">0,00</span>
+        </div>
+    </div>
+
+    <!-- Action bar -->
+    <div class="action-bar">
+        <button class="act-btn act-btn-blue" onclick="abrirModalIA()"><i class="ph-bold ph-robot"></i> IA Proveedor</button>
+        <button class="act-btn act-btn-green" onclick="exportarExcel()"><i class="ph-bold ph-microsoft-excel-logo"></i> Excel</button>
+        <button class="act-btn act-btn-gray" onclick="window.print()"><i class="ph-bold ph-printer"></i> PDF</button>
+    </div>
+
+    <!-- Modal: AI import -->
+    <div id="mod-ia" class="modal" onclick="if(event.target===this)cerrarModalIA()">
+        <div class="modal-box">
+            <h3 class="modal-title"><i class="ph-bold ph-robot" style="color:var(--blue);"></i> Importar Cotización de Proveedor</h3>
+            <p style="font-size:13px; color:var(--gray); margin:0 0 12px 0;">Subí la cotización del proveedor (PDF o imagen) y la IA la leerá y propondrá los ítems para agregar.</p>
+
+            <label class="inp-lbl">Archivo de cotización (PDF o imagen)</label>
+            <label style="display:block; border:2px dashed var(--border); border-radius:12px; padding:20px; text-align:center; cursor:pointer; color:var(--gray); font-size:13px; font-weight:600;" id="ia-file-label">
+                <i class="ph-bold ph-upload-simple" style="font-size:24px; display:block; margin-bottom:6px;"></i>
+                <span id="ia-file-name">Tocar para seleccionar</span>
+                <input type="file" id="ia-file-inp" accept="image/*,application/pdf" style="display:none" onchange="onIAFileSelect(this)">
+            </label>
+
+            <label class="inp-lbl">Sección destino</label>
+            <select class="inp-std" id="ia-dest-sec" style="margin-bottom:4px;"></select>
+
+            <label class="inp-lbl">Contexto adicional (opcional)</label>
+            <textarea class="inp-std" id="ia-extra-ctx" rows="2" placeholder="Ej: Es para un stand de 10 días en Santa Cruz" style="resize:none;"></textarea>
+
+            <div class="ai-prog-box" id="ia-prog-box">
+                <div class="ai-spinner"></div>
+                <div class="ai-prog-msg" id="ia-prog-msg">Analizando cotización...</div>
+            </div>
+
+            <div id="ia-preview-wrap" style="display:none; margin-top:14px;">
+                <div style="font-size:13px; font-weight:800; margin-bottom:8px;">Ítems detectados:</div>
+                <div style="overflow-x:auto;">
+                    <table class="ai-preview-table" id="ia-preview-table">
+                        <thead><tr><th>Detalle</th><th>Cant.</th><th>C.U.</th><th>Días</th><th>Total</th><th>Obs.</th></tr></thead>
+                        <tbody id="ia-preview-body"></tbody>
+                    </table>
+                </div>
+                <div style="font-size:11px; color:var(--gray); margin-top:8px;">Podés editar los valores antes de confirmar.</div>
+            </div>
+
+            <button class="btn-primary" id="ia-btn-analizar" onclick="analizarCotizacion()"><i class="ph-bold ph-magnifying-glass"></i> Analizar con IA</button>
+            <button class="btn-primary" id="ia-btn-confirmar" style="display:none; background:var(--green);" onclick="confirmarItemsIA()"><i class="ph-bold ph-check"></i> Agregar a la Sección</button>
+            <button class="btn-cancel-sm" onclick="cerrarModalIA()">Cancelar</button>
+        </div>
+    </div>
+
+    <!-- Modal: delete logo confirm -->
+    <div id="mod-del-logo" class="modal" onclick="if(event.target===this)this.style.display='none'">
+        <div class="modal-box">
+            <h3 class="modal-title">Eliminar logo</h3>
+            <p style="font-size:13px; color:var(--gray);">¿Eliminar este logo del encabezado?</p>
+            <button class="btn-primary" style="background:var(--red);" onclick="confirmarEliminarLogo()">Eliminar</button>
+            <button class="btn-cancel-sm" onclick="document.getElementById('mod-del-logo').style.display='none'">Cancelar</button>
+        </div>
+    </div>
+
+<script>
+    if (!firebase.apps.length) firebase.initializeApp(window._rubikFirebaseConfig);
+    const db = firebase.database();
+    const storage = firebase.storage();
+
+    const params = new URLSearchParams(location.search);
+    const cid = params.get('cid') || localStorage.getItem('rubik_client_id');
+    const pid = params.get('pid') || localStorage.getItem('rubik_current_pid');
+    const pname = localStorage.getItem('rubik_current_pname') || 'Proyecto';
+
+    if (!cid || !pid) { location.href = 'clientes.html'; }
+
+    document.getElementById('nav-title').textContent = pname;
+
+    const DB_REF = `proyectos/${cid}/${pid}/agencia`;
+
+    // ── Data model ──────────────────────────────────────────────────────
+    let _meta = { cliente:'', producto:'', actividad:'', duracion:'', horas_dia:'', plazas:'', fecha:'', fee_pct:11, imp_pct:19.04 };
+    let _logos = []; // [{url, path}]
+    let _secciones = []; // [{id, nombre, items:[{id, detalle, cantidad, costo_unitario, dias, obs}]}]
+    let _saveTimer = null;
+    let _logoDelIdx = -1;
+
+    // ── Helpers ──────────────────────────────────────────────────────────
+    function uid() { return Math.random().toString(36).slice(2, 9); }
+    function fNum(v) { return parseFloat(v) || 0; }
+    function fMoney(n) { return fNum(n).toLocaleString('es-BO', {minimumFractionDigits:2, maximumFractionDigits:2}); }
+    function debounceSave() { clearTimeout(_saveTimer); _saveTimer = setTimeout(guardarTodo, 1500); }
+
+    // ── Load ──────────────────────────────────────────────────────────────
+    function cargarDatos() {
+        db.ref(DB_REF).once('value').then(snap => {
+            const d = snap.val() || {};
+            if (d.meta) {
+                Object.assign(_meta, d.meta);
+                document.getElementById('meta-cliente').value = _meta.cliente || '';
+                document.getElementById('meta-producto').value = _meta.producto || '';
+                document.getElementById('meta-actividad').value = _meta.actividad || '';
+                document.getElementById('meta-duracion').value = _meta.duracion || '';
+                document.getElementById('meta-horas').value = _meta.horas_dia || '';
+                document.getElementById('meta-plazas').value = _meta.plazas || '';
+                document.getElementById('meta-fecha').value = _meta.fecha || '';
+                document.getElementById('inp-fee-pct').value = _meta.fee_pct != null ? _meta.fee_pct : 11;
+                document.getElementById('inp-imp-pct').value = _meta.imp_pct != null ? _meta.imp_pct : 19.04;
+            }
+            _logos = Array.isArray(d.logos) ? d.logos.filter(Boolean) : (d.logos ? Object.values(d.logos).filter(Boolean) : []);
+            _secciones = Array.isArray(d.secciones) ? d.secciones.filter(Boolean) : (d.secciones ? Object.values(d.secciones).filter(Boolean) : []);
+            _secciones.forEach(sec => {
+                if (!sec.id) sec.id = uid();
+                sec.items = Array.isArray(sec.items) ? sec.items.filter(Boolean) : (sec.items ? Object.values(sec.items).filter(Boolean) : []);
+                sec.items.forEach(it => { if (!it.id) it.id = uid(); });
+            });
+            renderLogos();
+            renderSecciones();
+            recalcTotals();
+        }).catch(err => console.error('Error cargando datos:', err));
+    }
+
+    // ── Save ──────────────────────────────────────────────────────────────
+    function readMetaFromDOM() {
+        _meta.cliente = document.getElementById('meta-cliente').value.trim();
+        _meta.producto = document.getElementById('meta-producto').value.trim();
+        _meta.actividad = document.getElementById('meta-actividad').value.trim();
+        _meta.duracion = document.getElementById('meta-duracion').value.trim();
+        _meta.horas_dia = document.getElementById('meta-horas').value.trim();
+        _meta.plazas = document.getElementById('meta-plazas').value.trim();
+        _meta.fecha = document.getElementById('meta-fecha').value.trim();
+        _meta.fee_pct = fNum(document.getElementById('inp-fee-pct').value);
+        _meta.imp_pct = fNum(document.getElementById('inp-imp-pct').value);
+    }
+
+    function readSeccionesFromDOM() {
+        _secciones.forEach((sec, si) => {
+            const secEl = document.getElementById(`sec-${sec.id}`);
+            if (secEl) {
+                const nameInp = secEl.querySelector('.sec-name-inp');
+                if (nameInp) sec.nombre = nameInp.value.trim();
+            }
+            sec.items.forEach((it, ii) => {
+                it.detalle = _getItVal(sec.id, it.id, 'detalle');
+                it.cantidad = fNum(_getItVal(sec.id, it.id, 'cantidad'));
+                it.costo_unitario = fNum(_getItVal(sec.id, it.id, 'cu'));
+                it.dias = fNum(_getItVal(sec.id, it.id, 'dias'));
+                it.obs = _getItVal(sec.id, it.id, 'obs');
+            });
+        });
+    }
+
+    function _getItVal(sid, iid, field) {
+        const el = document.getElementById(`it-${sid}-${iid}-${field}`);
+        return el ? el.value : '';
+    }
+
+    function guardarTodo() {
+        clearTimeout(_saveTimer);
+        readMetaFromDOM();
+        readSeccionesFromDOM();
+        const payload = {
+            meta: _meta,
+            logos: _logos,
+            secciones: _secciones
+        };
+        db.ref(DB_REF).set(payload).catch(e => console.error('Error guardando:', e));
+    }
+
+    // ── Logos ──────────────────────────────────────────────────────────────
+    function renderLogos() {
+        const row = document.getElementById('logos-row');
+        const addBtn = row.querySelector('.logo-add-btn');
+        // Remove old thumbs
+        row.querySelectorAll('.logo-thumb').forEach(el => el.remove());
+        _logos.forEach((logo, idx) => {
+            const img = document.createElement('img');
+            img.className = 'logo-thumb';
+            img.src = logo.url;
+            img.title = 'Tocar para eliminar';
+            img.onclick = () => abrirDelLogo(idx);
+            row.insertBefore(img, addBtn);
+        });
+    }
+
+    async function uploadLogo(inp) {
+        if (!inp.files || !inp.files[0]) return;
+        const file = inp.files[0];
+        inp.value = '';
+        const path = `logos/${cid}/${pid}_${uid()}.${file.name.split('.').pop()}`;
+        try {
+            const ref = storage.ref(path);
+            const snap = await ref.put(file);
+            const url = await snap.ref.getDownloadURL();
+            _logos.push({ url, path });
+            renderLogos();
+            guardarTodo();
+        } catch(e) { alert('Error subiendo logo: ' + e.message); }
+    }
+
+    function abrirDelLogo(idx) {
+        _logoDelIdx = idx;
+        document.getElementById('mod-del-logo').style.display = 'flex';
+    }
+    async function confirmarEliminarLogo() {
+        document.getElementById('mod-del-logo').style.display = 'none';
+        if (_logoDelIdx < 0 || _logoDelIdx >= _logos.length) return;
+        const logo = _logos[_logoDelIdx];
+        _logos.splice(_logoDelIdx, 1);
+        _logoDelIdx = -1;
+        renderLogos();
+        guardarTodo();
+        if (logo.path) { try { await storage.ref(logo.path).delete(); } catch(e){} }
+    }
+
+    // ── Secciones ──────────────────────────────────────────────────────────
+    function agregarSeccion() {
+        const sec = { id: uid(), nombre: '', items: [] };
+        _secciones.push(sec);
+        renderSecciones();
+        debounceSave();
+        // Focus on new section name
+        setTimeout(() => {
+            const inp = document.querySelector(`#sec-${sec.id} .sec-name-inp`);
+            if (inp) inp.focus();
+        }, 50);
+    }
+
+    function eliminarSeccion(secId) {
+        if (!confirm('¿Eliminar esta sección y todos sus ítems?')) return;
+        _secciones = _secciones.filter(s => s.id !== secId);
+        renderSecciones();
+        recalcTotals();
+        guardarTodo();
+    }
+
+    function agregarItem(secId) {
+        const sec = _secciones.find(s => s.id === secId);
+        if (!sec) return;
+        const it = { id: uid(), detalle: '', cantidad: 1, costo_unitario: 0, dias: 1, obs: '' };
+        sec.items.push(it);
+        renderSecciones();
+        recalcTotals();
+        debounceSave();
+        setTimeout(() => {
+            const el = document.getElementById(`it-${secId}-${it.id}-detalle`);
+            if (el) el.focus();
+        }, 50);
+    }
+
+    function eliminarItem(secId, itemId) {
+        const sec = _secciones.find(s => s.id === secId);
+        if (!sec) return;
+        sec.items = sec.items.filter(i => i.id !== itemId);
+        renderSecciones();
+        recalcTotals();
+        debounceSave();
+    }
+
+    function renderSecciones() {
+        const container = document.getElementById('secciones-container');
+        if (_secciones.length === 0) {
+            container.innerHTML = '';
+            return;
+        }
+        // Preserve existing input values before re-render
+        readSeccionesFromDOM();
+
+        container.innerHTML = _secciones.map(sec => `
+            <div class="sec-card" id="sec-${sec.id}">
+                <div class="sec-header">
+                    <i class="ph-bold ph-folder-open" style="color:var(--blue); font-size:16px; flex-shrink:0;"></i>
+                    <input class="sec-name-inp" placeholder="NOMBRE DE LA SECCIÓN" value="${escHtml(sec.nombre)}" oninput="onSecNameChange('${sec.id}', this.value)">
+                    <button class="sec-del-btn" onclick="eliminarSeccion('${sec.id}')"><i class="ph-bold ph-trash"></i></button>
+                </div>
+                <div style="overflow-x:auto;">
+                <table class="items-table">
+                    <thead>
+                        <tr>
+                            <th class="col-detalle">Detalle</th>
+                            <th class="col-cant">Cant.</th>
+                            <th class="col-cu">C.U. (Bs.)</th>
+                            <th class="col-dias">Días</th>
+                            <th class="col-total">Total</th>
+                            <th class="col-obs">Observaciones</th>
+                            <th class="td-del"></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${sec.items.map(it => renderItemRow(sec.id, it)).join('')}
+                    </tbody>
+                </table>
+                </div>
+                <button class="add-item-btn" onclick="agregarItem('${sec.id}')">
+                    <i class="ph-bold ph-plus-circle"></i> Agregar ítem
+                </button>
+            </div>
+        `).join('');
+    }
+
+    function renderItemRow(secId, it) {
+        const total = fNum(it.cantidad) * fNum(it.costo_unitario) * fNum(it.dias);
+        return `<tr>
+            <td class="col-detalle"><input class="td-inp" id="it-${secId}-${it.id}-detalle" value="${escHtml(it.detalle)}" placeholder="Descripción..." oninput="onItemChange('${secId}','${it.id}')"></td>
+            <td class="col-cant"><input class="td-inp" type="number" id="it-${secId}-${it.id}-cantidad" value="${it.cantidad||1}" min="0" step="any" oninput="onItemChange('${secId}','${it.id}')"></td>
+            <td class="col-cu"><input class="td-inp" type="number" id="it-${secId}-${it.id}-cu" value="${it.costo_unitario||0}" min="0" step="any" oninput="onItemChange('${secId}','${it.id}')"></td>
+            <td class="col-dias"><input class="td-inp" type="number" id="it-${secId}-${it.id}-dias" value="${it.dias||1}" min="0" step="any" oninput="onItemChange('${secId}','${it.id}')"></td>
+            <td class="col-total td-total">${fMoney(total)}</td>
+            <td class="col-obs"><input class="td-inp" id="it-${secId}-${it.id}-obs" value="${escHtml(it.obs||'')}" placeholder="Nota..."></td>
+            <td class="td-del"><button class="td-del-btn" onclick="eliminarItem('${secId}','${it.id}')"><i class="ph-bold ph-trash"></i></button></td>
+        </tr>`;
+    }
+
+    function escHtml(s) { return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+    function onSecNameChange(secId, val) {
+        const sec = _secciones.find(s => s.id === secId);
+        if (sec) sec.nombre = val;
+        debounceSave();
+    }
+
+    function onItemChange(secId, itemId) {
+        const sec = _secciones.find(s => s.id === secId);
+        if (!sec) return;
+        const it = sec.items.find(i => i.id === itemId);
+        if (!it) return;
+        it.detalle = _getItVal(secId, itemId, 'detalle');
+        it.cantidad = fNum(_getItVal(secId, itemId, 'cantidad'));
+        it.costo_unitario = fNum(_getItVal(secId, itemId, 'cu'));
+        it.dias = fNum(_getItVal(secId, itemId, 'dias'));
+        it.obs = _getItVal(secId, itemId, 'obs');
+        // Update total cell
+        const total = it.cantidad * it.costo_unitario * it.dias;
+        const row = document.getElementById(`it-${secId}-${itemId}-detalle`);
+        if (row) {
+            const tr = row.closest('tr');
+            if (tr) { const totalCell = tr.querySelector('.td-total'); if (totalCell) totalCell.textContent = fMoney(total); }
+        }
+        recalcTotals();
+        debounceSave();
+    }
+
+    // ── Totals ──────────────────────────────────────────────────────────────
+    function recalcTotals() {
+        let subtotal = 0;
+        _secciones.forEach(sec => {
+            sec.items.forEach(it => {
+                subtotal += fNum(it.cantidad) * fNum(it.costo_unitario) * fNum(it.dias);
+            });
+        });
+        const feePct = fNum(document.getElementById('inp-fee-pct').value);
+        const impPct = fNum(document.getElementById('inp-imp-pct').value);
+        const feeAmt = subtotal * feePct / 100;
+        const base = subtotal + feeAmt;
+        const impAmt = base * impPct / 100;
+        const total = base + impAmt;
+        document.getElementById('tot-subtotal').textContent = fMoney(subtotal);
+        document.getElementById('tot-fee').textContent = fMoney(feeAmt);
+        document.getElementById('tot-base').textContent = fMoney(base);
+        document.getElementById('tot-imp').textContent = fMoney(impAmt);
+        document.getElementById('tot-general').textContent = fMoney(total);
+    }
+
+    // ── AI Import ──────────────────────────────────────────────────────────
+    let _iaFile = null;
+    let _iaProposedItems = [];
+
+    function abrirModalIA() {
+        _iaFile = null; _iaProposedItems = [];
+        document.getElementById('ia-file-name').textContent = 'Tocar para seleccionar';
+        document.getElementById('ia-file-inp').value = '';
+        document.getElementById('ia-prog-box').style.display = 'none';
+        document.getElementById('ia-preview-wrap').style.display = 'none';
+        document.getElementById('ia-btn-analizar').style.display = 'block';
+        document.getElementById('ia-btn-confirmar').style.display = 'none';
+        document.getElementById('ia-extra-ctx').value = '';
+        // Populate section selector
+        const sel = document.getElementById('ia-dest-sec');
+        sel.innerHTML = _secciones.length === 0
+            ? '<option value="_new">— Crear nueva sección —</option>'
+            : _secciones.map(s => `<option value="${s.id}">${escHtml(s.nombre || 'Sección sin nombre')}</option>`).join('') + '<option value="_new">+ Nueva sección</option>';
+        document.getElementById('mod-ia').style.display = 'flex';
+    }
+
+    function cerrarModalIA() {
+        document.getElementById('mod-ia').style.display = 'none';
+    }
+
+    function onIAFileSelect(inp) {
+        if (inp.files && inp.files[0]) {
+            _iaFile = inp.files[0];
+            document.getElementById('ia-file-name').textContent = _iaFile.name;
+        }
+    }
+
+    async function analizarCotizacion() {
+        if (!_iaFile) { alert('Seleccioná un archivo primero.'); return; }
+
+        const btnAnalizar = document.getElementById('ia-btn-analizar');
+        const progBox = document.getElementById('ia-prog-box');
+        const progMsg = document.getElementById('ia-prog-msg');
+
+        btnAnalizar.disabled = true;
+        progBox.style.display = 'block';
+        progMsg.textContent = 'Leyendo archivo...';
+
+        try {
+            const base64 = await fileToBase64(_iaFile);
+            const mime = _iaFile.type || 'application/octet-stream';
+            const ctx = document.getElementById('ia-extra-ctx').value.trim();
+
+            const sysPrompt = `Sos un asistente especializado en leer cotizaciones de proveedores para eventos, stands y producción audiovisual.
+Tu tarea es extraer TODOS los ítems de la cotización adjunta y devolver un JSON con este formato exacto:
+{
+  "items": [
+    {"detalle": "descripción del ítem", "cantidad": 1, "costo_unitario": 0, "dias": 1, "total": 0, "obs": "observaciones"}
+  ]
+}
+Reglas:
+- "detalle": nombre/descripción del ítem
+- "cantidad": cantidad numérica (por defecto 1)
+- "costo_unitario": precio unitario en Bs. (número sin formato)
+- "dias": número de días/noches (por defecto 1)
+- "total": cantidad × costo_unitario × dias
+- "obs": observaciones o notas adicionales del ítem
+- Si el total aparece en el documento pero no hay desglose de cantidad×cu×dias, ponés cantidad=1, cu=total, dias=1
+- Devolvé SOLO el JSON, sin texto adicional, sin markdown.`;
+
+            const userText = ctx ? `Cotización adjunta. Contexto adicional: ${ctx}` : 'Cotización adjunta. Extraé todos los ítems.';
+
+            const parts = [
+                { inlineData: { data: base64.split(',')[1], mimeType: mime } },
+                { text: userText }
+            ];
+
+            progMsg.textContent = 'Analizando con IA...';
+
+            const token = firebase.auth().currentUser ? await firebase.auth().currentUser.getIdToken() : null;
+            const headers = { 'Content-Type': 'application/json' };
+            if (token) headers['Authorization'] = 'Bearer ' + token;
+
+            const resp = await fetch('/api/gemini', {
+                method: 'POST',
+                headers,
+                body: JSON.stringify({
+                    systemInstruction: { parts: [{ text: sysPrompt }] },
+                    contents: [{ role: 'user', parts }],
+                    generationConfig: { maxOutputTokens: 8000, temperature: 0.1 }
+                })
+            });
+
+            if (!resp.ok) { const t = await resp.text(); throw new Error(`HTTP ${resp.status}: ${t}`); }
+            const data = await resp.json();
+
+            const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+            let parsed;
+            try {
+                const jsonMatch = rawText.match(/\{[\s\S]*\}/);
+                parsed = JSON.parse(jsonMatch ? jsonMatch[0] : rawText);
+            } catch(e) {
+                throw new Error('No se pudo interpretar la respuesta de la IA. Intentá con otro archivo.');
+            }
+
+            _iaProposedItems = (parsed.items || []).map(it => ({
+                id: uid(),
+                detalle: it.detalle || '',
+                cantidad: fNum(it.cantidad) || 1,
+                costo_unitario: fNum(it.costo_unitario),
+                dias: fNum(it.dias) || 1,
+                obs: it.obs || ''
+            }));
+
+            if (_iaProposedItems.length === 0) throw new Error('La IA no encontró ítems en el archivo.');
+
+            renderIAPreview();
+            progBox.style.display = 'none';
+            document.getElementById('ia-preview-wrap').style.display = 'block';
+            document.getElementById('ia-btn-confirmar').style.display = 'block';
+
+        } catch(e) {
+            progBox.style.display = 'none';
+            alert('Error al analizar: ' + e.message);
+        } finally {
+            btnAnalizar.disabled = false;
+        }
+    }
+
+    function renderIAPreview() {
+        const tbody = document.getElementById('ia-preview-body');
+        tbody.innerHTML = _iaProposedItems.map((it, i) => {
+            const total = it.cantidad * it.costo_unitario * it.dias;
+            return `<tr>
+                <td><input style="border:none;background:transparent;width:100%;font-size:12px;" value="${escHtml(it.detalle)}" oninput="_iaProposedItems[${i}].detalle=this.value"></td>
+                <td class="num"><input style="border:none;background:transparent;width:50px;text-align:right;font-size:12px;" type="number" value="${it.cantidad}" oninput="_iaProposedItems[${i}].cantidad=parseFloat(this.value)||0; updateIAPreviewRow(${i})"></td>
+                <td class="num"><input style="border:none;background:transparent;width:70px;text-align:right;font-size:12px;" type="number" value="${it.costo_unitario}" oninput="_iaProposedItems[${i}].costo_unitario=parseFloat(this.value)||0; updateIAPreviewRow(${i})"></td>
+                <td class="num"><input style="border:none;background:transparent;width:40px;text-align:right;font-size:12px;" type="number" value="${it.dias}" oninput="_iaProposedItems[${i}].dias=parseFloat(this.value)||0; updateIAPreviewRow(${i})"></td>
+                <td class="num" id="ia-row-total-${i}">${fMoney(total)}</td>
+                <td><input style="border:none;background:transparent;width:100%;font-size:12px;" value="${escHtml(it.obs)}" oninput="_iaProposedItems[${i}].obs=this.value"></td>
+            </tr>`;
+        }).join('');
+    }
+
+    function updateIAPreviewRow(i) {
+        const it = _iaProposedItems[i];
+        const total = fNum(it.cantidad) * fNum(it.costo_unitario) * fNum(it.dias);
+        const el = document.getElementById(`ia-row-total-${i}`);
+        if (el) el.textContent = fMoney(total);
+    }
+
+    function confirmarItemsIA() {
+        if (_iaProposedItems.length === 0) return;
+        const destId = document.getElementById('ia-dest-sec').value;
+        let sec;
+        if (destId === '_new') {
+            sec = { id: uid(), nombre: 'Nueva Sección', items: [] };
+            _secciones.push(sec);
+        } else {
+            sec = _secciones.find(s => s.id === destId);
+        }
+        if (!sec) return;
+        sec.items.push(..._iaProposedItems.map(it => ({...it, id: uid()})));
+        renderSecciones();
+        recalcTotals();
+        guardarTodo();
+        cerrarModalIA();
+    }
+
+    async function fileToBase64(file) {
+        return new Promise((res, rej) => {
+            const reader = new FileReader();
+            reader.onload = e => res(e.target.result);
+            reader.onerror = rej;
+            reader.readAsDataURL(file);
+        });
+    }
+
+    // ── Export Excel ──────────────────────────────────────────────────────
+    function exportarExcel() {
+        readMetaFromDOM();
+        readSeccionesFromDOM();
+
+        const wb = XLSX.utils.book_new();
+        const rows = [];
+
+        // Meta header
+        rows.push(['CLIENTE:', _meta.cliente]);
+        rows.push(['PRODUCTO:', _meta.producto]);
+        rows.push(['ACTIVIDAD:', _meta.actividad]);
+        rows.push(['DURACIÓN:', _meta.duracion]);
+        rows.push(['HORAS POR DÍA:', _meta.horas_dia]);
+        rows.push(['PLAZA:', _meta.plazas]);
+        rows.push(['FECHA:', _meta.fecha]);
+        rows.push([]);
+
+        // Sections
+        _secciones.forEach(sec => {
+            rows.push([sec.nombre || 'SECCIÓN', '', '', '', '', 'OBSERVACIONES']);
+            rows.push(['DETALLE', 'CANTIDAD', 'COSTO UNITARIO', 'DÍAS', 'TOTALES', '']);
+            rows.push([]);
+            let secTotal = 0;
+            sec.items.forEach(it => {
+                const total = fNum(it.cantidad) * fNum(it.costo_unitario) * fNum(it.dias);
+                secTotal += total;
+                rows.push([it.detalle, it.cantidad, it.costo_unitario, it.dias, total, it.obs]);
+            });
+            rows.push(['', '', '', '', secTotal, '']);
+            rows.push([]);
+        });
+
+        // Totals
+        const feePct = fNum(document.getElementById('inp-fee-pct').value);
+        const impPct = fNum(document.getElementById('inp-imp-pct').value);
+        let subtotal = 0;
+        _secciones.forEach(sec => sec.items.forEach(it => { subtotal += fNum(it.cantidad) * fNum(it.costo_unitario) * fNum(it.dias); }));
+        const feeAmt = subtotal * feePct / 100;
+        const base = subtotal + feeAmt;
+        const impAmt = base * impPct / 100;
+        const total = base + impAmt;
+
+        rows.push(['', '', 'Sub-Total (Bs.)', '', subtotal]);
+        rows.push(['', '', `Fee Agencia (${feePct}%)`, '', feeAmt]);
+        rows.push(['', '', '', '', base]);
+        rows.push([]);
+        rows.push(['', '', 'Impuestos', '', impAmt]);
+        rows.push([]);
+        rows.push(['', '', 'Total General (Bs.)', '', total]);
+
+        const ws = XLSX.utils.aoa_to_sheet(rows);
+        // Column widths
+        ws['!cols'] = [{wch:40},{wch:10},{wch:18},{wch:8},{wch:18},{wch:40}];
+        XLSX.utils.book_append_sheet(wb, ws, 'Presupuesto');
+        const fname = `Presupuesto_${(_meta.cliente||'Agencia').replace(/\s+/g,'_')}_${(_meta.actividad||'Evento').replace(/\s+/g,'_')}.xlsx`;
+        XLSX.writeFile(wb, fname);
+    }
+
+    // ── Navigation ──────────────────────────────────────────────────────────
+    function volverDashboard() {
+        guardarTodo();
+        setTimeout(() => { window.location.href = 'dashboard-proyecto.html'; }, 200);
+    }
+
+    // ── Auth & Load ──────────────────────────────────────────────────────────
+    (function init() {
+        const auth = firebase.auth();
+        if (auth.currentUser) { cargarDatos(); return; }
+        auth.onAuthStateChanged(user => {
+            if (user) cargarDatos();
+            else window.location.href = 'login.html';
+        });
+    })();
+</script>
+</body>
+</html>
