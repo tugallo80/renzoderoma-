@@ -378,6 +378,17 @@
     function uid() { return Math.random().toString(36).slice(2, 9); }
     function fNum(v) { return parseFloat(v) || 0; }
     function fMoney(n) { return fNum(n).toLocaleString('es-BO', {minimumFractionDigits:2, maximumFractionDigits:2}); }
+    function parseAmt(v) {
+        if (v == null) return 0;
+        if (typeof v === 'number') return v;
+        const s = String(v).trim().replace(/[^\d.,]/g, '');
+        if (!s) return 0;
+        const lastDot = s.lastIndexOf('.');
+        const lastComma = s.lastIndexOf(',');
+        if (lastComma > lastDot) return parseFloat(s.replace(/\./g, '').replace(',', '.')) || 0;
+        if (lastDot > lastComma) return parseFloat(s.replace(/,/g, '')) || 0;
+        return parseFloat(s) || 0;
+    }
     function debounceSave() { clearTimeout(_saveTimer); _saveTimer = setTimeout(guardarTodo, 1500); }
 
     // ── Load ──────────────────────────────────────────────────────────────
@@ -639,7 +650,6 @@
         if (!hasGroups) {
             container.innerHTML = _secciones.map(sec => renderSecCard(sec)).join('');
             renderFiltroSocios();
-            if (_filtroSocio) setFiltroSocio(_filtroSocio);
             return;
         }
 
@@ -661,10 +671,10 @@
         }
         container.innerHTML = html;
         renderFiltroSocios();
-        if (_filtroSocio) setFiltroSocio(_filtroSocio);
     }
 
     function renderItemRow(secId, it) {
+        if (_filtroSocio && it.socio !== _filtroSocio) return '';
         const total = fNum(it.cantidad) * fNum(it.costo_unitario) * fNum(it.dias);
         return `<tr data-socio="${escHtml(it.socio||'')}">
             <td class="col-detalle"><input class="td-inp" id="it-${secId}-${it.id}-detalle" value="${escHtml(it.detalle)}" placeholder="Descripción..." oninput="onItemChange('${secId}','${it.id}')"></td>
@@ -682,8 +692,9 @@
     // ── Socio filter ───────────────────────────────────────────────────────
     function setFiltroSocio(socio) {
         _filtroSocio = socio;
-        document.querySelectorAll('.items-table tbody tr[data-socio]').forEach(tr => {
-            tr.style.display = (!socio || tr.dataset.socio === socio) ? '' : 'none';
+        _secciones.forEach(sec => {
+            const tbody = document.querySelector(`#sec-${sec.id} .items-table tbody`);
+            if (tbody) tbody.innerHTML = sec.items.map(it => renderItemRow(sec.id, it)).join('');
         });
         document.querySelectorAll('.socio-chip').forEach(ch => ch.classList.toggle('active', ch.dataset.socio === socio));
     }
@@ -820,9 +831,10 @@ Reglas:
 - Si un ítem no encaja claramente en ninguna sección, asignalo a la más cercana
 - Si realmente no hay sección adecuada, creá una nueva con nombre descriptivo
 - "detalle": nunca vacío
-- "costo_unitario": en Bs., número sin formato
-- Si el total está pero no hay desglose, ponés cantidad=1, costo_unitario=total, dias=1
-- Ignorá filas de encabezado, totales, subtotales y celdas vacías
+- "costo_unitario": OBLIGATORIO — extraé SIEMPRE el precio/valor/monto del ítem; si usás formato boliviano (1.500,00) convertilo a número limpio (1500); NUNCA dejes costo_unitario en 0 si hay un precio visible en el documento
+- El precio puede llamarse: precio, valor, monto, precio_unitario, costo, importe, unit price — buscalo con cualquier nombre
+- Si el total está pero no hay desglose, ponés cantidad=1, costo_unitario=total_del_item, dias=1
+- Ignorá filas de encabezado, totales generales, subtotales y celdas vacías
 - Devolvé SOLO el JSON`;
 
             let parts;
@@ -879,7 +891,7 @@ Reglas:
                 items: (ps.items || []).map(it => ({
                     detalle: it.detalle || '',
                     cantidad: fNum(it.cantidad) || 1,
-                    costo_unitario: fNum(it.costo_unitario),
+                    costo_unitario: parseAmt(it.costo_unitario ?? it.precio ?? it.precio_unitario ?? it.valor ?? it.monto ?? it.importe ?? 0),
                     dias: fNum(it.dias) || 1,
                     obs: it.obs || ''
                 })).filter(it => it.detalle)
@@ -926,18 +938,34 @@ Reglas:
         if (el) el.textContent = fMoney(total);
     }
 
+    function _normSecWords(s) {
+        return s.toUpperCase().trim()
+            .normalize('NFD').replace(/[̀-ͯ]/g, '')
+            .replace(/[^A-Z0-9\s]/g, '')
+            .split(/\s+/).filter(w => w.length > 2);
+    }
+
+    function _matchSeccion(proposed) {
+        const nameUp = proposed.toUpperCase().trim();
+        const exact = _secciones.find(s => s.nombre.toUpperCase().trim() === nameUp);
+        if (exact) return exact;
+        const propWords = _normSecWords(proposed);
+        let bestScore = 0, bestSec = null;
+        _secciones.forEach(s => {
+            const secWords = _normSecWords(s.nombre);
+            const overlap = propWords.filter(w => secWords.includes(w)).length;
+            const score = overlap / Math.max(1, Math.min(propWords.length, secWords.length));
+            if (overlap >= 1 && score > bestScore) { bestScore = score; bestSec = s; }
+        });
+        return bestSec;
+    }
+
     function confirmarItemsIA() {
         if (_iaProposedSecs.length === 0) return;
         const socioName = (document.getElementById('ia-socio-name').value || '').trim();
 
         _iaProposedSecs.forEach(ps => {
-            const nameUp = ps.seccion.toUpperCase().trim();
-            // Exact match first, then partial
-            let sec = _secciones.find(s => s.nombre.toUpperCase().trim() === nameUp);
-            if (!sec) sec = _secciones.find(s =>
-                nameUp.includes(s.nombre.toUpperCase().trim().slice(0, 7)) ||
-                s.nombre.toUpperCase().trim().includes(nameUp.slice(0, 7))
-            );
+            let sec = _matchSeccion(ps.seccion);
             if (!sec) {
                 sec = { id: uid(), nombre: ps.seccion, paquete: '', items: [] };
                 _secciones.push(sec);
