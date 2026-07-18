@@ -146,6 +146,12 @@
         .grupo-p2 .grupo-txt { color: var(--orange); }
         .grupo-sin .grupo-txt { color: var(--gray); }
 
+        /* Socio filter */
+        .socio-bar { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; align-items: center; padding: 4px 0; }
+        .socio-chip { padding: 6px 12px; border-radius: 16px; font-size: 11px; font-weight: 800; border: 1.5px solid var(--border); background: var(--bg); color: var(--gray); cursor: pointer; transition: 0.15s; white-space: nowrap; }
+        .socio-chip.active { background: rgba(0,122,255,0.1); color: var(--blue); border-color: var(--blue); }
+        .socio-chip:active { transform: scale(0.95); }
+
         /* Brief preview */
         .brief-sec-row { background: var(--bg); border-radius: 10px; padding: 10px 12px; margin-bottom: 8px; display: flex; flex-direction: column; gap: 4px; }
         .brief-sec-nombre { font-size: 12px; font-weight: 800; color: var(--text); }
@@ -201,6 +207,9 @@
         </div>
     </div>
 
+    <!-- Socio filter bar (visible when items have socios) -->
+    <div id="socio-filter-bar"></div>
+
     <!-- Sections container -->
     <div id="secciones-container"></div>
 
@@ -252,19 +261,19 @@
     <!-- Modal: AI import -->
     <div id="mod-ia" class="modal" onclick="if(event.target===this)cerrarModalIA()">
         <div class="modal-box">
-            <h3 class="modal-title"><i class="ph-bold ph-robot" style="color:var(--blue);"></i> Importar Cotización de Proveedor</h3>
-            <p style="font-size:13px; color:var(--gray); margin:0 0 12px 0;">Subí la cotización del proveedor (<b>Excel, PDF o imagen</b>) — la IA extrae todos los ítems y te los muestra para revisar antes de agregar.</p>
+            <h3 class="modal-title"><i class="ph-bold ph-robot" style="color:var(--blue);"></i> Importar Cotización de Socio/Proveedor</h3>
+            <p style="font-size:13px; color:var(--gray); margin:0 0 12px 0;">Subí la cotización — la IA detecta automáticamente qué ítems van en cada sección y los distribuye.</p>
 
-            <label class="inp-lbl">Archivo de cotización (PDF o imagen)</label>
+            <label class="inp-lbl">Nombre del Socio / Proveedor</label>
+            <input class="inp-std" id="ia-socio-name" placeholder="Ej: VW Argentina, Construcciones López..." style="margin-bottom:10px;">
+
+            <label class="inp-lbl">Cotización (PDF, Word, Excel o imagen)</label>
             <label style="display:block; border:2px dashed var(--border); border-radius:12px; padding:20px; text-align:center; cursor:pointer; color:var(--gray); font-size:13px; font-weight:600;" id="ia-file-label">
                 <i class="ph-bold ph-upload-simple" style="font-size:24px; display:block; margin-bottom:6px;"></i>
                 <span id="ia-file-name">Tocar para seleccionar</span>
                 <div style="font-size:10px; color:var(--gray); margin-top:4px; font-weight:600;">PDF · Word · Imagen · Excel · CSV</div>
                 <input type="file" id="ia-file-inp" accept="image/*,application/pdf,.xlsx,.xls,.csv,.docx,.doc" style="display:none" onchange="onIAFileSelect(this)">
             </label>
-
-            <label class="inp-lbl">Sección destino</label>
-            <select class="inp-std" id="ia-dest-sec" style="margin-bottom:4px;"></select>
 
             <label class="inp-lbl">Contexto adicional (opcional)</label>
             <textarea class="inp-std" id="ia-extra-ctx" rows="2" placeholder="Ej: Es para un stand de 10 días en Santa Cruz" style="resize:none;"></textarea>
@@ -275,7 +284,7 @@
             </div>
 
             <div id="ia-preview-wrap" style="display:none; margin-top:14px;">
-                <div style="font-size:13px; font-weight:800; margin-bottom:8px;">Ítems detectados:</div>
+                <div style="font-size:13px; font-weight:800; margin-bottom:8px;">Distribución detectada por sección:</div>
                 <div style="overflow-x:auto;">
                     <table class="ai-preview-table" id="ia-preview-table">
                         <thead><tr><th>Detalle</th><th>Cant.</th><th>C.U.</th><th>Días</th><th>Total</th><th>Obs.</th></tr></thead>
@@ -286,7 +295,7 @@
             </div>
 
             <button class="btn-primary" id="ia-btn-analizar" onclick="analizarCotizacion()"><i class="ph-bold ph-magnifying-glass"></i> Analizar con IA</button>
-            <button class="btn-primary" id="ia-btn-confirmar" style="display:none; background:var(--green);" onclick="confirmarItemsIA()"><i class="ph-bold ph-check"></i> Agregar a la Sección</button>
+            <button class="btn-primary" id="ia-btn-confirmar" style="display:none; background:var(--green);" onclick="confirmarItemsIA()"><i class="ph-bold ph-check"></i> Distribuir en Secciones</button>
             <button class="btn-cancel-sm" onclick="cerrarModalIA()">Cancelar</button>
         </div>
     </div>
@@ -388,7 +397,7 @@
                 if (!sec.id) sec.id = uid();
                 if (!sec.paquete) sec.paquete = '';
                 sec.items = Array.isArray(sec.items) ? sec.items.filter(Boolean) : (sec.items ? Object.values(sec.items).filter(Boolean) : []);
-                sec.items.forEach(it => { if (!it.id) it.id = uid(); });
+                sec.items.forEach(it => { if (!it.id) it.id = uid(); if (it.socio === undefined) it.socio = ''; });
             });
             renderLogos();
             renderSecciones();
@@ -513,7 +522,7 @@
     function agregarItem(secId) {
         const sec = _secciones.find(s => s.id === secId);
         if (!sec) return;
-        const it = { id: uid(), detalle: '', cantidad: 1, costo_unitario: 0, dias: 1, obs: '' };
+        const it = { id: uid(), detalle: '', cantidad: 1, costo_unitario: 0, dias: 1, obs: '', socio: '' };
         sec.items.push(it);
         renderSecciones();
         recalcTotals();
@@ -622,6 +631,8 @@
         const hasGroups = _secciones.some(s => s.paquete === 'p1' || s.paquete === 'p2');
         if (!hasGroups) {
             container.innerHTML = _secciones.map(sec => renderSecCard(sec)).join('');
+            renderFiltroSocios();
+            if (_filtroSocio) setFiltroSocio(_filtroSocio);
             return;
         }
 
@@ -642,11 +653,13 @@
             html += sinSecs.map(sec => renderSecCard(sec)).join('');
         }
         container.innerHTML = html;
+        renderFiltroSocios();
+        if (_filtroSocio) setFiltroSocio(_filtroSocio);
     }
 
     function renderItemRow(secId, it) {
         const total = fNum(it.cantidad) * fNum(it.costo_unitario) * fNum(it.dias);
-        return `<tr>
+        return `<tr data-socio="${escHtml(it.socio||'')}">
             <td class="col-detalle"><input class="td-inp" id="it-${secId}-${it.id}-detalle" value="${escHtml(it.detalle)}" placeholder="Descripción..." oninput="onItemChange('${secId}','${it.id}')"></td>
             <td class="col-cant"><input class="td-inp" type="number" id="it-${secId}-${it.id}-cantidad" value="${it.cantidad||1}" min="0" step="any" oninput="onItemChange('${secId}','${it.id}')"></td>
             <td class="col-cu"><input class="td-inp" type="number" id="it-${secId}-${it.id}-cu" value="${it.costo_unitario||0}" min="0" step="any" oninput="onItemChange('${secId}','${it.id}')"></td>
@@ -658,6 +671,27 @@
     }
 
     function escHtml(s) { return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+    // ── Socio filter ───────────────────────────────────────────────────────
+    function setFiltroSocio(socio) {
+        _filtroSocio = socio;
+        document.querySelectorAll('.items-table tbody tr[data-socio]').forEach(tr => {
+            tr.style.display = (!socio || tr.dataset.socio === socio) ? '' : 'none';
+        });
+        document.querySelectorAll('.socio-chip').forEach(ch => ch.classList.toggle('active', ch.dataset.socio === socio));
+    }
+
+    function renderFiltroSocios() {
+        const bar = document.getElementById('socio-filter-bar');
+        if (!bar) return;
+        const socios = [...new Set(_secciones.flatMap(s => s.items.map(i => i.socio)).filter(Boolean))];
+        if (socios.length === 0) { bar.innerHTML = ''; return; }
+        bar.innerHTML = `<div class="socio-bar">
+            <span style="font-size:10px;font-weight:800;color:var(--gray);text-transform:uppercase;letter-spacing:0.4px;flex-shrink:0;">Socio:</span>
+            <button class="socio-chip ${!_filtroSocio ? 'active' : ''}" data-socio="" onclick="setFiltroSocio('')">Todos</button>
+            ${socios.map(s => `<button class="socio-chip ${_filtroSocio===s?'active':''}" data-socio="${escHtml(s)}" onclick="setFiltroSocio('${escHtml(s)}')">${escHtml(s)}</button>`).join('')}
+        </div>`;
+    }
 
     function onSecNameChange(secId, val) {
         const sec = _secciones.find(s => s.id === secId);
@@ -709,10 +743,11 @@
 
     // ── AI Import ──────────────────────────────────────────────────────────
     let _iaFile = null;
-    let _iaProposedItems = [];
+    let _iaProposedSecs = []; // [{seccion: 'NOMBRE', items: [...]}]
+    let _filtroSocio = '';
 
     function abrirModalIA() {
-        _iaFile = null; _iaProposedItems = [];
+        _iaFile = null; _iaProposedSecs = [];
         document.getElementById('ia-file-name').textContent = 'Tocar para seleccionar';
         document.getElementById('ia-file-inp').value = '';
         document.getElementById('ia-prog-box').style.display = 'none';
@@ -720,11 +755,7 @@
         document.getElementById('ia-btn-analizar').style.display = 'block';
         document.getElementById('ia-btn-confirmar').style.display = 'none';
         document.getElementById('ia-extra-ctx').value = '';
-        // Populate section selector
-        const sel = document.getElementById('ia-dest-sec');
-        sel.innerHTML = _secciones.length === 0
-            ? '<option value="_new">— Crear nueva sección —</option>'
-            : _secciones.map(s => `<option value="${s.id}">${escHtml(s.nombre || 'Sección sin nombre')}</option>`).join('') + '<option value="_new">+ Nueva sección</option>';
+        document.getElementById('ia-socio-name').value = '';
         document.getElementById('mod-ia').style.display = 'flex';
     }
 
@@ -756,54 +787,59 @@
             const isExcel = fname.endsWith('.xlsx') || fname.endsWith('.xls') || fname.endsWith('.csv');
             const isWord = fname.endsWith('.docx') || fname.endsWith('.doc');
 
-            const sysPrompt = `Sos un asistente especializado en leer cotizaciones de proveedores para eventos, stands y producción audiovisual.
-Tu tarea es extraer TODOS los ítems de la cotización y devolver un JSON con este formato exacto:
+            const sectionList = _secciones.length > 0
+                ? _secciones.map(s => `- ${s.nombre}`).join('\n')
+                : '(sin secciones definidas aún — creá las secciones generales que correspondan)';
+
+            const sysPrompt = `Sos un experto en presupuestos de eventos, stands y producción audiovisual.
+Analizás la cotización de un socio/proveedor y distribuís sus ítems en las secciones correctas del presupuesto.
+
+Las secciones disponibles son:
+${sectionList}
+
+Devolvé SOLO un JSON válido con este formato exacto, sin markdown ni texto adicional:
 {
-  "items": [
-    {"detalle": "descripción del ítem", "cantidad": 1, "costo_unitario": 0, "dias": 1, "total": 0, "obs": "observaciones"}
+  "secciones": [
+    {
+      "seccion": "NOMBRE EXACTO DE LA SECCIÓN (igual a como aparece en la lista)",
+      "items": [
+        {"detalle": "descripción del ítem", "cantidad": 1, "costo_unitario": 0, "dias": 1, "obs": ""}
+      ]
+    }
   ]
 }
 Reglas:
-- "detalle": nombre/descripción del ítem — NUNCA dejes detalle vacío; si no hay nombre claro, usá la fila como descripción
-- "cantidad": cantidad numérica (por defecto 1)
-- "costo_unitario": precio unitario en Bs. (número sin formato, sin comas ni símbolo)
-- "dias": número de días/noches (por defecto 1)
-- "total": cantidad × costo_unitario × dias
-- "obs": observaciones o notas adicionales del ítem
-- Si el total aparece pero no hay desglose de cant×cu×dias, ponés cantidad=1, cu=total, dias=1
-- Ignorá filas de encabezado, totales, subtotales, y celdas vacías
-- Devolvé SOLO el JSON válido, sin texto adicional, sin markdown, sin bloque de código`;
+- Usá EXACTAMENTE los nombres de sección de la lista
+- Si un ítem no encaja claramente en ninguna sección, asignalo a la más cercana
+- Si realmente no hay sección adecuada, creá una nueva con nombre descriptivo
+- "detalle": nunca vacío
+- "costo_unitario": en Bs., número sin formato
+- Si el total está pero no hay desglose, ponés cantidad=1, costo_unitario=total, dias=1
+- Ignorá filas de encabezado, totales, subtotales y celdas vacías
+- Devolvé SOLO el JSON`;
 
             let parts;
-            const destIdEx = document.getElementById('ia-dest-sec').value;
-            const destSecEx = destIdEx !== '_new' ? _secciones.find(s => s.id === destIdEx) : null;
-            const secCtxEx = destSecEx ? ` Esta cotización corresponde a la sección "${destSecEx.nombre}". Extraé SOLO los ítems relevantes a esa sección.` : '';
+            const userCtx = ctx ? `\n\nContexto adicional: ${ctx}` : '';
 
             if (isExcel) {
                 progMsg.textContent = 'Leyendo Excel...';
                 const excelText = await excelToText(_iaFile);
-                const userText = `Cotización en formato tabla:\n\n${excelText}${secCtxEx}${ctx ? '\n\nContexto adicional: ' + ctx : ''}`;
-                parts = [{ text: userText }];
+                parts = [{ text: `Cotización en formato tabla:\n\n${excelText}${userCtx}` }];
             } else if (isWord) {
                 progMsg.textContent = 'Leyendo Word...';
                 const wordText = await docxToText(_iaFile);
-                const userText = `Cotización en Word:\n\n${wordText}${secCtxEx}${ctx ? '\n\nContexto adicional: ' + ctx : ''}`;
-                parts = [{ text: userText }];
+                parts = [{ text: `Cotización en Word:\n\n${wordText}${userCtx}` }];
             } else {
                 progMsg.textContent = 'Leyendo archivo...';
                 const base64 = await fileToBase64(_iaFile);
                 const mime = _iaFile.type || 'application/octet-stream';
-                const destId = document.getElementById('ia-dest-sec').value;
-                const destSec = destId !== '_new' ? _secciones.find(s => s.id === destId) : null;
-                const secCtx = destSec ? ` Esta cotización corresponde a la sección "${destSec.nombre}". Extraé SOLO los ítems relevantes a esa sección.` : '';
-                const userText = `Cotización adjunta.${secCtx}${ctx ? ' Contexto adicional: ' + ctx : ''} Extraé todos los ítems.`;
                 parts = [
                     { inlineData: { data: base64.split(',')[1], mimeType: mime } },
-                    { text: userText }
+                    { text: `Cotización adjunta. Distribuí los ítems en las secciones del presupuesto.${userCtx}` }
                 ];
             }
 
-            progMsg.textContent = 'Analizando con IA...';
+            progMsg.textContent = 'Analizando y distribuyendo con IA...';
 
             const token = firebase.auth().currentUser ? await firebase.auth().currentUser.getIdToken() : null;
             const headers = { 'Content-Type': 'application/json' };
@@ -831,16 +867,18 @@ Reglas:
                 throw new Error('No se pudo interpretar la respuesta de la IA. Intentá con otro archivo.');
             }
 
-            _iaProposedItems = (parsed.items || []).map(it => ({
-                id: uid(),
-                detalle: it.detalle || '',
-                cantidad: fNum(it.cantidad) || 1,
-                costo_unitario: fNum(it.costo_unitario),
-                dias: fNum(it.dias) || 1,
-                obs: it.obs || ''
-            }));
+            _iaProposedSecs = (parsed.secciones || []).map(ps => ({
+                seccion: ps.seccion || '',
+                items: (ps.items || []).map(it => ({
+                    detalle: it.detalle || '',
+                    cantidad: fNum(it.cantidad) || 1,
+                    costo_unitario: fNum(it.costo_unitario),
+                    dias: fNum(it.dias) || 1,
+                    obs: it.obs || ''
+                })).filter(it => it.detalle)
+            })).filter(ps => ps.seccion && ps.items.length > 0);
 
-            if (_iaProposedItems.length === 0) throw new Error('La IA no encontró ítems en el archivo.');
+            if (_iaProposedSecs.length === 0) throw new Error('La IA no encontró ítems en el archivo.');
 
             renderIAPreview();
             progBox.style.display = 'none';
@@ -857,38 +895,51 @@ Reglas:
 
     function renderIAPreview() {
         const tbody = document.getElementById('ia-preview-body');
-        tbody.innerHTML = _iaProposedItems.map((it, i) => {
-            const total = it.cantidad * it.costo_unitario * it.dias;
-            return `<tr>
-                <td><input style="border:none;background:transparent;width:100%;font-size:12px;" value="${escHtml(it.detalle)}" oninput="_iaProposedItems[${i}].detalle=this.value"></td>
-                <td class="num"><input style="border:none;background:transparent;width:50px;text-align:right;font-size:12px;" type="number" value="${it.cantidad}" oninput="_iaProposedItems[${i}].cantidad=parseFloat(this.value)||0; updateIAPreviewRow(${i})"></td>
-                <td class="num"><input style="border:none;background:transparent;width:70px;text-align:right;font-size:12px;" type="number" value="${it.costo_unitario}" oninput="_iaProposedItems[${i}].costo_unitario=parseFloat(this.value)||0; updateIAPreviewRow(${i})"></td>
-                <td class="num"><input style="border:none;background:transparent;width:40px;text-align:right;font-size:12px;" type="number" value="${it.dias}" oninput="_iaProposedItems[${i}].dias=parseFloat(this.value)||0; updateIAPreviewRow(${i})"></td>
-                <td class="num" id="ia-row-total-${i}">${fMoney(total)}</td>
-                <td><input style="border:none;background:transparent;width:100%;font-size:12px;" value="${escHtml(it.obs)}" oninput="_iaProposedItems[${i}].obs=this.value"></td>
-            </tr>`;
+        tbody.innerHTML = _iaProposedSecs.map((ps, si) => {
+            const secRow = `<tr><td colspan="6" style="padding:7px 6px 4px;font-weight:900;font-size:10px;color:var(--blue);text-transform:uppercase;letter-spacing:0.5px;background:rgba(0,122,255,0.06);border-radius:4px;">${escHtml(ps.seccion)}</td></tr>`;
+            const itemRows = ps.items.map((it, ii) => {
+                const total = it.cantidad * it.costo_unitario * it.dias;
+                return `<tr>
+                    <td><input style="border:none;background:transparent;width:100%;font-size:12px;" value="${escHtml(it.detalle)}" oninput="_iaProposedSecs[${si}].items[${ii}].detalle=this.value"></td>
+                    <td class="num"><input style="border:none;background:transparent;width:50px;text-align:right;font-size:12px;" type="number" value="${it.cantidad}" oninput="_iaProposedSecs[${si}].items[${ii}].cantidad=parseFloat(this.value)||0;updateIAPreviewRow(${si},${ii})"></td>
+                    <td class="num"><input style="border:none;background:transparent;width:70px;text-align:right;font-size:12px;" type="number" value="${it.costo_unitario}" oninput="_iaProposedSecs[${si}].items[${ii}].costo_unitario=parseFloat(this.value)||0;updateIAPreviewRow(${si},${ii})"></td>
+                    <td class="num"><input style="border:none;background:transparent;width:40px;text-align:right;font-size:12px;" type="number" value="${it.dias}" oninput="_iaProposedSecs[${si}].items[${ii}].dias=parseFloat(this.value)||0;updateIAPreviewRow(${si},${ii})"></td>
+                    <td class="num" id="ia-row-total-${si}-${ii}">${fMoney(total)}</td>
+                    <td><input style="border:none;background:transparent;width:100%;font-size:12px;" value="${escHtml(it.obs)}" oninput="_iaProposedSecs[${si}].items[${ii}].obs=this.value"></td>
+                </tr>`;
+            }).join('');
+            return secRow + itemRows;
         }).join('');
     }
 
-    function updateIAPreviewRow(i) {
-        const it = _iaProposedItems[i];
+    function updateIAPreviewRow(si, ii) {
+        const it = _iaProposedSecs[si].items[ii];
         const total = fNum(it.cantidad) * fNum(it.costo_unitario) * fNum(it.dias);
-        const el = document.getElementById(`ia-row-total-${i}`);
+        const el = document.getElementById(`ia-row-total-${si}-${ii}`);
         if (el) el.textContent = fMoney(total);
     }
 
     function confirmarItemsIA() {
-        if (_iaProposedItems.length === 0) return;
-        const destId = document.getElementById('ia-dest-sec').value;
-        let sec;
-        if (destId === '_new') {
-            sec = { id: uid(), nombre: 'Nueva Sección', items: [] };
-            _secciones.push(sec);
-        } else {
-            sec = _secciones.find(s => s.id === destId);
-        }
-        if (!sec) return;
-        sec.items.push(..._iaProposedItems.map(it => ({...it, id: uid()})));
+        if (_iaProposedSecs.length === 0) return;
+        const socioName = (document.getElementById('ia-socio-name').value || '').trim();
+
+        _iaProposedSecs.forEach(ps => {
+            const nameUp = ps.seccion.toUpperCase().trim();
+            // Exact match first, then partial
+            let sec = _secciones.find(s => s.nombre.toUpperCase().trim() === nameUp);
+            if (!sec) sec = _secciones.find(s =>
+                nameUp.includes(s.nombre.toUpperCase().trim().slice(0, 7)) ||
+                s.nombre.toUpperCase().trim().includes(nameUp.slice(0, 7))
+            );
+            if (!sec) {
+                sec = { id: uid(), nombre: ps.seccion, paquete: '', items: [] };
+                _secciones.push(sec);
+            }
+            ps.items.forEach(it => {
+                sec.items.push({ id: uid(), detalle: it.detalle, cantidad: it.cantidad, costo_unitario: it.costo_unitario, dias: it.dias, obs: it.obs, socio: socioName });
+            });
+        });
+
         renderSecciones();
         recalcTotals();
         guardarTodo();
