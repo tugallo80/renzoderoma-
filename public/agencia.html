@@ -125,37 +125,28 @@
         .ai-preview-table td { padding: 5px 6px; border-bottom: 1px solid rgba(0,0,0,0.04); }
         .ai-preview-table td.num { text-align: right; font-weight: 700; }
 
-        /* Paquete selector meta */
-        .paq-chips { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 2px; }
-        .paq-chip { padding: 7px 13px; border-radius: 20px; font-size: 11px; font-weight: 800; border: 1.5px solid var(--border); background: var(--bg); color: var(--gray); cursor: pointer; transition: 0.15s; }
-        .paq-chip:active { transform: scale(0.95); }
-        .paq-chip.ap1 { background: rgba(0,122,255,0.1); color: var(--blue); border-color: var(--blue); }
-        .paq-chip.ap2 { background: rgba(255,149,0,0.1); color: var(--orange); border-color: var(--orange); }
-        .paq-chip.aambos { background: rgba(52,199,89,0.1); color: var(--green); border-color: var(--green); }
+        /* Package manager */
+        .paq-manager { display: flex; flex-direction: column; gap: 6px; margin-top: 6px; }
+        .paq-item { display: flex; align-items: center; gap: 8px; background: var(--bg); border-radius: 10px; padding: 7px 10px; }
+        .paq-color-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+        .paq-name-inp { flex: 1; background: transparent; border: none; font-size: 12px; font-weight: 800; outline: none; color: var(--text); min-width: 0; }
+        .paq-del-btn { background: none; border: none; color: var(--red); font-size: 14px; cursor: pointer; padding: 2px 4px; display: flex; align-items: center; flex-shrink: 0; }
+        .paq-add-btn { background: none; border: 1.5px dashed var(--border); border-radius: 8px; padding: 7px 12px; font-size: 11px; font-weight: 700; color: var(--gray); cursor: pointer; display: flex; align-items: center; gap: 5px; align-self: flex-start; margin-top: 2px; }
+        .paq-add-btn:active { background: var(--bg); }
 
-        /* Section paquete pill (interactive toggle) */
+        /* Section paquete pill (interactive toggle — uses inline color styles) */
         .sec-paq-pill { padding: 3px 9px; border-radius: 10px; font-size: 10px; font-weight: 900; border: 1.5px solid var(--border); background: var(--bg); color: var(--gray); cursor: pointer; flex-shrink: 0; letter-spacing: 0.3px; transition: 0.15s; }
-        .sec-paq-pill.p1 { background: rgba(0,122,255,0.12); color: var(--blue); border-color: var(--blue); }
-        .sec-paq-pill.p2 { background: rgba(255,149,0,0.12); color: var(--orange); border-color: var(--orange); }
 
-        /* Paquete label (static badge shown in web + print) */
-        .sec-paq-label { font-size: 9px; font-weight: 900; padding: 4px 9px; border-radius: 6px; letter-spacing: 0.7px; white-space: nowrap; flex-shrink: 0; text-transform: uppercase; }
-        .sec-paq-label.p1 { background: rgba(0,122,255,0.15); color: var(--blue); }
-        .sec-paq-label.p2 { background: rgba(255,149,0,0.15); color: var(--orange); }
+        /* Paquete label — static badge, uses inline color styles */
+        .sec-paq-label { font-size: 9px; font-weight: 900; padding: 4px 9px; border-radius: 6px; letter-spacing: 0.7px; white-space: nowrap; flex-shrink: 0; text-transform: uppercase; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 
-        /* Paquete-tinted section cards */
-        .sec-card.p1 { border-left: 4px solid var(--blue); }
-        .sec-card.p2 { border-left: 4px solid var(--orange); }
-        .sec-header.p1 { background: rgba(0,122,255,0.09) !important; }
-        .sec-header.p2 { background: rgba(255,149,0,0.09) !important; }
+        /* Section header — print-color-adjust to allow background printing */
+        .sec-header { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 
         /* Group headers */
         .grupo-header { display: flex; align-items: center; gap: 10px; padding: 12px 2px 6px 2px; }
-        .grupo-line { flex: 1; height: 1px; background: var(--border); }
+        .grupo-line { flex: 1; height: 1px; }
         .grupo-txt { font-size: 10px; font-weight: 900; text-transform: uppercase; letter-spacing: 0.6px; white-space: nowrap; }
-        .grupo-p1 .grupo-txt { color: var(--blue); }
-        .grupo-p2 .grupo-txt { color: var(--orange); }
-        .grupo-sin .grupo-txt { color: var(--gray); }
 
         /* Socio filter */
         .socio-bar { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; align-items: center; padding: 4px 0; }
@@ -180,12 +171,6 @@
             .nav, .action-bar, .add-sec-btn, .add-item-btn, .sec-del-btn, .td-del, .logo-add-btn,
             #meta-paq-field, #socio-filter-bar, .sec-paq-pill { display: none !important; }
             .meta-card, .sec-card, .totals-card { border: 1px solid #ccc; break-inside: avoid; box-shadow: none; border-radius: 0; margin-bottom: 8px; }
-            .sec-card.p1 { border-left: 4px solid #007aff !important; }
-            .sec-card.p2 { border-left: 4px solid #ff9500 !important; }
-            .sec-header.p1 { background: rgba(0,122,255,0.09) !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-            .sec-header.p2 { background: rgba(255,149,0,0.09) !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-            .sec-paq-label.p1 { background: rgba(0,122,255,0.15) !important; color: #007aff !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-            .sec-paq-label.p2 { background: rgba(255,149,0,0.15) !important; color: #ff9500 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
             .meta-inp, .td-inp, .sec-name-inp, .fee-inp { border: none; background: transparent; padding: 0; }
             .items-table thead th, .items-table tbody td { padding: 4px 6px; font-size: 11px; }
             .print-footer { display: block !important; position: fixed; bottom: 6mm; left: 0; right: 0; text-align: center; font-size: 9px; color: #999; font-family: -apple-system, sans-serif; letter-spacing: 0.3px; }
@@ -217,13 +202,8 @@
             <div class="meta-field"><label class="meta-lbl">Plaza / Ciudad</label><input class="meta-inp" id="meta-plazas" placeholder="Ej: Santa Cruz" oninput="debounceSave()"></div>
             <div class="meta-field" style="grid-column:span 2;"><label class="meta-lbl">Fecha del Evento</label><input class="meta-inp" id="meta-fecha" placeholder="Ej: 18 al 27 de septiembre" oninput="debounceSave()"></div>
             <div class="meta-field" id="meta-paq-field" style="grid-column:span 2;">
-                <label class="meta-lbl">Paquete de Licitación</label>
-                <div class="paq-chips" id="meta-paq-chips">
-                    <button class="paq-chip" data-p="" onclick="selPaquete('')">Sin Paquete</button>
-                    <button class="paq-chip" data-p="p1" onclick="selPaquete('p1')">P1 — Diseño &amp; Obra</button>
-                    <button class="paq-chip" data-p="p2" onclick="selPaquete('p2')">P2 — Admin &amp; Operación</button>
-                    <button class="paq-chip" data-p="ambos" onclick="selPaquete('ambos')">Ambos Paquetes</button>
-                </div>
+                <label class="meta-lbl">Paquetes del Proyecto</label>
+                <div class="paq-manager" id="paq-manager"></div>
             </div>
         </div>
     </div>
@@ -298,6 +278,14 @@
 
             <label class="inp-lbl">Contexto adicional (opcional)</label>
             <textarea class="inp-std" id="ia-extra-ctx" rows="2" placeholder="Ej: Es para un stand de 10 días en Santa Cruz" style="resize:none;"></textarea>
+
+            <label style="display:flex;align-items:flex-start;gap:10px;margin-top:12px;cursor:pointer;background:rgba(255,149,0,0.07);border:1px solid rgba(255,149,0,0.3);border-radius:10px;padding:10px 12px;">
+                <input type="checkbox" id="ia-solo-servicio" style="width:16px;height:16px;margin-top:1px;flex-shrink:0;accent-color:var(--orange);">
+                <div>
+                    <div style="font-size:13px;font-weight:800;color:var(--orange);">Importar como Servicio (sin precios)</div>
+                    <div style="font-size:11px;color:var(--gray);margin-top:2px;">Los productos se convierten en ítems de servicio con precio en cero. Mi socio completará los montos del servicio.</div>
+                </div>
+            </label>
 
             <div class="ai-prog-box" id="ia-prog-box">
                 <div class="ai-spinner"></div>
@@ -385,11 +373,27 @@
     const DB_REF = `proyectos/${cid}/${pid}/agencia`;
 
     // ── Data model ──────────────────────────────────────────────────────
-    let _meta = { cliente:'', producto:'', actividad:'', duracion:'', horas_dia:'', plazas:'', fecha:'', fee_pct:11, imp_pct:19.04, paquete:'' };
+    const PAQ_PALETTE = ['#007aff','#ff9500','#34c759','#bf5af2','#5ac8fa','#ff3b30','#ffcc00'];
+    const PAQ_DEFAULT = [
+        { id: 'p1', nombre: 'P1 — Diseño & Obra', color: '#007aff' },
+        { id: 'p2', nombre: 'P2 — Admin & Operación', color: '#ff9500' }
+    ];
+
+    let _meta = { cliente:'', producto:'', actividad:'', duracion:'', horas_dia:'', plazas:'', fecha:'', fee_pct:11, imp_pct:19.04, paquetes: JSON.parse(JSON.stringify(PAQ_DEFAULT)) };
     let _logos = []; // [{url, path}]
-    let _secciones = []; // [{id, nombre, paquete:'', items:[{id, detalle, cantidad, costo_unitario, dias, obs}]}]
+    let _secciones = []; // [{id, nombre, paquete:'', items:[{id, detalle, cantidad, costo_unitario, dias, obs, socio:''}]}]
     let _saveTimer = null;
     let _logoDelIdx = -1;
+
+    // ── Package helpers ───────────────────────────────────────────────────
+    function hexRgba(hex, a) {
+        const r = parseInt(hex.slice(1,3),16), g = parseInt(hex.slice(3,5),16), b = parseInt(hex.slice(5,7),16);
+        return `rgba(${r},${g},${b},${a})`;
+    }
+    function getPaq(id) { return (_meta.paquetes||[]).find(p => p.id === id) || null; }
+    function paqColor(id) { const p = getPaq(id); return p ? p.color : null; }
+    function paqNombre(id) { const p = getPaq(id); return p ? p.nombre : ''; }
+    function paqShort(id) { const n = paqNombre(id); return n ? (n.split(' — ')[0] || n.split(' ')[0]) : '---'; }
 
     // ── Helpers ──────────────────────────────────────────────────────────
     function uid() { return Math.random().toString(36).slice(2, 9); }
@@ -408,6 +412,47 @@
     }
     function debounceSave() { clearTimeout(_saveTimer); _saveTimer = setTimeout(guardarTodo, 1500); }
 
+    // ── Package manager ───────────────────────────────────────────────────
+    function renderPaqManager() {
+        const el = document.getElementById('paq-manager');
+        if (!el) return;
+        const paquetes = _meta.paquetes || [];
+        el.innerHTML = paquetes.map((p, i) => `
+            <div class="paq-item">
+                <div class="paq-color-dot" style="background:${p.color};"></div>
+                <input class="paq-name-inp" value="${escHtml(p.nombre)}" style="color:${p.color};"
+                    oninput="_meta.paquetes[${i}].nombre=this.value; debounceSave();" placeholder="Nombre del paquete">
+                <button class="paq-del-btn" onclick="eliminarPaquete('${p.id}')" title="Eliminar paquete"><i class="ph-bold ph-x"></i></button>
+            </div>
+        `).join('') + `<button class="paq-add-btn" onclick="agregarPaquete()"><i class="ph-bold ph-plus"></i> Agregar Paquete</button>`;
+    }
+
+    function agregarPaquete() {
+        const usedColors = (_meta.paquetes||[]).map(p => p.color);
+        const color = PAQ_PALETTE.find(c => !usedColors.includes(c)) || PAQ_PALETTE[(_meta.paquetes||[]).length % PAQ_PALETTE.length];
+        const n = (_meta.paquetes||[]).length + 1;
+        const id = 'p' + n + '_' + uid();
+        if (!_meta.paquetes) _meta.paquetes = [];
+        _meta.paquetes.push({ id, nombre: `P${n} — Nuevo Paquete`, color });
+        renderPaqManager();
+        debounceSave();
+        // Focus new name input
+        setTimeout(() => {
+            const inputs = document.querySelectorAll('#paq-manager .paq-name-inp');
+            if (inputs.length) inputs[inputs.length-1].select();
+        }, 50);
+    }
+
+    function eliminarPaquete(id) {
+        if ((_meta.paquetes||[]).length <= 1 && !confirm('¿Eliminar el único paquete?')) return;
+        _meta.paquetes = (_meta.paquetes||[]).filter(p => p.id !== id);
+        readSeccionesFromDOM();
+        _secciones.forEach(sec => { if (sec.paquete === id) sec.paquete = ''; });
+        renderPaqManager();
+        renderSecciones();
+        debounceSave();
+    }
+
     // ── Load ──────────────────────────────────────────────────────────────
     function cargarDatos() {
         db.ref(DB_REF).once('value').then(snap => {
@@ -424,8 +469,11 @@
                 document.getElementById('inp-fee-pct').value = _meta.fee_pct != null ? _meta.fee_pct : 11;
                 document.getElementById('inp-imp-pct').value = _meta.imp_pct != null ? _meta.imp_pct : 19.04;
             }
-            if (d.meta && d.meta.paquete != null) _meta.paquete = d.meta.paquete;
-            _renderPaqChips();
+            // Ensure paquetes array exists (backward compat with old p1/p2 data)
+            if (!_meta.paquetes || !Array.isArray(_meta.paquetes) || _meta.paquetes.length === 0) {
+                _meta.paquetes = JSON.parse(JSON.stringify(PAQ_DEFAULT));
+            }
+            renderPaqManager();
             _logos = Array.isArray(d.logos) ? d.logos.filter(Boolean) : (d.logos ? Object.values(d.logos).filter(Boolean) : []);
             _secciones = Array.isArray(d.secciones) ? d.secciones.filter(Boolean) : (d.secciones ? Object.values(d.secciones).filter(Boolean) : []);
             _secciones.forEach(sec => {
@@ -580,47 +628,31 @@
     }
 
     // ── Paquete helpers ────────────────────────────────────────────────────
-    function selPaquete(p) {
-        _meta.paquete = p;
-        _renderPaqChips();
-        debounceSave();
-    }
-
-    function _renderPaqChips() {
-        document.querySelectorAll('#meta-paq-chips .paq-chip').forEach(chip => {
-            const cp = chip.dataset.p;
-            let cls = 'paq-chip';
-            if (_meta.paquete === cp) {
-                if (cp === 'p1') cls += ' ap1';
-                else if (cp === 'p2') cls += ' ap2';
-                else if (cp === 'ambos') cls += ' aambos';
-                else cls += ' ap-none'; // "Sin Paquete" selected
-            }
-            chip.className = cls;
-        });
-    }
-
     function toggleSecPaquete(secId) {
         readSeccionesFromDOM();
         const sec = _secciones.find(s => s.id === secId);
         if (!sec) return;
-        const cycle = ['', 'p1', 'p2'];
-        sec.paquete = cycle[(cycle.indexOf(sec.paquete || '') + 1) % cycle.length];
+        const paqIds = ['', ...(_meta.paquetes||[]).map(p => p.id)];
+        sec.paquete = paqIds[(paqIds.indexOf(sec.paquete || '') + 1) % paqIds.length];
         renderSecciones();
         debounceSave();
     }
 
     function renderSecCard(sec) {
-        const paqClass = sec.paquete === 'p1' ? ' p1' : sec.paquete === 'p2' ? ' p2' : '';
-        const paqLabel = sec.paquete === 'p1' ? 'P1' : sec.paquete === 'p2' ? 'P2' : '---';
-        const paqFullLabel = sec.paquete === 'p1' ? 'PAQUETE 1' : sec.paquete === 'p2' ? 'PAQUETE 2' : '';
+        const color = paqColor(sec.paquete);
+        const nombre = paqNombre(sec.paquete);
+        const short = paqShort(sec.paquete);
+        const cardStyle = color ? `border-left:4px solid ${color};` : '';
+        const headerStyle = color ? `background:${hexRgba(color,0.09)};` : '';
+        const labelStyle = color ? `background:${hexRgba(color,0.15)};color:${color};` : 'display:none;';
+        const pillStyle = color ? `background:${hexRgba(color,0.12)};color:${color};border-color:${color};` : '';
         return `
-            <div class="sec-card${paqClass}" id="sec-${sec.id}">
-                <div class="sec-header${paqClass}">
+            <div class="sec-card" id="sec-${sec.id}" style="${cardStyle}">
+                <div class="sec-header" style="${headerStyle}">
                     <i class="ph-bold ph-folder-open" style="color:var(--blue); font-size:16px; flex-shrink:0;"></i>
                     <input class="sec-name-inp" placeholder="NOMBRE DE LA SECCIÓN" value="${escHtml(sec.nombre)}" oninput="onSecNameChange('${sec.id}', this.value)">
-                    ${paqFullLabel ? `<span class="sec-paq-label${paqClass}">${paqFullLabel}</span>` : ''}
-                    <button class="sec-paq-pill${paqClass}" onclick="toggleSecPaquete('${sec.id}')" title="Ciclar paquete (P1/P2)">${paqLabel}</button>
+                    <span class="sec-paq-label" style="${labelStyle}">${escHtml(nombre)}</span>
+                    <button class="sec-paq-pill" style="${pillStyle}" onclick="toggleSecPaquete('${sec.id}')" title="Ciclar paquete">${escHtml(short)}</button>
                     <button class="sec-del-btn" onclick="eliminarSeccion('${sec.id}')"><i class="ph-bold ph-trash"></i></button>
                 </div>
                 <div style="overflow-x:auto;">
@@ -646,9 +678,10 @@
         `;
     }
 
-    function grupoHeader(paq, label) {
-        const cls = paq === 'p1' ? 'grupo-p1' : paq === 'p2' ? 'grupo-p2' : 'grupo-sin';
-        return `<div class="grupo-header ${cls}"><div class="grupo-line"></div><span class="grupo-txt">${label}</span><div class="grupo-line"></div></div>`;
+    function grupoHeader(nombre, color) {
+        const lineStyle = color ? `background:${color};` : 'background:var(--border);';
+        const textStyle = color ? `color:${color};` : 'color:var(--gray);';
+        return `<div class="grupo-header"><div class="grupo-line" style="${lineStyle}"></div><span class="grupo-txt" style="${textStyle}">${escHtml(nombre)}</span><div class="grupo-line" style="${lineStyle}"></div></div>`;
     }
 
     function renderSecciones() {
@@ -663,27 +696,27 @@
         }
         readSeccionesFromDOM();
 
-        const hasGroups = _secciones.some(s => s.paquete === 'p1' || s.paquete === 'p2');
+        const paquetes = _meta.paquetes || [];
+        const assignedIds = new Set(paquetes.map(p => p.id));
+        const hasGroups = _secciones.some(s => s.paquete && assignedIds.has(s.paquete));
+
         if (!hasGroups) {
             container.innerHTML = _secciones.map(sec => renderSecCard(sec)).join('');
             renderFiltroSocios();
             return;
         }
 
-        const p1Secs = _secciones.filter(s => s.paquete === 'p1');
-        const p2Secs = _secciones.filter(s => s.paquete === 'p2');
-        const sinSecs = _secciones.filter(s => !s.paquete || s.paquete === '');
         let html = '';
-        if (p1Secs.length > 0) {
-            html += grupoHeader('p1', 'PAQUETE 1 — Diseño, Arquitectura y Obra Civil');
-            html += p1Secs.map(sec => renderSecCard(sec)).join('');
-        }
-        if (p2Secs.length > 0) {
-            html += grupoHeader('p2', 'PAQUETE 2 — Administración, Operación y Experiencias');
-            html += p2Secs.map(sec => renderSecCard(sec)).join('');
-        }
+        paquetes.forEach(paq => {
+            const secs = _secciones.filter(s => s.paquete === paq.id);
+            if (secs.length > 0) {
+                html += grupoHeader(paq.nombre, paq.color);
+                html += secs.map(sec => renderSecCard(sec)).join('');
+            }
+        });
+        const sinSecs = _secciones.filter(s => !s.paquete || !assignedIds.has(s.paquete));
         if (sinSecs.length > 0) {
-            if (p1Secs.length > 0 || p2Secs.length > 0) html += grupoHeader('sin', 'SIN ASIGNAR');
+            if (html) html += grupoHeader('SIN ASIGNAR', null);
             html += sinSecs.map(sec => renderSecCard(sec)).join('');
         }
         container.innerHTML = html;
@@ -791,6 +824,7 @@
         document.getElementById('ia-btn-confirmar').style.display = 'none';
         document.getElementById('ia-extra-ctx').value = '';
         document.getElementById('ia-socio-name').value = '';
+        document.getElementById('ia-solo-servicio').checked = false;
         document.getElementById('mod-ia').style.display = 'flex';
     }
 
@@ -818,6 +852,7 @@
 
         try {
             const ctx = document.getElementById('ia-extra-ctx').value.trim();
+            const soloServicio = document.getElementById('ia-solo-servicio').checked;
             const fname = _iaFile.name.toLowerCase();
             const isExcel = fname.endsWith('.xlsx') || fname.endsWith('.xls') || fname.endsWith('.csv');
             const isWord = fname.endsWith('.docx') || fname.endsWith('.doc');
@@ -825,6 +860,10 @@
             const sectionList = _secciones.length > 0
                 ? _secciones.map(s => `- ${s.nombre}`).join('\n')
                 : '(sin secciones definidas aún — creá las secciones generales que correspondan)';
+
+            const precioRegla = soloServicio
+                ? `- MODO SERVICIO: los ítems son PRODUCTOS que el cliente compra directamente. Convertí cada uno en su SERVICIO equivalente (instalación, operación, soporte, configuración, contenido). "detalle" = nombre del SERVICIO (ej: "Servicio de operación y soporte técnico — Robot Humanoide G1"). "costo_unitario" = SIEMPRE 0. "obs" = "Precio por definir — a confirmar con el socio". NO copies el precio del producto.`
+                : `- "costo_unitario": OBLIGATORIO — extraé SIEMPRE el precio del ítem; formato boliviano "1.500,00" → número limpio 1500; NUNCA dejes 0 si hay precio visible. El precio puede llamarse: precio, valor, monto, precio_unitario, costo, importe, unit price.`;
 
             const sysPrompt = `Sos un experto en presupuestos de eventos, stands y producción audiovisual.
 Analizás la cotización de un socio/proveedor y distribuís sus ítems en las secciones correctas del presupuesto.
@@ -848,8 +887,7 @@ Reglas:
 - Si un ítem no encaja claramente en ninguna sección, asignalo a la más cercana
 - Si realmente no hay sección adecuada, creá una nueva con nombre descriptivo
 - "detalle": nunca vacío
-- "costo_unitario": OBLIGATORIO — extraé SIEMPRE el precio/valor/monto del ítem; si usás formato boliviano (1.500,00) convertilo a número limpio (1500); NUNCA dejes costo_unitario en 0 si hay un precio visible en el documento
-- El precio puede llamarse: precio, valor, monto, precio_unitario, costo, importe, unit price — buscalo con cualquier nombre
+${precioRegla}
 - Si el total está pero no hay desglose, ponés cantidad=1, costo_unitario=total_del_item, dias=1
 - Ignorá filas de encabezado, totales generales, subtotales y celdas vacías
 - Devolvé SOLO el JSON`;
@@ -1288,8 +1326,9 @@ Reglas:
         rows.push(['FECHA:', _meta.fecha]);
         rows.push([]);
 
-        // Sections — grouped if any section has paquete
-        const hasGroups = _secciones.some(s => s.paquete === 'p1' || s.paquete === 'p2');
+        // Sections — grouped if any section is assigned to a defined package
+        const _xPaqIds = new Set((_meta.paquetes||[]).map(p => p.id));
+        const hasGroups = _secciones.some(s => s.paquete && _xPaqIds.has(s.paquete));
         const renderSecRows = (sec) => {
             rows.push([sec.nombre || 'SECCIÓN', '', '', '', '', 'OBSERVACIONES']);
             rows.push(['DETALLE', 'CANTIDAD', 'COSTO UNITARIO', 'DÍAS', 'TOTALES', '']);
@@ -1304,21 +1343,21 @@ Reglas:
             rows.push([]);
         };
         if (hasGroups) {
-            const p1Secs = _secciones.filter(s => s.paquete === 'p1');
-            const p2Secs = _secciones.filter(s => s.paquete === 'p2');
-            const sinSecs = _secciones.filter(s => !s.paquete || s.paquete === '');
-            if (p1Secs.length > 0) {
-                rows.push(['── PAQUETE 1 — Diseño, Arquitectura y Obra Civil ──']);
-                rows.push([]);
-                p1Secs.forEach(renderSecRows);
-            }
-            if (p2Secs.length > 0) {
-                rows.push(['── PAQUETE 2 — Administración, Operación y Experiencias ──']);
-                rows.push([]);
-                p2Secs.forEach(renderSecRows);
-            }
+            const paquetes = _meta.paquetes || [];
+            const assignedIds = new Set(paquetes.map(p => p.id));
+            let anyPrinted = false;
+            paquetes.forEach(paq => {
+                const secs = _secciones.filter(s => s.paquete === paq.id);
+                if (secs.length > 0) {
+                    rows.push([`── ${paq.nombre} ──`]);
+                    rows.push([]);
+                    secs.forEach(renderSecRows);
+                    anyPrinted = true;
+                }
+            });
+            const sinSecs = _secciones.filter(s => !s.paquete || !assignedIds.has(s.paquete));
             if (sinSecs.length > 0) {
-                if (p1Secs.length > 0 || p2Secs.length > 0) { rows.push(['── SIN ASIGNAR ──']); rows.push([]); }
+                if (anyPrinted) { rows.push(['── SIN ASIGNAR ──']); rows.push([]); }
                 sinSecs.forEach(renderSecRows);
             }
         } else {
