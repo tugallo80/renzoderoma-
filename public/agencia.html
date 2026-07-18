@@ -10,6 +10,7 @@
     <script src="https://www.gstatic.com/firebasejs/9.1.3/firebase-database-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.1.3/firebase-storage-compat.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/fflate@0.8.2/umd/index.js"></script>
     <script>
         window._rubikFirebaseConfig = window._rubikFirebaseConfig || {
             apiKey: "AIzaSyDXYlofy31cDP14xVAVxWo_7TqXdSgsIjA",
@@ -258,8 +259,8 @@
             <label style="display:block; border:2px dashed var(--border); border-radius:12px; padding:20px; text-align:center; cursor:pointer; color:var(--gray); font-size:13px; font-weight:600;" id="ia-file-label">
                 <i class="ph-bold ph-upload-simple" style="font-size:24px; display:block; margin-bottom:6px;"></i>
                 <span id="ia-file-name">Tocar para seleccionar</span>
-                <div style="font-size:10px; color:var(--gray); margin-top:4px; font-weight:600;">PDF · Imagen · Excel (.xlsx) · CSV</div>
-                <input type="file" id="ia-file-inp" accept="image/*,application/pdf,.xlsx,.xls,.csv" style="display:none" onchange="onIAFileSelect(this)">
+                <div style="font-size:10px; color:var(--gray); margin-top:4px; font-weight:600;">PDF · Word · Imagen · Excel · CSV</div>
+                <input type="file" id="ia-file-inp" accept="image/*,application/pdf,.xlsx,.xls,.csv,.docx,.doc" style="display:none" onchange="onIAFileSelect(this)">
             </label>
 
             <label class="inp-lbl">Sección destino</label>
@@ -297,11 +298,11 @@
             <p style="font-size:13px; color:var(--gray); margin:0 0 12px 0;">Subí el brief o esquema presupuestario del cliente. La IA crea las secciones con sus montos globales — ideal para la fase de licitación sin necesidad de ítems detallados.</p>
 
             <label class="inp-lbl">Brief del cliente (PDF, imagen, Excel o CSV)</label>
-            <label style="display:block; border:2px dashed #bf5af2; border-radius:12px; padding:20px; text-align:center; cursor:pointer; color:#bf5af2; font-size:13px; font-weight:600;">
+            <label id="brief-file-label" style="display:block; border:2px dashed #bf5af2; border-radius:12px; padding:20px; text-align:center; cursor:pointer; color:#bf5af2; font-size:13px; font-weight:600;">
                 <i class="ph-bold ph-upload-simple" style="font-size:24px; display:block; margin-bottom:6px;"></i>
                 <span id="brief-file-name">Tocar para seleccionar</span>
-                <div style="font-size:10px; margin-top:4px; font-weight:600; color:var(--gray);">PDF · Imagen · Excel (.xlsx) · CSV</div>
-                <input type="file" id="brief-file-inp" accept="image/*,application/pdf,.xlsx,.xls,.csv" style="display:none" onchange="onBriefFileSelect(this)">
+                <div style="font-size:10px; margin-top:4px; font-weight:600; color:var(--gray);">PDF · Word · Imagen · Excel · CSV</div>
+                <input type="file" id="brief-file-inp" accept="image/*,application/pdf,.xlsx,.xls,.csv,.docx,.doc" style="display:none" onchange="onBriefFileSelect(this)">
             </label>
 
             <label class="inp-lbl">Notas adicionales (opcional)</label>
@@ -753,6 +754,7 @@
             const ctx = document.getElementById('ia-extra-ctx').value.trim();
             const fname = _iaFile.name.toLowerCase();
             const isExcel = fname.endsWith('.xlsx') || fname.endsWith('.xls') || fname.endsWith('.csv');
+            const isWord = fname.endsWith('.docx') || fname.endsWith('.doc');
 
             const sysPrompt = `Sos un asistente especializado en leer cotizaciones de proveedores para eventos, stands y producción audiovisual.
 Tu tarea es extraer TODOS los ítems de la cotización y devolver un JSON con este formato exacto:
@@ -782,14 +784,19 @@ Reglas:
                 const excelText = await excelToText(_iaFile);
                 const userText = `Cotización en formato tabla:\n\n${excelText}${secCtxEx}${ctx ? '\n\nContexto adicional: ' + ctx : ''}`;
                 parts = [{ text: userText }];
+            } else if (isWord) {
+                progMsg.textContent = 'Leyendo Word...';
+                const wordText = await docxToText(_iaFile);
+                const userText = `Cotización en Word:\n\n${wordText}${secCtxEx}${ctx ? '\n\nContexto adicional: ' + ctx : ''}`;
+                parts = [{ text: userText }];
             } else {
                 progMsg.textContent = 'Leyendo archivo...';
                 const base64 = await fileToBase64(_iaFile);
                 const mime = _iaFile.type || 'application/octet-stream';
                 const destId = document.getElementById('ia-dest-sec').value;
-            const destSec = destId !== '_new' ? _secciones.find(s => s.id === destId) : null;
-            const secCtx = destSec ? ` Esta cotización corresponde a la sección "${destSec.nombre}". Extraé SOLO los ítems relevantes a esa sección.` : '';
-            const userText = `Cotización adjunta.${secCtx}${ctx ? ' Contexto adicional: ' + ctx : ''} Extraé todos los ítems.`;
+                const destSec = destId !== '_new' ? _secciones.find(s => s.id === destId) : null;
+                const secCtx = destSec ? ` Esta cotización corresponde a la sección "${destSec.nombre}". Extraé SOLO los ítems relevantes a esa sección.` : '';
+                const userText = `Cotización adjunta.${secCtx}${ctx ? ' Contexto adicional: ' + ctx : ''} Extraé todos los ítems.`;
                 parts = [
                     { inlineData: { data: base64.split(',')[1], mimeType: mime } },
                     { text: userText }
@@ -920,6 +927,44 @@ Reglas:
         });
     }
 
+    async function docxToText(file) {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = e => {
+                try {
+                    const arr = new Uint8Array(e.target.result);
+                    const unzipped = fflate.unzipSync(arr);
+                    const xmlKey = 'word/document.xml';
+                    if (!unzipped[xmlKey]) { reject(new Error('No se pudo leer el archivo Word')); return; }
+                    let xml = new TextDecoder('utf-8').decode(unzipped[xmlKey]);
+                    // Paragraph breaks before stripping tags
+                    xml = xml.replace(/<w:p[ >]/g, '\n').replace(/<w:br[^/]*/g, '\n');
+                    const text = xml.replace(/<[^>]+>/g, '')
+                        .replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot;/g,'"').replace(/&#39;/g,"'")
+                        .replace(/\n{3,}/g,'\n\n').trim();
+                    resolve(text);
+                } catch(err) { reject(err); }
+            };
+            reader.onerror = reject;
+            reader.readAsArrayBuffer(file);
+        });
+    }
+
+    // ── Drag & Drop ────────────────────────────────────────────────────────
+    function setupDragDrop(labelId, onFile) {
+        const label = document.getElementById(labelId);
+        if (!label) return;
+        const origBorder = label.style.borderColor || '';
+        label.addEventListener('dragover', e => { e.preventDefault(); e.stopPropagation(); label.style.opacity = '0.7'; });
+        label.addEventListener('dragleave', () => { label.style.opacity = ''; });
+        label.addEventListener('drop', e => {
+            e.preventDefault(); e.stopPropagation();
+            label.style.opacity = '';
+            const f = e.dataTransfer?.files?.[0];
+            if (f) onFile(f);
+        });
+    }
+
     // ── IA Brief ──────────────────────────────────────────────────────────
     let _briefFile = null;
     let _briefProposedSecs = []; // [{nombre, descripcion, monto, paquete}]
@@ -959,6 +1004,7 @@ Reglas:
             const extra = document.getElementById('brief-extra').value.trim();
             const fname = _briefFile.name.toLowerCase();
             const isExcel = fname.endsWith('.xlsx') || fname.endsWith('.xls') || fname.endsWith('.csv');
+            const isWord = fname.endsWith('.docx') || fname.endsWith('.doc');
 
             const sysPrompt = `Sos un asistente especializado en presupuestos de eventos, stands y producción audiovisual.
 Analizás un BRIEF o esquema presupuestario de un cliente y generás una lista de secciones del presupuesto.
@@ -993,6 +1039,10 @@ Reglas:
                 progMsg.textContent = 'Leyendo Excel...';
                 const txt = await excelToText(_briefFile);
                 parts = [{ text: `Brief en formato tabla:\n\n${txt}${extra ? '\n\nNotas: ' + extra : ''}` }];
+            } else if (isWord) {
+                progMsg.textContent = 'Leyendo Word...';
+                const txt = await docxToText(_briefFile);
+                parts = [{ text: `Brief en Word:\n\n${txt}${extra ? '\n\nNotas: ' + extra : ''}` }];
             } else {
                 progMsg.textContent = 'Analizando brief con IA...';
                 const base64 = await fileToBase64(_briefFile);
@@ -1206,6 +1256,8 @@ Reglas:
 
     // ── Auth & Load ──────────────────────────────────────────────────────────
     (function init() {
+        setupDragDrop('ia-file-label', f => { _iaFile = f; document.getElementById('ia-file-name').textContent = f.name; });
+        setupDragDrop('brief-file-label', f => { _briefFile = f; document.getElementById('brief-file-name').textContent = f.name; });
         const auth = firebase.auth();
         if (auth.currentUser) { cargarDatos(); return; }
         auth.onAuthStateChanged(user => {
