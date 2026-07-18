@@ -133,10 +133,21 @@
         .paq-chip.ap2 { background: rgba(255,149,0,0.1); color: var(--orange); border-color: var(--orange); }
         .paq-chip.aambos { background: rgba(52,199,89,0.1); color: var(--green); border-color: var(--green); }
 
-        /* Section paquete pill */
+        /* Section paquete pill (interactive toggle) */
         .sec-paq-pill { padding: 3px 9px; border-radius: 10px; font-size: 10px; font-weight: 900; border: 1.5px solid var(--border); background: var(--bg); color: var(--gray); cursor: pointer; flex-shrink: 0; letter-spacing: 0.3px; transition: 0.15s; }
         .sec-paq-pill.p1 { background: rgba(0,122,255,0.12); color: var(--blue); border-color: var(--blue); }
         .sec-paq-pill.p2 { background: rgba(255,149,0,0.12); color: var(--orange); border-color: var(--orange); }
+
+        /* Paquete label (static badge shown in web + print) */
+        .sec-paq-label { font-size: 9px; font-weight: 900; padding: 4px 9px; border-radius: 6px; letter-spacing: 0.7px; white-space: nowrap; flex-shrink: 0; text-transform: uppercase; }
+        .sec-paq-label.p1 { background: rgba(0,122,255,0.15); color: var(--blue); }
+        .sec-paq-label.p2 { background: rgba(255,149,0,0.15); color: var(--orange); }
+
+        /* Paquete-tinted section cards */
+        .sec-card.p1 { border-left: 4px solid var(--blue); }
+        .sec-card.p2 { border-left: 4px solid var(--orange); }
+        .sec-header.p1 { background: rgba(0,122,255,0.09) !important; }
+        .sec-header.p2 { background: rgba(255,149,0,0.09) !important; }
 
         /* Group headers */
         .grupo-header { display: flex; align-items: center; gap: 10px; padding: 12px 2px 6px 2px; }
@@ -169,6 +180,12 @@
             .nav, .action-bar, .add-sec-btn, .add-item-btn, .sec-del-btn, .td-del, .logo-add-btn,
             #meta-paq-field, #socio-filter-bar, .sec-paq-pill { display: none !important; }
             .meta-card, .sec-card, .totals-card { border: 1px solid #ccc; break-inside: avoid; box-shadow: none; border-radius: 0; margin-bottom: 8px; }
+            .sec-card.p1 { border-left: 4px solid #007aff !important; }
+            .sec-card.p2 { border-left: 4px solid #ff9500 !important; }
+            .sec-header.p1 { background: rgba(0,122,255,0.09) !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+            .sec-header.p2 { background: rgba(255,149,0,0.09) !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+            .sec-paq-label.p1 { background: rgba(0,122,255,0.15) !important; color: #007aff !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+            .sec-paq-label.p2 { background: rgba(255,149,0,0.15) !important; color: #ff9500 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
             .meta-inp, .td-inp, .sec-name-inp, .fee-inp { border: none; background: transparent; padding: 0; }
             .items-table thead th, .items-table tbody td { padding: 4px 6px; font-size: 11px; }
             .print-footer { display: block !important; position: fixed; bottom: 6mm; left: 0; right: 0; text-align: center; font-size: 9px; color: #999; font-family: -apple-system, sans-serif; letter-spacing: 0.3px; }
@@ -444,7 +461,9 @@
                 if (nameInp) sec.nombre = nameInp.value.trim();
             }
             sec.items.forEach((it, ii) => {
-                it.detalle = _getItVal(sec.id, it.id, 'detalle');
+                const detEl = document.getElementById(`it-${sec.id}-${it.id}-detalle`);
+                if (!detEl) return; // ítem sin DOM aún — no borrar sus datos
+                it.detalle = detEl.value;
                 it.cantidad = fNum(_getItVal(sec.id, it.id, 'cantidad'));
                 it.costo_unitario = fNum(_getItVal(sec.id, it.id, 'cu'));
                 it.dias = fNum(_getItVal(sec.id, it.id, 'dias'));
@@ -582,27 +601,25 @@
     }
 
     function toggleSecPaquete(secId) {
+        readSeccionesFromDOM();
         const sec = _secciones.find(s => s.id === secId);
         if (!sec) return;
         const cycle = ['', 'p1', 'p2'];
-        const cur = cycle.indexOf(sec.paquete || '');
-        sec.paquete = cycle[(cur + 1) % cycle.length];
-        const pill = document.querySelector(`#sec-${secId} .sec-paq-pill`);
-        if (pill) {
-            pill.className = 'sec-paq-pill' + (sec.paquete === 'p1' ? ' p1' : sec.paquete === 'p2' ? ' p2' : '');
-            pill.textContent = sec.paquete === 'p1' ? 'P1' : sec.paquete === 'p2' ? 'P2' : '---';
-        }
+        sec.paquete = cycle[(cycle.indexOf(sec.paquete || '') + 1) % cycle.length];
+        renderSecciones();
         debounceSave();
     }
 
     function renderSecCard(sec) {
         const paqClass = sec.paquete === 'p1' ? ' p1' : sec.paquete === 'p2' ? ' p2' : '';
         const paqLabel = sec.paquete === 'p1' ? 'P1' : sec.paquete === 'p2' ? 'P2' : '---';
+        const paqFullLabel = sec.paquete === 'p1' ? 'PAQUETE 1' : sec.paquete === 'p2' ? 'PAQUETE 2' : '';
         return `
-            <div class="sec-card" id="sec-${sec.id}">
-                <div class="sec-header">
+            <div class="sec-card${paqClass}" id="sec-${sec.id}">
+                <div class="sec-header${paqClass}">
                     <i class="ph-bold ph-folder-open" style="color:var(--blue); font-size:16px; flex-shrink:0;"></i>
                     <input class="sec-name-inp" placeholder="NOMBRE DE LA SECCIÓN" value="${escHtml(sec.nombre)}" oninput="onSecNameChange('${sec.id}', this.value)">
+                    ${paqFullLabel ? `<span class="sec-paq-label${paqClass}">${paqFullLabel}</span>` : ''}
                     <button class="sec-paq-pill${paqClass}" onclick="toggleSecPaquete('${sec.id}')" title="Ciclar paquete (P1/P2)">${paqLabel}</button>
                     <button class="sec-del-btn" onclick="eliminarSeccion('${sec.id}')"><i class="ph-bold ph-trash"></i></button>
                 </div>
