@@ -124,6 +124,27 @@
         .ai-preview-table td { padding: 5px 6px; border-bottom: 1px solid rgba(0,0,0,0.04); }
         .ai-preview-table td.num { text-align: right; font-weight: 700; }
 
+        /* Paquete selector meta */
+        .paq-chips { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 2px; }
+        .paq-chip { padding: 7px 13px; border-radius: 20px; font-size: 11px; font-weight: 800; border: 1.5px solid var(--border); background: var(--bg); color: var(--gray); cursor: pointer; transition: 0.15s; }
+        .paq-chip:active { transform: scale(0.95); }
+        .paq-chip.ap1 { background: rgba(0,122,255,0.1); color: var(--blue); border-color: var(--blue); }
+        .paq-chip.ap2 { background: rgba(255,149,0,0.1); color: var(--orange); border-color: var(--orange); }
+        .paq-chip.aambos { background: rgba(52,199,89,0.1); color: var(--green); border-color: var(--green); }
+
+        /* Section paquete pill */
+        .sec-paq-pill { padding: 3px 9px; border-radius: 10px; font-size: 10px; font-weight: 900; border: 1.5px solid var(--border); background: var(--bg); color: var(--gray); cursor: pointer; flex-shrink: 0; letter-spacing: 0.3px; transition: 0.15s; }
+        .sec-paq-pill.p1 { background: rgba(0,122,255,0.12); color: var(--blue); border-color: var(--blue); }
+        .sec-paq-pill.p2 { background: rgba(255,149,0,0.12); color: var(--orange); border-color: var(--orange); }
+
+        /* Group headers */
+        .grupo-header { display: flex; align-items: center; gap: 10px; padding: 12px 2px 6px 2px; }
+        .grupo-line { flex: 1; height: 1px; background: var(--border); }
+        .grupo-txt { font-size: 10px; font-weight: 900; text-transform: uppercase; letter-spacing: 0.6px; white-space: nowrap; }
+        .grupo-p1 .grupo-txt { color: var(--blue); }
+        .grupo-p2 .grupo-txt { color: var(--orange); }
+        .grupo-sin .grupo-txt { color: var(--gray); }
+
         /* Brief preview */
         .brief-sec-row { background: var(--bg); border-radius: 10px; padding: 10px 12px; margin-bottom: 8px; display: flex; flex-direction: column; gap: 4px; }
         .brief-sec-nombre { font-size: 12px; font-weight: 800; color: var(--text); }
@@ -167,6 +188,15 @@
             <div class="meta-field"><label class="meta-lbl">Horas por Día</label><input class="meta-inp" id="meta-horas" placeholder="Ej: No Aplica" oninput="debounceSave()"></div>
             <div class="meta-field"><label class="meta-lbl">Plaza / Ciudad</label><input class="meta-inp" id="meta-plazas" placeholder="Ej: Santa Cruz" oninput="debounceSave()"></div>
             <div class="meta-field" style="grid-column:span 2;"><label class="meta-lbl">Fecha del Evento</label><input class="meta-inp" id="meta-fecha" placeholder="Ej: 18 al 27 de septiembre" oninput="debounceSave()"></div>
+            <div class="meta-field" style="grid-column:span 2;">
+                <label class="meta-lbl">Paquete de Licitación</label>
+                <div class="paq-chips" id="meta-paq-chips">
+                    <button class="paq-chip" data-p="" onclick="selPaquete('')">Sin Paquete</button>
+                    <button class="paq-chip" data-p="p1" onclick="selPaquete('p1')">P1 — Diseño &amp; Obra</button>
+                    <button class="paq-chip" data-p="p2" onclick="selPaquete('p2')">P2 — Admin &amp; Operación</button>
+                    <button class="paq-chip" data-p="ambos" onclick="selPaquete('ambos')">Ambos Paquetes</button>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -321,9 +351,9 @@
     const DB_REF = `proyectos/${cid}/${pid}/agencia`;
 
     // ── Data model ──────────────────────────────────────────────────────
-    let _meta = { cliente:'', producto:'', actividad:'', duracion:'', horas_dia:'', plazas:'', fecha:'', fee_pct:11, imp_pct:19.04 };
+    let _meta = { cliente:'', producto:'', actividad:'', duracion:'', horas_dia:'', plazas:'', fecha:'', fee_pct:11, imp_pct:19.04, paquete:'' };
     let _logos = []; // [{url, path}]
-    let _secciones = []; // [{id, nombre, items:[{id, detalle, cantidad, costo_unitario, dias, obs}]}]
+    let _secciones = []; // [{id, nombre, paquete:'', items:[{id, detalle, cantidad, costo_unitario, dias, obs}]}]
     let _saveTimer = null;
     let _logoDelIdx = -1;
 
@@ -349,10 +379,13 @@
                 document.getElementById('inp-fee-pct').value = _meta.fee_pct != null ? _meta.fee_pct : 11;
                 document.getElementById('inp-imp-pct').value = _meta.imp_pct != null ? _meta.imp_pct : 19.04;
             }
+            if (d.meta && d.meta.paquete != null) _meta.paquete = d.meta.paquete;
+            _renderPaqChips();
             _logos = Array.isArray(d.logos) ? d.logos.filter(Boolean) : (d.logos ? Object.values(d.logos).filter(Boolean) : []);
             _secciones = Array.isArray(d.secciones) ? d.secciones.filter(Boolean) : (d.secciones ? Object.values(d.secciones).filter(Boolean) : []);
             _secciones.forEach(sec => {
                 if (!sec.id) sec.id = uid();
+                if (!sec.paquete) sec.paquete = '';
                 sec.items = Array.isArray(sec.items) ? sec.items.filter(Boolean) : (sec.items ? Object.values(sec.items).filter(Boolean) : []);
                 sec.items.forEach(it => { if (!it.id) it.id = uid(); });
             });
@@ -457,7 +490,7 @@
 
     // ── Secciones ──────────────────────────────────────────────────────────
     function agregarSeccion() {
-        const sec = { id: uid(), nombre: '', items: [] };
+        const sec = { id: uid(), nombre: '', paquete: '', items: [] };
         _secciones.push(sec);
         renderSecciones();
         debounceSave();
@@ -499,6 +532,80 @@
         debounceSave();
     }
 
+    // ── Paquete helpers ────────────────────────────────────────────────────
+    function selPaquete(p) {
+        _meta.paquete = p;
+        _renderPaqChips();
+        debounceSave();
+    }
+
+    function _renderPaqChips() {
+        document.querySelectorAll('#meta-paq-chips .paq-chip').forEach(chip => {
+            const cp = chip.dataset.p;
+            let cls = 'paq-chip';
+            if (_meta.paquete === cp) {
+                if (cp === 'p1') cls += ' ap1';
+                else if (cp === 'p2') cls += ' ap2';
+                else if (cp === 'ambos') cls += ' aambos';
+                else cls += ' ap-none'; // "Sin Paquete" selected
+            }
+            chip.className = cls;
+        });
+    }
+
+    function toggleSecPaquete(secId) {
+        const sec = _secciones.find(s => s.id === secId);
+        if (!sec) return;
+        const cycle = ['', 'p1', 'p2'];
+        const cur = cycle.indexOf(sec.paquete || '');
+        sec.paquete = cycle[(cur + 1) % cycle.length];
+        const pill = document.querySelector(`#sec-${secId} .sec-paq-pill`);
+        if (pill) {
+            pill.className = 'sec-paq-pill' + (sec.paquete === 'p1' ? ' p1' : sec.paquete === 'p2' ? ' p2' : '');
+            pill.textContent = sec.paquete === 'p1' ? 'P1' : sec.paquete === 'p2' ? 'P2' : '---';
+        }
+        debounceSave();
+    }
+
+    function renderSecCard(sec) {
+        const paqClass = sec.paquete === 'p1' ? ' p1' : sec.paquete === 'p2' ? ' p2' : '';
+        const paqLabel = sec.paquete === 'p1' ? 'P1' : sec.paquete === 'p2' ? 'P2' : '---';
+        return `
+            <div class="sec-card" id="sec-${sec.id}">
+                <div class="sec-header">
+                    <i class="ph-bold ph-folder-open" style="color:var(--blue); font-size:16px; flex-shrink:0;"></i>
+                    <input class="sec-name-inp" placeholder="NOMBRE DE LA SECCIÓN" value="${escHtml(sec.nombre)}" oninput="onSecNameChange('${sec.id}', this.value)">
+                    <button class="sec-paq-pill${paqClass}" onclick="toggleSecPaquete('${sec.id}')" title="Ciclar paquete (P1/P2)">${paqLabel}</button>
+                    <button class="sec-del-btn" onclick="eliminarSeccion('${sec.id}')"><i class="ph-bold ph-trash"></i></button>
+                </div>
+                <div style="overflow-x:auto;">
+                <table class="items-table">
+                    <thead><tr>
+                        <th class="col-detalle">Detalle</th>
+                        <th class="col-cant">Cant.</th>
+                        <th class="col-cu">C.U. (Bs.)</th>
+                        <th class="col-dias">Días</th>
+                        <th class="col-total">Total</th>
+                        <th class="col-obs">Observaciones</th>
+                        <th class="td-del"></th>
+                    </tr></thead>
+                    <tbody>
+                        ${sec.items.map(it => renderItemRow(sec.id, it)).join('')}
+                    </tbody>
+                </table>
+                </div>
+                <button class="add-item-btn" onclick="agregarItem('${sec.id}')">
+                    <i class="ph-bold ph-plus-circle"></i> Agregar ítem
+                </button>
+            </div>
+        `;
+    }
+
+    function grupoHeader(paq, label) {
+        const cls = paq === 'p1' ? 'grupo-p1' : paq === 'p2' ? 'grupo-p2' : 'grupo-sin';
+        return `<div class="grupo-header ${cls}"><div class="grupo-line"></div><span class="grupo-txt">${label}</span><div class="grupo-line"></div></div>`;
+    }
+
     function renderSecciones() {
         const container = document.getElementById('secciones-container');
         if (_secciones.length === 0) {
@@ -509,39 +616,31 @@
             </div>`;
             return;
         }
-        // Preserve existing input values before re-render
         readSeccionesFromDOM();
 
-        container.innerHTML = _secciones.map(sec => `
-            <div class="sec-card" id="sec-${sec.id}">
-                <div class="sec-header">
-                    <i class="ph-bold ph-folder-open" style="color:var(--blue); font-size:16px; flex-shrink:0;"></i>
-                    <input class="sec-name-inp" placeholder="NOMBRE DE LA SECCIÓN" value="${escHtml(sec.nombre)}" oninput="onSecNameChange('${sec.id}', this.value)">
-                    <button class="sec-del-btn" onclick="eliminarSeccion('${sec.id}')"><i class="ph-bold ph-trash"></i></button>
-                </div>
-                <div style="overflow-x:auto;">
-                <table class="items-table">
-                    <thead>
-                        <tr>
-                            <th class="col-detalle">Detalle</th>
-                            <th class="col-cant">Cant.</th>
-                            <th class="col-cu">C.U. (Bs.)</th>
-                            <th class="col-dias">Días</th>
-                            <th class="col-total">Total</th>
-                            <th class="col-obs">Observaciones</th>
-                            <th class="td-del"></th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        ${sec.items.map(it => renderItemRow(sec.id, it)).join('')}
-                    </tbody>
-                </table>
-                </div>
-                <button class="add-item-btn" onclick="agregarItem('${sec.id}')">
-                    <i class="ph-bold ph-plus-circle"></i> Agregar ítem
-                </button>
-            </div>
-        `).join('');
+        const hasGroups = _secciones.some(s => s.paquete === 'p1' || s.paquete === 'p2');
+        if (!hasGroups) {
+            container.innerHTML = _secciones.map(sec => renderSecCard(sec)).join('');
+            return;
+        }
+
+        const p1Secs = _secciones.filter(s => s.paquete === 'p1');
+        const p2Secs = _secciones.filter(s => s.paquete === 'p2');
+        const sinSecs = _secciones.filter(s => !s.paquete || s.paquete === '');
+        let html = '';
+        if (p1Secs.length > 0) {
+            html += grupoHeader('p1', 'PAQUETE 1 — Diseño, Arquitectura y Obra Civil');
+            html += p1Secs.map(sec => renderSecCard(sec)).join('');
+        }
+        if (p2Secs.length > 0) {
+            html += grupoHeader('p2', 'PAQUETE 2 — Administración, Operación y Experiencias');
+            html += p2Secs.map(sec => renderSecCard(sec)).join('');
+        }
+        if (sinSecs.length > 0) {
+            if (p1Secs.length > 0 || p2Secs.length > 0) html += grupoHeader('sin', 'SIN ASIGNAR');
+            html += sinSecs.map(sec => renderSecCard(sec)).join('');
+        }
+        container.innerHTML = html;
     }
 
     function renderItemRow(secId, it) {
@@ -823,7 +922,7 @@ Reglas:
 
     // ── IA Brief ──────────────────────────────────────────────────────────
     let _briefFile = null;
-    let _briefProposedSecs = []; // [{nombre, descripcion, monto}]
+    let _briefProposedSecs = []; // [{nombre, descripcion, monto, paquete}]
 
     function abrirModalBrief() {
         _briefFile = null; _briefProposedSecs = [];
@@ -945,7 +1044,8 @@ Reglas:
             _briefProposedSecs = (parsed.secciones || []).map(s => ({
                 nombre: s.nombre || '',
                 descripcion: s.descripcion || '',
-                monto: fNum(s.monto)
+                monto: fNum(s.monto),
+                paquete: ''
             }));
 
             if (_briefProposedSecs.length === 0) throw new Error('La IA no detectó secciones en el brief.');
@@ -963,24 +1063,42 @@ Reglas:
         }
     }
 
+    function toggleBriefSecPaquete(i) {
+        const cycle = ['', 'p1', 'p2'];
+        const cur = cycle.indexOf(_briefProposedSecs[i].paquete || '');
+        _briefProposedSecs[i].paquete = cycle[(cur + 1) % cycle.length];
+        const pill = document.getElementById(`brief-paq-${i}`);
+        if (pill) {
+            const p = _briefProposedSecs[i].paquete;
+            pill.className = 'sec-paq-pill' + (p === 'p1' ? ' p1' : p === 'p2' ? ' p2' : '');
+            pill.textContent = p === 'p1' ? 'P1' : p === 'p2' ? 'P2' : '---';
+        }
+    }
+
     function renderBriefPreview() {
         const list = document.getElementById('brief-preview-list');
-        list.innerHTML = _briefProposedSecs.map((s, i) => `
+        list.innerHTML = _briefProposedSecs.map((s, i) => {
+            const paqClass = s.paquete === 'p1' ? ' p1' : s.paquete === 'p2' ? ' p2' : '';
+            const paqLabel = s.paquete === 'p1' ? 'P1' : s.paquete === 'p2' ? 'P2' : '---';
+            return `
             <div class="brief-sec-row">
-                <input style="background:transparent;border:none;font-size:12px;font-weight:800;color:var(--text);outline:none;width:100%;" value="${escHtml(s.nombre)}" oninput="_briefProposedSecs[${i}].nombre=this.value" placeholder="NOMBRE SECCIÓN">
+                <div style="display:flex;align-items:center;gap:6px;">
+                    <input style="background:transparent;border:none;font-size:12px;font-weight:800;color:var(--text);outline:none;flex:1;" value="${escHtml(s.nombre)}" oninput="_briefProposedSecs[${i}].nombre=this.value" placeholder="NOMBRE SECCIÓN">
+                    <button id="brief-paq-${i}" class="sec-paq-pill${paqClass}" onclick="toggleBriefSecPaquete(${i})" title="Asignar paquete">${paqLabel}</button>
+                </div>
                 <div class="brief-sec-desc">${escHtml(s.descripcion)}</div>
                 <div class="brief-sec-monto-row">
                     <span class="brief-sec-monto-lbl">Monto (Bs.)</span>
                     <input type="number" class="brief-sec-monto-inp" value="${s.monto}" min="0" step="any" oninput="_briefProposedSecs[${i}].monto=parseFloat(this.value)||0">
                 </div>
             </div>
-        `).join('');
+        `}).join('');
     }
 
     function confirmarBrief() {
         _briefProposedSecs.forEach(s => {
             if (!s.nombre.trim()) return;
-            const sec = { id: uid(), nombre: s.nombre.trim(), items: [] };
+            const sec = { id: uid(), nombre: s.nombre.trim(), paquete: s.paquete || '', items: [] };
             if (s.monto > 0) {
                 sec.items.push({
                     id: uid(),
@@ -1017,8 +1135,9 @@ Reglas:
         rows.push(['FECHA:', _meta.fecha]);
         rows.push([]);
 
-        // Sections
-        _secciones.forEach(sec => {
+        // Sections — grouped if any section has paquete
+        const hasGroups = _secciones.some(s => s.paquete === 'p1' || s.paquete === 'p2');
+        const renderSecRows = (sec) => {
             rows.push([sec.nombre || 'SECCIÓN', '', '', '', '', 'OBSERVACIONES']);
             rows.push(['DETALLE', 'CANTIDAD', 'COSTO UNITARIO', 'DÍAS', 'TOTALES', '']);
             rows.push([]);
@@ -1030,7 +1149,28 @@ Reglas:
             });
             rows.push(['', '', '', '', secTotal, '']);
             rows.push([]);
-        });
+        };
+        if (hasGroups) {
+            const p1Secs = _secciones.filter(s => s.paquete === 'p1');
+            const p2Secs = _secciones.filter(s => s.paquete === 'p2');
+            const sinSecs = _secciones.filter(s => !s.paquete || s.paquete === '');
+            if (p1Secs.length > 0) {
+                rows.push(['── PAQUETE 1 — Diseño, Arquitectura y Obra Civil ──']);
+                rows.push([]);
+                p1Secs.forEach(renderSecRows);
+            }
+            if (p2Secs.length > 0) {
+                rows.push(['── PAQUETE 2 — Administración, Operación y Experiencias ──']);
+                rows.push([]);
+                p2Secs.forEach(renderSecRows);
+            }
+            if (sinSecs.length > 0) {
+                if (p1Secs.length > 0 || p2Secs.length > 0) { rows.push(['── SIN ASIGNAR ──']); rows.push([]); }
+                sinSecs.forEach(renderSecRows);
+            }
+        } else {
+            _secciones.forEach(renderSecRows);
+        }
 
         // Totals
         const feePct = fNum(document.getElementById('inp-fee-pct').value);
