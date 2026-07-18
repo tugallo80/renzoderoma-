@@ -124,6 +124,15 @@
         .ai-preview-table td { padding: 5px 6px; border-bottom: 1px solid rgba(0,0,0,0.04); }
         .ai-preview-table td.num { text-align: right; font-weight: 700; }
 
+        /* Brief preview */
+        .brief-sec-row { background: var(--bg); border-radius: 10px; padding: 10px 12px; margin-bottom: 8px; display: flex; flex-direction: column; gap: 4px; }
+        .brief-sec-nombre { font-size: 12px; font-weight: 800; color: var(--text); }
+        .brief-sec-desc { font-size: 11px; color: var(--gray); line-height: 1.4; }
+        .brief-sec-monto-row { display: flex; align-items: center; gap: 6px; margin-top: 4px; }
+        .brief-sec-monto-lbl { font-size: 11px; font-weight: 700; color: var(--gray); }
+        .brief-sec-monto-inp { background: var(--card); border: 1px solid var(--border); border-radius: 6px; padding: 4px 8px; font-size: 13px; font-weight: 800; color: #bf5af2; text-align: right; outline: none; width: 120px; }
+        .brief-sec-monto-inp:focus { border-color: #bf5af2; }
+
         /* Print styles */
         @media print {
             .nav, .action-bar, .add-sec-btn, .add-item-btn, .sec-del-btn, .td-del, .logo-add-btn { display: none !important; }
@@ -203,9 +212,10 @@
 
     <!-- Action bar -->
     <div class="action-bar">
-        <button class="act-btn act-btn-blue" onclick="abrirModalIA()"><i class="ph-bold ph-robot"></i> IA Proveedor</button>
-        <button class="act-btn act-btn-green" onclick="exportarExcel()"><i class="ph-bold ph-microsoft-excel-logo"></i> Excel</button>
-        <button class="act-btn act-btn-gray" onclick="window.print()"><i class="ph-bold ph-printer"></i> PDF</button>
+        <button class="act-btn" style="background:rgba(175,82,222,0.12);color:#bf5af2;font-size:11px;" onclick="abrirModalBrief()"><i class="ph-bold ph-file-text"></i> IA Brief</button>
+        <button class="act-btn act-btn-blue" style="font-size:11px;" onclick="abrirModalIA()"><i class="ph-bold ph-robot"></i> IA Proveedor</button>
+        <button class="act-btn act-btn-green" style="font-size:11px;" onclick="exportarExcel()"><i class="ph-bold ph-microsoft-excel-logo"></i> Excel</button>
+        <button class="act-btn act-btn-gray" style="font-size:11px;" onclick="window.print()"><i class="ph-bold ph-printer"></i> PDF</button>
     </div>
 
     <!-- Modal: AI import -->
@@ -247,6 +257,40 @@
             <button class="btn-primary" id="ia-btn-analizar" onclick="analizarCotizacion()"><i class="ph-bold ph-magnifying-glass"></i> Analizar con IA</button>
             <button class="btn-primary" id="ia-btn-confirmar" style="display:none; background:var(--green);" onclick="confirmarItemsIA()"><i class="ph-bold ph-check"></i> Agregar a la Sección</button>
             <button class="btn-cancel-sm" onclick="cerrarModalIA()">Cancelar</button>
+        </div>
+    </div>
+
+    <!-- Modal: IA Brief -->
+    <div id="mod-brief" class="modal" onclick="if(event.target===this)cerrarModalBrief()">
+        <div class="modal-box">
+            <h3 class="modal-title" style="color:#bf5af2;"><i class="ph-bold ph-file-text"></i> Generar Presupuesto desde Brief</h3>
+            <p style="font-size:13px; color:var(--gray); margin:0 0 12px 0;">Subí el brief o esquema presupuestario del cliente. La IA crea las secciones con sus montos globales — ideal para la fase de licitación sin necesidad de ítems detallados.</p>
+
+            <label class="inp-lbl">Brief del cliente (PDF, imagen, Excel o CSV)</label>
+            <label style="display:block; border:2px dashed #bf5af2; border-radius:12px; padding:20px; text-align:center; cursor:pointer; color:#bf5af2; font-size:13px; font-weight:600;">
+                <i class="ph-bold ph-upload-simple" style="font-size:24px; display:block; margin-bottom:6px;"></i>
+                <span id="brief-file-name">Tocar para seleccionar</span>
+                <div style="font-size:10px; margin-top:4px; font-weight:600; color:var(--gray);">PDF · Imagen · Excel (.xlsx) · CSV</div>
+                <input type="file" id="brief-file-inp" accept="image/*,application/pdf,.xlsx,.xls,.csv" style="display:none" onchange="onBriefFileSelect(this)">
+            </label>
+
+            <label class="inp-lbl">Notas adicionales (opcional)</label>
+            <textarea class="inp-std" id="brief-extra" rows="2" placeholder="Ej: somos tres socios en sociedad accidental, agregar fee de agencia del 15%" style="resize:none;"></textarea>
+
+            <div class="ai-prog-box" id="brief-prog-box">
+                <div class="ai-spinner" style="border-top-color:#bf5af2;"></div>
+                <div class="ai-prog-msg" id="brief-prog-msg">Leyendo brief...</div>
+            </div>
+
+            <div id="brief-preview-wrap" style="display:none; margin-top:14px;">
+                <div style="font-size:13px; font-weight:800; margin-bottom:8px;">Secciones detectadas:</div>
+                <div id="brief-preview-list"></div>
+                <div style="font-size:11px; color:var(--gray); margin-top:8px;">Podés editar los montos antes de confirmar. Los ítems detallados los cargás después con "IA Proveedor".</div>
+            </div>
+
+            <button class="btn-primary" id="brief-btn-analizar" style="background:#bf5af2;" onclick="analizarBrief()"><i class="ph-bold ph-magnifying-glass"></i> Generar Secciones con IA</button>
+            <button class="btn-primary" id="brief-btn-confirmar" style="display:none; background:var(--green);" onclick="confirmarBrief()"><i class="ph-bold ph-check"></i> Crear Secciones</button>
+            <button class="btn-cancel-sm" onclick="cerrarModalBrief()">Cancelar</button>
         </div>
     </div>
 
@@ -630,16 +674,23 @@ Reglas:
 - Devolvé SOLO el JSON válido, sin texto adicional, sin markdown, sin bloque de código`;
 
             let parts;
+            const destIdEx = document.getElementById('ia-dest-sec').value;
+            const destSecEx = destIdEx !== '_new' ? _secciones.find(s => s.id === destIdEx) : null;
+            const secCtxEx = destSecEx ? ` Esta cotización corresponde a la sección "${destSecEx.nombre}". Extraé SOLO los ítems relevantes a esa sección.` : '';
+
             if (isExcel) {
                 progMsg.textContent = 'Leyendo Excel...';
                 const excelText = await excelToText(_iaFile);
-                const userText = `Cotización en formato tabla:\n\n${excelText}${ctx ? '\n\nContexto adicional: ' + ctx : ''}`;
+                const userText = `Cotización en formato tabla:\n\n${excelText}${secCtxEx}${ctx ? '\n\nContexto adicional: ' + ctx : ''}`;
                 parts = [{ text: userText }];
             } else {
                 progMsg.textContent = 'Leyendo archivo...';
                 const base64 = await fileToBase64(_iaFile);
                 const mime = _iaFile.type || 'application/octet-stream';
-                const userText = ctx ? `Cotización adjunta. Contexto adicional: ${ctx}` : 'Cotización adjunta. Extraé todos los ítems.';
+                const destId = document.getElementById('ia-dest-sec').value;
+            const destSec = destId !== '_new' ? _secciones.find(s => s.id === destId) : null;
+            const secCtx = destSec ? ` Esta cotización corresponde a la sección "${destSec.nombre}". Extraé SOLO los ítems relevantes a esa sección.` : '';
+            const userText = `Cotización adjunta.${secCtx}${ctx ? ' Contexto adicional: ' + ctx : ''} Extraé todos los ítems.`;
                 parts = [
                     { inlineData: { data: base64.split(',')[1], mimeType: mime } },
                     { text: userText }
@@ -768,6 +819,184 @@ Reglas:
             reader.onerror = rej;
             reader.readAsArrayBuffer(file);
         });
+    }
+
+    // ── IA Brief ──────────────────────────────────────────────────────────
+    let _briefFile = null;
+    let _briefProposedSecs = []; // [{nombre, descripcion, monto}]
+
+    function abrirModalBrief() {
+        _briefFile = null; _briefProposedSecs = [];
+        document.getElementById('brief-file-name').textContent = 'Tocar para seleccionar';
+        document.getElementById('brief-file-inp').value = '';
+        document.getElementById('brief-prog-box').style.display = 'none';
+        document.getElementById('brief-preview-wrap').style.display = 'none';
+        document.getElementById('brief-btn-analizar').style.display = 'block';
+        document.getElementById('brief-btn-confirmar').style.display = 'none';
+        document.getElementById('brief-extra').value = '';
+        document.getElementById('mod-brief').style.display = 'flex';
+    }
+    function cerrarModalBrief() { document.getElementById('mod-brief').style.display = 'none'; }
+
+    function onBriefFileSelect(inp) {
+        if (inp.files && inp.files[0]) {
+            _briefFile = inp.files[0];
+            document.getElementById('brief-file-name').textContent = _briefFile.name;
+        }
+    }
+
+    async function analizarBrief() {
+        if (!_briefFile) { alert('Seleccioná el archivo del brief primero.'); return; }
+
+        const btn = document.getElementById('brief-btn-analizar');
+        const progBox = document.getElementById('brief-prog-box');
+        const progMsg = document.getElementById('brief-prog-msg');
+
+        btn.disabled = true;
+        progBox.style.display = 'block';
+        progMsg.textContent = 'Leyendo brief...';
+
+        try {
+            const extra = document.getElementById('brief-extra').value.trim();
+            const fname = _briefFile.name.toLowerCase();
+            const isExcel = fname.endsWith('.xlsx') || fname.endsWith('.xls') || fname.endsWith('.csv');
+
+            const sysPrompt = `Sos un asistente especializado en presupuestos de eventos, stands y producción audiovisual.
+Analizás un BRIEF o esquema presupuestario de un cliente y generás una lista de secciones del presupuesto.
+
+Devolvé SOLO un JSON válido con este formato exacto, sin texto adicional, sin markdown:
+{
+  "meta": {
+    "cliente": "nombre del cliente si está en el documento, sino vacío",
+    "actividad": "nombre del evento/proyecto si está en el documento, sino vacío",
+    "total_brief": 0
+  },
+  "secciones": [
+    {
+      "nombre": "NOMBRE DE LA SECCIÓN EN MAYÚSCULAS",
+      "descripcion": "Descripción breve del alcance de esta sección",
+      "monto": 0
+    }
+  ]
+}
+
+Reglas:
+- Cada sección del brief se convierte en una entrada de "secciones"
+- "nombre": nombre de la sección en MAYÚSCULAS, conciso
+- "descripcion": resumen del alcance/ítem en una línea
+- "monto": monto asignado en el brief (número sin formato, sin comas)
+- Si el brief no tiene montos explícitos, ponés 0
+- Extraé TODAS las secciones del documento
+- No inventés secciones que no están en el documento`;
+
+            let parts;
+            if (isExcel) {
+                progMsg.textContent = 'Leyendo Excel...';
+                const txt = await excelToText(_briefFile);
+                parts = [{ text: `Brief en formato tabla:\n\n${txt}${extra ? '\n\nNotas: ' + extra : ''}` }];
+            } else {
+                progMsg.textContent = 'Analizando brief con IA...';
+                const base64 = await fileToBase64(_briefFile);
+                const mime = _briefFile.type || 'application/octet-stream';
+                parts = [
+                    { inlineData: { data: base64.split(',')[1], mimeType: mime } },
+                    { text: `Brief adjunto. Extraé todas las secciones.${extra ? ' Notas adicionales: ' + extra : ''}` }
+                ];
+            }
+
+            progMsg.textContent = 'Generando secciones...';
+
+            const token = firebase.auth().currentUser ? await firebase.auth().currentUser.getIdToken() : null;
+            const headers = { 'Content-Type': 'application/json' };
+            if (token) headers['Authorization'] = 'Bearer ' + token;
+
+            const resp = await fetch('/api/gemini', {
+                method: 'POST',
+                headers,
+                body: JSON.stringify({
+                    systemInstruction: { parts: [{ text: sysPrompt }] },
+                    contents: [{ role: 'user', parts }],
+                    generationConfig: { maxOutputTokens: 4000, temperature: 0.1 }
+                })
+            });
+
+            if (!resp.ok) { const t = await resp.text(); throw new Error(`HTTP ${resp.status}: ${t}`); }
+            const data = await resp.json();
+            const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+
+            let parsed;
+            try {
+                const jsonMatch = rawText.match(/\{[\s\S]*\}/);
+                parsed = JSON.parse(jsonMatch ? jsonMatch[0] : rawText);
+            } catch(e) {
+                throw new Error('No se pudo interpretar la respuesta de la IA.');
+            }
+
+            // Update meta fields from brief
+            if (parsed.meta) {
+                if (parsed.meta.cliente && !document.getElementById('meta-cliente').value.trim()) {
+                    document.getElementById('meta-cliente').value = parsed.meta.cliente;
+                }
+                if (parsed.meta.actividad && !document.getElementById('meta-actividad').value.trim()) {
+                    document.getElementById('meta-actividad').value = parsed.meta.actividad;
+                }
+            }
+
+            _briefProposedSecs = (parsed.secciones || []).map(s => ({
+                nombre: s.nombre || '',
+                descripcion: s.descripcion || '',
+                monto: fNum(s.monto)
+            }));
+
+            if (_briefProposedSecs.length === 0) throw new Error('La IA no detectó secciones en el brief.');
+
+            renderBriefPreview();
+            progBox.style.display = 'none';
+            document.getElementById('brief-preview-wrap').style.display = 'block';
+            document.getElementById('brief-btn-confirmar').style.display = 'block';
+
+        } catch(e) {
+            progBox.style.display = 'none';
+            alert('Error: ' + e.message);
+        } finally {
+            btn.disabled = false;
+        }
+    }
+
+    function renderBriefPreview() {
+        const list = document.getElementById('brief-preview-list');
+        list.innerHTML = _briefProposedSecs.map((s, i) => `
+            <div class="brief-sec-row">
+                <input style="background:transparent;border:none;font-size:12px;font-weight:800;color:var(--text);outline:none;width:100%;" value="${escHtml(s.nombre)}" oninput="_briefProposedSecs[${i}].nombre=this.value" placeholder="NOMBRE SECCIÓN">
+                <div class="brief-sec-desc">${escHtml(s.descripcion)}</div>
+                <div class="brief-sec-monto-row">
+                    <span class="brief-sec-monto-lbl">Monto (Bs.)</span>
+                    <input type="number" class="brief-sec-monto-inp" value="${s.monto}" min="0" step="any" oninput="_briefProposedSecs[${i}].monto=parseFloat(this.value)||0">
+                </div>
+            </div>
+        `).join('');
+    }
+
+    function confirmarBrief() {
+        _briefProposedSecs.forEach(s => {
+            if (!s.nombre.trim()) return;
+            const sec = { id: uid(), nombre: s.nombre.trim(), items: [] };
+            if (s.monto > 0) {
+                sec.items.push({
+                    id: uid(),
+                    detalle: s.descripcion || s.nombre,
+                    cantidad: 1,
+                    costo_unitario: s.monto,
+                    dias: 1,
+                    obs: 'Monto global — detallar en fase final'
+                });
+            }
+            _secciones.push(sec);
+        });
+        renderSecciones();
+        recalcTotals();
+        guardarTodo();
+        cerrarModalBrief();
     }
 
     // ── Export Excel ──────────────────────────────────────────────────────
