@@ -474,7 +474,7 @@
                 div.className = 'app-item';
                 if (oculto) div.style.opacity = '0.55';
                 div.innerHTML = `<div class="icon-wrap" style="position:relative;">${imgSrc}<div class="badge-status" style="color:${iconColor};">${statusIcon}</div>${ocultoBadge}</div><div class="app-name">${displayNombre}${oculto ? ' 🚫' : ''}</div>`;
-                div.addEventListener('click', () => openProject(pid, safeName));
+                div.addEventListener('click', () => openProject(pid, safeName, p.tipo || ''));
                 div.addEventListener('contextmenu', e => { openActionMenu(pid, safeName, safeImg, p.estado); e.preventDefault(); });
                 div.addEventListener('touchstart', e => _lpStart(e, pid, safeName, safeImg, p.estado), {passive:true});
                 div.addEventListener('touchend', _lpCancel, {passive:true});
@@ -623,12 +623,11 @@
         closeModals();
     }
 
-    function openProject(pid, pname) {
+    function openProject(pid, pname, tipo) {
         if (window._lpFired) { window._lpFired = false; return; }
-        const proj = globalProjectsArr.find(p => p.pid === pid);
         localStorage.setItem('rubik_current_pid', pid);
         localStorage.setItem('rubik_current_pname', pname);
-        localStorage.setItem('rubik_project_tipo', (proj && proj.tipo) || '');
+        localStorage.setItem('rubik_project_tipo', tipo || '');
         window.location.href = 'dashboard-proyecto.html';
     }
 

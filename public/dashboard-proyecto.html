@@ -110,7 +110,7 @@
 
     <div class="modules-grid">
         <div class="mod-item" onclick="abrirModulo('disenos')"><div class="mod-icon ic-dis"><i class="ph-fill ph-palette"></i></div><div class="mod-label">Diseños &<br>Archivos</div></div>
-        <div class="mod-item" onclick="abrirModulo('presupuesto')"><div class="mod-icon ic-pre"><i class="ph-fill ph-calculator"></i></div><div class="mod-label">Presupuesto<br>& Extras</div></div>
+        <div class="mod-item" id="mod-presupuesto" onclick="abrirModulo('presupuesto')"><div class="mod-icon ic-pre"><i class="ph-fill ph-calculator"></i></div><div class="mod-label" id="lbl-presupuesto">Presupuesto<br>& Extras</div></div>
         <div class="mod-item" onclick="abrirModulo('gantt')"><div class="mod-icon ic-gan"><i class="ph-fill ph-calendar-check"></i></div><div class="mod-label">Gantt de<br>Obra</div></div>
         <div class="mod-item" onclick="abrirModulo('produccion')"><div class="mod-icon ic-pro"><i class="ph-fill ph-hammer"></i></div><div class="mod-label">Control<br>Producción</div></div>
         <div class="mod-item" onclick="abrirModulo('compras')"><div class="mod-icon ic-com"><i class="ph-fill ph-shopping-cart"></i></div><div class="mod-label">Compras y<br>Materiales</div></div>
@@ -275,6 +275,18 @@
     })();
 
     function cargarDashboard() {
+        // Leer tipo de proyecto para routing correcto
+        db.ref(`proyectos/${cid}/${pid}/tipo`).once('value', snap => {
+            _proyTipo = snap.val() || '';
+            localStorage.setItem('rubik_project_tipo', _proyTipo);
+            if (_proyTipo === 'agencia') {
+                const lbl = document.getElementById('lbl-presupuesto');
+                if (lbl) lbl.innerHTML = 'Ppto.<br>Agencia';
+                const ico = document.querySelector('#mod-presupuesto .mod-icon');
+                if (ico) ico.style.background = 'rgba(255,149,0,0.12)';
+            }
+        });
+
         // Inicializar botón visible/oculto
         db.ref(`proyectos/${cid}/${pid}/visible_cliente`).once('value', snap => {
             const vis = snap.val() !== false;
@@ -375,7 +387,7 @@
     }
 
     function fMoney(num) { return parseFloat(num || 0).toLocaleString('es-BO', {minimumFractionDigits: 2, maximumFractionDigits: 2}); }
-    const _proyTipo = localStorage.getItem('rubik_project_tipo') || '';
+    let _proyTipo = localStorage.getItem('rubik_project_tipo') || '';
     function abrirModulo(mod) {
         const dest = (mod === 'presupuesto' && _proyTipo === 'agencia') ? 'agencia' : mod;
         window.location.href = dest + '.html?cid=' + cid + '&pid=' + pid;
