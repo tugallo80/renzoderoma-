@@ -99,6 +99,13 @@
         .act-btn-orange { background: var(--orange); color: #fff; }
         .act-btn-gray { background: var(--bg); color: var(--text); border: 1px solid var(--border); }
         .act-btn:active { opacity: 0.8; transform: scale(0.97); }
+        /* Share mode: hide hub-only elements */
+        .share-mode #btn-nav-dashboard,
+        .share-mode #btn-ia-brief,
+        .share-mode #btn-ia-proveedor,
+        .share-mode #btn-share-link { display: none !important; }
+        #badge-share { display: none; font-size: 10px; font-weight: 800; background: rgba(255,149,0,0.15); color: var(--orange); border-radius: 20px; padding: 3px 10px; letter-spacing: 0.3px; white-space: nowrap; }
+        .share-mode #badge-share { display: inline-flex; align-items: center; gap: 4px; }
 
         /* Add section button */
         .add-sec-btn { width: 100%; background: rgba(0,122,255,0.07); border: 1.5px dashed var(--blue); border-radius: 14px; padding: 14px; font-size: 13px; font-weight: 800; color: var(--blue); cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; margin-bottom: 14px; }
@@ -179,7 +186,8 @@
             @page { margin: 0; size: A4 portrait; }
             body { padding: 12mm 10mm 18mm 10mm !important; background: #fff !important; color: #000; padding-bottom: 120px; }
             .nav, .action-bar, .add-sec-btn, .add-item-btn, .sec-del-btn, .td-del, .logo-add-btn,
-            #meta-paq-field, #socio-filter-bar, #paq-filter-bar, .sec-paq-pill, .float-totals { display: none !important; }
+            #meta-paq-field, #socio-filter-bar, #paq-filter-bar, .sec-paq-pill, .float-totals,
+            #badge-share, #btn-share-link { display: none !important; }
             .meta-card, .sec-card, .totals-card { border: 1px solid #ccc; break-inside: avoid; box-shadow: none; border-radius: 0; margin-bottom: 8px; }
             .meta-inp, .td-inp, .sec-name-inp, .fee-inp { border: none; background: transparent; padding: 0; }
             .items-table thead th, .items-table tbody td { padding: 4px 6px; font-size: 11px; }
@@ -192,8 +200,9 @@
 
     <!-- Navigation -->
     <div class="nav">
-        <button class="btn-nav" onclick="volverDashboard()"><i class="ph-bold ph-caret-left"></i> Dashboard</button>
+        <button id="btn-nav-dashboard" class="btn-nav" onclick="volverDashboard()"><i class="ph-bold ph-caret-left"></i> Dashboard</button>
         <div class="nav-title" id="nav-title">Presupuesto Agencia</div>
+        <span id="badge-share"><i class="ph-bold ph-users"></i> Modo Socio</span>
         <button class="btn-nav" onclick="guardarTodo()" style="color:var(--green);"><i class="ph-bold ph-floppy-disk"></i> Guardar</button>
     </div>
 
@@ -285,10 +294,11 @@
 
     <!-- Action bar -->
     <div class="action-bar">
-        <button class="act-btn" style="background:rgba(175,82,222,0.12);color:#bf5af2;font-size:11px;" onclick="abrirModalBrief()"><i class="ph-bold ph-file-text"></i> IA Brief</button>
-        <button class="act-btn act-btn-blue" style="font-size:11px;" onclick="abrirModalIA()"><i class="ph-bold ph-robot"></i> IA Proveedor</button>
+        <button id="btn-ia-brief" class="act-btn" style="background:rgba(175,82,222,0.12);color:#bf5af2;font-size:11px;" onclick="abrirModalBrief()"><i class="ph-bold ph-file-text"></i> IA Brief</button>
+        <button id="btn-ia-proveedor" class="act-btn act-btn-blue" style="font-size:11px;" onclick="abrirModalIA()"><i class="ph-bold ph-robot"></i> IA Proveedor</button>
         <button class="act-btn act-btn-green" style="font-size:11px;" onclick="exportarExcel()"><i class="ph-bold ph-microsoft-excel-logo"></i> Excel</button>
         <button class="act-btn act-btn-gray" style="font-size:11px;" onclick="imprimirDoc()"><i class="ph-bold ph-printer"></i> PDF</button>
+        <button id="btn-share-link" class="act-btn" style="background:rgba(0,122,255,0.1);color:var(--blue);border:1.5px solid var(--blue);font-size:11px;" onclick="copiarLinkSocio()"><i class="ph-bold ph-share-network"></i> Compartir</button>
     </div>
 
     <!-- Modal: AI import -->
@@ -397,8 +407,10 @@
     const cid = params.get('cid') || localStorage.getItem('rubik_client_id');
     const pid = params.get('pid') || localStorage.getItem('rubik_current_pid');
     const pname = localStorage.getItem('rubik_current_pname') || 'Proyecto';
+    const _shareMode = params.get('share') === '1';
 
     if (!cid || !pid) { location.href = 'clientes.html'; }
+    if (_shareMode) document.body.classList.add('share-mode');
 
     document.getElementById('nav-title').textContent = pname;
 
@@ -1525,11 +1537,41 @@ Reglas:
         setTimeout(() => { window.location.href = 'dashboard-proyecto.html'; }, 200);
     }
 
+    function copiarLinkSocio() {
+        const url = `${location.origin}/agencia.html?cid=${encodeURIComponent(cid)}&pid=${encodeURIComponent(pid)}&share=1`;
+        navigator.clipboard.writeText(url).then(() => {
+            const btn = document.getElementById('btn-share-link');
+            const orig = btn.innerHTML;
+            btn.innerHTML = '<i class="ph-bold ph-check"></i> ¡Copiado!';
+            btn.style.background = 'rgba(52,199,89,0.15)';
+            btn.style.color = 'var(--green)';
+            btn.style.borderColor = 'var(--green)';
+            setTimeout(() => {
+                btn.innerHTML = orig;
+                btn.style.background = '';
+                btn.style.color = '';
+                btn.style.borderColor = '';
+            }, 2500);
+        }).catch(() => {
+            prompt('Copiá este link:', `${location.origin}/agencia.html?cid=${encodeURIComponent(cid)}&pid=${encodeURIComponent(pid)}&share=1`);
+        });
+    }
+
     // ── Auth & Load ──────────────────────────────────────────────────────────
     (function init() {
         setupDragDrop('ia-file-label', f => { _iaFile = f; document.getElementById('ia-file-name').textContent = f.name; });
         setupDragDrop('brief-file-label', f => { _briefFile = f; document.getElementById('brief-file-name').textContent = f.name; });
         const auth = firebase.auth();
+        if (_shareMode) {
+            // Socio access: anonymous sign-in, no account needed
+            auth.signInAnonymously()
+                .then(() => cargarDatos())
+                .catch(e => {
+                    console.error('anon auth error', e);
+                    document.body.innerHTML = '<div style="padding:40px;text-align:center;font-family:sans-serif;"><p style="font-size:18px;">No se pudo cargar el proyecto.<br>Pedí un nuevo link a tu contacto.</p></div>';
+                });
+            return;
+        }
         if (auth.currentUser) { cargarDatos(); return; }
         auth.onAuthStateChanged(user => {
             if (user) cargarDatos();
