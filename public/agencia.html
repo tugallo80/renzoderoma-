@@ -357,12 +357,12 @@
             <h3 class="modal-title" style="color:#bf5af2;"><i class="ph-bold ph-file-text"></i> Generar Presupuesto desde Brief</h3>
             <p style="font-size:13px; color:var(--gray); margin:0 0 12px 0;">Subí el brief o esquema presupuestario del cliente. La IA crea las secciones con sus montos globales — ideal para la fase de licitación sin necesidad de ítems detallados.</p>
 
-            <label class="inp-lbl">Brief del cliente (PDF, imagen, Excel o CSV)</label>
-            <label id="brief-file-label" style="display:block; border:2px dashed #bf5af2; border-radius:12px; padding:20px; text-align:center; cursor:pointer; color:#bf5af2; font-size:13px; font-weight:600;">
+            <label class="inp-lbl">Brief del cliente (podés seleccionar varios archivos)</label>
+            <label id="brief-file-label" style="display:block; border:2px dashed #bf5af2; border-radius:12px; padding:16px 20px; text-align:center; cursor:pointer; color:#bf5af2; font-size:13px; font-weight:600;">
                 <i class="ph-bold ph-upload-simple" style="font-size:24px; display:block; margin-bottom:6px;"></i>
                 <span id="brief-file-name">Tocar para seleccionar</span>
-                <div style="font-size:10px; margin-top:4px; font-weight:600; color:var(--gray);">PDF · Word · Imagen · Excel · CSV</div>
-                <input type="file" id="brief-file-inp" accept="image/*,application/pdf,.xlsx,.xls,.csv,.docx,.doc" style="display:none" onchange="onBriefFileSelect(this)">
+                <div style="font-size:10px; margin-top:4px; font-weight:600; color:var(--gray);">PDF · Word · Imagen · Excel · CSV — múltiples archivos OK</div>
+                <input type="file" id="brief-file-inp" accept="image/*,application/pdf,.xlsx,.xls,.csv,.docx,.doc" multiple style="display:none" onchange="onBriefFileSelect(this)">
             </label>
 
             <label class="inp-lbl">Notas adicionales (opcional)</label>
@@ -1017,13 +1017,15 @@ Devolvé SOLO un JSON válido con este formato exacto, sin markdown ni texto adi
   ]
 }
 Reglas:
-- Usá EXACTAMENTE los nombres de sección de la lista
-- Si un ítem no encaja claramente en ninguna sección, asignalo a la más cercana
-- Si realmente no hay sección adecuada, creá una nueva con nombre descriptivo
-- "detalle": nunca vacío
+- CRÍTICO: Las categorías internas del proveedor (ej: "Recurso Humano", "Materiales", "Equipos", "Mano de Obra") son agrupaciones INTERNAS del proveedor — NUNCA las uses como nombre de sección. En cambio, analizá el CONTENIDO de cada ítem individual y asignalo a la sección del presupuesto más apropiada según su función real (ej: "Coordinación" → sección de Administración o Producción; "Diseño" → sección de Diseño; "Instalación" → sección de Montaje/Instalación).
+- Trabajá ítem por ítem, no sección por sección del proveedor.
+- Usá EXACTAMENTE los nombres de sección de la lista de arriba.
+- Si un ítem no encaja claramente en ninguna sección, asignalo a la más cercana semánticamente.
+- Si realmente no hay sección adecuada, creá una nueva con nombre descriptivo en mayúsculas.
+- "detalle": nunca vacío — usá el nombre completo del ítem/servicio.
 ${precioRegla}
-- Si el total está pero no hay desglose, ponés cantidad=1, costo_unitario=total_del_item, dias=1
-- Ignorá filas de encabezado, totales generales, subtotales y celdas vacías
+- Si el total del ítem está pero no hay desglose de cantidad/precio, ponés cantidad=1, costo_unitario=total_del_item, dias=1.
+- Ignorá filas de encabezado, totales generales, subtotales y celdas vacías.
 - Devolvé SOLO el JSON`;
 
             let parts;
@@ -1241,11 +1243,11 @@ ${precioRegla}
     }
 
     // ── IA Brief ──────────────────────────────────────────────────────────
-    let _briefFile = null;
+    let _briefFiles = [];
     let _briefProposedSecs = []; // [{nombre, descripcion, monto, paquete}]
 
     function abrirModalBrief() {
-        _briefFile = null; _briefProposedSecs = [];
+        _briefFiles = []; _briefProposedSecs = [];
         document.getElementById('brief-file-name').textContent = 'Tocar para seleccionar';
         document.getElementById('brief-file-inp').value = '';
         document.getElementById('brief-prog-box').style.display = 'none';
@@ -1258,14 +1260,16 @@ ${precioRegla}
     function cerrarModalBrief() { document.getElementById('mod-brief').style.display = 'none'; }
 
     function onBriefFileSelect(inp) {
-        if (inp.files && inp.files[0]) {
-            _briefFile = inp.files[0];
-            document.getElementById('brief-file-name').textContent = _briefFile.name;
+        if (inp.files && inp.files.length > 0) {
+            _briefFiles = Array.from(inp.files);
+            const names = _briefFiles.map(f => f.name).join(', ');
+            document.getElementById('brief-file-name').textContent =
+                _briefFiles.length === 1 ? names : `${_briefFiles.length} archivos: ${names}`;
         }
     }
 
     async function analizarBrief() {
-        if (!_briefFile) { alert('Seleccioná el archivo del brief primero.'); return; }
+        if (_briefFiles.length === 0) { alert('Seleccioná al menos un archivo de brief.'); return; }
 
         const btn = document.getElementById('brief-btn-analizar');
         const progBox = document.getElementById('brief-prog-box');
@@ -1273,22 +1277,19 @@ ${precioRegla}
 
         btn.disabled = true;
         progBox.style.display = 'block';
-        progMsg.textContent = 'Leyendo brief...';
+        progMsg.textContent = 'Leyendo archivos...';
 
         try {
             const extra = document.getElementById('brief-extra').value.trim();
-            const fname = _briefFile.name.toLowerCase();
-            const isExcel = fname.endsWith('.xlsx') || fname.endsWith('.xls') || fname.endsWith('.csv');
-            const isWord = fname.endsWith('.docx') || fname.endsWith('.doc');
 
             const sysPrompt = `Sos un asistente especializado en presupuestos de eventos, stands y producción audiovisual.
-Analizás un BRIEF o esquema presupuestario de un cliente y generás una lista de secciones del presupuesto.
+Analizás uno o varios documentos de brief/esquema presupuestario y generás una lista consolidada de secciones del presupuesto.
 
 Devolvé SOLO un JSON válido con este formato exacto, sin texto adicional, sin markdown:
 {
   "meta": {
-    "cliente": "nombre del cliente si está en el documento, sino vacío",
-    "actividad": "nombre del evento/proyecto si está en el documento, sino vacío",
+    "cliente": "nombre del cliente si está en algún documento, sino vacío",
+    "actividad": "nombre del evento/proyecto si está en algún documento, sino vacío",
     "total_brief": 0
   },
   "secciones": [
@@ -1301,32 +1302,42 @@ Devolvé SOLO un JSON válido con este formato exacto, sin texto adicional, sin 
 }
 
 Reglas:
-- Cada sección del brief se convierte en una entrada de "secciones"
+- Consolidá las secciones de TODOS los documentos en una lista unificada (sin duplicados)
 - "nombre": nombre de la sección en MAYÚSCULAS, conciso
 - "descripcion": resumen del alcance/ítem en una línea
-- "monto": monto asignado en el brief (número sin formato, sin comas)
-- Si el brief no tiene montos explícitos, ponés 0
-- Extraé TODAS las secciones del documento
-- No inventés secciones que no están en el documento`;
+- "monto": monto asignado en el brief (número sin formato, sin comas ni puntos de miles). Bolivianos.
+- Si no hay montos explícitos, ponés 0
+- Extraé TODAS las secciones relevantes de todos los documentos
+- No inventés secciones que no estén en los documentos`;
 
-            let parts;
-            if (isExcel) {
-                progMsg.textContent = 'Leyendo Excel...';
-                const txt = await excelToText(_briefFile);
-                parts = [{ text: `Brief en formato tabla:\n\n${txt}${extra ? '\n\nNotas: ' + extra : ''}` }];
-            } else if (isWord) {
-                progMsg.textContent = 'Leyendo Word...';
-                const txt = await docxToText(_briefFile);
-                parts = [{ text: `Brief en Word:\n\n${txt}${extra ? '\n\nNotas: ' + extra : ''}` }];
-            } else {
-                progMsg.textContent = 'Analizando brief con IA...';
-                const base64 = await fileToBase64(_briefFile);
-                const mime = _briefFile.type || 'application/octet-stream';
-                parts = [
-                    { inlineData: { data: base64.split(',')[1], mimeType: mime } },
-                    { text: `Brief adjunto. Extraé todas las secciones.${extra ? ' Notas adicionales: ' + extra : ''}` }
-                ];
+            // Build parts: concatenate text files, send binary files as inlineData
+            const parts = [];
+            let textAccum = '';
+
+            for (let i = 0; i < _briefFiles.length; i++) {
+                const f = _briefFiles[i];
+                const fname = f.name.toLowerCase();
+                progMsg.textContent = `Leyendo ${f.name}...`;
+                const isExcel = fname.endsWith('.xlsx') || fname.endsWith('.xls') || fname.endsWith('.csv');
+                const isWord = fname.endsWith('.docx') || fname.endsWith('.doc');
+                if (isExcel) {
+                    const txt = await excelToText(f);
+                    textAccum += `\n\n=== ARCHIVO ${i+1}: ${f.name} ===\n${txt}`;
+                } else if (isWord) {
+                    const txt = await docxToText(f);
+                    textAccum += `\n\n=== ARCHIVO ${i+1}: ${f.name} ===\n${txt}`;
+                } else {
+                    // image / PDF → flush accumulated text first, then inlineData
+                    if (textAccum) { parts.push({ text: textAccum }); textAccum = ''; }
+                    const base64 = await fileToBase64(f);
+                    const mime = f.type || 'application/octet-stream';
+                    parts.push({ inlineData: { data: base64.split(',')[1], mimeType: mime } });
+                    parts.push({ text: `(Archivo ${i+1}: ${f.name})` });
+                }
             }
+            if (textAccum) parts.push({ text: textAccum });
+            if (extra) parts.push({ text: `\nNotas adicionales del usuario: ${extra}` });
+            parts.push({ text: 'Analizá todos los archivos anteriores y generá el JSON de secciones consolidado.' });
 
             progMsg.textContent = 'Generando secciones...';
 
@@ -1560,7 +1571,7 @@ Reglas:
     // ── Auth & Load ──────────────────────────────────────────────────────────
     (function init() {
         setupDragDrop('ia-file-label', f => { _iaFile = f; document.getElementById('ia-file-name').textContent = f.name; });
-        setupDragDrop('brief-file-label', f => { _briefFile = f; document.getElementById('brief-file-name').textContent = f.name; });
+        setupDragDrop('brief-file-label', f => { _briefFiles = [f]; document.getElementById('brief-file-name').textContent = f.name; });
         const auth = firebase.auth();
         if (_shareMode) {
             // Socio access: anonymous sign-in, no account needed
