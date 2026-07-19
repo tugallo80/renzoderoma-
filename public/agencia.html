@@ -1305,8 +1305,9 @@ Reglas:
 - Consolidá las secciones de TODOS los documentos en una lista unificada (sin duplicados)
 - "nombre": nombre de la sección en MAYÚSCULAS, conciso
 - "descripcion": resumen del alcance/ítem en una línea
-- "monto": monto asignado en el brief (número sin formato, sin comas ni puntos de miles). Bolivianos.
-- Si no hay montos explícitos, ponés 0
+- "monto": OBLIGATORIO — extraé el monto asignado a cada sección. El número debe ser limpio, sin Bs., sin puntos de miles, sin comas decimales. Formato boliviano "1.500,00" → 1500; "250.000" → 250000. Si un esquema presupuestario lista montos por sección, SIEMPRE extraé esos valores.
+- Solo ponés 0 si REALMENTE no existe ningún monto en ningún documento para esa sección.
+- Los montos pueden llamarse: monto, presupuesto, total, importe, valor, costo, asignación.
 - Extraé TODAS las secciones relevantes de todos los documentos
 - No inventés secciones que no estén en los documentos`;
 
@@ -1380,7 +1381,7 @@ Reglas:
             _briefProposedSecs = (parsed.secciones || []).map(s => ({
                 nombre: s.nombre || '',
                 descripcion: s.descripcion || '',
-                monto: fNum(s.monto),
+                monto: parseAmt(s.monto),
                 paquete: ''
             }));
 
