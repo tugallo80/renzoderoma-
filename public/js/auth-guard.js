@@ -13,6 +13,10 @@
     var EXEMPT = ['/login.html', '/cliente-view', '/proveedor-grafico', '/interno/', '/contratista/', '/404.html', '/juego-viborita', '/apu.html'];
     var isExempt = EXEMPT.some(function (p) { return path.indexOf(p) !== -1; });
 
+    // Modo socio (share link): cid+pid en la URL → no requiere auth de hub
+    var _sp = new URLSearchParams(location.search);
+    if (_sp.get('cid') && _sp.get('pid')) isExempt = true;
+
     if (path === '/' || path === '') {
         location.replace('/login.html');
         return;
