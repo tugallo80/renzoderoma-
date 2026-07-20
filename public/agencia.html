@@ -305,7 +305,21 @@
         <button id="btn-ia-proveedor" class="act-btn act-btn-blue" style="font-size:11px;" onclick="abrirModalIA()"><i class="ph-bold ph-robot"></i> IA Proveedor</button>
         <button class="act-btn act-btn-green" style="font-size:11px;" onclick="exportarExcel()"><i class="ph-bold ph-microsoft-excel-logo"></i> Excel</button>
         <button class="act-btn act-btn-gray" style="font-size:11px;" onclick="imprimirDoc()"><i class="ph-bold ph-printer"></i> PDF</button>
-        <button id="btn-share-link" class="act-btn" style="background:rgba(0,122,255,0.1);color:var(--blue);border:1.5px solid var(--blue);font-size:11px;" onclick="copiarLinkSocio()"><i class="ph-bold ph-share-network"></i> Compartir</button>
+        <button id="btn-share-link" class="act-btn" style="background:rgba(0,122,255,0.1);color:var(--blue);border:1.5px solid var(--blue);font-size:11px;" onclick="abrirModalShare()"><i class="ph-bold ph-share-network"></i> Compartir</button>
+    </div>
+
+    <!-- Modal: Compartir link socios -->
+    <div id="mod-share" class="modal" onclick="if(event.target===this)cerrarModalShare()" style="display:none;">
+        <div class="modal-box" style="max-width:420px;">
+            <h3 class="modal-title"><i class="ph-bold ph-share-network" style="color:var(--blue);"></i> Link para Socios</h3>
+            <p style="font-size:13px;color:var(--gray);margin:0 0 14px 0;">Enviá este link a tus socios. Podrán ver y editar el presupuesto sin necesitar cuenta.</p>
+            <div style="display:flex;gap:8px;align-items:center;">
+                <input id="share-url-input" readonly style="flex:1;background:var(--card);border:1.5px solid var(--border);border-radius:10px;padding:10px 12px;font-size:12px;color:var(--fg);outline:none;font-family:monospace;" onclick="this.select()">
+                <button id="btn-copy-share" onclick="copiarUrlShare()" style="padding:10px 14px;background:var(--blue);color:#fff;border:none;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap;"><i class="ph-bold ph-copy"></i> Copiar</button>
+            </div>
+            <p style="font-size:11px;color:var(--gray);margin:10px 0 0 0;">Tocá el link para seleccionarlo y luego copiarlo si el botón no funciona.</p>
+            <button onclick="cerrarModalShare()" style="margin-top:14px;width:100%;padding:10px;background:var(--card);border:1px solid var(--border);border-radius:10px;font-size:14px;font-weight:600;cursor:pointer;color:var(--fg);">Cerrar</button>
+        </div>
     </div>
 
     <!-- Modal: AI import -->
@@ -544,6 +558,10 @@
     function cargarDatos() {
         db.ref(DB_REF).once('value').then(snap => {
             const d = snap.val() || {};
+            if (_shareMode && !d.meta && !d.secciones) {
+                document.body.innerHTML = '<div style="padding:48px 24px;text-align:center;font-family:-apple-system,sans-serif;"><div style="font-size:48px;margin-bottom:16px;">📋</div><p style="font-size:18px;font-weight:700;margin:0 0 8px 0;">Proyecto sin datos</p><p style="font-size:14px;color:#666;margin:0;">El responsable aún no guardó el presupuesto.<br>Pedile que presione "Guardar" y te vuelva a enviar el link.</p></div>';
+                return;
+            }
             if (d.meta) {
                 Object.assign(_meta, d.meta);
                 document.getElementById('meta-cliente').value = _meta.cliente || '';
@@ -555,6 +573,9 @@
                 document.getElementById('meta-fecha').value = _meta.fecha || '';
                 document.getElementById('inp-fee-pct').value = _meta.fee_pct != null ? _meta.fee_pct : 11;
                 document.getElementById('inp-imp-pct').value = _meta.imp_pct != null ? _meta.imp_pct : 19.04;
+                if (_shareMode && (_meta.cliente || _meta.actividad)) {
+                    document.getElementById('nav-title').textContent = [_meta.cliente, _meta.actividad].filter(Boolean).join(' — ');
+                }
             }
             // Ensure paquetes array exists (backward compat with old p1/p2 data)
             if (!_meta.paquetes || !Array.isArray(_meta.paquetes) || _meta.paquetes.length === 0) {
@@ -1882,23 +1903,30 @@ Reglas CRÍTICAS:
         setTimeout(() => { window.location.href = 'dashboard-proyecto.html'; }, 200);
     }
 
-    function copiarLinkSocio() {
+    function abrirModalShare() {
         const url = `${location.origin}/agencia.html?cid=${encodeURIComponent(cid)}&pid=${encodeURIComponent(pid)}&share=1`;
+        document.getElementById('share-url-input').value = url;
+        const btn = document.getElementById('btn-copy-share');
+        btn.innerHTML = '<i class="ph-bold ph-copy"></i> Copiar';
+        btn.style.background = 'var(--blue)';
+        document.getElementById('mod-share').style.display = 'flex';
+    }
+    function cerrarModalShare() {
+        document.getElementById('mod-share').style.display = 'none';
+    }
+    function copiarUrlShare() {
+        const url = document.getElementById('share-url-input').value;
+        const btn = document.getElementById('btn-copy-share');
         navigator.clipboard.writeText(url).then(() => {
-            const btn = document.getElementById('btn-share-link');
-            const orig = btn.innerHTML;
             btn.innerHTML = '<i class="ph-bold ph-check"></i> ¡Copiado!';
-            btn.style.background = 'rgba(52,199,89,0.15)';
-            btn.style.color = 'var(--green)';
-            btn.style.borderColor = 'var(--green)';
-            setTimeout(() => {
-                btn.innerHTML = orig;
-                btn.style.background = '';
-                btn.style.color = '';
-                btn.style.borderColor = '';
-            }, 2500);
+            btn.style.background = 'var(--green)';
+            setTimeout(() => { btn.innerHTML = '<i class="ph-bold ph-copy"></i> Copiar'; btn.style.background = 'var(--blue)'; }, 2500);
         }).catch(() => {
-            prompt('Copiá este link:', `${location.origin}/agencia.html?cid=${encodeURIComponent(cid)}&pid=${encodeURIComponent(pid)}&share=1`);
+            // Fallback: select the input so user can copy manually
+            const inp = document.getElementById('share-url-input');
+            inp.select();
+            inp.setSelectionRange(0, 99999);
+            try { document.execCommand('copy'); btn.innerHTML = '<i class="ph-bold ph-check"></i> ¡Copiado!'; btn.style.background = 'var(--green)'; setTimeout(() => { btn.innerHTML = '<i class="ph-bold ph-copy"></i> Copiar'; btn.style.background = 'var(--blue)'; }, 2500); } catch(e) {}
         });
     }
 
