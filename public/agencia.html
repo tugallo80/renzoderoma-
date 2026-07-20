@@ -68,6 +68,7 @@
         .td-del { width: 28px; }
         .td-del-btn { background: none; border: none; color: var(--red); font-size: 16px; cursor: pointer; padding: 2px; display: flex; align-items: center; }
         .col-detalle { min-width: 120px; }
+        .td-socio-sel { border: none; background: rgba(0,122,255,0.08); color: var(--blue); font-size: 10px; font-weight: 700; border-radius: 6px; padding: 2px 6px; cursor: pointer; margin-top: 3px; max-width: 160px; outline: none; display: block; }
         .col-cant { width: 55px; }
         .col-cu { width: 80px; }
         .col-dias { width: 50px; }
@@ -602,6 +603,8 @@
                 it.costo_unitario = fNum(_getItVal(sec.id, it.id, 'cu'));
                 it.dias = fNum(_getItVal(sec.id, it.id, 'dias'));
                 it.obs = _getItVal(sec.id, it.id, 'obs');
+                const socioEl = document.getElementById(`it-${sec.id}-${it.id}-socio`);
+                if (socioEl) it.socio = socioEl.value;
             });
         });
     }
@@ -820,11 +823,20 @@
         renderFiltroSocios();
     }
 
+    function _socioSelectOpts(current) {
+        const socios = [...new Set(_secciones.flatMap(s => s.items.map(i => i.socio)).filter(Boolean))].sort();
+        const opts = socios.map(s => `<option value="${escHtml(s)}"${s === current ? ' selected' : ''}>${escHtml(s)}</option>`).join('');
+        return `<option value=""${!current ? ' selected' : ''}>— sin socio —</option>${opts}`;
+    }
+
     function renderItemRow(secId, it) {
         if (_filtroSocio && it.socio !== _filtroSocio) return '';
         const total = fNum(it.cantidad) * fNum(it.costo_unitario) * fNum(it.dias);
         return `<tr data-socio="${escHtml(it.socio||'')}">
-            <td class="col-detalle"><input class="td-inp" id="it-${secId}-${it.id}-detalle" value="${escHtml(it.detalle)}" placeholder="Descripción..." oninput="onItemChange('${secId}','${it.id}')"></td>
+            <td class="col-detalle">
+                <input class="td-inp" id="it-${secId}-${it.id}-detalle" value="${escHtml(it.detalle)}" placeholder="Descripción..." oninput="onItemChange('${secId}','${it.id}')">
+                <select class="td-socio-sel" id="it-${secId}-${it.id}-socio" onchange="onItemSocioChange('${secId}','${it.id}',this.value)">${_socioSelectOpts(it.socio||'')}</select>
+            </td>
             <td class="col-cant"><input class="td-inp" type="number" id="it-${secId}-${it.id}-cantidad" value="${it.cantidad||1}" min="0" step="any" oninput="onItemChange('${secId}','${it.id}')"></td>
             <td class="col-cu"><input class="td-inp" type="number" id="it-${secId}-${it.id}-cu" value="${it.costo_unitario||0}" min="0" step="any" oninput="onItemChange('${secId}','${it.id}')"></td>
             <td class="col-dias"><input class="td-inp" type="number" id="it-${secId}-${it.id}-dias" value="${it.dias||1}" min="0" step="any" oninput="onItemChange('${secId}','${it.id}')"></td>
@@ -832,6 +844,17 @@
             <td class="col-obs"><input class="td-inp" id="it-${secId}-${it.id}-obs" value="${escHtml(it.obs||'')}" placeholder="Nota..."></td>
             <td class="td-del"><button class="td-del-btn" onclick="eliminarItem('${secId}','${it.id}')"><i class="ph-bold ph-trash"></i></button></td>
         </tr>`;
+    }
+
+    function onItemSocioChange(secId, itemId, newSocio) {
+        const sec = _secciones.find(s => s.id === secId);
+        if (!sec) return;
+        const it = sec.items.find(i => i.id === itemId);
+        if (!it) return;
+        it.socio = newSocio;
+        // re-render filters so new socio appears in chips immediately
+        renderFiltroSocios();
+        debounceSave();
     }
 
     function escHtml(s) { return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
