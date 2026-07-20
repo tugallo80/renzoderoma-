@@ -1938,18 +1938,20 @@ Reglas CRÍTICAS:
         setupDragDrop('brief-file-label', f => { _briefFiles = [f]; document.getElementById('brief-file-name').textContent = f.name; });
         const auth = firebase.auth();
 
+        // Ocultar botones de hub de forma preventiva si hay cid+pid en la URL
+        // (se revierte si resulta ser un hub user logueado)
+        if (cidParam && pidParam) document.body.classList.add('share-mode');
+
         // Hub logueado: acceso completo inmediato
-        if (auth.currentUser) { cargarDatos(); return; }
+        if (auth.currentUser) { document.body.classList.remove('share-mode'); cargarDatos(); return; }
 
         auth.onAuthStateChanged(user => {
             if (user) {
-                // Hub user autenticado → acceso normal
+                // Hub user autenticado → acceso normal, quitar share-mode
                 document.body.classList.remove('share-mode');
                 cargarDatos();
             } else if (cidParam && pidParam) {
-                // No logueado + tiene cid+pid en URL (con o sin ?share=1) → modo socio
-                // Las reglas de Firebase permiten acceso público a proyectos/$cid/$pid/agencia
-                document.body.classList.add('share-mode');
+                // No logueado + cid+pid en URL → modo socio (share-mode ya aplicado)
                 cargarDatos();
             } else {
                 window.location.href = 'login.html';
