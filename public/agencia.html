@@ -461,8 +461,10 @@
     const storage = firebase.storage();
 
     const params = new URLSearchParams(location.search);
-    const cid = params.get('cid') || localStorage.getItem('rubik_client_id');
-    const pid = params.get('pid') || localStorage.getItem('rubik_current_pid');
+    const cidParam = params.get('cid');  // URL-only — indica acceso externo
+    const pidParam = params.get('pid');
+    const cid = cidParam || localStorage.getItem('rubik_client_id');
+    const pid = pidParam || localStorage.getItem('rubik_current_pid');
     const pname = localStorage.getItem('rubik_current_pname') || 'Proyecto';
     const _shareMode = params.get('share') === '1';
 
@@ -1952,8 +1954,8 @@ Reglas CRÍTICAS:
             _initDone = true;
             if (user) {
                 cargarDatos();
-            } else if (cid && pid) {
-                // No hay sesión pero sí parámetros de proyecto → acceso anónimo automático
+            } else if (cidParam && pidParam) {
+                // No hay sesión pero cid+pid vienen en la URL → acceso anónimo de socio
                 document.body.classList.add('share-mode');
                 auth.signInAnonymously()
                     .then(() => cargarDatos())
