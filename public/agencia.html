@@ -852,9 +852,8 @@
         const it = sec.items.find(i => i.id === itemId);
         if (!it) return;
         it.socio = newSocio;
-        // re-render filters so new socio appears in chips immediately
         renderFiltroSocios();
-        debounceSave();
+        writeItemGranular(sec, it);
     }
 
     function escHtml(s) { return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
@@ -982,7 +981,24 @@
             if (tr) { const totalCell = tr.querySelector('.td-total'); if (totalCell) totalCell.textContent = fMoney(total); }
         }
         recalcTotals();
-        debounceSave();
+        // Granular write: only update this specific item's path in Firebase
+        // so concurrent editors don't overwrite each other's changes
+        writeItemGranular(sec, it);
+    }
+
+    function writeItemGranular(sec, it) {
+        const secIdx = _secciones.indexOf(sec);
+        const itIdx = sec.items.indexOf(it);
+        if (secIdx < 0 || itIdx < 0) return;
+        clearTimeout(_saveTimer);
+        _saveTimer = setTimeout(() => {
+            const updates = {};
+            updates[`secciones/${secIdx}/items/${itIdx}`] = {
+                id: it.id, detalle: it.detalle, cantidad: it.cantidad,
+                costo_unitario: it.costo_unitario, dias: it.dias, obs: it.obs, socio: it.socio || ''
+            };
+            db.ref(DB_REF).update(updates).catch(e => console.error('granular save error', e));
+        }, 800);
     }
 
     // ── Totals ──────────────────────────────────────────────────────────────
