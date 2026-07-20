@@ -1937,32 +1937,22 @@ Reglas CRÍTICAS:
         setupDragDrop('ia-file-label', f => { _iaFile = f; document.getElementById('ia-file-name').textContent = f.name; });
         setupDragDrop('brief-file-label', f => { _briefFiles = [f]; document.getElementById('brief-file-name').textContent = f.name; });
         const auth = firebase.auth();
-        // Explicit share mode OR unauthenticated visitor with project params → anonymous auth
+
+        // Acceso de socio (share=1 en URL): las reglas de Firebase permiten
+        // lectura/escritura pública en proyectos/$cid/$pid/agencia — sin auth
         if (_shareMode) {
-            auth.signInAnonymously()
-                .then(() => cargarDatos())
-                .catch(e => {
-                    console.error('anon auth error', e);
-                    document.body.innerHTML = '<div style="padding:40px;text-align:center;font-family:sans-serif;"><p style="font-size:18px;">No se pudo cargar el proyecto.<br>Pedí un nuevo link a tu contacto.</p></div>';
-                });
+            cargarDatos();
             return;
         }
+
+        // Acceso hub normal: requiere login
         if (auth.currentUser) { cargarDatos(); return; }
         let _initDone = false;
         auth.onAuthStateChanged(user => {
             if (_initDone) return;
             _initDone = true;
-            if (user) {
-                cargarDatos();
-            } else if (cidParam && pidParam) {
-                // No hay sesión pero cid+pid vienen en la URL → acceso anónimo de socio
-                document.body.classList.add('share-mode');
-                auth.signInAnonymously()
-                    .then(() => cargarDatos())
-                    .catch(e => { console.error('anon auth error', e); window.location.href = 'login.html'; });
-            } else {
-                window.location.href = 'login.html';
-            }
+            if (user) { cargarDatos(); }
+            else { window.location.href = 'login.html'; }
         });
     })();
 </script>

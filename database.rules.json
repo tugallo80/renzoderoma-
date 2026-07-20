@@ -7,15 +7,23 @@
     // ══════════════════════════════════════════════════════════════
 
     // ─── PROYECTOS ─────────────────────────────────────────────────
-    // Cualquier usuario autenticado puede leer/escribir sus propios proyectos.
-    // La restricción de acceso se garantiza por el cid en la URL (que el hub comparte
-    // explícitamente). auth.token.email se requiere solo para leer /proyectos raíz.
+    // Hub: lectura/escritura total con auth.
+    // Socios (link de agencia): acceso público a /$cid/$pid/agencia — la seguridad
+    // está garantizada por el UUID del cid+pid (imposible de adivinar).
     "proyectos": {
       ".read":  "auth != null",
       ".write": "auth != null",
       "$cid": {
         ".read":  "auth != null",
-        ".write": "auth != null"
+        ".write": "auth != null",
+        "$pid": {
+          ".read":  "auth != null",
+          ".write": "auth != null",
+          "agencia": {
+            ".read":  true,
+            ".write": true
+          }
+        }
       }
     },
 
