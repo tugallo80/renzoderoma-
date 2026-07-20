@@ -618,12 +618,22 @@
         clearTimeout(_saveTimer);
         readMetaFromDOM();
         readSeccionesFromDOM();
-        const payload = {
-            meta: _meta,
-            logos: _logos,
-            secciones: _secciones
-        };
-        db.ref(DB_REF).set(payload).catch(e => console.error('Error guardando:', e));
+        const payload = { meta: _meta, logos: _logos, secciones: _secciones };
+        // Visual feedback on the Guardar button
+        const btn = document.querySelector('.btn-nav[onclick="guardarTodo()"]');
+        if (btn) { btn.innerHTML = '<i class="ph-bold ph-check"></i> Guardando...'; btn.style.color = 'var(--green)'; }
+        db.ref(DB_REF).set(payload)
+            .then(() => {
+                if (btn) {
+                    btn.innerHTML = '<i class="ph-bold ph-check-circle"></i> Guardado';
+                    setTimeout(() => { btn.innerHTML = '<i class="ph-bold ph-floppy-disk"></i> Guardar'; }, 2000);
+                }
+            })
+            .catch(e => {
+                console.error('Error guardando:', e);
+                if (btn) { btn.innerHTML = '<i class="ph-bold ph-floppy-disk"></i> Guardar'; }
+                alert('Error al guardar: ' + (e.message || e.code || e));
+            });
     }
 
     // ── Logos ──────────────────────────────────────────────────────────────
