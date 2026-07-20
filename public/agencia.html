@@ -1935,8 +1935,8 @@ Reglas CRÍTICAS:
         setupDragDrop('ia-file-label', f => { _iaFile = f; document.getElementById('ia-file-name').textContent = f.name; });
         setupDragDrop('brief-file-label', f => { _briefFiles = [f]; document.getElementById('brief-file-name').textContent = f.name; });
         const auth = firebase.auth();
+        // Explicit share mode OR unauthenticated visitor with project params → anonymous auth
         if (_shareMode) {
-            // Socio access: anonymous sign-in, no account needed
             auth.signInAnonymously()
                 .then(() => cargarDatos())
                 .catch(e => {
@@ -1946,9 +1946,21 @@ Reglas CRÍTICAS:
             return;
         }
         if (auth.currentUser) { cargarDatos(); return; }
+        let _initDone = false;
         auth.onAuthStateChanged(user => {
-            if (user) cargarDatos();
-            else window.location.href = 'login.html';
+            if (_initDone) return;
+            _initDone = true;
+            if (user) {
+                cargarDatos();
+            } else if (cid && pid) {
+                // No hay sesión pero sí parámetros de proyecto → acceso anónimo automático
+                document.body.classList.add('share-mode');
+                auth.signInAnonymously()
+                    .then(() => cargarDatos())
+                    .catch(e => { console.error('anon auth error', e); window.location.href = 'login.html'; });
+            } else {
+                window.location.href = 'login.html';
+            }
         });
     })();
 </script>
