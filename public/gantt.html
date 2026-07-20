@@ -958,9 +958,13 @@
             const resp = await fetch('/api/gemini', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
-                body: JSON.stringify({ model: 'gemini-2.5-flash', text: promptText })
+                body: JSON.stringify({ model: 'gemini-2.5-flash', text: promptText, advancedModel: true })
             });
-            if (!resp.ok) throw new Error('Error API Gemini: ' + resp.status);
+            if (!resp.ok) {
+                let detail = '';
+                try { const e = await resp.json(); detail = e.detalle || e.error || ''; } catch(_) {}
+                throw new Error(`Error API Gemini: ${resp.status}${detail ? ' — ' + detail : ''}`);
+            }
             const data = await resp.json();
             return data?.candidates?.[0]?.content?.parts?.[0]?.text || data.text || '';
         }
