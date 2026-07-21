@@ -1933,13 +1933,56 @@
                 visEl.innerHTML = `<div style="margin-bottom:8px;display:flex;flex-wrap:wrap;">${legendHtml}</div>${barsHtml}`;
             }
 
-            const canvas = document.getElementById('computo-canvas');
-            if (canvas) { const ctx = canvas.getContext('2d'); ctx.clearRect(0, 0, canvas.width, canvas.height); canvas.style.display = 'none'; }
+            // Dibujar en canvas (oculto) para poder guardarlo como imagen al hacer "Guardar Corte"
+            _drawBarCanvas(bars, barLen, nameColor, uniqueNames);
         }
     }
 
     function _cfindNode(n,w,h) { if(n.used){let r=_cfindNode(n.right,w,h);if(r)return r;return _cfindNode(n.down,w,h);}else if(w<=n.w&&h<=n.h)return n;return null; }
     function _csplitNode(n,w,h) { n.used=true; n.down={x:n.x,y:n.y+h,w:n.w,h:n.h-h,used:false}; n.right={x:n.x+w,y:n.y,w:n.w-w,h:h,used:false}; }
+
+    function _drawBarCanvas(bars, barLen, nameColor, uniqueNames) {
+        const canvas = document.getElementById('computo-canvas');
+        if (!canvas || bars.length === 0) return;
+        const W = 600, BAR_H = 36, LABEL_H = 18, PAD = 14, LEG_H = 28;
+        canvas.width = W;
+        canvas.height = PAD + LEG_H + bars.length * (LABEL_H + BAR_H + 8) + PAD;
+        canvas.style.display = 'none'; // oculto — solo para captura
+        const ctx = canvas.getContext('2d');
+        ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, W, canvas.height);
+        // Leyenda
+        let lx = PAD;
+        ctx.font = 'bold 11px Arial'; ctx.textAlign = 'left';
+        uniqueNames.forEach(n => {
+            ctx.fillStyle = nameColor[n]; ctx.fillRect(lx, PAD + 2, 11, 11);
+            ctx.fillStyle = '#1a1a1a'; ctx.fillText(n, lx + 15, PAD + 12);
+            lx += ctx.measureText(n).width + 32;
+        });
+        const BW = W - PAD * 2;
+        bars.forEach((b, i) => {
+            const y = PAD + LEG_H + i * (LABEL_H + BAR_H + 8);
+            ctx.fillStyle = '#666'; ctx.font = 'bold 10px Arial'; ctx.textAlign = 'left';
+            ctx.fillText('Barra ' + (i + 1), PAD, y + 12);
+            let x = PAD;
+            b.cuts.forEach(c => {
+                const w = (c.l / barLen) * BW;
+                ctx.fillStyle = nameColor[c.n]; ctx.fillRect(x, y + LABEL_H, w, BAR_H);
+                if (w > 28) {
+                    ctx.fillStyle = 'white'; ctx.font = 'bold 9px Arial'; ctx.textAlign = 'center';
+                    ctx.fillText(c.l + 'm', x + w / 2, y + LABEL_H + BAR_H / 2 + 4);
+                }
+                x += w;
+            });
+            if (b.rem > 0.001) {
+                const sw = (b.rem / barLen) * BW;
+                ctx.fillStyle = '#e5e5ea'; ctx.fillRect(x, y + LABEL_H, sw, BAR_H);
+                ctx.fillStyle = '#888'; ctx.font = 'bold 9px Arial'; ctx.textAlign = 'center';
+                ctx.fillText('↩ ' + b.rem.toFixed(2) + 'm', x + sw / 2, y + LABEL_H + BAR_H / 2 + 4);
+            }
+            ctx.strokeStyle = '#d1d1d6'; ctx.lineWidth = 1;
+            ctx.strokeRect(PAD, y + LABEL_H, BW, BAR_H);
+        });
+    }
 
     function _drawComputoCanvas(bins, pW, pH) {
         const canvas = document.getElementById('computo-canvas');
@@ -1982,7 +2025,7 @@
         // Generar imagen del plano de cortes
         const canvas = document.getElementById('computo-canvas');
         let corteUrl = '';
-        if (canvas && canvas.style.display !== 'none' && s.cutPlates.length > 0) {
+        if (canvas && s.cutPlates.length > 0 && canvas.width > 0) {
             try {
                 const b64 = canvas.toDataURL('image/jpeg', 0.85);
                 const tok = await firebase.auth().currentUser.getIdToken();
