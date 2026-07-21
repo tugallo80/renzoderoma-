@@ -1758,7 +1758,14 @@
         _computoState.cutPlates = []; _computoState.finalVal = 0;
 
         const und = (mat.u || 'und').toLowerCase();
-        _computoState.mode = (und === 'plancha' || und === 'm2') ? 'plancha' : (und === 'barra' || und === 'ml') ? 'barra' : 'plancha';
+        const _cmode = (und === 'plancha' || und === 'm2') ? 'plancha' : (und === 'barra' || und === 'ml') ? 'barra' : 'plancha';
+        _computoState.mode = _cmode;
+        document.getElementById('computo-grp-ancho').style.display = _cmode === 'plancha' ? 'flex' : 'none';
+        document.querySelectorAll('.computo-tab').forEach((b, i) => b.classList.toggle('active', (i===0&&_cmode==='plancha')||(i===1&&_cmode==='barra')));
+        const _nb2 = document.getElementById('cp-nombre'); if (_nb2) _nb2.style.display = _cmode === 'barra' ? 'block' : 'none';
+        const _ao2 = document.getElementById('cp-ancho'); if (_ao2) _ao2.style.display = _cmode === 'barra' ? 'none' : '';
+        if (_cmode === 'barra') { const ph2 = document.getElementById('cp-ph'); if (ph2) ph2.value = '6'; }
+        const _bv2 = document.getElementById('computo-bars-vis'); if (_bv2) _bv2.style.display = 'none';
 
         document.getElementById('computo-prod-modal').style.display = 'flex';
         _renderComputo();
@@ -1773,6 +1780,10 @@
         document.querySelectorAll('.computo-tab').forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
         document.getElementById('computo-grp-ancho').style.display = m === 'plancha' ? 'flex' : 'none';
+        const _nb = document.getElementById('cp-nombre'); if (_nb) _nb.style.display = m === 'barra' ? 'block' : 'none';
+        const _ao = document.getElementById('cp-ancho'); if (_ao) _ao.style.display = m === 'barra' ? 'none' : '';
+        if (m === 'barra') { const ph = document.getElementById('cp-ph'); if (ph) ph.value = '6'; }
+        const _bv = document.getElementById('computo-bars-vis'); if (_bv) _bv.style.display = 'none';
         _computoState.measures = []; _computoState.cutPlates = [];
         _renderComputo();
     };
@@ -1782,10 +1793,13 @@
         const l = parseFloat(document.getElementById('cp-largo').value)||0;
         const a = parseFloat(document.getElementById('cp-ancho').value)||0;
         if (l === 0) return;
-        _computoState.measures.push({ c, l, a });
+        const nombreEl = document.getElementById('cp-nombre');
+        const n = (nombreEl && nombreEl.style.display !== 'none') ? (nombreEl.value.trim() || 'Pieza') : '';
+        _computoState.measures.push({ c, l, a, n });
         document.getElementById('cp-cant').value = '1';
         document.getElementById('cp-largo').value = '';
         document.getElementById('cp-ancho').value = '';
+        if (nombreEl) nombreEl.value = '';
         _renderComputo();
     };
 
@@ -1800,14 +1814,22 @@
         const listEl = document.getElementById('computo-measures-list');
         if (listEl) {
             listEl.innerHTML = s.measures.map((m, i) => {
-                const txt = s.mode === 'plancha'
-                    ? `${m.c} × (${m.l}×${m.a}m) = ${(m.c*m.l*m.a).toFixed(3)}m²`
-                    : `${m.c} × ${m.l}m = ${(m.c*m.l).toFixed(3)}m`;
+                let txt;
+                if (s.mode === 'plancha') {
+                    txt = `${m.c} × (${m.l}×${m.a}m) = ${(m.c*m.l*m.a).toFixed(3)}m²`;
+                } else {
+                    const label = m.n ? `<b>${m.n}</b> — ` : '';
+                    txt = `${label}${m.c} × ${m.l}m = ${(m.c*m.l).toFixed(3)}ml`;
+                }
                 return `<div class="computo-measure-item"><span>${txt}</span><i class="ph-bold ph-trash" onclick="computoDelMeasure(${i})" style="color:var(--red);cursor:pointer;"></i></div>`;
             }).join('') || '<div style="color:var(--gray);font-size:11px;text-align:center;padding:10px;">Sin medidas</div>';
         }
         // Resultado
-        if (s.measures.length > 0) _runComputo();
+        if (s.measures.length > 0) {
+            _runComputo();
+        } else {
+            const bv = document.getElementById('computo-bars-vis'); if (bv) bv.style.display = 'none';
+        }
     }
 
     function _runComputo() {
@@ -1845,27 +1867,74 @@
             if (resEl) resEl.innerHTML = `<b style="font-size:20px;color:var(--blue);">${bins.length}</b> Planchas (${pW}×${pH}m) · Desperdicio: <b style="color:var(--orange);">${desp}%</b> · Saldo útil: <b>${(totalAvail-totalUsed).toFixed(3)}m²</b>`;
             _drawComputoCanvas(bins, pW, pH);
         } else {
-            // Barras (1D)
-            let lens = [];
-            s.measures.forEach(m => { for (let i=0; i<m.c; i++) lens.push(m.l); });
-            lens.sort((a,b)=>b-a);
-            let bars = []; let barLen = pH; // pH como longitud de barra (default 6m)
-            lens.forEach(l => {
+            // Barras (1D) — First-Fit Decreasing con nombres y visualización de sobrones
+            const barLen = parseFloat(document.getElementById('cp-ph').value) || 6;
+            let pieces = [];
+            s.measures.forEach(m => {
+                const nombre = m.n || 'Pieza';
+                for (let i = 0; i < m.c; i++) pieces.push({ l: m.l, n: nombre });
+            });
+            // FFD: ordenar de mayor a menor para minimizar desperdicios
+            pieces.sort((a, b) => b.l - a.l);
+
+            let bars = [];
+            pieces.forEach(p => {
                 let placed = false;
                 for (let b of bars) {
-                    if (b.rem >= l) { b.rem -= l; b.cuts.push(l); placed=true; break; }
+                    if (b.rem >= p.l - 0.001) {
+                        b.rem = Math.round((b.rem - p.l) * 1000) / 1000;
+                        b.cuts.push({ l: p.l, n: p.n });
+                        placed = true; break;
+                    }
                 }
-                if (!placed) bars.push({ rem: barLen-l, cuts: [l] });
+                if (!placed) bars.push({ rem: Math.round((barLen - p.l) * 1000) / 1000, cuts: [{ l: p.l, n: p.n }] });
             });
-            s.cutPlates = bars;
-            s.finalVal = bars.length;
-            const totalUsed = lens.reduce((s,l)=>s+l,0);
+
+            s.cutPlates = bars; s.finalVal = bars.length;
+            const totalUsed = pieces.reduce((acc, p) => acc + p.l, 0);
             const totalAvail = bars.length * barLen;
-            const desp = totalAvail > 0 ? ((totalAvail-totalUsed)/totalAvail*100).toFixed(1) : 0;
+            const desp = totalAvail > 0 ? ((totalAvail - totalUsed) / totalAvail * 100).toFixed(1) : '0';
+
             const resEl = document.getElementById('computo-result');
-            if (resEl) resEl.innerHTML = `<b style="font-size:20px;color:var(--blue);">${bars.length}</b> Barras (${barLen}m) · Desperdicio: <b style="color:var(--orange);">${desp}%</b>`;
+            if (resEl) resEl.innerHTML = `<b style="font-size:20px;color:var(--blue);">${bars.length}</b> Barras (${barLen}m) &nbsp;·&nbsp; Desperdicio: <b style="color:var(--orange);">${desp}%</b> &nbsp;·&nbsp; Saldo útil: <b>${(totalAvail - totalUsed).toFixed(2)}m</b>`;
+
+            // Paleta de colores por nombre de pieza
+            const uniqueNames = [...new Set(pieces.map(p => p.n))];
+            const palette = ['#007aff','#34c759','#ff9500','#af52de','#ff3b30','#5856d6','#00c7be','#ff6b35'];
+            const nameColor = {};
+            uniqueNames.forEach((n, i) => { nameColor[n] = palette[i % palette.length]; });
+
+            const legendHtml = uniqueNames.map(n =>
+                `<span style="display:inline-flex;align-items:center;gap:4px;font-size:10px;font-weight:700;margin:0 8px 4px 0;">
+                    <span style="width:10px;height:10px;border-radius:2px;background:${nameColor[n]};flex-shrink:0;display:inline-block;"></span>${n}</span>`
+            ).join('');
+
+            const barsHtml = bars.map((b, idx) => {
+                const segs = b.cuts.map(c => {
+                    const pct = (c.l / barLen * 100).toFixed(2);
+                    return `<div title="${c.n}: ${c.l}m" style="width:${pct}%;background:${nameColor[c.n]};min-width:3px;display:flex;align-items:center;justify-content:center;overflow:hidden;">
+                        <span style="font-size:8px;color:white;font-weight:800;white-space:nowrap;padding:0 3px;text-shadow:0 1px 2px rgba(0,0,0,0.5);overflow:hidden;text-overflow:ellipsis;">${c.l}m</span>
+                    </div>`;
+                }).join('');
+                const sobronPct = (b.rem / barLen * 100).toFixed(2);
+                const sobronHtml = b.rem > 0.001 ?
+                    `<div style="width:${sobronPct}%;background:#e5e5ea;display:flex;align-items:center;justify-content:center;overflow:hidden;">
+                        <span style="font-size:8px;color:#888;font-weight:700;white-space:nowrap;padding:0 3px;">↩ ${b.rem.toFixed(2)}m</span>
+                    </div>` : '';
+                return `<div style="margin-bottom:8px;">
+                    <div style="font-size:10px;color:var(--gray);font-weight:700;margin-bottom:3px;">Barra ${idx + 1}</div>
+                    <div style="display:flex;height:28px;border-radius:6px;overflow:hidden;border:1px solid var(--border);">${segs}${sobronHtml}</div>
+                </div>`;
+            }).join('');
+
+            const visEl = document.getElementById('computo-bars-vis');
+            if (visEl) {
+                visEl.style.display = 'block';
+                visEl.innerHTML = `<div style="margin-bottom:8px;display:flex;flex-wrap:wrap;">${legendHtml}</div>${barsHtml}`;
+            }
+
             const canvas = document.getElementById('computo-canvas');
-            if (canvas) { const ctx = canvas.getContext('2d'); ctx.clearRect(0,0,canvas.width,canvas.height); canvas.style.display='none'; }
+            if (canvas) { const ctx = canvas.getContext('2d'); ctx.clearRect(0, 0, canvas.width, canvas.height); canvas.style.display = 'none'; }
         }
     }
 
@@ -5381,6 +5450,7 @@ INSTRUCCIONES:
 
             <!-- Agregar medida -->
             <div style="font-size:10px;font-weight:800;color:var(--gray);text-transform:uppercase;margin-bottom:6px;">Piezas a cortar</div>
+            <input class="computo-inp" type="text" id="cp-nombre" placeholder="Nombre de pieza (ej: Costado, Costilla...)" style="display:none;width:100%;margin-bottom:6px;box-sizing:border-box;">
             <div class="computo-row">
                 <input class="computo-inp" type="number" id="cp-cant" value="1" min="1" placeholder="Cant" style="width:60px;flex:none;">
                 <input class="computo-inp" type="number" id="cp-largo" placeholder="Largo (m)" step="0.001">
@@ -5396,8 +5466,10 @@ INSTRUCCIONES:
                 Agrega medidas para calcular
             </div>
 
-            <!-- Canvas de visualización -->
+            <!-- Canvas de visualización (planchas) -->
             <canvas id="computo-canvas" style="display:none;width:100%;border-radius:8px;border:1px solid var(--border);margin-bottom:12px;"></canvas>
+            <!-- Visualización de barras (solo modo barra) -->
+            <div id="computo-bars-vis" style="display:none;margin-bottom:12px;max-height:280px;overflow-y:auto;"></div>
 
             <!-- Botones -->
             <div style="display:flex;gap:10px;">
