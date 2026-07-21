@@ -552,12 +552,13 @@
                 body: JSON.stringify({
                     prompt: 'Eres un asistente que lee comprobantes de pago bolivianos (transferencias, depósitos, recibos). Extrae el monto total pagado y la fecha. Responde ÚNICAMENTE con JSON válido, sin texto adicional: {"monto": 1500.50, "fecha": "2026-06-24"}. Usa formato YYYY-MM-DD para la fecha. Si no encontrás la fecha usa la de hoy. Si no encontrás el monto usa 0.',
                     model: 'gemini-2.5-flash',
+                    advancedModel: true,
                     image: { data: imgData, mimeType: 'image/jpeg' }
                 })
             });
             const data = await res.json();
-            if (!res.ok) throw new Error(data.error || 'Error IA');
-            let text = data.text || '';
+            if (!res.ok) throw new Error(data.error || data.detalle || 'Error IA');
+            let text = data?.candidates?.[0]?.content?.parts?.[0]?.text || data.text || '';
             let cleanJson = text.replace(/```json/gi,'').replace(/```/g,'').trim();
             const match = cleanJson.match(/\{[\s\S]*?\}/);
             if (match) cleanJson = match[0];
