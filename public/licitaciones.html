@@ -1839,7 +1839,8 @@ ${reqTxt}<div style="margin-top:4px;">${badgeMo}</div>
                             <div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:3px;">${badgeType}${saldoBadge}</div>
                         </div>
                         <div style="display:flex;gap:6px;align-items:center;">
-                            <button class="btn-del-lic" style="background:rgba(0,122,255,0.1);color:var(--blue);" onclick="exportarPropuestaPDF('${key}')" title="Exportar Propuesta PDF"><i class="ph-bold ph-file-pdf"></i></button>
+                            <button class="btn-del-lic" style="background:rgba(0,122,255,0.12);color:var(--blue);" onclick="exportarPropuestaPDF('${key}','general')" title="Propuesta General (resumen + descripción)"><i class="ph-bold ph-file-text"></i></button>
+                            <button class="btn-del-lic" style="background:rgba(255,149,0,0.12);color:var(--orange);" onclick="exportarPropuestaPDF('${key}','detalle')" title="Propuesta Detallada (con costos por material)"><i class="ph-bold ph-file-pdf"></i></button>
                             <button class="btn-del-lic" onclick="eliminarLicitacion('${key}','${lic.worker_id}','${lic.estado}',${lic.precio_final||lic.precio_propuesto||0})" title="Eliminar"><i class="ph-bold ph-trash"></i></button>
                         </div>
                     </div>
@@ -2401,7 +2402,8 @@ LICITACIONES ACTUALES DEL PROYECTO:
         });
     }
 
-    window.exportarPropuestaPDF = async function(licKey) {
+    window.exportarPropuestaPDF = async function(licKey, modo) {
+        modo = modo || 'general';
         const lic = currentLics[licKey];
         if (!lic || !lic.tareas) { alert('No hay datos de esta licitación.'); return; }
         showLoader('Generando propuesta PDF...');
@@ -2409,224 +2411,299 @@ LICITACIONES ACTUALES DEL PROYECTO:
             const { jsPDF } = window.jspdf;
             const doc = new jsPDF({orientation:'portrait', unit:'mm', format:'a4'});
             const fM = n => parseFloat(n||0).toLocaleString('es-BO',{minimumFractionDigits:2,maximumFractionDigits:2});
-            const W = 210, mL = 14, mR = 14;
-            const usableW = W - mL - mR;
+            const W = 210, mL = 14, mR = 14, usableW = W - mL - mR;
+            const cleanTxt = s => String(s||'').replace(/[\u{1F000}-\u{1FFFF}]/gu,'').trim();
 
-            // ── HEADER ──
-            doc.setFillColor(0, 122, 255);
-            doc.rect(0, 0, W, 30, 'F');
-            doc.setTextColor(255, 255, 255);
-            doc.setFont('helvetica', 'bold');
-            doc.setFontSize(16);
-            doc.text('PROPUESTA ECONÓMICA', W/2, 14, {align:'center'});
-            doc.setFontSize(9);
-            doc.setFont('helvetica', 'normal');
-            doc.text(pName, W/2, 22, {align:'center'});
-            doc.setTextColor(0, 0, 0);
-            // Logo RUBIK — esquina superior derecha del header
-            try {
-                const rubikLogo = await _loadImgBase64('/IA RUBIK BOTON.png');
-                if (rubikLogo) doc.addImage(rubikLogo, 'PNG', W - mR - 22, 3, 24, 24);
-            } catch(e) {}
+            // ── Fetch datos de producción ──
+            const itemsSnap = await db.ref(`proyectos/${cid}/${pid}/presupuesto/items`).once('value');
+            const allPItems = itemsSnap.val() || {};
 
-            const workerName = lic.worker_name || lic.worker_id || '';
-            let yH = 38;
-            if (workerName) {
-                doc.setFont('helvetica', 'normal');
-                doc.setFontSize(9);
-                doc.text('Contratista: ' + workerName, mL, yH);
-            }
-            doc.setFontSize(9);
-            doc.text('Fecha: ' + new Date().toLocaleDateString('es-BO'), W - mR, yH, {align:'right'});
-
-            // ── TABLA RESUMEN — agrupada por ítem ──
-            const tareas = Object.values(lic.tareas);
-
-            // Agrupar tareas por originIdx para mostrar encabezado de ítem
-            const _tGroups = {};
-            const _tGroupKeys = [];
-            tareas.forEach(t => {
-                const k = (t.originIdx != null) ? String(t.originIdx) : '_' + String(t.task_name||'').slice(0,6);
-                if (!_tGroups[k]) { _tGroups[k] = {label: t.parent_desc || t.task_name || 'Ítem', tareas:[], fecha:''}; _tGroupKeys.push(k); }
-                _tGroups[k].tareas.push(t);
-                if (!_tGroups[k].fecha && t.fecha_entrega && t.fecha_entrega !== 'Sin fecha') _tGroups[k].fecha = t.fecha_entrega;
-            });
-
-            let rowNum = 1;
-            const tableRows = [];
-            const headerRowSet = new Set();
-
-            _tGroupKeys.forEach(k => {
-                const g = _tGroups[k];
-                const fe = (g.fecha && g.fecha !== 'Sin fecha') ? '   —   Entrega: ' + g.fecha : '';
-                headerRowSet.add(tableRows.length);
-                tableRows.push(['', g.label.substring(0, 90) + fe, '', '', '', '']);
-                g.tareas.forEach(t => {
-                    tableRows.push([
-                        String(rowNum++),
-                        (t.task_name || t.desc || '—').substring(0, 72),
-                        t.und || 'u',
-                        parseFloat(t.cant||0).toFixed(2),
-                        fM(t.pu) + ' Bs',
-                        fM(t.subtotal) + ' Bs'
-                    ]);
-                });
-            });
-
-            const calcTotal = tareas.reduce((s,t)=>s+parseFloat(t.subtotal||0),0);
-            const totalFinal = parseFloat(lic.precio_propuesto || lic.precio_final || calcTotal);
-
-            doc.autoTable({
-                startY: 44,
-                head: [['#', 'Trabajo / Descripción', 'Und', 'Cant', 'P.U.', 'Subtotal']],
-                body: tableRows,
-                foot: [['', '', '', '', 'TOTAL', fM(totalFinal) + ' Bs']],
-                theme: 'striped',
-                headStyles: {fillColor:[0,122,255], textColor:255, fontStyle:'bold', fontSize:9, cellPadding:3},
-                footStyles: {fillColor:[220,220,220], textColor:[0,0,0], fontStyle:'bold', fontSize:10},
-                columnStyles: {
-                    0: {cellWidth:8,  halign:'center'},
-                    1: {cellWidth:80},
-                    2: {cellWidth:13, halign:'center'},
-                    3: {cellWidth:16, halign:'right'},
-                    4: {cellWidth:27, halign:'right'},
-                    5: {cellWidth:27, halign:'right'}
-                },
-                styles: {fontSize:8, cellPadding:3, overflow:'linebreak'},
-                margin: {left:mL, right:mR},
-                didParseCell: function(d) {
-                    if (d.section !== 'body') return;
-                    if (headerRowSet.has(d.row.index)) {
-                        d.cell.styles.fillColor = [30, 30, 30];
-                        d.cell.styles.textColor = [255, 255, 255];
-                        d.cell.styles.fontStyle = 'bold';
-                        d.cell.styles.fontSize = 8;
-                        d.cell.styles.cellPadding = {top:5, right:4, bottom:5, left:4};
-                    }
-                }
-            });
-
-            // ── PÁGINAS DE IMÁGENES POR ÍTEM ──
-            const groups = {};
-            tareas.forEach(t => {
+            // ── Agrupar tareas por originIdx ──
+            const groupOrder = [], groups = {};
+            Object.values(lic.tareas).forEach(t => {
                 const k = (t.originIdx != null) ? String(t.originIdx) : '_' + String(t.task_name||'').slice(0,8);
-                if (!groups[k]) groups[k] = {label: t.task_name||t.desc||'Ítem', subtotal:0, fechaEntrega: t.fecha_entrega||'', imgs:[], matsArr: t.matsArr||[]};
-                groups[k].subtotal += parseFloat(t.subtotal||0);
-                if (t.img) groups[k].imgs.push(t.img);
-                if (t.op_images) {
-                    const arr = Array.isArray(t.op_images) ? t.op_images : Object.values(t.op_images);
-                    arr.forEach(u => { if (u) groups[k].imgs.push(u); });
+                if (!groups[k]) {
+                    const it = (t.originIdx != null) ? (allPItems[t.originIdx] || null) : null;
+                    groups[k] = { idx: t.originIdx, label: t.parent_desc || t.task_name || 'Ítem',
+                        subtotal: 0, item: it, imgs: [], tareas: [], fechaEntrega: '' };
+                    groupOrder.push(k);
                 }
-                if (t.cortes) {
-                    const arr = Array.isArray(t.cortes) ? t.cortes : Object.values(t.cortes);
-                    arr.forEach(u => { if (u) groups[k].imgs.push(u); });
-                }
+                groups[k].subtotal += parseFloat(t.subtotal || 0);
+                groups[k].tareas.push(t);
+                if (!groups[k].fechaEntrega && t.fecha_entrega && t.fecha_entrega !== 'Sin fecha') groups[k].fechaEntrega = t.fecha_entrega;
             });
 
-            // Agregar imágenes de artes gráficos
-            if (_licArtsData) {
-                Object.keys(_licArtsData).forEach(idx => {
-                    if (!groups[idx]) return;
-                    (_licArtsData[idx]||[]).forEach(art => {
-                        if (art.imgRef) groups[idx].imgs.push(art.imgRef);
-                    });
+            // Recolectar imágenes de producción por ítem
+            groupOrder.forEach(k => {
+                const g = groups[k], seen = new Set();
+                const addImg = u => { if (u && typeof u === 'string' && !seen.has(u)) { seen.add(u); g.imgs.push(u); } };
+                g.tareas.forEach(t => {
+                    addImg(t.img);
+                    if (t.op_images) (Array.isArray(t.op_images)?t.op_images:Object.values(t.op_images)).forEach(addImg);
+                    if (t.cortes) (Array.isArray(t.cortes)?t.cortes:Object.values(t.cortes)).forEach(addImg);
+                });
+                const it = g.item;
+                if (it) {
+                    addImg(it.img);
+                    if (it.op_images) (Array.isArray(it.op_images)?it.op_images:Object.values(it.op_images)).forEach(addImg);
+                    if (it.cortes) (Array.isArray(it.cortes)?it.cortes:Object.values(it.cortes)).forEach(addImg);
+                    if (it.prod_apu && it.prod_apu.mat) it.prod_apu.mat.forEach(m => { if(m.corte_url) addImg(m.corte_url); });
+                }
+                if (_licArtsData && _licArtsData[k]) (_licArtsData[k]||[]).forEach(art => { if(art.imgRef) addImg(art.imgRef); });
+            });
+
+            const calcTotal = groupOrder.reduce((s,k)=>s+groups[k].subtotal,0);
+            const totalFinal = parseFloat(lic.precio_propuesto || lic.precio_final || calcTotal);
+            const workerName = lic.worker_name || lic.worker_id || '';
+
+            // ── Header azul (portada) ──
+            const tituloPortada = modo === 'detalle' ? 'PROPUESTA DETALLADA' : 'PROPUESTA ECONÓMICA';
+            doc.setFillColor(0,122,255); doc.rect(0,0,W,30,'F');
+            doc.setTextColor(255,255,255); doc.setFont('helvetica','bold'); doc.setFontSize(16);
+            doc.text(tituloPortada, W/2, 13, {align:'center'});
+            doc.setFontSize(9); doc.setFont('helvetica','normal');
+            doc.text(cleanTxt(pName), W/2, 21, {align:'center'});
+            doc.setTextColor(0,0,0);
+            try { const logo = await _loadImgBase64('/IA RUBIK BOTON.png'); if(logo) doc.addImage(logo,'PNG',W-mR-22,3,24,24); } catch(e){}
+            let yH = 38;
+            if (workerName) { doc.setFont('helvetica','normal'); doc.setFontSize(9); doc.text('Contratista: '+workerName, mL, yH); }
+            doc.setFontSize(9); doc.text('Fecha: '+new Date().toLocaleDateString('es-BO'), W-mR, yH, {align:'right'});
+
+            // ════════════════════════════════════════════════
+            //  MODO GENERAL — tabla resumen (1 fila por ítem)
+            // ════════════════════════════════════════════════
+            if (modo === 'general') {
+                const rows = groupOrder.map((k, i) => {
+                    const g = groups[k];
+                    const lbl = cleanTxt(g.label).substring(0,90);
+                    const fe = g.fechaEntrega ? '   —   Entrega: '+g.fechaEntrega : '';
+                    return [String(i+1), lbl+fe, fM(g.subtotal)+' Bs'];
+                });
+                doc.autoTable({
+                    startY: 44,
+                    head: [['#','Ítem / Descripción','Total']],
+                    body: rows,
+                    foot: [['','TOTAL',fM(totalFinal)+' Bs']],
+                    theme: 'striped',
+                    headStyles: {fillColor:[0,122,255], textColor:255, fontStyle:'bold', fontSize:10, cellPadding:4},
+                    footStyles: {fillColor:[20,20,20], textColor:255, fontStyle:'bold', fontSize:11, cellPadding:5},
+                    columnStyles: {0:{cellWidth:10,halign:'center'}, 1:{cellWidth:148}, 2:{cellWidth:24,halign:'right',fontStyle:'bold'}},
+                    styles: {fontSize:9, cellPadding:4, overflow:'linebreak'},
+                    margin: {left:mL, right:mR}
                 });
             }
 
-            for (const [k, group] of Object.entries(groups)) {
-                const uniqueImgs = [...new Set(group.imgs)].slice(0, 8);
-                const hasMats = lic.lic_mode === 'venta' && group.matsArr && group.matsArr.length > 0;
+            // ════════════════════════════════════════════════
+            //  MODO DETALLE — desglose costo por ítem
+            // ════════════════════════════════════════════════
+            if (modo === 'detalle') {
+                let y = 44;
+                for (const k of groupOrder) {
+                    const g = groups[k], it = g.item;
+                    const moSrc  = (it && it.prod_apu && it.prod_apu.mo  && it.prod_apu.mo.length  > 0) ? it.prod_apu.mo  : [];
+                    const matSrc = (it && it.prod_apu && it.prod_apu.mat && it.prod_apu.mat.length > 0)
+                        ? it.prod_apu.mat.filter(m => !m.es_arte) : [];
 
-                // ── Para Obra Vendida: página de materiales antes de las imágenes ──
-                if (hasMats) {
-                    doc.addPage();
-                    doc.setFillColor(52, 199, 89);
-                    doc.rect(0, 0, W, 14, 'F');
-                    doc.setTextColor(255, 255, 255);
-                    doc.setFont('helvetica', 'bold');
-                    doc.setFontSize(9);
-                    const matLabelClean = group.label.replace(/[\u{1F000}-\u{1FFFF}]/gu,'').trim().substring(0,90);
-                    doc.text(matLabelClean, W/2, 9.5, {align:'center'});
-                    doc.setTextColor(0, 0, 0);
-                    doc.setFont('helvetica', 'bold');
-                    doc.setFontSize(10);
-                    doc.text('Materiales requeridos', mL, 23);
-                    let mY = 30;
-                    doc.setFont('helvetica', 'normal');
-                    doc.setFontSize(9);
-                    group.matsArr.forEach(m => {
-                        if (mY > 270) { doc.addPage(); mY = 15; }
-                        doc.text(`${m.d}   ×  ${m.q} ${m.u}`, mL + 4, mY);
-                        mY += 7;
-                    });
-                    // Precio en esquina inferior derecha
-                    const mpbW = 60, mpbH = 12;
-                    doc.setFillColor(0, 0, 0);
-                    doc.roundedRect(W - mR - mpbW, 275, mpbW, mpbH, 2, 2, 'F');
-                    doc.setTextColor(255, 255, 255);
-                    doc.setFont('helvetica', 'bold');
-                    doc.setFontSize(10);
-                    doc.text(fM(group.subtotal) + ' Bs', W - mR - mpbW/2, 283, {align:'center'});
-                    doc.setTextColor(0, 0, 0);
+                    // Nueva página si no cabe
+                    const minH = 14 + (matSrc.length + moSrc.length) * 5 + 20;
+                    if (y + minH > 270) {
+                        doc.addPage();
+                        doc.setFillColor(0,122,255); doc.rect(0,0,W,30,'F');
+                        doc.setTextColor(255,255,255); doc.setFont('helvetica','bold'); doc.setFontSize(16);
+                        doc.text('PROPUESTA DETALLADA (cont.)', W/2,13,{align:'center'});
+                        doc.setFontSize(9); doc.setFont('helvetica','normal');
+                        doc.text(cleanTxt(pName), W/2,21,{align:'center'});
+                        doc.setTextColor(0,0,0); y = 36;
+                    }
+
+                    // Cabecera del ítem
+                    const lblD = cleanTxt(g.label).substring(0,85);
+                    doc.setFillColor(20,20,20); doc.rect(mL-2, y, usableW+4, 10, 'F');
+                    doc.setTextColor(255,255,255); doc.setFont('helvetica','bold'); doc.setFontSize(9);
+                    doc.text(lblD, mL, y+7);
+                    doc.text(fM(g.subtotal)+' Bs', W-mR, y+7, {align:'right'});
+                    doc.setTextColor(0,0,0); y += 14;
+
+                    // Tabla Materiales
+                    if (matSrc.length > 0) {
+                        doc.setFont('helvetica','bold'); doc.setFontSize(7.5); doc.setTextColor(0,100,200);
+                        doc.text('MATERIALES', mL, y); y += 3; doc.setTextColor(0,0,0);
+                        doc.autoTable({
+                            startY: y,
+                            head:[['Material','Cant.','U.','P.U.','Subtotal']],
+                            body: matSrc.map(m=>[
+                                cleanTxt(m.d).substring(0,55),
+                                parseFloat(m.q||0).toFixed(2),
+                                m.u||'',
+                                fM(m.p)+' Bs',
+                                fM(parseFloat(m.q||0)*parseFloat(m.p||0))+' Bs'
+                            ]),
+                            theme:'plain',
+                            headStyles:{fillColor:[230,240,255],fontSize:7,cellPadding:2,fontStyle:'bold'},
+                            columnStyles:{0:{cellWidth:85},1:{cellWidth:18,halign:'right'},2:{cellWidth:12},3:{cellWidth:22,halign:'right'},4:{cellWidth:25,halign:'right'}},
+                            styles:{fontSize:7.5,cellPadding:2,overflow:'linebreak'},
+                            margin:{left:mL,right:mR}, tableWidth:usableW
+                        });
+                        y = doc.lastAutoTable.finalY + 3;
+                    }
+
+                    // Tabla Mano de Obra
+                    if (moSrc.length > 0) {
+                        doc.setFont('helvetica','bold'); doc.setFontSize(7.5); doc.setTextColor(200,100,0);
+                        doc.text('MANO DE OBRA', mL, y); y += 3; doc.setTextColor(0,0,0);
+                        doc.autoTable({
+                            startY: y,
+                            head:[['Actividad','Cant.','U.','P.U.','Subtotal']],
+                            body: moSrc.map(m=>[
+                                cleanTxt(m.d).substring(0,55),
+                                parseFloat(m.q||0).toFixed(2),
+                                m.u||'',
+                                fM(m.p)+' Bs',
+                                fM(parseFloat(m.q||0)*parseFloat(m.p||0))+' Bs'
+                            ]),
+                            theme:'plain',
+                            headStyles:{fillColor:[255,245,225],fontSize:7,cellPadding:2,fontStyle:'bold'},
+                            columnStyles:{0:{cellWidth:85},1:{cellWidth:18,halign:'right'},2:{cellWidth:12},3:{cellWidth:22,halign:'right'},4:{cellWidth:25,halign:'right'}},
+                            styles:{fontSize:7.5,cellPadding:2,overflow:'linebreak'},
+                            margin:{left:mL,right:mR}, tableWidth:usableW
+                        });
+                        y = doc.lastAutoTable.finalY + 3;
+                    }
+
+                    if (!matSrc.length && !moSrc.length) {
+                        // Fallback: tareas individuales
+                        doc.autoTable({
+                            startY: y,
+                            head:[['Trabajo','Und','Cant','P.U.','Subtotal']],
+                            body: g.tareas.map(t=>[
+                                cleanTxt(t.task_name||t.desc||'').substring(0,65),
+                                t.und||'u', parseFloat(t.cant||0).toFixed(2),
+                                fM(t.pu)+' Bs', fM(t.subtotal)+' Bs'
+                            ]),
+                            theme:'plain',
+                            headStyles:{fillColor:[240,240,240],fontSize:7,cellPadding:2,fontStyle:'bold'},
+                            columnStyles:{0:{cellWidth:90},1:{cellWidth:12,halign:'center'},2:{cellWidth:16,halign:'right'},3:{cellWidth:24,halign:'right'},4:{cellWidth:20,halign:'right'}},
+                            styles:{fontSize:7.5,cellPadding:2},
+                            margin:{left:mL,right:mR}, tableWidth:usableW
+                        });
+                        y = doc.lastAutoTable.finalY + 3;
+                    }
+
+                    y += 6;
                 }
 
-                if (uniqueImgs.length === 0) continue;
+                // Pie de página con total
+                if (y > 270) { doc.addPage(); y = 20; }
+                doc.setFillColor(20,20,20); doc.rect(mL-2, y, usableW+4, 12, 'F');
+                doc.setTextColor(255,255,255); doc.setFont('helvetica','bold'); doc.setFontSize(12);
+                doc.text('TOTAL GENERAL', mL, y+8.5);
+                doc.text(fM(totalFinal)+' Bs', W-mR, y+8.5, {align:'right'});
+                doc.setTextColor(0,0,0);
+            }
 
+            // ════════════════════════════════════════════════
+            //  ANEXOS — ítem por ítem: descripción + materiales + imágenes
+            // ════════════════════════════════════════════════
+            for (const k of groupOrder) {
+                const g = groups[k], it = g.item;
+                const moSrc  = (it && it.prod_apu && it.prod_apu.mo)  ? it.prod_apu.mo  : [];
+                const matSrc = (it && it.prod_apu && it.prod_apu.mat) ? it.prod_apu.mat.filter(m=>!m.es_arte) : [];
+                const featTxt = it && it.feat ? cleanTxt(it.feat) : '';
+                const lblItem = cleanTxt(g.label).substring(0,85);
+                const uniqueImgs = g.imgs.slice(0, 10);
+
+                const hasAnex = featTxt || matSrc.length || moSrc.length || uniqueImgs.length;
+                if (!hasAnex) continue;
+
+                // ── Página de descripción ──
+                doc.addPage();
+                doc.setFillColor(20,20,20); doc.rect(0,0,W,18,'F');
+                doc.setTextColor(255,255,255); doc.setFont('helvetica','bold'); doc.setFontSize(11);
+                doc.text(lblItem, mL, 11);
+                doc.text(fM(g.subtotal)+' Bs', W-mR, 11, {align:'right'});
+                if (g.fechaEntrega) {
+                    doc.setFont('helvetica','normal'); doc.setFontSize(8);
+                    doc.text('Entrega: '+g.fechaEntrega, mL, 16);
+                }
+                doc.setTextColor(0,0,0);
+                let y = 25;
+
+                if (featTxt) {
+                    doc.setFont('helvetica','bold'); doc.setFontSize(8); doc.setTextColor(0,100,200);
+                    doc.text('DESCRIPCIÓN', mL, y); y += 5; doc.setTextColor(0,0,0);
+                    doc.setFont('helvetica','normal'); doc.setFontSize(8.5);
+                    const lines = doc.splitTextToSize(featTxt, usableW);
+                    const maxL = Math.min(lines.length, 18);
+                    doc.text(lines.slice(0,maxL), mL, y);
+                    y += maxL * 5 + 5;
+                }
+
+                if (matSrc.length > 0) {
+                    if (y > 248) { doc.addPage(); y = 14; }
+                    doc.setFont('helvetica','bold'); doc.setFontSize(8); doc.setTextColor(0,100,200);
+                    doc.text('MATERIALES REQUERIDOS', mL, y); y += 5; doc.setTextColor(0,0,0);
+                    matSrc.forEach(m => {
+                        if (y > 265) { doc.addPage(); y = 14; }
+                        doc.setFont('helvetica','normal'); doc.setFontSize(8.5);
+                        doc.text(`•  ${cleanTxt(m.d).substring(0,56)}   ×   ${parseFloat(m.q||0).toFixed(2)} ${m.u||''}`, mL+3, y);
+                        y += 5.5;
+                    });
+                    y += 4;
+                }
+
+                if (moSrc.length > 0) {
+                    if (y > 248) { doc.addPage(); y = 14; }
+                    doc.setFont('helvetica','bold'); doc.setFontSize(8); doc.setTextColor(200,100,0);
+                    doc.text('MANO DE OBRA', mL, y); y += 5; doc.setTextColor(0,0,0);
+                    moSrc.forEach(m => {
+                        if (y > 265) { doc.addPage(); y = 14; }
+                        doc.setFont('helvetica','normal'); doc.setFontSize(8.5);
+                        doc.text(`•  ${cleanTxt(m.d).substring(0,56)}   ×   ${parseFloat(m.q||0).toFixed(2)} ${m.u||''}`, mL+3, y);
+                        y += 5.5;
+                    });
+                    y += 4;
+                }
+
+                // ── Imágenes de producción ──
                 for (const imgUrl of uniqueImgs) {
                     let imgData = null;
                     try { imgData = await _loadImgBase64(imgUrl); } catch(e) {}
                     if (!imgData) continue;
 
-                    doc.addPage();
-
-                    // Barra de título del ítem
-                    doc.setFillColor(30, 30, 30);
-                    doc.rect(0, 0, W, 14, 'F');
-                    doc.setTextColor(255, 255, 255);
-                    doc.setFont('helvetica', 'bold');
-                    doc.setFontSize(9);
-                    const labelClean = group.label.replace(/[\u{1F000}-\u{1FFFF}]/gu,'').trim().substring(0,90);
-                    doc.text(labelClean, W/2, 9.5, {align:'center'});
-                    doc.setTextColor(0, 0, 0);
-
-                    if (group.fechaEntrega && group.fechaEntrega !== 'Sin fecha') {
-                        doc.setFont('helvetica', 'normal');
-                        doc.setFontSize(8);
-                        doc.text('Entrega: ' + group.fechaEntrega, mL, 22);
-                    }
-
-                    const imgTop = 26;
-                    const maxImgH = 230;
-                    let dims = {w:800, h:600};
+                    let dims = {w:800,h:600};
                     try { dims = await _getImgDims(imgData); } catch(e) {}
-                    const scale = Math.min(usableW / dims.w, maxImgH / dims.h);
-                    const drawW = dims.w * scale;
-                    const drawH = dims.h * scale;
-                    const imgX  = mL + (usableW - drawW) / 2;
 
-                    const imgFmt = imgData.startsWith('data:image/png') ? 'PNG' : 'JPEG';
-                    try {
-                        doc.addImage(imgData, imgFmt, imgX, imgTop, drawW, drawH);
-                    } catch(e) {
-                        try { doc.addImage(imgData, 'PNG', imgX, imgTop, drawW, drawH); } catch(e2) { continue; }
+                    const maxH = Math.min(297 - y - 20, 140);
+                    if (maxH < 35) {
+                        // Nueva página de imagen
+                        doc.addPage();
+                        doc.setFillColor(20,20,20); doc.rect(0,0,W,14,'F');
+                        doc.setTextColor(255,255,255); doc.setFont('helvetica','bold'); doc.setFontSize(9);
+                        doc.text(lblItem, W/2, 9.5, {align:'center'});
+                        doc.setTextColor(0,0,0);
+                        y = 18;
                     }
+                    const maxH2 = Math.min(297 - y - 16, 200);
+                    const scale = Math.min(usableW/dims.w, maxH2/dims.h);
+                    const dW = dims.w*scale, dH = dims.h*scale;
+                    const iX = mL + (usableW-dW)/2;
+                    const fmt = imgData.startsWith('data:image/png') ? 'PNG' : 'JPEG';
+                    try { doc.addImage(imgData, fmt, iX, y, dW, dH); }
+                    catch(e) { try { doc.addImage(imgData,'PNG',iX,y,dW,dH); } catch(e2){ continue; } }
 
-                    // Badge monto — esquina inferior derecha de la imagen
-                    const badgeW = 58, badgeH = 12;
-                    const bX = imgX + drawW - badgeW;
-                    const bY = imgTop + drawH - badgeH;
-                    doc.setFillColor(0, 0, 0);
-                    doc.roundedRect(bX, bY, badgeW, badgeH, 2, 2, 'F');
-                    doc.setTextColor(255, 255, 255);
-                    doc.setFont('helvetica', 'bold');
-                    doc.setFontSize(10);
-                    doc.text(fM(group.subtotal) + ' Bs', bX + badgeW/2, bY + 8, {align:'center'});
-                    doc.setTextColor(0, 0, 0);
+                    // Badge precio
+                    const bW=56, bH=11;
+                    doc.setFillColor(0,0,0); doc.roundedRect(iX+dW-bW, y+dH-bH, bW, bH, 2, 2, 'F');
+                    doc.setTextColor(255,255,255); doc.setFont('helvetica','bold'); doc.setFontSize(9);
+                    doc.text(fM(g.subtotal)+' Bs', iX+dW-bW/2, y+dH-bH+7.5, {align:'center'});
+                    doc.setTextColor(0,0,0);
+                    y += dH + 7;
                 }
             }
 
             const safeName = pName.replace(/[^a-zA-Z0-9\-_]/g,'_').substring(0,30);
-            doc.save('propuesta_' + safeName + '_' + licKey.slice(-6) + '.pdf');
+            const sufijo = modo === 'detalle' ? 'detallada' : 'general';
+            doc.save(`propuesta_${sufijo}_${safeName}_${licKey.slice(-6)}.pdf`);
         } catch(e) {
             console.error('PDF export error:', e);
             alert('Error generando PDF: ' + e.message);
