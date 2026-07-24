@@ -1746,7 +1746,7 @@
     // MODAL CÓMPUTO MÉTRICO INLINE (plancha / barra) para prod_apu.mat
     // ════════════════════════════════════════════════════════════════════════
     let _computoState = { idx: null, mIdx: null, section: null, mode: 'plancha',
-        pW: 1.22, pH: 2.44, measures: [], cutPlates: [], finalVal: 0 };
+        pW: 1.22, pH: 2.44, measures: [], cutPlates: [], finalVal: 0, selectedIdx: new Set() };
 
     window.abrirComputoProduccion = function(idx, mIdx, section) {
         _initProdApu(idx);
@@ -1813,6 +1813,7 @@
 
     window.computoDelMeasure = function(i) {
         _computoState.measures.splice(i, 1);
+        _computoState.selectedIdx = new Set(); // reset selection on structural change
         _renderComputo();
     };
 
@@ -1821,6 +1822,7 @@
         const j = i + dir;
         if (j < 0 || j >= a.length) return;
         [a[i], a[j]] = [a[j], a[i]];
+        _computoState.selectedIdx = new Set();
         _renderComputo();
     };
 
@@ -1861,6 +1863,32 @@
             m.l = Math.round(newL * 10000) / 10000;
         }
         _renderComputo();
+    };
+
+    window.updateSelectionSum = function() {
+        const s = _computoState;
+        if (!s.selectedIdx) s.selectedIdx = new Set();
+        // Read current checkbox states
+        s.selectedIdx = new Set();
+        s.measures.forEach((m, i) => {
+            const cb = document.getElementById(`cmcb-${i}`);
+            if (cb && cb.checked) s.selectedIdx.add(i);
+        });
+        let totalPcs = 0, totalLen = 0;
+        s.selectedIdx.forEach(i => {
+            const m = s.measures[i];
+            if (m) { totalPcs += (m.c || 1); totalLen += (m.c || 1) * m.l; }
+        });
+        const el = document.getElementById('computo-sel-sum');
+        if (!el) return;
+        if (s.selectedIdx.size > 0) {
+            const lenM = totalLen.toFixed(3);
+            const lenCm = (totalLen * 100).toFixed(1);
+            el.style.display = 'block';
+            el.innerHTML = `<i class="ph-bold ph-check-square"></i> <b>${s.selectedIdx.size}</b> tipo${s.selectedIdx.size > 1 ? 's' : ''} · <b>${totalPcs}</b> piezas · <b>${lenM}ml</b> <span style="font-size:10px;opacity:0.7;">(${lenCm}cm)</span>`;
+        } else {
+            el.style.display = 'none';
+        }
     };
 
     // ── Unidad m / cm ─────────────────────────────────────────────────────
@@ -1923,6 +1951,7 @@
         const listEl = document.getElementById('computo-measures-list');
         if (listEl) {
             const isBar = s.mode === 'barra';
+            if (!s.selectedIdx) s.selectedIdx = new Set();
             listEl.innerHTML = s.measures.map((m, i) => {
                 let txt;
                 if (!isBar) {
@@ -1934,13 +1963,16 @@
                 const canUp = i > 0, canDown = i < s.measures.length - 1;
                 const grayDim = 'color:var(--gray);opacity:0.4;pointer-events:none;';
                 const grayAct = 'color:var(--gray);cursor:pointer;';
+                const checked = s.selectedIdx.has(i) ? 'checked' : '';
+                const cbHtml = isBar ? `<input type="checkbox" id="cmcb-${i}" onchange="updateSelectionSum()" ${checked} style="margin-right:6px;width:15px;height:15px;cursor:pointer;accent-color:var(--blue);flex-shrink:0;">` : '';
                 const moveHtml = isBar ? `
                     <i class="ph-bold ph-arrow-fat-up" onclick="computoMoveMeasure(${i},-1)" style="font-size:12px;padding:3px;${canUp ? grayAct : grayDim}"></i>
                     <i class="ph-bold ph-arrow-fat-down" onclick="computoMoveMeasure(${i},1)" style="font-size:12px;padding:3px;${canDown ? grayAct : grayDim}"></i>
                     <i class="ph-bold ph-pencil-simple" onclick="computoEditMeasure(${i})" style="font-size:12px;padding:3px;color:var(--blue);cursor:pointer;"></i>
                 ` : '';
-                return `<div class="computo-measure-item" id="cmitem-${i}"><span style="flex:1;">${txt}</span><div style="display:flex;align-items:center;gap:0;">${moveHtml}<i class="ph-bold ph-trash" onclick="computoDelMeasure(${i})" style="color:var(--red);cursor:pointer;font-size:13px;padding:3px;"></i></div></div>`;
+                return `<div class="computo-measure-item" id="cmitem-${i}" style="display:flex;align-items:center;">${cbHtml}<span style="flex:1;">${txt}</span><div style="display:flex;align-items:center;gap:0;">${moveHtml}<i class="ph-bold ph-trash" onclick="computoDelMeasure(${i})" style="color:var(--red);cursor:pointer;font-size:13px;padding:3px;"></i></div></div>`;
             }).join('') || '<div style="color:var(--gray);font-size:11px;text-align:center;padding:10px;">Sin medidas</div>';
+            updateSelectionSum();
         }
         // Resultado
         if (s.measures.length > 0) {
@@ -5648,7 +5680,9 @@ INSTRUCCIONES:
             </div>
 
             <!-- Lista de medidas -->
-            <div id="computo-measures-list" style="margin-bottom:12px;min-height:60px;max-height:160px;overflow-y:auto;resize:vertical;"></div>
+            <div id="computo-measures-list" style="margin-bottom:4px;min-height:60px;max-height:65vh;overflow-y:auto;resize:vertical;"></div>
+            <!-- Suma de seleccionados -->
+            <div id="computo-sel-sum" style="display:none;background:rgba(0,122,255,0.09);border-radius:8px;padding:8px 12px;font-size:12px;font-weight:700;color:var(--blue);margin-bottom:10px;"></div>
 
             <!-- Resultado -->
             <div id="computo-result" style="background:var(--bg);border-radius:10px;padding:12px;text-align:center;font-size:13px;font-weight:800;margin-bottom:10px;min-height:40px;">
