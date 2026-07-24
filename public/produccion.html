@@ -1766,6 +1766,8 @@
         const _ao2 = document.getElementById('cp-ancho'); if (_ao2) _ao2.style.display = _cmode === 'barra' ? 'none' : '';
         if (_cmode === 'barra') { const ph2 = document.getElementById('cp-ph'); if (ph2) ph2.value = '6'; }
         const _bv2 = document.getElementById('computo-bars-vis'); if (_bv2) _bv2.style.display = 'none';
+        const _ur2 = document.getElementById('cp-unit-row'); if (_ur2) _ur2.style.display = _cmode === 'barra' ? 'flex' : 'none';
+        const _hr2 = document.getElementById('cp-hipo-row'); if (_hr2) _hr2.style.display = _cmode === 'barra' ? 'block' : 'none';
 
         document.getElementById('computo-prod-modal').style.display = 'flex';
         _renderComputo();
@@ -1784,14 +1786,20 @@
         const _ao = document.getElementById('cp-ancho'); if (_ao) _ao.style.display = m === 'barra' ? 'none' : '';
         if (m === 'barra') { const ph = document.getElementById('cp-ph'); if (ph) ph.value = '6'; }
         const _bv = document.getElementById('computo-bars-vis'); if (_bv) _bv.style.display = 'none';
+        // Show/hide bar-only controls
+        const _ur = document.getElementById('cp-unit-row'); if (_ur) _ur.style.display = m === 'barra' ? 'flex' : 'none';
+        const _hr = document.getElementById('cp-hipo-row'); if (_hr) _hr.style.display = m === 'barra' ? 'block' : 'none';
+        if (m !== 'barra') { setCpUnit('m'); } // reset unit to meters on plancha mode
         _computoState.measures = []; _computoState.cutPlates = [];
         _renderComputo();
     };
 
     window.computoAddMeasure = function() {
         const c = parseFloat(document.getElementById('cp-cant').value)||1;
-        const l = parseFloat(document.getElementById('cp-largo').value)||0;
-        const a = parseFloat(document.getElementById('cp-ancho').value)||0;
+        let l = parseFloat(document.getElementById('cp-largo').value)||0;
+        let a = parseFloat(document.getElementById('cp-ancho').value)||0;
+        // Convert cm → m if unit switch is in cm mode
+        if (_cpUnit === 'cm') { l = Math.round(l / 100 * 10000) / 10000; a = Math.round(a / 100 * 10000) / 10000; }
         if (l === 0) return;
         const nombreEl = document.getElementById('cp-nombre');
         const n = (nombreEl && nombreEl.style.display !== 'none') ? (nombreEl.value.trim() || 'Pieza') : '';
@@ -1806,6 +1814,58 @@
     window.computoDelMeasure = function(i) {
         _computoState.measures.splice(i, 1);
         _renderComputo();
+    };
+
+    // ── Unidad m / cm ─────────────────────────────────────────────────────
+    let _cpUnit = 'm';
+    window.setCpUnit = function(u) {
+        _cpUnit = u;
+        const mBtn = document.getElementById('cp-unit-m-btn');
+        const cmBtn = document.getElementById('cp-unit-cm-btn');
+        if (mBtn) { mBtn.style.background = u === 'm' ? 'var(--blue)' : 'var(--bg)'; mBtn.style.color = u === 'm' ? '#fff' : 'var(--gray)'; }
+        if (cmBtn) { cmBtn.style.background = u === 'cm' ? 'var(--blue)' : 'var(--bg)'; cmBtn.style.color = u === 'cm' ? '#fff' : 'var(--gray)'; }
+        const largoInp = document.getElementById('cp-largo');
+        if (largoInp) largoInp.placeholder = u === 'cm' ? 'Largo (cm)' : 'Largo (m)';
+        // Update hipotenusa placeholders
+        const hBase = document.getElementById('cp-hipo-base');
+        const hAlt = document.getElementById('cp-hipo-alt');
+        if (hBase) hBase.placeholder = u === 'cm' ? 'Base (cm)' : 'Base (m)';
+        if (hAlt) hAlt.placeholder = u === 'cm' ? 'Altura (cm)' : 'Altura (m)';
+        // Clear result
+        const resEl = document.getElementById('cp-hipo-result');
+        if (resEl) { resEl.style.display = 'none'; resEl.textContent = ''; }
+    };
+
+    // ── Hipotenusa ─────────────────────────────────────────────────────────
+    window.toggleHipoPanel = function() {
+        const panel = document.getElementById('cp-hipo-panel');
+        if (!panel) return;
+        const visible = panel.style.display !== 'none';
+        panel.style.display = visible ? 'none' : 'block';
+        const btn = document.getElementById('cp-hipo-toggle');
+        if (btn) btn.style.background = visible ? 'rgba(88,86,214,0.1)' : 'rgba(88,86,214,0.22)';
+        if (!visible) { // focus first input when opening
+            const b = document.getElementById('cp-hipo-base');
+            if (b) setTimeout(() => b.focus(), 50);
+        }
+    };
+
+    window.calcHipotenusa = function() {
+        let base = parseFloat(document.getElementById('cp-hipo-base').value) || 0;
+        let alt = parseFloat(document.getElementById('cp-hipo-alt').value) || 0;
+        if (base === 0 && alt === 0) return;
+        const hipo = Math.sqrt(base * base + alt * alt); // in selected unit
+        const hipoRounded = Math.round(hipo * 10000) / 10000;
+        const largoInp = document.getElementById('cp-largo');
+        if (largoInp) largoInp.value = hipoRounded;
+        // Show result with both units
+        const resEl = document.getElementById('cp-hipo-result');
+        if (resEl) {
+            const hipoM = _cpUnit === 'cm' ? hipoRounded / 100 : hipoRounded;
+            const hipoCm = _cpUnit === 'cm' ? hipoRounded : hipoRounded * 100;
+            resEl.style.display = 'block';
+            resEl.innerHTML = `<i class="ph-bold ph-check-circle"></i> Hipotenusa: <b>${hipoM.toFixed(4)}m</b> = <b>${hipoCm.toFixed(2)}cm</b> → insertada en Largo`;
+        }
     };
 
     function _renderComputo() {
@@ -5492,13 +5552,38 @@ INSTRUCCIONES:
             </div>
 
             <!-- Agregar medida -->
-            <div style="font-size:10px;font-weight:800;color:var(--gray);text-transform:uppercase;margin-bottom:6px;">Piezas a cortar</div>
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+                <div style="font-size:10px;font-weight:800;color:var(--gray);text-transform:uppercase;">Piezas a cortar</div>
+                <!-- Selector m / cm — solo visible en modo barra -->
+                <div id="cp-unit-row" style="display:none;align-items:center;gap:6px;">
+                    <span style="font-size:9px;font-weight:700;color:var(--gray);">Unidad:</span>
+                    <div style="display:flex;border:1px solid var(--border);border-radius:7px;overflow:hidden;">
+                        <button id="cp-unit-m-btn" onclick="setCpUnit('m')" style="padding:3px 10px;font-size:10px;font-weight:800;border:none;cursor:pointer;background:var(--blue);color:#fff;">m</button>
+                        <button id="cp-unit-cm-btn" onclick="setCpUnit('cm')" style="padding:3px 10px;font-size:10px;font-weight:800;border:none;cursor:pointer;background:var(--bg);color:var(--gray);">cm</button>
+                    </div>
+                </div>
+            </div>
             <input class="computo-inp" type="text" id="cp-nombre" placeholder="Nombre de pieza (ej: Costado, Costilla...)" style="display:none;width:100%;margin-bottom:6px;box-sizing:border-box;">
             <div class="computo-row">
                 <input class="computo-inp" type="number" id="cp-cant" value="1" min="1" placeholder="Cant" style="width:60px;flex:none;">
                 <input class="computo-inp" type="number" id="cp-largo" placeholder="Largo (m)" step="0.001">
                 <input class="computo-inp" type="number" id="cp-ancho" placeholder="Ancho (m)" step="0.001">
                 <button onclick="computoAddMeasure()" style="background:var(--blue);color:white;border:none;border-radius:8px;padding:8px 14px;font-weight:800;cursor:pointer;"><i class="ph-bold ph-plus"></i></button>
+            </div>
+            <!-- Botón + panel hipotenusa — solo en modo barra -->
+            <div id="cp-hipo-row" style="display:none;margin-bottom:4px;">
+                <button id="cp-hipo-toggle" onclick="toggleHipoPanel()" style="background:rgba(88,86,214,0.1);color:#5856d6;border:none;border-radius:8px;padding:5px 12px;font-size:11px;font-weight:800;cursor:pointer;display:flex;align-items:center;gap:5px;">
+                    <i class="ph-bold ph-triangle"></i> Hipotenusa
+                </button>
+                <div id="cp-hipo-panel" style="display:none;background:rgba(88,86,214,0.07);border-radius:10px;padding:10px;margin-top:6px;border:1px solid rgba(88,86,214,0.15);">
+                    <div style="font-size:10px;font-weight:800;color:#5856d6;margin-bottom:6px;display:flex;align-items:center;gap:4px;"><i class="ph-bold ph-math-operations"></i> √ (Base² + Altura²)</div>
+                    <div class="computo-row" style="margin-bottom:0;">
+                        <input class="computo-inp" type="number" id="cp-hipo-base" placeholder="Base (m)" step="0.001" style="flex:1;">
+                        <input class="computo-inp" type="number" id="cp-hipo-alt" placeholder="Altura (m)" step="0.001" style="flex:1;">
+                        <button onclick="calcHipotenusa()" style="background:#5856d6;color:white;border:none;border-radius:8px;padding:8px 12px;font-size:11px;font-weight:800;cursor:pointer;white-space:nowrap;">→ Largo</button>
+                    </div>
+                    <div id="cp-hipo-result" style="display:none;font-size:11px;font-weight:700;color:#5856d6;margin-top:8px;padding:6px 10px;background:rgba(88,86,214,0.12);border-radius:7px;"></div>
+                </div>
             </div>
 
             <!-- Lista de medidas -->
