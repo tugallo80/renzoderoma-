@@ -70,10 +70,15 @@
         .col-detalle { min-width: 120px; }
         .td-socio-sel { border: none; background: rgba(0,122,255,0.08); color: var(--blue); font-size: 10px; font-weight: 700; border-radius: 6px; padding: 2px 6px; cursor: pointer; margin-top: 3px; max-width: 160px; outline: none; display: block; }
         .col-cant { width: 55px; }
-        .col-cu { width: 80px; }
+        .col-cu { width: 96px; }
         .col-dias { width: 50px; }
         .col-total { width: 90px; }
         .col-obs { min-width: 100px; }
+        .td-moneda-btn { background: rgba(142,142,147,0.15); border: none; border-radius: 5px; padding: 2px 5px; font-size: 9px; font-weight: 800; color: var(--gray); cursor: pointer; margin-top: 3px; display: block; width: 100%; text-align: center; letter-spacing: 0.3px; }
+        .td-moneda-btn.td-moneda-usd { background: rgba(52,199,89,0.2); color: #34c759; }
+        .tr-usd td { background: rgba(52,199,89,0.05) !important; }
+        .tot-usd-indent { padding: 3px 0 3px 20px; opacity: 0.8; }
+        .tc-badge { display:inline-flex; align-items:center; gap:5px; background:rgba(52,199,89,0.12); color:#34c759; font-size:11px; font-weight:800; border-radius:8px; padding:5px 10px; }
 
         .add-item-btn { width: 100%; background: none; border: none; border-top: 1px solid var(--border); padding: 10px 16px; font-size: 12px; font-weight: 700; color: var(--blue); cursor: pointer; display: flex; align-items: center; gap: 6px; }
         .add-item-btn:active { background: rgba(0,122,255,0.05); }
@@ -196,7 +201,10 @@
             #meta-paq-field, #socio-filter-bar, #paq-filter-bar, .sec-paq-pill, .float-totals,
             #badge-share, #btn-share-link, #mod-ia-socios { display: none !important; }
             .meta-card, .sec-card, .totals-card { border: 1px solid #ccc; break-inside: avoid; box-shadow: none; border-radius: 0; margin-bottom: 8px; }
-            .meta-inp, .td-inp, .sec-name-inp, .fee-inp { border: none; background: transparent; padding: 0; }
+            .meta-inp, .td-inp, .sec-name-inp, .fee-inp, #inp-tc { border: none; background: transparent; padding: 0; }
+            .tc-badge { display: none !important; }
+            .td-moneda-btn { display: none !important; }
+            .tr-usd td { background: rgba(52,199,89,0.08) !important; }
             .items-table thead th, .items-table tbody td { padding: 4px 6px; font-size: 11px; }
             .print-footer { display: block !important; position: fixed; bottom: 6mm; left: 0; right: 0; text-align: center; font-size: 9px; color: #999; font-family: -apple-system, sans-serif; letter-spacing: 0.3px; }
         }
@@ -227,6 +235,8 @@
             <div class="meta-field"><label class="meta-lbl">Horas por Día</label><input class="meta-inp" id="meta-horas" placeholder="Ej: No Aplica" oninput="debounceSave()"></div>
             <div class="meta-field"><label class="meta-lbl">Plaza / Ciudad</label><input class="meta-inp" id="meta-plazas" placeholder="Ej: Santa Cruz" oninput="debounceSave()"></div>
             <div class="meta-field" style="grid-column:span 2;"><label class="meta-lbl">Fecha del Evento</label><input class="meta-inp" id="meta-fecha" placeholder="Ej: 18 al 27 de septiembre" oninput="debounceSave()"></div>
+            <div class="meta-field"><label class="meta-lbl">Tipo de Cambio (Bs./$)</label><input class="meta-inp" id="inp-tc" type="number" min="0" step="0.01" value="6.96" placeholder="6.96" oninput="recalcTotals(); debounceSave()" style="color:#34c759;font-weight:900;"></div>
+            <div class="meta-field" style="display:flex;align-items:center;"><div class="tc-badge"><i class="ph-bold ph-currency-dollar"></i> Items marcados con <b>$</b> se convierten al T.C. antes del fee</div></div>
             <div class="meta-field" id="meta-paq-field" style="grid-column:span 2;">
                 <label class="meta-lbl">Paquetes del Proyecto</label>
                 <div class="paq-manager" id="paq-manager"></div>
@@ -250,8 +260,23 @@
     <!-- Totals -->
     <div class="totals-card" id="totals-card">
         <div class="total-row">
-            <span class="total-lbl">Sub-Total (Bs.)</span>
-            <span class="total-val" id="tot-subtotal">0,00</span>
+            <span class="total-lbl" id="tot-subtotal-bob-lbl">Sub-Total (Bs.)</span>
+            <span class="total-val" id="tot-subtotal-bob">0,00</span>
+        </div>
+        <!-- USD section — oculto cuando no hay ítems en dólares -->
+        <div id="tot-usd-section" style="display:none;">
+            <div class="total-row">
+                <span class="total-lbl" style="color:#34c759;">Sub-Total (USD)</span>
+                <span class="total-val" style="color:#34c759;" id="tot-subtotal-usd">$ 0,00</span>
+            </div>
+            <div class="total-row tot-usd-indent">
+                <span class="total-lbl" style="font-size:11px;">→ en Bs. (al T.C.)</span>
+                <span class="total-val" style="font-size:12px; color:#34c759;" id="tot-subtotal-usd-bs">0,00</span>
+            </div>
+            <div class="total-row" style="border-top:1px dashed var(--border);">
+                <span class="total-lbl" style="font-weight:900;">Sub-Total Combinado (Bs.)</span>
+                <span class="total-val" id="tot-subtotal">0,00</span>
+            </div>
         </div>
         <div class="total-row">
             <div class="fee-input-wrap">
@@ -482,7 +507,7 @@
         { id: 'p2', nombre: 'P2 — Admin & Operación', color: '#ff9500' }
     ];
 
-    let _meta = { cliente:'', producto:'', actividad:'', duracion:'', horas_dia:'', plazas:'', fecha:'', fee_pct:11, imp_pct:19.04, paquetes: JSON.parse(JSON.stringify(PAQ_DEFAULT)) };
+    let _meta = { cliente:'', producto:'', actividad:'', duracion:'', horas_dia:'', plazas:'', fecha:'', fee_pct:11, imp_pct:19.04, tc:6.96, paquetes: JSON.parse(JSON.stringify(PAQ_DEFAULT)) };
     let _logos = []; // [{url, path}]
     let _secciones = []; // [{id, nombre, paquete:'', items:[{id, detalle, cantidad, costo_unitario, dias, obs, socio:''}]}]
     let _saveTimer = null;
@@ -575,6 +600,7 @@
                 document.getElementById('meta-fecha').value = _meta.fecha || '';
                 document.getElementById('inp-fee-pct').value = _meta.fee_pct != null ? _meta.fee_pct : 11;
                 document.getElementById('inp-imp-pct').value = _meta.imp_pct != null ? _meta.imp_pct : 19.04;
+                document.getElementById('inp-tc').value = _meta.tc != null ? _meta.tc : 6.96;
                 if (_shareMode && (_meta.cliente || _meta.actividad)) {
                     document.getElementById('nav-title').textContent = [_meta.cliente, _meta.actividad].filter(Boolean).join(' — ');
                 }
@@ -590,7 +616,7 @@
                 if (!sec.id) sec.id = uid();
                 if (!sec.paquete) sec.paquete = '';
                 sec.items = Array.isArray(sec.items) ? sec.items.filter(Boolean) : (sec.items ? Object.values(sec.items).filter(Boolean) : []);
-                sec.items.forEach(it => { if (!it.id) it.id = uid(); if (it.socio === undefined) it.socio = ''; });
+                sec.items.forEach(it => { if (!it.id) it.id = uid(); if (it.socio === undefined) it.socio = ''; if (!it.moneda) it.moneda = 'BOB'; });
             });
             renderLogos();
             renderSecciones();
@@ -609,6 +635,7 @@
         _meta.fecha = document.getElementById('meta-fecha').value.trim();
         _meta.fee_pct = fNum(document.getElementById('inp-fee-pct').value);
         _meta.imp_pct = fNum(document.getElementById('inp-imp-pct').value);
+        _meta.tc = fNum(document.getElementById('inp-tc').value) || 6.96;
     }
 
     function readSeccionesFromDOM() {
@@ -628,6 +655,8 @@
                 it.obs = _getItVal(sec.id, it.id, 'obs');
                 const socioEl = document.getElementById(`it-${sec.id}-${it.id}-socio`);
                 if (socioEl) it.socio = socioEl.value;
+                const monedaEl = document.getElementById(`it-${sec.id}-${it.id}-moneda`);
+                if (monedaEl) it.moneda = monedaEl.value;
             });
         });
     }
@@ -729,7 +758,7 @@
     function agregarItem(secId) {
         const sec = _secciones.find(s => s.id === secId);
         if (!sec) return;
-        const it = { id: uid(), detalle: '', cantidad: 1, costo_unitario: 0, dias: 1, obs: '', socio: '' };
+        const it = { id: uid(), detalle: '', cantidad: 1, costo_unitario: 0, dias: 1, obs: '', socio: '', moneda: 'BOB' };
         sec.items.push(it);
         renderSecciones();
         recalcTotals();
@@ -782,7 +811,7 @@
                     <thead><tr>
                         <th class="col-detalle">Detalle</th>
                         <th class="col-cant">Cant.</th>
-                        <th class="col-cu">C.U. (Bs.)</th>
+                        <th class="col-cu">C.U. / $</th>
                         <th class="col-dias">Días</th>
                         <th class="col-total">Total</th>
                         <th class="col-obs">Observaciones</th>
@@ -864,19 +893,48 @@
 
     function renderItemRow(secId, it) {
         if (_filtroSocio && it.socio !== _filtroSocio) return '';
+        const moneda = it.moneda || 'BOB';
+        const isUSD = moneda === 'USD';
         const total = fNum(it.cantidad) * fNum(it.costo_unitario) * fNum(it.dias);
-        return `<tr data-socio="${escHtml(it.socio||'')}">
+        const totalStr = (isUSD ? '$ ' : '') + fMoney(total);
+        return `<tr data-socio="${escHtml(it.socio||'')}" class="${isUSD ? 'tr-usd' : ''}">
             <td class="col-detalle">
                 <input class="td-inp" id="it-${secId}-${it.id}-detalle" value="${escHtml(it.detalle)}" placeholder="Descripción..." oninput="onItemChange('${secId}','${it.id}')">
                 <select class="td-socio-sel" id="it-${secId}-${it.id}-socio" onchange="onItemSocioChange('${secId}','${it.id}',this.value)">${_socioSelectOpts(it.socio||'')}</select>
             </td>
             <td class="col-cant"><input class="td-inp" type="number" id="it-${secId}-${it.id}-cantidad" value="${it.cantidad||1}" min="0" step="any" oninput="onItemChange('${secId}','${it.id}')"></td>
-            <td class="col-cu"><input class="td-inp" type="number" id="it-${secId}-${it.id}-cu" value="${it.costo_unitario||0}" min="0" step="any" oninput="onItemChange('${secId}','${it.id}')"></td>
+            <td class="col-cu">
+                <input class="td-inp" type="number" id="it-${secId}-${it.id}-cu" value="${it.costo_unitario||0}" min="0" step="any" oninput="onItemChange('${secId}','${it.id}')">
+                <input type="hidden" id="it-${secId}-${it.id}-moneda" value="${moneda}">
+                <button class="td-moneda-btn${isUSD?' td-moneda-usd':''}" id="it-${secId}-${it.id}-moneda-btn" onclick="toggleMoneda('${secId}','${it.id}')">${isUSD ? '$ USD' : 'Bs. BOB'}</button>
+            </td>
             <td class="col-dias"><input class="td-inp" type="number" id="it-${secId}-${it.id}-dias" value="${it.dias||1}" min="0" step="any" oninput="onItemChange('${secId}','${it.id}')"></td>
-            <td class="col-total td-total">${fMoney(total)}</td>
+            <td class="col-total td-total">${totalStr}</td>
             <td class="col-obs"><input class="td-inp" id="it-${secId}-${it.id}-obs" value="${escHtml(it.obs||'')}" placeholder="Nota..."></td>
             <td class="td-del"><button class="td-del-btn" onclick="eliminarItem('${secId}','${it.id}')"><i class="ph-bold ph-trash"></i></button></td>
         </tr>`;
+    }
+
+    function toggleMoneda(secId, itemId) {
+        const inp = document.getElementById(`it-${secId}-${itemId}-moneda`);
+        if (!inp) return;
+        const newMoneda = inp.value === 'USD' ? 'BOB' : 'USD';
+        inp.value = newMoneda;
+        const isUSD = newMoneda === 'USD';
+        const btn = document.getElementById(`it-${secId}-${itemId}-moneda-btn`);
+        if (btn) { btn.textContent = isUSD ? '$ USD' : 'Bs. BOB'; btn.classList.toggle('td-moneda-usd', isUSD); }
+        const detEl = document.getElementById(`it-${secId}-${itemId}-detalle`);
+        if (detEl) { const tr = detEl.closest('tr'); if (tr) tr.className = isUSD ? 'tr-usd' : ''; }
+        const sec = _secciones.find(s => s.id === secId);
+        const it = sec ? sec.items.find(i => i.id === itemId) : null;
+        if (it) {
+            it.moneda = newMoneda;
+            const total = fNum(it.cantidad) * fNum(it.costo_unitario) * fNum(it.dias);
+            const tr = detEl ? detEl.closest('tr') : null;
+            if (tr) { const tc = tr.querySelector('.td-total'); if (tc) tc.textContent = (isUSD ? '$ ' : '') + fMoney(total); }
+            writeItemGranular(sec, it);
+        }
+        recalcTotals();
     }
 
     function onItemSocioChange(secId, itemId, newSocio) {
@@ -947,15 +1005,18 @@
     }
 
     function recalcFloatTotals() {
-        let projSub = 0, paqSub = 0, socioSub = 0;
+        let projBOB = 0, projUSD = 0, paqSub = 0, socioSub = 0;
+        const tc = fNum(document.getElementById('inp-tc').value) || 6.96;
         _secciones.forEach(sec => {
             sec.items.forEach(it => {
                 const amt = fNum(it.cantidad) * fNum(it.costo_unitario) * fNum(it.dias);
-                projSub += amt;
-                if (_filtroPaquete && sec.paquete === _filtroPaquete) paqSub += amt;
-                if (_filtroSocio && it.socio === _filtroSocio) socioSub += amt;
+                const amtBs = (it.moneda || 'BOB') === 'USD' ? amt * tc : amt;
+                if ((it.moneda || 'BOB') === 'USD') projUSD += amt; else projBOB += amt;
+                if (_filtroPaquete && sec.paquete === _filtroPaquete) paqSub += amtBs;
+                if (_filtroSocio && it.socio === _filtroSocio) socioSub += amtBs;
             });
         });
+        const projSub = projBOB + projUSD * tc;
         const feePct = fNum(document.getElementById('inp-fee-pct').value);
         const impPct = fNum(document.getElementById('inp-imp-pct').value);
         const grand = (projSub * (1 + feePct/100)) * (1 + impPct/100);
@@ -1028,7 +1089,8 @@
             const updates = {};
             updates[`secciones/${secIdx}/items/${itIdx}`] = {
                 id: it.id, detalle: it.detalle, cantidad: it.cantidad,
-                costo_unitario: it.costo_unitario, dias: it.dias, obs: it.obs, socio: it.socio || ''
+                costo_unitario: it.costo_unitario, dias: it.dias, obs: it.obs, socio: it.socio || '',
+                moneda: it.moneda || 'BOB'
             };
             db.ref(DB_REF).update(updates).catch(e => console.error('granular save error', e));
         }, 800);
@@ -1036,19 +1098,34 @@
 
     // ── Totals ──────────────────────────────────────────────────────────────
     function recalcTotals() {
-        let subtotal = 0;
+        let subtotalBOB = 0, subtotalUSD = 0;
         _secciones.forEach(sec => {
             sec.items.forEach(it => {
-                subtotal += fNum(it.cantidad) * fNum(it.costo_unitario) * fNum(it.dias);
+                const amt = fNum(it.cantidad) * fNum(it.costo_unitario) * fNum(it.dias);
+                if ((it.moneda || 'BOB') === 'USD') subtotalUSD += amt;
+                else subtotalBOB += amt;
             });
         });
+        const tc = fNum(document.getElementById('inp-tc').value) || 6.96;
+        const usdEnBs = subtotalUSD * tc;
+        const subtotalCombinado = subtotalBOB + usdEnBs;
+        const hasUSD = subtotalUSD > 0;
+
         const feePct = fNum(document.getElementById('inp-fee-pct').value);
         const impPct = fNum(document.getElementById('inp-imp-pct').value);
-        const feeAmt = subtotal * feePct / 100;
-        const base = subtotal + feeAmt;
+        const feeAmt = subtotalCombinado * feePct / 100;
+        const base = subtotalCombinado + feeAmt;
         const impAmt = base * impPct / 100;
         const total = base + impAmt;
-        document.getElementById('tot-subtotal').textContent = fMoney(subtotal);
+
+        document.getElementById('tot-subtotal-bob').textContent = fMoney(subtotalBOB);
+        document.getElementById('tot-subtotal-usd').textContent = '$ ' + fMoney(subtotalUSD);
+        document.getElementById('tot-subtotal-usd-bs').textContent = fMoney(usdEnBs);
+        document.getElementById('tot-subtotal').textContent = fMoney(subtotalCombinado);
+        document.getElementById('tot-usd-section').style.display = hasUSD ? '' : 'none';
+        const boblbl = document.getElementById('tot-subtotal-bob-lbl');
+        if (boblbl) boblbl.textContent = hasUSD ? 'Sub-Total (Bs.)' : 'Sub-Total (Bs.)';
+
         document.getElementById('tot-fee').textContent = fMoney(feeAmt);
         document.getElementById('tot-base').textContent = fMoney(base);
         document.getElementById('tot-imp').textContent = fMoney(impAmt);
@@ -1831,17 +1908,20 @@ Reglas CRÍTICAS:
         // Sections — grouped if any section is assigned to a defined package
         const _xPaqIds = new Set((_meta.paquetes||[]).map(p => p.id));
         const hasGroups = _secciones.some(s => s.paquete && _xPaqIds.has(s.paquete));
+        const tcVal = fNum(document.getElementById('inp-tc').value) || 6.96;
         const renderSecRows = (sec) => {
-            rows.push([sec.nombre || 'SECCIÓN', '', '', '', '', 'OBSERVACIONES']);
-            rows.push(['DETALLE', 'CANTIDAD', 'COSTO UNITARIO', 'DÍAS', 'TOTALES', '']);
+            rows.push([sec.nombre || 'SECCIÓN', '', '', '', '', '', 'OBSERVACIONES']);
+            rows.push(['DETALLE', 'CANTIDAD', 'C.U.', 'MONEDA', 'DÍAS', 'TOTAL (en moneda)', '']);
             rows.push([]);
-            let secTotal = 0;
+            let secTotalBOB = 0, secTotalUSD = 0;
             sec.items.forEach(it => {
                 const total = fNum(it.cantidad) * fNum(it.costo_unitario) * fNum(it.dias);
-                secTotal += total;
-                rows.push([it.detalle, it.cantidad, it.costo_unitario, it.dias, total, it.obs]);
+                const mon = (it.moneda || 'BOB');
+                if (mon === 'USD') secTotalUSD += total; else secTotalBOB += total;
+                rows.push([it.detalle, it.cantidad, it.costo_unitario, mon, it.dias, total, it.obs]);
             });
-            rows.push(['', '', '', '', secTotal, '']);
+            if (secTotalBOB > 0) rows.push(['', '', '', 'Subtotal Bs.', '', secTotalBOB, '']);
+            if (secTotalUSD > 0) rows.push(['', '', '', 'Subtotal USD $', '', secTotalUSD, '']);
             rows.push([]);
         };
         if (hasGroups) {
@@ -1869,24 +1949,34 @@ Reglas CRÍTICAS:
         // Totals
         const feePct = fNum(document.getElementById('inp-fee-pct').value);
         const impPct = fNum(document.getElementById('inp-imp-pct').value);
-        let subtotal = 0;
-        _secciones.forEach(sec => sec.items.forEach(it => { subtotal += fNum(it.cantidad) * fNum(it.costo_unitario) * fNum(it.dias); }));
-        const feeAmt = subtotal * feePct / 100;
-        const base = subtotal + feeAmt;
+        let subtotalBOB = 0, subtotalUSD = 0;
+        _secciones.forEach(sec => sec.items.forEach(it => {
+            const amt = fNum(it.cantidad) * fNum(it.costo_unitario) * fNum(it.dias);
+            if ((it.moneda || 'BOB') === 'USD') subtotalUSD += amt; else subtotalBOB += amt;
+        }));
+        const usdEnBs = subtotalUSD * tcVal;
+        const subtotalCombinado = subtotalBOB + usdEnBs;
+        const feeAmt = subtotalCombinado * feePct / 100;
+        const base = subtotalCombinado + feeAmt;
         const impAmt = base * impPct / 100;
         const total = base + impAmt;
 
-        rows.push(['', '', 'Sub-Total (Bs.)', '', subtotal]);
-        rows.push(['', '', `Fee Agencia (${feePct}%)`, '', feeAmt]);
-        rows.push(['', '', '', '', base]);
+        rows.push(['', '', '', 'Sub-Total (Bs.)', '', subtotalBOB]);
+        if (subtotalUSD > 0) {
+            rows.push(['', '', '', 'Sub-Total (USD $)', '', subtotalUSD]);
+            rows.push(['', '', '', `→ en Bs. (T.C. ${tcVal})`, '', usdEnBs]);
+            rows.push(['', '', '', 'Sub-Total Combinado (Bs.)', '', subtotalCombinado]);
+        }
+        rows.push(['', '', '', `Fee Agencia (${feePct}%)`, '', feeAmt]);
+        rows.push(['', '', '', 'Base (Sub + Fee)', '', base]);
         rows.push([]);
-        rows.push(['', '', 'Impuestos', '', impAmt]);
+        rows.push(['', '', '', `Impuestos (${impPct}%)`, '', impAmt]);
         rows.push([]);
-        rows.push(['', '', 'Total General (Bs.)', '', total]);
+        rows.push(['', '', '', 'TOTAL GENERAL (Bs.)', '', total]);
 
         const ws = XLSX.utils.aoa_to_sheet(rows);
         // Column widths
-        ws['!cols'] = [{wch:40},{wch:10},{wch:18},{wch:8},{wch:18},{wch:40}];
+        ws['!cols'] = [{wch:40},{wch:10},{wch:18},{wch:10},{wch:8},{wch:18},{wch:40}];
         XLSX.utils.book_append_sheet(wb, ws, 'Presupuesto');
         const fname = `Presupuesto_${(_meta.cliente||'Agencia').replace(/\s+/g,'_')}_${(_meta.actividad||'Evento').replace(/\s+/g,'_')}.xlsx`;
         XLSX.writeFile(wb, fname);
