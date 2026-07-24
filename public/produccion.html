@@ -1835,6 +1835,8 @@
             <div style="display:flex;gap:5px;flex:1;flex-wrap:wrap;align-items:center;">
                 <input id="cmedit-n-${i}" class="computo-inp" value="${(m.n||'').replace(/"/g,'&quot;')}" placeholder="Nombre" style="flex:1;min-width:80px;height:30px;padding:3px 7px;font-size:11px;">
                 <div style="display:flex;align-items:center;gap:3px;">
+                    <input id="cmedit-c-${i}" type="number" class="computo-inp" value="${m.c||1}" min="1" step="1" placeholder="Cant" style="width:52px;height:30px;padding:3px 7px;font-size:11px;text-align:center;">
+                    <span style="font-size:10px;font-weight:700;color:var(--gray);">×</span>
                     <input id="cmedit-l-${i}" type="number" class="computo-inp" value="${largoDisplay}" step="0.001" placeholder="Largo" style="width:80px;height:30px;padding:3px 7px;font-size:11px;">
                     <span style="font-size:10px;font-weight:700;color:var(--gray);">${unit}</span>
                 </div>
@@ -1849,8 +1851,10 @@
         const s = _computoState;
         const m = s.measures[i];
         const nameInp = document.getElementById(`cmedit-n-${i}`);
+        const cantInp = document.getElementById(`cmedit-c-${i}`);
         const largoInp = document.getElementById(`cmedit-l-${i}`);
         if (nameInp) m.n = nameInp.value.trim() || m.n;
+        if (cantInp) m.c = Math.max(1, parseInt(cantInp.value) || 1);
         if (largoInp) {
             let newL = parseFloat(largoInp.value) || m.l;
             if (_cpUnit === 'cm') newL = newL / 100;
