@@ -1816,6 +1816,49 @@
         _renderComputo();
     };
 
+    window.computoMoveMeasure = function(i, dir) {
+        const a = _computoState.measures;
+        const j = i + dir;
+        if (j < 0 || j >= a.length) return;
+        [a[i], a[j]] = [a[j], a[i]];
+        _renderComputo();
+    };
+
+    window.computoEditMeasure = function(i) {
+        const s = _computoState;
+        const m = s.measures[i];
+        const item = document.getElementById(`cmitem-${i}`);
+        if (!item) return;
+        const unit = _cpUnit === 'cm' ? 'cm' : 'm';
+        const largoDisplay = _cpUnit === 'cm' ? (m.l * 100).toFixed(1) : m.l.toString();
+        item.innerHTML = `
+            <div style="display:flex;gap:5px;flex:1;flex-wrap:wrap;align-items:center;">
+                <input id="cmedit-n-${i}" class="computo-inp" value="${(m.n||'').replace(/"/g,'&quot;')}" placeholder="Nombre" style="flex:1;min-width:80px;height:30px;padding:3px 7px;font-size:11px;">
+                <div style="display:flex;align-items:center;gap:3px;">
+                    <input id="cmedit-l-${i}" type="number" class="computo-inp" value="${largoDisplay}" step="0.001" placeholder="Largo" style="width:80px;height:30px;padding:3px 7px;font-size:11px;">
+                    <span style="font-size:10px;font-weight:700;color:var(--gray);">${unit}</span>
+                </div>
+                <button onclick="computoSaveEdit(${i})" style="background:var(--green);color:white;border:none;border-radius:7px;padding:5px 10px;font-weight:800;cursor:pointer;height:30px;"><i class="ph-bold ph-check"></i></button>
+                <button onclick="_renderComputo()" style="background:var(--bg);border:1px solid var(--border);border-radius:7px;padding:5px 10px;font-weight:800;cursor:pointer;height:30px;"><i class="ph-bold ph-x"></i></button>
+            </div>`;
+        const inp = document.getElementById(`cmedit-l-${i}`);
+        if (inp) inp.focus();
+    };
+
+    window.computoSaveEdit = function(i) {
+        const s = _computoState;
+        const m = s.measures[i];
+        const nameInp = document.getElementById(`cmedit-n-${i}`);
+        const largoInp = document.getElementById(`cmedit-l-${i}`);
+        if (nameInp) m.n = nameInp.value.trim() || m.n;
+        if (largoInp) {
+            let newL = parseFloat(largoInp.value) || m.l;
+            if (_cpUnit === 'cm') newL = newL / 100;
+            m.l = Math.round(newL * 10000) / 10000;
+        }
+        _renderComputo();
+    };
+
     // ── Unidad m / cm ─────────────────────────────────────────────────────
     let _cpUnit = 'm';
     window.setCpUnit = function(u) {
@@ -1875,15 +1918,24 @@
         // Medidas
         const listEl = document.getElementById('computo-measures-list');
         if (listEl) {
+            const isBar = s.mode === 'barra';
             listEl.innerHTML = s.measures.map((m, i) => {
                 let txt;
-                if (s.mode === 'plancha') {
+                if (!isBar) {
                     txt = `${m.c} × (${m.l}×${m.a}m) = ${(m.c*m.l*m.a).toFixed(3)}m²`;
                 } else {
                     const label = m.n ? `<b>${m.n}</b> — ` : '';
                     txt = `${label}${m.c} × ${m.l}m = ${(m.c*m.l).toFixed(3)}ml`;
                 }
-                return `<div class="computo-measure-item"><span>${txt}</span><i class="ph-bold ph-trash" onclick="computoDelMeasure(${i})" style="color:var(--red);cursor:pointer;"></i></div>`;
+                const canUp = i > 0, canDown = i < s.measures.length - 1;
+                const grayDim = 'color:var(--gray);opacity:0.4;pointer-events:none;';
+                const grayAct = 'color:var(--gray);cursor:pointer;';
+                const moveHtml = isBar ? `
+                    <i class="ph-bold ph-arrow-fat-up" onclick="computoMoveMeasure(${i},-1)" style="font-size:12px;padding:3px;${canUp ? grayAct : grayDim}"></i>
+                    <i class="ph-bold ph-arrow-fat-down" onclick="computoMoveMeasure(${i},1)" style="font-size:12px;padding:3px;${canDown ? grayAct : grayDim}"></i>
+                    <i class="ph-bold ph-pencil-simple" onclick="computoEditMeasure(${i})" style="font-size:12px;padding:3px;color:var(--blue);cursor:pointer;"></i>
+                ` : '';
+                return `<div class="computo-measure-item" id="cmitem-${i}"><span style="flex:1;">${txt}</span><div style="display:flex;align-items:center;gap:0;">${moveHtml}<i class="ph-bold ph-trash" onclick="computoDelMeasure(${i})" style="color:var(--red);cursor:pointer;font-size:13px;padding:3px;"></i></div></div>`;
             }).join('') || '<div style="color:var(--gray);font-size:11px;text-align:center;padding:10px;">Sin medidas</div>';
         }
         // Resultado
@@ -1939,26 +1991,29 @@
             // FFD: ordenar de mayor a menor para minimizar desperdicios
             pieces.sort((a, b) => b.l - a.l);
 
+            const kerf = 0.003; // 3mm disco/sierra de corte por pieza
             let bars = [];
             pieces.forEach(p => {
                 let placed = false;
                 for (let b of bars) {
-                    if (b.rem >= p.l - 0.001) {
-                        b.rem = Math.round((b.rem - p.l) * 1000) / 1000;
+                    if (b.rem >= p.l + kerf - 0.0001) {
+                        b.rem = Math.round((b.rem - p.l - kerf) * 10000) / 10000;
                         b.cuts.push({ l: p.l, n: p.n });
                         placed = true; break;
                     }
                 }
-                if (!placed) bars.push({ rem: Math.round((barLen - p.l) * 1000) / 1000, cuts: [{ l: p.l, n: p.n }] });
+                if (!placed) bars.push({ rem: Math.round((barLen - p.l - kerf) * 10000) / 10000, cuts: [{ l: p.l, n: p.n }] });
             });
 
             s.cutPlates = bars; s.finalVal = bars.length;
             const totalUsed = pieces.reduce((acc, p) => acc + p.l, 0);
+            const totalKerf = pieces.length * kerf;
             const totalAvail = bars.length * barLen;
-            const desp = totalAvail > 0 ? ((totalAvail - totalUsed) / totalAvail * 100).toFixed(1) : '0';
+            const desp = totalAvail > 0 ? ((totalAvail - totalUsed - totalKerf) / totalAvail * 100).toFixed(1) : '0';
+            const saldoUtil = Math.max(0, totalAvail - totalUsed - totalKerf);
 
             const resEl = document.getElementById('computo-result');
-            if (resEl) resEl.innerHTML = `<b style="font-size:20px;color:var(--blue);">${bars.length}</b> Barras (${barLen}m) &nbsp;·&nbsp; Desperdicio: <b style="color:var(--orange);">${desp}%</b> &nbsp;·&nbsp; Saldo útil: <b>${(totalAvail - totalUsed).toFixed(2)}m</b>`;
+            if (resEl) resEl.innerHTML = `<b style="font-size:20px;color:var(--blue);">${bars.length}</b> Barras (${barLen}m) &nbsp;·&nbsp; Desperdicio: <b style="color:var(--orange);">${desp}%</b> &nbsp;·&nbsp; Saldo útil: <b>${saldoUtil.toFixed(2)}m</b><div style="font-size:9px;color:var(--gray);margin-top:3px;font-weight:600;">${pieces.length} cortes × 3mm = ${(totalKerf*100).toFixed(1)}cm pérdida de corte incluida</div>`;
 
             // Paleta de colores por nombre de pieza
             const uniqueNames = [...new Set(pieces.map(p => p.n))];
