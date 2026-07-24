@@ -1855,16 +1855,18 @@
         let alt = parseFloat(document.getElementById('cp-hipo-alt').value) || 0;
         if (base === 0 && alt === 0) return;
         const hipo = Math.sqrt(base * base + alt * alt); // in selected unit
-        const hipoRounded = Math.round(hipo * 10000) / 10000;
+        // 1 decimal in cm mode, 2 in m mode
+        const decimals = _cpUnit === 'cm' ? 1 : 2;
+        const factor = Math.pow(10, decimals);
+        const hipoRounded = Math.round(hipo * factor) / factor;
         const largoInp = document.getElementById('cp-largo');
         if (largoInp) largoInp.value = hipoRounded;
-        // Show result with both units
         const resEl = document.getElementById('cp-hipo-result');
         if (resEl) {
-            const hipoM = _cpUnit === 'cm' ? hipoRounded / 100 : hipoRounded;
-            const hipoCm = _cpUnit === 'cm' ? hipoRounded : hipoRounded * 100;
+            const hipoM = _cpUnit === 'cm' ? hipo / 100 : hipo;
+            const hipoCm = _cpUnit === 'cm' ? hipo : hipo * 100;
             resEl.style.display = 'block';
-            resEl.innerHTML = `<i class="ph-bold ph-check-circle"></i> Hipotenusa: <b>${hipoM.toFixed(4)}m</b> = <b>${hipoCm.toFixed(2)}cm</b> → insertada en Largo`;
+            resEl.innerHTML = `<i class="ph-bold ph-check-circle"></i> Hipotenusa: <b>${hipoM.toFixed(2)}m</b> = <b>${hipoCm.toFixed(1)}cm</b> → insertada en Largo`;
         }
     };
 
