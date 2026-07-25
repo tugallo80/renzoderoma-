@@ -331,6 +331,7 @@
         <button class="act-btn act-btn-green" style="font-size:11px;" onclick="exportarExcel()"><i class="ph-bold ph-microsoft-excel-logo"></i> Excel</button>
         <button class="act-btn act-btn-gray" style="font-size:11px;" onclick="imprimirDoc()"><i class="ph-bold ph-printer"></i> PDF</button>
         <button id="btn-share-link" class="act-btn" style="background:rgba(0,122,255,0.1);color:var(--blue);border:1.5px solid var(--blue);font-size:11px;" onclick="abrirModalShare()"><i class="ph-bold ph-share-network"></i> Compartir</button>
+        <button class="act-btn" style="background:rgba(37,211,102,0.12);color:#25d366;border:1.5px solid rgba(37,211,102,0.3);font-size:11px;" onclick="enviarPorMail()"><i class="ph-bold ph-envelope"></i> Mail</button>
     </div>
 
     <!-- Modal: Compartir link socios -->
@@ -2020,6 +2021,21 @@ Reglas CRÍTICAS:
             inp.setSelectionRange(0, 99999);
             try { document.execCommand('copy'); btn.innerHTML = '<i class="ph-bold ph-check"></i> ¡Copiado!'; btn.style.background = 'var(--green)'; setTimeout(() => { btn.innerHTML = '<i class="ph-bold ph-copy"></i> Copiar'; btn.style.background = 'var(--blue)'; }, 2500); } catch(e) {}
         });
+    }
+
+    // ── Enviar por Mail ────────────────────────────────────────────────────────
+    function enviarPorMail() {
+        const cliente   = document.getElementById('meta-cliente').value.trim()   || 'Cliente';
+        const actividad = document.getElementById('meta-actividad').value.trim() || '';
+        const producto  = document.getElementById('meta-producto').value.trim()  || '';
+        const fecha     = document.getElementById('meta-fecha').value.trim()     || '';
+        const shareUrl  = `${location.origin}/agencia.html?cid=${encodeURIComponent(cid)}&pid=${encodeURIComponent(pid)}&share=1`;
+
+        const subject = `Presupuesto Agencia — ${cliente}${actividad ? ' | ' + actividad : ''}`;
+        const body = `Estimado/a,\n\nAdjunto el presupuesto de agencia para ${actividad ? '"' + actividad + '" — ' : ''}${cliente}${producto ? ' (' + producto + ')' : ''}${fecha ? ', ' + fecha : ''}.\n\nPuede visualizarlo en el siguiente enlace:\n${shareUrl}\n\nQuedo a su disposición para cualquier consulta o ajuste.\n\nSaludos,`;
+
+        const params = new URLSearchParams({ compose: '1', subject, body });
+        window.open('/correo.html?' + params.toString(), '_blank');
     }
 
     // ── Auth & Load ──────────────────────────────────────────────────────────
