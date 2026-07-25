@@ -13,9 +13,10 @@ const { simpleParser } = require("mailparser");
 const ZOHO_MAIL_PASSWORD = defineSecret("ZOHO_MAIL_PASSWORD");
 
 const ZOHO_USER = "renzo@rubikbolivia.com";
-const IMAP_HOST = "imap.zoho.com";
+// Zoho Workplace con dominio propio usa imappro.zoho.com
+const IMAP_HOST = "imappro.zoho.com";
 const IMAP_PORT = 993;
-const SMTP_HOST = "smtp.zoho.com";
+const SMTP_HOST = "smtppro.zoho.com";
 const SMTP_PORT = 465;
 
 const ALLOWED_ORIGINS = new Set([
@@ -62,7 +63,14 @@ function makeImapClient(password) {
         auth: { user: ZOHO_USER, pass: password },
         logger: false,
         tls: { rejectUnauthorized: true },
+        socketTimeout: 15000,
+        connectionTimeout: 15000,
     });
+}
+
+function imapErrMsg(e) {
+    // imapflow expone responseText en errores de comando IMAP
+    return e.responseText || e.response || e.message || String(e);
 }
 
 // ── GET /api/mail/folders ────────────────────────────────────────────────────
@@ -86,8 +94,8 @@ exports.mailFolders = onRequest(
                 .map(f => ({ path: f.path, name: f.name, flags: [...f.flags] }));
             return res.status(200).json({ folders });
         } catch (e) {
-            console.error("[mailFolders]", e.message);
-            return res.status(500).json({ error: e.message });
+            console.error("[mailFolders]", e.message, e.responseText || "");
+            return res.status(500).json({ error: imapErrMsg(e) });
         } finally {
             await client.logout().catch(() => {});
         }
@@ -155,8 +163,8 @@ exports.mailInbox = onRequest(
             messages.reverse();
             return res.status(200).json({ messages, total, page, limit });
         } catch (e) {
-            console.error("[mailInbox]", e.message);
-            return res.status(500).json({ error: e.message });
+            console.error("[mailInbox]", e.message, e.responseText || "");
+            return res.status(500).json({ error: imapErrMsg(e) });
         } finally {
             await client.logout().catch(() => {});
         }
@@ -228,8 +236,8 @@ exports.mailMessage = onRequest(
                 attachments,
             });
         } catch (e) {
-            console.error("[mailMessage]", e.message);
-            return res.status(500).json({ error: e.message });
+            console.error("[mailMessage]", e.message, e.responseText || "");
+            return res.status(500).json({ error: imapErrMsg(e) });
         } finally {
             await client.logout().catch(() => {});
         }
@@ -314,7 +322,7 @@ exports.mailSend = onRequest(
             return res.status(200).json({ ok: true, messageId: info.messageId });
         } catch (e) {
             console.error("[mailSend]", e.message);
-            return res.status(500).json({ error: e.message });
+            return res.status(500).json({ error: e.message || String(e) });
         }
     }
 );
