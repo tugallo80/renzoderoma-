@@ -83,6 +83,34 @@
           "functionId": "geminiLiveKey",
           "region": "us-central1"
         }
+      },
+      {
+        "source": "/api/mail/folders",
+        "function": {
+          "functionId": "mailFolders",
+          "region": "us-central1"
+        }
+      },
+      {
+        "source": "/api/mail/inbox",
+        "function": {
+          "functionId": "mailInbox",
+          "region": "us-central1"
+        }
+      },
+      {
+        "source": "/api/mail/message",
+        "function": {
+          "functionId": "mailMessage",
+          "region": "us-central1"
+        }
+      },
+      {
+        "source": "/api/mail/send",
+        "function": {
+          "functionId": "mailSend",
+          "region": "us-central1"
+        }
       }
     ]
   },

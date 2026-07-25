@@ -1,0 +1,623 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Correo — Rubik Bolivia</title>
+<link rel="icon" href="/img/favicon.png">
+<script src="https://www.gstatic.com/firebasejs/9.1.3/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.1.3/firebase-auth-compat.js"></script>
+<link rel="stylesheet" href="https://unpkg.com/@phosphor-icons/web@2.1.1/src/bold/style.css">
+<style>
+  :root {
+    --bg: #f5f5f7;
+    --surface: #fff;
+    --sidebar-bg: #1c1c1e;
+    --sidebar-fg: #e5e5ea;
+    --sidebar-active: #3478f6;
+    --border: rgba(0,0,0,.08);
+    --text: #1c1c1e;
+    --text-sub: #6e6e73;
+    --blue: #3478f6;
+    --red: #ff3b30;
+    --green: #34c759;
+    --orange: #ff9500;
+    --radius: 12px;
+    --shadow: 0 2px 12px rgba(0,0,0,.07);
+  }
+  @media (prefers-color-scheme:dark){
+    :root{
+      --bg:#000;--surface:#1c1c1e;--border:rgba(255,255,255,.08);
+      --text:#f5f5f7;--text-sub:#98989f;--shadow:0 2px 12px rgba(0,0,0,.4);
+    }
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{font-family:-apple-system,BlinkMacSystemFont,'SF Pro Text',sans-serif;background:var(--bg);color:var(--text);height:100dvh;display:flex;overflow:hidden;}
+
+  /* ── Sidebar ── */
+  #sidebar{
+    width:220px;min-width:220px;background:var(--sidebar-bg);color:var(--sidebar-fg);
+    display:flex;flex-direction:column;padding:20px 0;overflow-y:auto;
+  }
+  #sidebar h2{font-size:18px;font-weight:700;padding:0 18px 14px;color:#fff;letter-spacing:-.3px;}
+  .folder-item{
+    display:flex;align-items:center;gap:10px;padding:9px 18px;cursor:pointer;
+    border-radius:0;font-size:14px;color:var(--sidebar-fg);transition:background .15s;
+  }
+  .folder-item:hover{background:rgba(255,255,255,.07);}
+  .folder-item.active{background:var(--sidebar-active);color:#fff;font-weight:600;}
+  .folder-item i{font-size:16px;flex-shrink:0;}
+  .folder-badge{margin-left:auto;background:var(--sidebar-active);color:#fff;border-radius:10px;padding:1px 7px;font-size:11px;font-weight:700;}
+  .folder-item.active .folder-badge{background:rgba(255,255,255,.3);}
+  #sidebar-compose{
+    margin:12px 14px 0;background:var(--sidebar-active);color:#fff;border:none;border-radius:10px;
+    padding:10px 0;font-size:14px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;
+    transition:opacity .15s;
+  }
+  #sidebar-compose:hover{opacity:.85;}
+
+  /* ── List panel ── */
+  #list-panel{
+    width:320px;min-width:220px;border-right:1px solid var(--border);background:var(--surface);
+    display:flex;flex-direction:column;overflow:hidden;
+  }
+  #list-header{
+    padding:14px 16px 10px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px;
+  }
+  #list-folder-title{font-size:17px;font-weight:700;flex:1;}
+  #btn-refresh{background:none;border:none;cursor:pointer;color:var(--blue);font-size:18px;padding:4px;}
+  #list-search{
+    margin:10px 12px;background:var(--bg);border:1px solid var(--border);border-radius:8px;
+    padding:8px 12px;font-size:14px;color:var(--text);outline:none;
+  }
+  #list-search::placeholder{color:var(--text-sub);}
+  #msg-list{flex:1;overflow-y:auto;}
+  .msg-item{
+    padding:12px 16px;border-bottom:1px solid var(--border);cursor:pointer;transition:background .12s;
+    display:flex;gap:10px;align-items:flex-start;
+  }
+  .msg-item:hover{background:var(--bg);}
+  .msg-item.active{background:rgba(52,120,246,.08);}
+  .msg-item.unread .mi-subject{font-weight:700;}
+  .mi-dot{width:8px;height:8px;border-radius:50%;background:var(--blue);flex-shrink:0;margin-top:5px;}
+  .mi-dot.seen{background:transparent;}
+  .mi-body{flex:1;min-width:0;}
+  .mi-from{font-size:14px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .mi-subject{font-size:13px;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px;}
+  .mi-date{font-size:11px;color:var(--text-sub);flex-shrink:0;padding-top:2px;}
+  #list-pager{padding:10px 16px;border-top:1px solid var(--border);display:flex;align-items:center;gap:8px;justify-content:center;}
+  #list-pager button{background:none;border:1px solid var(--border);border-radius:6px;padding:5px 10px;cursor:pointer;color:var(--text);font-size:13px;}
+  #list-pager button:disabled{opacity:.35;cursor:default;}
+  #list-page-info{font-size:13px;color:var(--text-sub);}
+  #list-loading{padding:20px;text-align:center;color:var(--text-sub);font-size:14px;}
+
+  /* ── Message panel ── */
+  #msg-panel{flex:1;display:flex;flex-direction:column;overflow:hidden;}
+  #msg-empty{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;color:var(--text-sub);}
+  #msg-empty i{font-size:56px;opacity:.3;}
+  #msg-empty p{font-size:15px;}
+  #msg-view{display:none;flex-direction:column;flex:1;overflow:hidden;}
+  #msg-toolbar{
+    padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;
+    flex-wrap:wrap;
+  }
+  #msg-toolbar button{
+    background:none;border:1px solid var(--border);border-radius:8px;
+    padding:7px 14px;font-size:13px;cursor:pointer;color:var(--text);
+    display:flex;align-items:center;gap:6px;transition:background .12s;
+  }
+  #msg-toolbar button:hover{background:var(--bg);}
+  #msg-toolbar button i{font-size:15px;}
+  #msg-header{padding:18px 20px 12px;border-bottom:1px solid var(--border);}
+  #msg-subject{font-size:20px;font-weight:700;margin-bottom:10px;}
+  .msg-meta{font-size:13px;color:var(--text-sub);margin-bottom:4px;}
+  .msg-meta span{color:var(--text);}
+  #msg-body{flex:1;overflow-y:auto;padding:20px;}
+  #msg-body iframe{width:100%;min-height:300px;border:none;background:#fff;border-radius:8px;}
+  #msg-text-fallback{white-space:pre-wrap;font-size:14px;line-height:1.65;color:var(--text);}
+
+  /* ── Compose modal ── */
+  #compose-overlay{
+    position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:100;display:none;
+    align-items:flex-end;justify-content:flex-end;padding:0 20px 20px 0;
+  }
+  #compose-overlay.open{display:flex;}
+  #compose-modal{
+    background:var(--surface);border-radius:14px;width:100%;max-width:540px;
+    box-shadow:0 8px 40px rgba(0,0,0,.3);display:flex;flex-direction:column;overflow:hidden;
+  }
+  #compose-header{
+    padding:14px 16px;background:var(--sidebar-bg);color:#fff;
+    display:flex;align-items:center;justify-content:space-between;
+  }
+  #compose-header h3{font-size:15px;font-weight:600;}
+  #compose-header button{background:none;border:none;color:#aaa;cursor:pointer;font-size:18px;}
+  .compose-row{display:flex;align-items:center;border-bottom:1px solid var(--border);padding:0 14px;}
+  .compose-row label{font-size:13px;color:var(--text-sub);min-width:52px;}
+  .compose-row input{
+    flex:1;border:none;outline:none;padding:10px 8px;font-size:14px;background:transparent;color:var(--text);
+  }
+  #compose-body{
+    flex:1;min-height:180px;resize:vertical;border:none;outline:none;padding:14px;
+    font-size:14px;line-height:1.6;font-family:inherit;color:var(--text);background:transparent;
+  }
+  #compose-footer{
+    padding:10px 14px;border-top:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;
+  }
+  #btn-compose-send{
+    background:var(--blue);color:#fff;border:none;border-radius:8px;
+    padding:9px 20px;font-size:14px;font-weight:600;cursor:pointer;
+    display:flex;align-items:center;gap:6px;
+  }
+  #btn-compose-send:disabled{opacity:.5;cursor:default;}
+  #compose-status{font-size:13px;color:var(--text-sub);}
+
+  /* ── Loading spinner ── */
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .spinner{
+    width:22px;height:22px;border:2px solid var(--border);border-top-color:var(--blue);
+    border-radius:50%;animation:spin .6s linear infinite;display:inline-block;
+  }
+
+  /* Mobile */
+  @media(max-width:700px){
+    #sidebar{display:none;}
+    #list-panel{width:100%;min-width:0;border-right:none;}
+    #msg-panel{display:none;}
+    body.show-msg #list-panel{display:none;}
+    body.show-msg #msg-panel{display:flex;}
+    body.show-msg #sidebar{display:none;}
+    #btn-back{display:flex!important;}
+  }
+  #btn-back{display:none;background:none;border:none;cursor:pointer;color:var(--blue);font-size:22px;padding:4px;}
+</style>
+</head>
+<body>
+
+<!-- Sidebar -->
+<nav id="sidebar">
+  <h2>Correo</h2>
+  <button id="sidebar-compose" onclick="openCompose()">
+    <i class="ph-bold ph-pencil-simple"></i> Redactar
+  </button>
+  <div id="folder-list" style="margin-top:14px;"></div>
+</nav>
+
+<!-- List panel -->
+<div id="list-panel">
+  <div id="list-header">
+    <button id="btn-back" onclick="showList()"><i class="ph-bold ph-arrow-left"></i></button>
+    <span id="list-folder-title">INBOX</span>
+    <button id="btn-refresh" onclick="loadInbox()" title="Actualizar"><i class="ph-bold ph-arrows-clockwise"></i></button>
+  </div>
+  <input id="list-search" type="search" placeholder="Buscar en esta bandeja…" oninput="filterList(this.value)">
+  <div id="msg-list"><div id="list-loading"><div class="spinner"></div></div></div>
+  <div id="list-pager">
+    <button id="btn-prev" onclick="changePage(-1)" disabled><i class="ph-bold ph-caret-left"></i></button>
+    <span id="list-page-info">–</span>
+    <button id="btn-next" onclick="changePage(1)" disabled><i class="ph-bold ph-caret-right"></i></button>
+  </div>
+</div>
+
+<!-- Message panel -->
+<div id="msg-panel">
+  <div id="msg-empty">
+    <i class="ph-bold ph-envelope-open"></i>
+    <p>Selecciona un correo para leerlo</p>
+  </div>
+  <div id="msg-view">
+    <div id="msg-toolbar">
+      <button onclick="replyMsg()"><i class="ph-bold ph-arrow-bend-up-left"></i> Responder</button>
+      <button onclick="replyAllMsg()"><i class="ph-bold ph-arrow-bend-double-up-left"></i> Resp. todos</button>
+      <button onclick="forwardMsg()"><i class="ph-bold ph-arrow-bend-up-right"></i> Reenviar</button>
+    </div>
+    <div id="msg-header">
+      <div id="msg-subject"></div>
+      <div class="msg-meta">De: <span id="msg-from"></span></div>
+      <div class="msg-meta">Para: <span id="msg-to"></span></div>
+      <div class="msg-meta" id="msg-cc-row" style="display:none">CC: <span id="msg-cc"></span></div>
+      <div class="msg-meta">Fecha: <span id="msg-date"></span></div>
+    </div>
+    <div id="msg-body"></div>
+  </div>
+</div>
+
+<!-- Compose modal -->
+<div id="compose-overlay" onclick="overlayClick(event)">
+  <div id="compose-modal">
+    <div id="compose-header">
+      <h3 id="compose-title">Nuevo mensaje</h3>
+      <button onclick="closeCompose()"><i class="ph-bold ph-x"></i></button>
+    </div>
+    <div class="compose-row">
+      <label>Para</label>
+      <input id="compose-to" type="email" placeholder="destinatario@ejemplo.com">
+    </div>
+    <div class="compose-row">
+      <label>CC</label>
+      <input id="compose-cc" type="email" placeholder="(opcional)">
+    </div>
+    <div class="compose-row">
+      <label>Asunto</label>
+      <input id="compose-subject" type="text" placeholder="Asunto">
+    </div>
+    <textarea id="compose-body" placeholder="Escribe tu mensaje…"></textarea>
+    <div id="compose-footer">
+      <span id="compose-status"></span>
+      <button id="btn-compose-send" onclick="sendMail()">
+        <i class="ph-bold ph-paper-plane-tilt"></i> Enviar
+      </button>
+    </div>
+  </div>
+</div>
+
+<script>
+const firebaseConfig = {
+  apiKey:            "AIzaSyDXYlofy31cDP14xVAVxWo_7TqXdSgsIjA",
+  authDomain:        "rubik-bolivia.firebaseapp.com",
+  databaseURL:       "https://rubik-bolivia-default-rtdb.firebaseio.com",
+  projectId:         "rubik-bolivia",
+  storageBucket:     "rubik-bolivia.firebasestorage.app",
+  messagingSenderId: "4153087958",
+  appId:             "1:4153087958:web:cf2dd16106580ed6437677",
+};
+if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
+const auth = firebase.auth();
+
+// ── State ──────────────────────────────────────────────────────────────────
+let _token   = null;
+let _folder  = "INBOX";
+let _page    = 1;
+const _limit = 20;
+let _total   = 0;
+let _msgs    = [];       // current page messages
+let _allMsgs = [];       // for client-side search filter
+let _activeUid = null;
+let _activeParsed = null;
+let _composeMode = null; // null | 'new' | 'reply' | 'replyAll' | 'forward'
+
+// ── Auth ───────────────────────────────────────────────────────────────────
+auth.onAuthStateChanged(async user => {
+  if (!user) {
+    window.location.href = "/index.html";
+    return;
+  }
+  _token = await user.getIdToken();
+  // Refresh token periodically
+  setInterval(async () => { _token = await user.getIdToken(true); }, 50 * 60 * 1000);
+
+  loadFolders();
+  loadInbox();
+});
+
+// ── API helpers ────────────────────────────────────────────────────────────
+async function api(path) {
+  const res = await fetch(path, {
+    headers: { Authorization: `Bearer ${_token}` },
+  });
+  if (!res.ok) {
+    const j = await res.json().catch(() => ({}));
+    throw new Error(j.error || `HTTP ${res.status}`);
+  }
+  return res.json();
+}
+
+async function apiPost(path, body) {
+  const res = await fetch(path, {
+    method:  "POST",
+    headers: { Authorization: `Bearer ${_token}`, "Content-Type": "application/json" },
+    body:    JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const j = await res.json().catch(() => ({}));
+    throw new Error(j.error || `HTTP ${res.status}`);
+  }
+  return res.json();
+}
+
+// ── Folders ────────────────────────────────────────────────────────────────
+const FOLDER_ICONS = {
+  INBOX:   "ph-tray",
+  Sent:    "ph-paper-plane-tilt",
+  "Sent Items": "ph-paper-plane-tilt",
+  Drafts:  "ph-file-text",
+  Trash:   "ph-trash",
+  Spam:    "ph-warning",
+  Junk:    "ph-warning",
+  Archive: "ph-archive",
+};
+
+async function loadFolders() {
+  try {
+    const data = await api("/api/mail/folders");
+    const container = document.getElementById("folder-list");
+    container.innerHTML = "";
+    (data.folders || []).forEach(f => {
+      const icon = FOLDER_ICONS[f.name] || FOLDER_ICONS[f.path] || "ph-folder";
+      const el = document.createElement("div");
+      el.className = "folder-item" + (f.path === _folder ? " active" : "");
+      el.dataset.path = f.path;
+      el.innerHTML = `<i class="ph-bold ${icon}"></i>${f.name}`;
+      el.onclick = () => { selectFolder(f.path, el, f.name); };
+      container.appendChild(el);
+    });
+  } catch (e) {
+    console.warn("loadFolders:", e.message);
+  }
+}
+
+function selectFolder(path, el, name) {
+  _folder = path;
+  _page   = 1;
+  document.querySelectorAll(".folder-item").forEach(x => x.classList.remove("active"));
+  el.classList.add("active");
+  document.getElementById("list-folder-title").textContent = name || path;
+  loadInbox();
+}
+
+// ── Inbox list ─────────────────────────────────────────────────────────────
+window.loadInbox = async function() {
+  const listEl = document.getElementById("msg-list");
+  listEl.innerHTML = `<div id="list-loading"><div class="spinner"></div></div>`;
+  try {
+    const data = await api(`/api/mail/inbox?folder=${encodeURIComponent(_folder)}&page=${_page}&limit=${_limit}`);
+    _msgs    = data.messages || [];
+    _allMsgs = _msgs;
+    _total   = data.total || 0;
+    renderList(_msgs);
+    updatePager();
+  } catch (e) {
+    listEl.innerHTML = `<div style="padding:20px;color:var(--red);font-size:14px;">Error: ${e.message}</div>`;
+  }
+};
+
+function renderList(msgs) {
+  const listEl = document.getElementById("msg-list");
+  if (!msgs.length) {
+    listEl.innerHTML = `<div style="padding:20px;text-align:center;color:var(--text-sub);font-size:14px;">Sin mensajes</div>`;
+    return;
+  }
+  listEl.innerHTML = msgs.map(m => {
+    const d    = m.date ? fmtDate(new Date(m.date)) : "";
+    const from = escHtml(shortFrom(m.from));
+    const subj = escHtml(m.subject);
+    return `<div class="msg-item${m.seen ? "" : " unread"}${m.uid === _activeUid ? " active" : ""}"
+                 data-uid="${m.uid}" onclick="openMsg(${m.uid})">
+      <div class="mi-dot${m.seen ? " seen" : ""}"></div>
+      <div class="mi-body">
+        <div class="mi-from">${from}</div>
+        <div class="mi-subject">${subj}</div>
+      </div>
+      <div class="mi-date">${d}</div>
+    </div>`;
+  }).join("");
+}
+
+function updatePager() {
+  const pages = Math.max(1, Math.ceil(_total / _limit));
+  document.getElementById("list-page-info").textContent = `${_page} / ${pages}`;
+  document.getElementById("btn-prev").disabled = _page <= 1;
+  document.getElementById("btn-next").disabled = _page >= pages;
+}
+
+window.changePage = function(dir) {
+  _page += dir;
+  loadInbox();
+};
+
+window.filterList = function(q) {
+  const lq = q.toLowerCase();
+  const filtered = _allMsgs.filter(m =>
+    m.subject.toLowerCase().includes(lq) || m.from.toLowerCase().includes(lq)
+  );
+  renderList(filtered);
+};
+
+// ── Open message ───────────────────────────────────────────────────────────
+window.openMsg = async function(uid) {
+  _activeUid = uid;
+  document.querySelectorAll(".msg-item").forEach(el => {
+    el.classList.toggle("active", parseInt(el.dataset.uid) === uid);
+  });
+  // Mark as seen in list
+  const found = _msgs.find(m => m.uid === uid);
+  if (found) found.seen = true;
+  document.querySelectorAll(`.msg-item[data-uid="${uid}"] .mi-dot`).forEach(d => d.classList.add("seen"));
+
+  document.getElementById("msg-empty").style.display = "none";
+  document.getElementById("msg-view").style.display  = "flex";
+  document.getElementById("msg-body").innerHTML = `<div style="padding:20px;"><div class="spinner"></div></div>`;
+  document.getElementById("msg-subject").textContent = "Cargando…";
+
+  // Mobile: show message panel
+  document.body.classList.add("show-msg");
+
+  try {
+    const data = await api(`/api/mail/message?folder=${encodeURIComponent(_folder)}&uid=${uid}`);
+    _activeParsed = data;
+    renderMessage(data);
+  } catch (e) {
+    document.getElementById("msg-body").innerHTML =
+      `<div style="padding:20px;color:var(--red);">Error: ${escHtml(e.message)}</div>`;
+  }
+};
+
+function renderMessage(d) {
+  document.getElementById("msg-subject").textContent = d.subject;
+  document.getElementById("msg-from").textContent    = d.from;
+  document.getElementById("msg-to").textContent      = d.to;
+  document.getElementById("msg-date").textContent    = d.date ? new Date(d.date).toLocaleString("es-BO") : "–";
+
+  const ccRow = document.getElementById("msg-cc-row");
+  if (d.cc) {
+    document.getElementById("msg-cc").textContent = d.cc;
+    ccRow.style.display = "";
+  } else {
+    ccRow.style.display = "none";
+  }
+
+  const bodyEl = document.getElementById("msg-body");
+  if (d.html) {
+    // Sandbox iframe to prevent JS execution
+    const iframe = document.createElement("iframe");
+    iframe.setAttribute("sandbox", "allow-same-origin");
+    iframe.style.cssText = "width:100%;border:none;border-radius:8px;min-height:300px;background:#fff;";
+    bodyEl.innerHTML = "";
+    bodyEl.appendChild(iframe);
+    const doc = iframe.contentDocument || iframe.contentWindow.document;
+    doc.open();
+    doc.write(d.html);
+    doc.close();
+    // Auto-resize iframe
+    setTimeout(() => {
+      iframe.style.height = (doc.documentElement.scrollHeight + 20) + "px";
+    }, 300);
+  } else {
+    bodyEl.innerHTML = `<div id="msg-text-fallback">${escHtml(d.text || "")}</div>`;
+  }
+}
+
+window.showList = function() {
+  document.body.classList.remove("show-msg");
+};
+
+// ── Compose ────────────────────────────────────────────────────────────────
+window.openCompose = function() {
+  _composeMode = "new";
+  document.getElementById("compose-title").textContent = "Nuevo mensaje";
+  document.getElementById("compose-to").value      = "";
+  document.getElementById("compose-cc").value      = "";
+  document.getElementById("compose-subject").value = "";
+  document.getElementById("compose-body").value    = "";
+  document.getElementById("compose-status").textContent = "";
+  document.getElementById("compose-overlay").classList.add("open");
+};
+
+window.closeCompose = function() {
+  document.getElementById("compose-overlay").classList.remove("open");
+};
+
+window.overlayClick = function(e) {
+  if (e.target === document.getElementById("compose-overlay")) closeCompose();
+};
+
+window.replyMsg = function() {
+  if (!_activeParsed) return;
+  _composeMode = "reply";
+  document.getElementById("compose-title").textContent = "Responder";
+  document.getElementById("compose-to").value      = _activeParsed.from;
+  document.getElementById("compose-cc").value      = "";
+  document.getElementById("compose-subject").value = prefixSubject("Re:", _activeParsed.subject);
+  document.getElementById("compose-body").value    = quoteBody(_activeParsed);
+  document.getElementById("compose-status").textContent = "";
+  document.getElementById("compose-overlay").classList.add("open");
+};
+
+window.replyAllMsg = function() {
+  if (!_activeParsed) return;
+  _composeMode = "replyAll";
+  const toAddrs = [_activeParsed.from, _activeParsed.to].filter(Boolean).join(", ");
+  document.getElementById("compose-title").textContent = "Responder a todos";
+  document.getElementById("compose-to").value      = toAddrs;
+  document.getElementById("compose-cc").value      = _activeParsed.cc || "";
+  document.getElementById("compose-subject").value = prefixSubject("Re:", _activeParsed.subject);
+  document.getElementById("compose-body").value    = quoteBody(_activeParsed);
+  document.getElementById("compose-status").textContent = "";
+  document.getElementById("compose-overlay").classList.add("open");
+};
+
+window.forwardMsg = function() {
+  if (!_activeParsed) return;
+  _composeMode = "forward";
+  document.getElementById("compose-title").textContent = "Reenviar";
+  document.getElementById("compose-to").value      = "";
+  document.getElementById("compose-cc").value      = "";
+  document.getElementById("compose-subject").value = prefixSubject("Fwd:", _activeParsed.subject);
+  document.getElementById("compose-body").value    = quoteBody(_activeParsed);
+  document.getElementById("compose-status").textContent = "";
+  document.getElementById("compose-overlay").classList.add("open");
+};
+
+window.sendMail = async function() {
+  const to      = document.getElementById("compose-to").value.trim();
+  const cc      = document.getElementById("compose-cc").value.trim();
+  const subject = document.getElementById("compose-subject").value.trim();
+  const text    = document.getElementById("compose-body").value.trim();
+  const statusEl = document.getElementById("compose-status");
+  const btnSend  = document.getElementById("btn-compose-send");
+
+  if (!to || !subject || !text) {
+    statusEl.style.color = "var(--red)";
+    statusEl.textContent = "Completa Para, Asunto y Mensaje.";
+    return;
+  }
+
+  btnSend.disabled = true;
+  statusEl.style.color = "var(--text-sub)";
+  statusEl.textContent = "Enviando…";
+
+  const payload = { to, subject, text };
+  if (cc) payload.cc = cc;
+  if ((_composeMode === "reply" || _composeMode === "replyAll") && _activeUid) {
+    payload.replyToUid    = _activeUid;
+    payload.replyToFolder = _folder;
+  }
+
+  try {
+    await apiPost("/api/mail/send", payload);
+    statusEl.style.color = "var(--green)";
+    statusEl.textContent = "Enviado.";
+    setTimeout(closeCompose, 1200);
+  } catch (e) {
+    statusEl.style.color = "var(--red)";
+    statusEl.textContent = "Error: " + e.message;
+  } finally {
+    btnSend.disabled = false;
+  }
+};
+
+// ── Utils ──────────────────────────────────────────────────────────────────
+function escHtml(s) {
+  return String(s)
+    .replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")
+    .replace(/"/g,"&quot;");
+}
+
+function shortFrom(addr) {
+  const m = addr.match(/^(.+?)\s*</);
+  return m ? m[1].trim() : addr.split("@")[0];
+}
+
+function fmtDate(d) {
+  const now = new Date();
+  const diff = now - d;
+  if (diff < 86400000 && now.getDate() === d.getDate()) {
+    return d.toLocaleTimeString("es-BO", { hour:"2-digit", minute:"2-digit" });
+  }
+  if (diff < 7 * 86400000) {
+    return d.toLocaleDateString("es-BO", { weekday:"short" });
+  }
+  return d.toLocaleDateString("es-BO", { day:"2-digit", month:"short" });
+}
+
+function prefixSubject(prefix, subject) {
+  if (!subject) return prefix + " ";
+  const s = subject.trim();
+  if (s.toLowerCase().startsWith(prefix.toLowerCase())) return s;
+  return `${prefix} ${s}`;
+}
+
+function quoteBody(d) {
+  const date  = d.date ? new Date(d.date).toLocaleString("es-BO") : "";
+  const plain = d.text || stripHtml(d.html || "");
+  return `\n\n---\nEl ${date}, ${d.from} escribió:\n\n${plain.trim().split("\n").map(l => "> " + l).join("\n")}`;
+}
+
+function stripHtml(html) {
+  const tmp = document.createElement("div");
+  tmp.innerHTML = html;
+  return tmp.textContent || tmp.innerText || "";
+}
+</script>
+</body>
+</html>

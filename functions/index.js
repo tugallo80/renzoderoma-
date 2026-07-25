@@ -25,6 +25,13 @@ const admin = require("firebase-admin");
 
 admin.initializeApp();
 
+// ── Mail module (Zoho IMAP/SMTP) ──────────────────────────────────────────────
+const mail = require("./mail");
+exports.mailFolders = mail.mailFolders;
+exports.mailInbox   = mail.mailInbox;
+exports.mailMessage = mail.mailMessage;
+exports.mailSend    = mail.mailSend;
+
 // Secrets gestionados por Firebase Secret Manager
 const GEMINI_API_KEY        = defineSecret("GEMINI_API_KEY");
 const ANTHROPIC_API_KEY     = defineSecret("ANTHROPIC_API_KEY");
