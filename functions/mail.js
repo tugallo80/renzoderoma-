@@ -13,6 +13,28 @@ const { simpleParser } = require("mailparser");
 const ZOHO_MAIL_PASSWORD = defineSecret("ZOHO_MAIL_PASSWORD");
 
 const ZOHO_USER = "renzo@rubikbolivia.com";
+
+const FIRMA_TEXT = `\n\n--\nRenzo De Roma\nRubik Bolivia — Ingeniería Creativa\n📱 +591 76868833\nhttps://rubikbolivia.com`;
+
+const FIRMA_HTML = `
+<br><br>
+<table cellpadding="0" cellspacing="0" border="0" style="border-top:2px solid #007aff;padding-top:14px;margin-top:16px;font-family:-apple-system,BlinkMacSystemFont,Arial,sans-serif;max-width:440px;">
+  <tr><td colspan="2" style="padding-bottom:12px;"></td></tr>
+  <tr>
+    <td style="padding-right:14px;vertical-align:middle;">
+      <img src="https://rubikbolivia.com/LOGO-IA-RUBIK.jpg" width="54" height="54"
+           style="border-radius:50%;display:block;border:2px solid #e5e5ea;" alt="Rubik Bolivia">
+    </td>
+    <td style="vertical-align:middle;">
+      <div style="font-size:14px;font-weight:700;color:#1c1c1e;margin-bottom:2px;">Renzo De Roma</div>
+      <div style="font-size:12px;color:#8e8e93;margin-bottom:6px;">Rubik Bolivia &mdash; Ingeniería Creativa</div>
+      <a href="https://wa.me/59176868833" style="color:#25d366;font-size:12px;font-weight:600;text-decoration:none;">📱 +591 76868833</a>
+      <span style="color:#d1d1d6;margin:0 6px;">|</span>
+      <a href="https://rubikbolivia.com" style="color:#007aff;font-size:12px;font-weight:600;text-decoration:none;">rubikbolivia.com</a>
+    </td>
+  </tr>
+</table>`;
+
 // Zoho Workplace con dominio propio usa imappro.zoho.com
 const IMAP_HOST = "imappro.zoho.com";
 const IMAP_PORT = 993;
@@ -304,14 +326,20 @@ exports.mailSend = onRequest(
             auth:   { user: ZOHO_USER, pass: ZOHO_MAIL_PASSWORD.value() },
         });
 
+        // Inyectar firma al final de cada correo saliente
+        const finalText = text ? text + FIRMA_TEXT : undefined;
+        const finalHtml = html
+            ? html + FIRMA_HTML
+            : (text ? `<div style="white-space:pre-wrap;font-family:inherit;">${text}</div>` + FIRMA_HTML : undefined);
+
         const mailOptions = {
             from:    `Renzo De Roma <${ZOHO_USER}>`,
             to,
             subject,
             ...(cc  ? { cc }  : {}),
             ...(bcc ? { bcc } : {}),
-            ...(text ? { text } : {}),
-            ...(html ? { html } : {}),
+            ...(finalText ? { text: finalText } : {}),
+            ...(finalHtml ? { html: finalHtml } : {}),
             ...(inReplyTo  ? { inReplyTo }  : {}),
             ...(references ? { references } : {}),
         };
