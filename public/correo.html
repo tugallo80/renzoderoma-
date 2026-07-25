@@ -198,6 +198,22 @@
     #compose-modal{max-width:100%;border-radius:14px 14px 0 0;}
     #compose-overlay{padding:0;align-items:flex-end;justify-content:center;}
   }
+
+  /* ── IA Panel ── */
+  #ai-panel{position:fixed;bottom:0;right:0;width:100%;max-width:420px;background:var(--surface);border:1px solid var(--border);border-radius:16px 16px 0 0;box-shadow:0 -4px 24px rgba(0,0,0,.18);z-index:300;display:none;flex-direction:column;max-height:72vh;overflow:hidden;}
+  #ai-panel.open{display:flex;}
+  .ai-ph{padding:14px 16px;background:linear-gradient(135deg,#bf5af2,#5856d6);color:#fff;display:flex;align-items:center;justify-content:space-between;border-radius:16px 16px 0 0;flex-shrink:0;}
+  .ai-ph h3{margin:0;font-size:15px;font-weight:700;}
+  .ai-ph button{background:none;border:none;color:rgba(255,255,255,.7);font-size:20px;cursor:pointer;}
+  #ai-panel-body{flex:1;overflow-y:auto;padding:14px;}
+  .ai-reply-card{background:var(--bg);border-radius:10px;padding:12px;margin-bottom:10px;border:1px solid var(--border);}
+  .ai-reply-text{font-size:13px;line-height:1.6;color:var(--text);white-space:pre-wrap;margin-bottom:8px;}
+  .ai-use-btn{background:var(--blue);color:#fff;border:none;border-radius:8px;padding:7px 14px;font-size:12px;font-weight:600;cursor:pointer;}
+  #ai-compose-bar{border-top:1px solid var(--border);padding:8px 14px;display:flex;align-items:center;gap:8px;background:rgba(175,82,222,0.04);flex-shrink:0;}
+  #btn-ai-draft{background:rgba(175,82,222,0.12);color:#bf5af2;border:1px solid rgba(175,82,222,0.2);border-radius:8px;padding:7px 12px;font-size:12px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:5px;}
+  #btn-ai-draft:disabled{opacity:.5;cursor:default;}
+  #ai-draft-status{font-size:12px;color:var(--text-sub);}
+  @media(max-width:700px){#ai-panel{max-width:100%;border-radius:16px 16px 0 0;}}
 </style>
 </head>
 <body>
@@ -222,6 +238,15 @@
   </a>
 </nav>
 
+<!-- IA Panel -->
+<div id="ai-panel">
+  <div class="ai-ph">
+    <h3 id="ai-panel-title">✨ IA Asistente</h3>
+    <button onclick="cerrarIAPanel()"><i class="ph-bold ph-x"></i></button>
+  </div>
+  <div id="ai-panel-body"></div>
+</div>
+
 <!-- Mobile: backdrop del drawer -->
 <div id="sidebar-backdrop" onclick="closeMobileSidebar()"></div>
 
@@ -236,6 +261,7 @@
     <button id="btn-back" onclick="showList()"><i class="ph-bold ph-arrow-left"></i></button>
     <a id="btn-mobile-hub" href="/index.html"><i class="ph-bold ph-house"></i> Hub</a>
     <span id="list-folder-title">INBOX</span>
+    <button id="btn-ia-resumen" onclick="abrirIAResumen()" title="Resumen IA" style="background:none;border:none;cursor:pointer;color:#bf5af2;font-size:18px;padding:4px;"><i class="ph-bold ph-list-magnifying-glass"></i></button>
     <button id="btn-refresh" onclick="loadInbox()" title="Actualizar"><i class="ph-bold ph-arrows-clockwise"></i></button>
     <button id="btn-mobile-menu" onclick="openMobileSidebar()" title="Bandejas"><i class="ph-bold ph-list"></i></button>
   </div>
@@ -259,6 +285,7 @@
       <button onclick="replyMsg()"><i class="ph-bold ph-arrow-bend-up-left"></i> Responder</button>
       <button onclick="replyAllMsg()"><i class="ph-bold ph-arrow-bend-double-up-left"></i> Resp. todos</button>
       <button onclick="forwardMsg()"><i class="ph-bold ph-arrow-bend-up-right"></i> Reenviar</button>
+      <button onclick="abrirIAMensaje()" style="margin-left:auto;background:rgba(175,82,222,0.1);color:#bf5af2;border-color:rgba(175,82,222,0.2);"><i class="ph-bold ph-sparkle"></i> IA</button>
     </div>
     <div id="msg-header">
       <div id="msg-subject"></div>
@@ -291,6 +318,10 @@
       <input id="compose-subject" type="text" placeholder="Asunto">
     </div>
     <textarea id="compose-body" placeholder="Escribe tu mensaje…"></textarea>
+    <div id="ai-compose-bar">
+      <button id="btn-ai-draft" onclick="mejorarConIA()"><i class="ph-bold ph-sparkle"></i> Mejorar con IA</button>
+      <span id="ai-draft-status"></span>
+    </div>
     <div id="firma-preview" style="border-top:1px solid var(--border);padding:10px 14px 6px;display:flex;align-items:center;gap:10px;opacity:0.7;pointer-events:none;user-select:none;">
       <img src="/LOGO-IA-RUBIK.jpg" width="32" height="32" style="border-radius:50%;flex-shrink:0;" alt="">
       <div style="font-size:11px;line-height:1.5;color:var(--text-sub);">
@@ -685,6 +716,153 @@ function stripHtml(html) {
   tmp.innerHTML = html;
   return tmp.textContent || tmp.innerText || "";
 }
+
+// ── Gemini helper ────────────────────────────────────────────────────────────
+async function gemini(sysPrompt, userText, maxTokens) {
+  const resp = await fetch('/api/gemini', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${_token}` },
+    body: JSON.stringify({
+      systemInstruction: { parts: [{ text: sysPrompt }] },
+      contents: [{ role: 'user', parts: [{ text: userText }] }],
+      generationConfig: { maxOutputTokens: maxTokens || 2000, temperature: 0.7 }
+    })
+  });
+  if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+  const d = await resp.json();
+  return d.candidates?.[0]?.content?.parts?.[0]?.text || '';
+}
+
+// ── Mejorar compose con IA ───────────────────────────────────────────────────
+window.mejorarConIA = async function() {
+  const to      = document.getElementById('compose-to').value.trim();
+  const subject = document.getElementById('compose-subject').value.trim();
+  const body    = document.getElementById('compose-body').value.trim();
+  if (!body) { alert('Escribe algo primero.'); return; }
+  const btn    = document.getElementById('btn-ai-draft');
+  const status = document.getElementById('ai-draft-status');
+  btn.disabled = true; status.textContent = 'Mejorando…';
+  try {
+    const result = await gemini(
+      `Eres un asistente de redacción profesional. Trabajas para Renzo | Rubik Corp — Rubik Bolivia.
+Reescribe el cuerpo del correo de forma profesional, clara y concisa en español boliviano.
+Solo devuelve el cuerpo mejorado, sin saludo inicial ni firma — esos se agregan automáticamente.
+Mantén el sentido original pero eleva el tono y claridad.`,
+      `Para: ${to}\nAsunto: ${subject}\n\nBorrador actual:\n${body}`
+    );
+    document.getElementById('compose-body').value = result.trim();
+    status.textContent = '✓ Mejorado';
+    setTimeout(() => { status.textContent = ''; }, 3000);
+  } catch(e) {
+    status.textContent = 'Error: ' + e.message;
+  } finally { btn.disabled = false; }
+};
+
+// ── IA sobre mensaje abierto ─────────────────────────────────────────────────
+window.abrirIAMensaje = async function() {
+  if (!_activeParsed) return;
+  const panel = document.getElementById('ai-panel');
+  const pbody = document.getElementById('ai-panel-body');
+  document.getElementById('ai-panel-title').textContent = '✨ IA — Este correo';
+  pbody.innerHTML = '<div style="text-align:center;padding:20px;color:var(--text-sub);">Analizando…<br><div class="spinner" style="margin:10px auto;"></div></div>';
+  panel.classList.add('open');
+  try {
+    const txt = _activeParsed.text || stripHtml(_activeParsed.html || '');
+    const raw = await gemini(
+      `Eres el asistente ejecutivo de Renzo | Rubik Corp en Rubik Bolivia. Analiza el correo y responde SOLO con este JSON (sin markdown):
+{"resumen":"2-3 oraciones","accion":"qué debe hacer Renzo o Ninguna","respuestas":["respuesta profesional completa 1","respuesta 2","respuesta 3"]}`,
+      `De: ${_activeParsed.from}\nAsunto: ${_activeParsed.subject}\n\n${txt.substring(0,3000)}`
+    );
+    let p; try { const m = raw.match(/\{[\s\S]*\}/); p = JSON.parse(m ? m[0] : raw); } catch(e) { throw new Error('Respuesta IA inválida'); }
+    window._iaReplies = p.respuestas || [];
+    pbody.innerHTML = `
+      <div style="background:rgba(175,82,222,0.08);border-radius:10px;padding:12px;margin-bottom:12px;border:1px solid rgba(175,82,222,0.2);">
+        <div style="font-size:10px;font-weight:800;color:#bf5af2;text-transform:uppercase;margin-bottom:5px;">Resumen</div>
+        <div style="font-size:13px;line-height:1.6;">${escHtml(p.resumen)}</div>
+        ${p.accion && p.accion !== 'Ninguna' ? `<div style="margin-top:8px;font-size:12px;font-weight:700;color:var(--orange);">⚡ ${escHtml(p.accion)}</div>` : ''}
+      </div>
+      <div style="font-size:11px;font-weight:800;color:var(--text-sub);text-transform:uppercase;margin-bottom:8px;">Sugerencias de respuesta</div>
+      ${(p.respuestas||[]).map((r,i)=>`
+        <div class="ai-reply-card">
+          <div class="ai-reply-text">${escHtml(r)}</div>
+          <button class="ai-use-btn" onclick="usarRespuestaIA(${i})">Usar esta respuesta</button>
+        </div>`).join('')}`;
+  } catch(e) {
+    pbody.innerHTML = `<div style="color:var(--red);padding:16px;">Error: ${escHtml(e.message)}</div>`;
+  }
+};
+
+window.usarRespuestaIA = function(idx) {
+  const reply = (window._iaReplies||[])[idx];
+  if (!reply) return;
+  cerrarIAPanel();
+  replyMsg();
+  setTimeout(() => {
+    const b = document.getElementById('compose-body');
+    if (b) b.value = reply + (b.value ? '\n\n' + b.value : '');
+  }, 150);
+};
+
+// ── IA Resumen de bandeja ────────────────────────────────────────────────────
+window.abrirIAResumen = async function() {
+  const panel = document.getElementById('ai-panel');
+  const pbody = document.getElementById('ai-panel-body');
+  document.getElementById('ai-panel-title').textContent = '📋 Pendientes';
+  pbody.innerHTML = '<div style="text-align:center;padding:20px;color:var(--text-sub);">Analizando bandeja…<br><div class="spinner" style="margin:10px auto;"></div></div>';
+  panel.classList.add('open');
+  const unread = _msgs.filter(m => !m.seen).slice(0,15);
+  if (!unread.length) { pbody.innerHTML = '<div style="text-align:center;padding:24px;font-size:32px;">🎉</div><div style="text-align:center;color:var(--text-sub);">Sin correos pendientes</div>'; return; }
+  try {
+    const lista = unread.map((m,i)=>`${i+1}. De: ${m.from} | Asunto: ${m.subject} | Fecha: ${m.date?new Date(m.date).toLocaleDateString('es-BO'):'?'}`).join('\n');
+    const raw = await gemini(
+      `Eres el asistente ejecutivo de Renzo | Rubik Corp. Analiza los correos no leídos y devuelve SOLO este JSON (sin markdown):
+{"resumen":"1-2 oraciones sobre el estado general","items":[{"n":1,"urgencia":"alta|media|baja","accion":"qué hacer en máximo 10 palabras"}]}
+Ordena por urgencia descendente.`,
+      `Correos no leídos (${unread.length}):\n${lista}`, 1500
+    );
+    let p; try { const m = raw.match(/\{[\s\S]*\}/); p = JSON.parse(m ? m[0] : raw); } catch(e) { throw new Error('Respuesta IA inválida'); }
+    const uc = { alta:'#ff3b30', media:'#ff9500', baja:'#34c759' };
+    pbody.innerHTML = `
+      <div style="background:rgba(52,120,246,0.08);border-radius:10px;padding:12px;margin-bottom:12px;font-size:13px;line-height:1.6;">${escHtml(p.resumen||'')}</div>
+      ${(p.items||[]).map(it=>{
+        const msg = unread[it.n-1];
+        const c = uc[it.urgencia]||'#8e8e93';
+        return `<div class="ai-reply-card" style="cursor:pointer;" onclick="openMsg(${msg?.uid||0});cerrarIAPanel();">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:5px;">
+            <span style="background:${c};color:#fff;border-radius:6px;padding:2px 8px;font-size:10px;font-weight:700;flex-shrink:0;">${(it.urgencia||'').toUpperCase()}</span>
+            <span style="font-size:12px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escHtml(msg?.subject||'')}</span>
+          </div>
+          <div style="font-size:11px;color:var(--text-sub);margin-bottom:3px;">${escHtml(shortFrom(msg?.from||''))}</div>
+          <div style="font-size:12px;color:var(--text);">→ ${escHtml(it.accion)}</div>
+        </div>`;
+      }).join('')}`;
+  } catch(e) {
+    pbody.innerHTML = `<div style="color:var(--red);padding:16px;">Error: ${escHtml(e.message)}</div>`;
+  }
+};
+
+window.cerrarIAPanel = function() { document.getElementById('ai-panel').classList.remove('open'); };
+
+// ── Compose desde URL params (para hub pages) ────────────────────────────────
+(function() {
+  const up = new URLSearchParams(location.search);
+  if (up.get('compose') !== '1') return;
+  const origOnAuth = auth.onAuthStateChanged.bind(auth);
+  // Will be triggered after auth resolves — listen once
+  const unsub = auth.onAuthStateChanged(user => {
+    if (!user) return;
+    unsub();
+    setTimeout(() => {
+      openCompose();
+      const to      = up.get('to')      || '';
+      const subject = up.get('subject') || '';
+      const body    = up.get('body')    || '';
+      if (to)      document.getElementById('compose-to').value      = to;
+      if (subject) document.getElementById('compose-subject').value = subject;
+      if (body)    document.getElementById('compose-body').value    = body;
+    }, 800);
+  });
+})();
 </script>
 </body>
 </html>
