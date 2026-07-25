@@ -264,6 +264,14 @@
       <input id="compose-subject" type="text" placeholder="Asunto">
     </div>
     <textarea id="compose-body" placeholder="Escribe tu mensaje…"></textarea>
+    <div id="firma-preview" style="border-top:1px solid var(--border);padding:10px 14px 6px;display:flex;align-items:center;gap:10px;opacity:0.7;pointer-events:none;user-select:none;">
+      <img src="/LOGO-IA-RUBIK.jpg" width="32" height="32" style="border-radius:50%;flex-shrink:0;" alt="">
+      <div style="font-size:11px;line-height:1.5;color:var(--text-sub);">
+        <strong style="color:var(--text);">Renzo De Roma</strong><br>
+        Rubik Bolivia — Ingeniería Creativa<br>
+        <span style="color:#25d366;">📱 +591 76868833</span> · rubikbolivia.com
+      </div>
+    </div>
     <div id="compose-footer">
       <span id="compose-status"></span>
       <button id="btn-compose-send" onclick="sendMail()">
