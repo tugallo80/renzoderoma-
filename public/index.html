@@ -63,8 +63,11 @@
         .btn-logout { margin: 40px auto 0 auto; background: rgba(255, 59, 48, 0.1); color: var(--red); border: none; padding: 15px 30px; border-radius: 16px; font-weight: 900; font-size: 14px; cursor: pointer; display: flex; align-items: center; gap: 8px; justify-content: center; max-width: 200px; transition: 0.2s;}
         .btn-logout:active { transform: scale(0.95); }
 
-        .btn-config-ceo { position: fixed; top: 20px; right: 20px; background: #1c1c1e; color: #fff; border: 1px solid var(--border); border-radius: 50%; width: 45px; height: 45px; display: flex; align-items: center; justify-content: center; font-size: 24px; cursor: pointer; z-index: 9000; box-shadow: 0 4px 10px rgba(0,0,0,0.2); transition: 0.2s; }
+        .btn-config-ceo { position: fixed; top: 75px; right: 20px; background: #1c1c1e; color: #fff; border: 1px solid var(--border); border-radius: 50%; width: 45px; height: 45px; display: flex; align-items: center; justify-content: center; font-size: 24px; cursor: pointer; z-index: 9000; box-shadow: 0 4px 10px rgba(0,0,0,0.2); transition: 0.2s; }
         .btn-config-ceo:active { transform: scale(0.90); }
+        #btn-correo { position: fixed; top: 20px; right: 20px; background: #1c1c1e; color: #fff; border: 1px solid var(--border); border-radius: 50%; width: 45px; height: 45px; display: flex; align-items: center; justify-content: center; font-size: 22px; cursor: pointer; z-index: 9000; box-shadow: 0 4px 10px rgba(0,0,0,0.2); transition: 0.2s; text-decoration: none; }
+        #btn-correo:active { transform: scale(0.90); }
+        #correo-badge { position: absolute; top: -4px; right: -4px; background: var(--red, #ff3b30); color: #fff; border-radius: 10px; min-width: 18px; height: 18px; font-size: 10px; font-weight: 800; display: none; align-items: center; justify-content: center; padding: 0 4px; border: 2px solid #000; }
 
         /* ESTILOS MODAL IA CHAT */
         .chat-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); backdrop-filter: blur(5px); z-index: 9500; flex-direction: column; justify-content: center; align-items: center; padding: 20px;}
@@ -246,6 +249,10 @@
     </div>
 
     <button class="btn-logout" onclick="window.location.href='login.html'"><i class="ph-bold ph-sign-out"></i> Cerrar Sesión</button>
+    <a id="btn-correo" href="/correo.html" title="Correo">
+        <i class="ph-bold ph-envelope-simple"></i>
+        <span id="correo-badge"></span>
+    </a>
     <button class="btn-config-ceo" onclick="abrirCMSPrompt()" title="Laboratorio IA"><i class="ph-fill ph-gear"></i></button>
 
     <div class="chat-overlay" id="ia-modal">
@@ -2027,6 +2034,51 @@ $$$QUOTE_DATA: [{"desc":"Nombre Item","feat":"Característica","cant":1,"und":"p
         if (btn) { btn.classList.toggle('muted', _liveMuted); btn.innerHTML = icon; }
         _liveSetStatus(_liveMuted ? 'Micrófono silenciado' : 'Escuchando...', _liveMuted ? '' : 'st-listening');
     };
+
+    // ── Badge de correos no leídos ────────────────────────────────────────────
+    let _correoLastUnread = 0;
+    async function actualizarBadgeCorreo() {
+        try {
+            const user = firebase.auth().currentUser;
+            if (!user) return;
+            const tok = await user.getIdToken();
+            const res = await fetch('/api/mail/inbox?folder=INBOX&page=1&limit=20', {
+                headers: { Authorization: 'Bearer ' + tok }
+            });
+            if (!res.ok) return;
+            const data = await res.json();
+            const unread = (data.messages || []).filter(m => !m.seen).length;
+            const badge = document.getElementById('correo-badge');
+            if (!badge) return;
+            if (unread > 0) {
+                badge.textContent = unread > 99 ? '99+' : unread;
+                badge.style.display = 'flex';
+            } else {
+                badge.style.display = 'none';
+            }
+            // Notificación del navegador si llegan correos nuevos
+            if (unread > _correoLastUnread && _correoLastUnread >= 0 && document.hidden) {
+                if (Notification.permission === 'granted') {
+                    new Notification('Nuevo correo — Rubik Bolivia', {
+                        body: `Tienes ${unread} correo${unread > 1 ? 's' : ''} sin leer`,
+                        icon: '/img/favicon.png',
+                    });
+                }
+            }
+            _correoLastUnread = unread;
+        } catch (e) { /* silencioso */ }
+    }
+
+    firebase.auth().onAuthStateChanged(function(user) {
+        if (!user) return;
+        // Pedir permiso de notificaciones al usuario
+        if (Notification && Notification.permission === 'default') {
+            Notification.requestPermission();
+        }
+        // Primera consulta inmediata, luego cada 60s
+        actualizarBadgeCorreo();
+        setInterval(actualizarBadgeCorreo, 60000);
+    });
     </script>
 
     <!-- Botón flotante — Llamar al Asesor IA (esquina superior izquierda) -->
