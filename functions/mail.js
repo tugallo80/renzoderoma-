@@ -14,7 +14,7 @@ const ZOHO_MAIL_PASSWORD = defineSecret("ZOHO_MAIL_PASSWORD");
 
 const ZOHO_USER = "renzo@rubikbolivia.com";
 
-const FIRMA_TEXT = `\n\n--\nRenzo De Roma\nRubik Bolivia — Ingeniería Creativa\n📱 +591 76868833\nhttps://rubikbolivia.com`;
+const FIRMA_TEXT = `\n\n--\nRenzo — Rubik Corp.\nRubik Bolivia — Ingeniería Creativa\n📱 +591 76868833\nhttps://rubikbolivia.com`;
 
 const FIRMA_HTML = `
 <br><br>
@@ -26,7 +26,7 @@ const FIRMA_HTML = `
            style="border-radius:50%;display:block;border:2px solid #e5e5ea;" alt="Rubik Bolivia">
     </td>
     <td style="vertical-align:middle;">
-      <div style="font-size:14px;font-weight:700;color:#1c1c1e;margin-bottom:2px;">Renzo De Roma</div>
+      <div style="font-size:14px;font-weight:700;color:#1c1c1e;margin-bottom:2px;">Renzo — Rubik Corp.</div>
       <div style="font-size:12px;color:#8e8e93;margin-bottom:6px;">Rubik Bolivia &mdash; Ingeniería Creativa</div>
       <a href="https://wa.me/59176868833" style="color:#25d366;font-size:12px;font-weight:600;text-decoration:none;">📱 +591 76868833</a>
       <span style="color:#d1d1d6;margin:0 6px;">|</span>
@@ -333,7 +333,7 @@ exports.mailSend = onRequest(
             : (text ? `<div style="white-space:pre-wrap;font-family:inherit;">${text}</div>` + FIRMA_HTML : undefined);
 
         const mailOptions = {
-            from:    `Renzo De Roma <${ZOHO_USER}>`,
+            from:    `Renzo | Rubik Corp. <${ZOHO_USER}>`,
             to,
             subject,
             ...(cc  ? { cc }  : {}),
