@@ -1,0 +1,685 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Rubik Bolivia — Ingeniería Creativa</title>
+  <meta name="description" content="Gestión de proyectos, ingeniería, construcción y tecnología creativa en Bolivia. Hacemos posible tu visión.">
+  <meta name="theme-color" content="#000000">
+  <link rel="icon" type="image/png" href="/LOGO-IA-RUBIK.jpg">
+  <link rel="apple-touch-icon" href="/LOGO-IA-RUBIK.jpg">
+
+  <!-- OG -->
+  <meta property="og:title" content="Rubik Bolivia — Ingeniería Creativa">
+  <meta property="og:description" content="Gestión de proyectos, ingeniería, construcción y tecnología creativa en Bolivia.">
+  <meta property="og:image" content="https://rubikbolivia.com/LOGO-IA-RUBIK.jpg">
+  <meta property="og:type" content="website">
+
+  <script src="https://www.gstatic.com/firebasejs/9.1.3/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.1.3/firebase-database-compat.js"></script>
+
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:        #000000;
+      --surface:   #0d0d0d;
+      --card:      #141414;
+      --card2:     #1a1a1a;
+      --blue:      #007aff;
+      --blue-glow: rgba(0,122,255,0.25);
+      --purple:    #af52de;
+      --green:     #30d158;
+      --text:      #f5f5f7;
+      --muted:     #8e8e93;
+      --border:    rgba(255,255,255,0.08);
+      --radius:    20px;
+    }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      overflow-x: hidden;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* ── NAV ─────────────────────────────────────────── */
+    nav {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 1000;
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0 28px; height: 62px;
+      background: rgba(0,0,0,0.72);
+      backdrop-filter: blur(24px) saturate(1.4);
+      -webkit-backdrop-filter: blur(24px) saturate(1.4);
+      border-bottom: 1px solid var(--border);
+    }
+    .nav-left { display: flex; align-items: center; gap: 12px; text-decoration: none; }
+    .nav-logo { width: 34px; height: 34px; border-radius: 50%; object-fit: cover; border: 1.5px solid rgba(255,255,255,0.15); }
+    .nav-brand { font-size: 15px; font-weight: 700; color: var(--text); letter-spacing: -0.3px; }
+    .nav-links { display: flex; align-items: center; gap: 6px; }
+    .nav-link { color: var(--muted); text-decoration: none; font-size: 14px; font-weight: 500; padding: 7px 14px; border-radius: 10px; transition: color .2s, background .2s; }
+    .nav-link:hover { color: var(--text); background: rgba(255,255,255,0.06); }
+    .nav-cta { background: var(--blue); color: #fff; text-decoration: none; font-size: 14px; font-weight: 600; padding: 8px 18px; border-radius: 10px; transition: background .2s, transform .1s; }
+    .nav-cta:hover { background: #006ee6; }
+    .nav-cta:active { transform: scale(0.96); }
+    .nav-hamburger { display: none; background: none; border: none; color: var(--text); font-size: 22px; cursor: pointer; padding: 4px; }
+
+    /* ── HERO ────────────────────────────────────────── */
+    #hero {
+      min-height: 100vh;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      position: relative; overflow: hidden;
+      padding: 80px 24px 60px;
+    }
+    .hero-mesh {
+      position: absolute; inset: 0; pointer-events: none;
+      background:
+        radial-gradient(ellipse 80% 60% at 50% 0%, rgba(0,122,255,0.12) 0%, transparent 70%),
+        radial-gradient(ellipse 60% 50% at 80% 80%, rgba(175,82,222,0.08) 0%, transparent 60%);
+    }
+    .hero-grid {
+      position: absolute; inset: 0; pointer-events: none;
+      background-image:
+        linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px);
+      background-size: 60px 60px;
+      mask-image: radial-gradient(ellipse 80% 80% at 50% 40%, black, transparent);
+    }
+
+    .hero-inner { position: relative; z-index: 2; text-align: center; max-width: 800px; }
+
+    .hero-badge {
+      display: inline-flex; align-items: center; gap: 8px;
+      background: rgba(0,122,255,0.12); border: 1px solid rgba(0,122,255,0.3);
+      color: #5ac8fa; font-size: 13px; font-weight: 600;
+      padding: 6px 16px; border-radius: 99px; margin-bottom: 32px;
+      letter-spacing: 0.3px;
+    }
+    .hero-badge::before {
+      content: ''; width: 7px; height: 7px; border-radius: 50%;
+      background: #5ac8fa;
+      animation: pulse-dot 2s ease-in-out infinite;
+    }
+    @keyframes pulse-dot {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.5; transform: scale(0.7); }
+    }
+
+    .hero-logo-wrap {
+      width: 110px; height: 110px; margin: 0 auto 36px;
+      border-radius: 50%; overflow: hidden;
+      border: 2px solid rgba(255,255,255,0.12);
+      box-shadow: 0 0 60px rgba(0,122,255,0.3), 0 20px 40px rgba(0,0,0,0.5);
+      animation: float 5s ease-in-out infinite;
+    }
+    @keyframes float {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(-10px); }
+    }
+    .hero-logo-wrap img { width: 100%; height: 100%; object-fit: cover; }
+
+    h1.hero-title {
+      font-size: clamp(38px, 7vw, 72px);
+      font-weight: 800; line-height: 1.1;
+      letter-spacing: -2px;
+      margin-bottom: 22px;
+    }
+    .gradient-text {
+      background: linear-gradient(135deg, var(--blue) 0%, var(--purple) 100%);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .hero-sub {
+      font-size: clamp(16px, 2.5vw, 20px);
+      color: var(--muted); line-height: 1.6;
+      max-width: 560px; margin: 0 auto 42px;
+    }
+    .hero-ctas { display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; }
+    .btn-primary {
+      background: var(--blue); color: #fff;
+      text-decoration: none; padding: 14px 28px;
+      border-radius: 14px; font-size: 15px; font-weight: 600;
+      transition: background .2s, transform .1s, box-shadow .2s;
+      box-shadow: 0 8px 24px rgba(0,122,255,0.35);
+    }
+    .btn-primary:hover { background: #006ee6; box-shadow: 0 12px 32px rgba(0,122,255,0.45); }
+    .btn-primary:active { transform: scale(0.97); }
+    .btn-wsp {
+      display: flex; align-items: center; gap: 8px;
+      background: rgba(37,211,102,0.12); border: 1px solid rgba(37,211,102,0.3);
+      color: #25d366; text-decoration: none;
+      padding: 14px 28px; border-radius: 14px; font-size: 15px; font-weight: 600;
+      transition: background .2s, transform .1s;
+    }
+    .btn-wsp:hover { background: rgba(37,211,102,0.2); }
+    .btn-wsp:active { transform: scale(0.97); }
+    .btn-wsp svg { flex-shrink: 0; }
+
+    .hero-scroll {
+      position: absolute; bottom: 32px; left: 50%; transform: translateX(-50%);
+      display: flex; flex-direction: column; align-items: center; gap: 6px;
+      color: var(--muted); font-size: 12px; font-weight: 500;
+      animation: bounce 2.5s ease-in-out infinite;
+      text-decoration: none;
+    }
+    @keyframes bounce {
+      0%, 100% { transform: translateX(-50%) translateY(0); }
+      50% { transform: translateX(-50%) translateY(6px); }
+    }
+    .hero-scroll-arrow { font-size: 18px; }
+
+    /* ── SECTIONS COMMON ─────────────────────────────── */
+    section { padding: 100px 24px; }
+    .section-inner { max-width: 1100px; margin: 0 auto; }
+    .section-header { text-align: center; margin-bottom: 60px; }
+    .section-tag {
+      display: inline-block;
+      color: var(--blue); font-size: 13px; font-weight: 700;
+      letter-spacing: 1.5px; text-transform: uppercase;
+      margin-bottom: 14px;
+    }
+    .section-title {
+      font-size: clamp(28px, 5vw, 48px);
+      font-weight: 800; letter-spacing: -1.5px; line-height: 1.1;
+    }
+    .section-sub { color: var(--muted); font-size: 17px; margin-top: 14px; line-height: 1.6; }
+
+    /* ── SERVICIOS ───────────────────────────────────── */
+    #servicios { background: var(--surface); }
+    .services-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 16px;
+    }
+    .service-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 30px;
+      transition: transform .2s, border-color .2s, box-shadow .2s;
+      opacity: 0; transform: translateY(30px);
+    }
+    .service-card.visible { opacity: 1; transform: translateY(0); transition: opacity .5s ease, transform .5s ease; }
+    .service-card:hover {
+      border-color: rgba(0,122,255,0.35);
+      box-shadow: 0 12px 40px rgba(0,0,0,0.4), 0 0 0 1px rgba(0,122,255,0.1);
+      transform: translateY(-4px);
+    }
+    .service-icon {
+      width: 52px; height: 52px; border-radius: 14px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 26px; margin-bottom: 20px;
+    }
+    .service-card h3 { font-size: 18px; font-weight: 700; margin-bottom: 10px; }
+    .service-card p { color: var(--muted); font-size: 14px; line-height: 1.6; }
+
+    /* ── PORTAFOLIO ──────────────────────────────────── */
+    #portafolio { background: var(--bg); }
+    .portfolio-filter {
+      display: flex; gap: 10px; flex-wrap: wrap; justify-content: center;
+      margin-bottom: 48px;
+    }
+    .filter-btn {
+      background: var(--card); border: 1px solid var(--border);
+      color: var(--muted); padding: 9px 20px; border-radius: 99px;
+      font-size: 14px; font-weight: 600; cursor: pointer;
+      transition: all .2s; white-space: nowrap;
+    }
+    .filter-btn:hover { border-color: rgba(0,122,255,0.4); color: var(--text); }
+    .filter-btn.active { background: var(--blue); border-color: var(--blue); color: #fff; }
+
+    .portfolio-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+      gap: 20px;
+    }
+    .portfolio-card {
+      background: var(--card); border: 1px solid var(--border); border-radius: var(--radius);
+      overflow: hidden; cursor: pointer;
+      transition: transform .2s, box-shadow .2s, opacity .3s;
+      opacity: 0; transform: translateY(20px);
+    }
+    .portfolio-card.visible { opacity: 1; transform: translateY(0); }
+    .portfolio-card:hover { transform: translateY(-6px); box-shadow: 0 20px 50px rgba(0,0,0,0.5); }
+    .portfolio-card.hidden { display: none; }
+    .portfolio-img {
+      width: 100%; aspect-ratio: 16/10; object-fit: cover; display: block;
+      background: var(--card2);
+    }
+    .portfolio-img-placeholder {
+      width: 100%; aspect-ratio: 16/10; background: var(--card2);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 48px;
+    }
+    .portfolio-body { padding: 20px; }
+    .portfolio-cat {
+      font-size: 11px; font-weight: 700; letter-spacing: 1.2px;
+      text-transform: uppercase; color: var(--blue); margin-bottom: 8px;
+    }
+    .portfolio-card h3 { font-size: 16px; font-weight: 700; margin-bottom: 8px; }
+    .portfolio-card p { font-size: 13px; color: var(--muted); line-height: 1.5; }
+
+    .portfolio-empty {
+      grid-column: 1/-1; text-align: center; padding: 80px 0;
+      color: var(--muted);
+    }
+    .portfolio-empty .empty-icon { font-size: 56px; margin-bottom: 16px; }
+    .portfolio-empty p { font-size: 16px; }
+
+    /* ── NOSOTROS ────────────────────────────────────── */
+    #nosotros { background: var(--surface); }
+    .about-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 60px; align-items: center; }
+    .about-text h2 { font-size: clamp(26px, 4vw, 42px); font-weight: 800; letter-spacing: -1px; margin-bottom: 20px; }
+    .about-text p { color: var(--muted); font-size: 16px; line-height: 1.7; margin-bottom: 16px; }
+    .about-logo-wrap {
+      display: flex; align-items: center; justify-content: center;
+      padding: 40px;
+    }
+    .about-logo {
+      width: 200px; height: 200px; border-radius: 50%; object-fit: cover;
+      border: 3px solid rgba(255,255,255,0.1);
+      box-shadow: 0 0 80px rgba(0,122,255,0.2), 0 30px 60px rgba(0,0,0,0.5);
+    }
+    .stats-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-top: 48px; }
+    .stat-card {
+      background: var(--card); border: 1px solid var(--border); border-radius: var(--radius);
+      padding: 24px; text-align: center;
+    }
+    .stat-num { display: block; font-size: 40px; font-weight: 800; color: var(--blue); letter-spacing: -2px; }
+    .stat-label { font-size: 13px; color: var(--muted); font-weight: 500; margin-top: 4px; }
+
+    /* ── CONTACTO ────────────────────────────────────── */
+    #contacto {
+      background: var(--bg);
+      text-align: center;
+      background-image: radial-gradient(ellipse 70% 50% at 50% 0%, rgba(0,122,255,0.08) 0%, transparent 70%);
+    }
+    #contacto h2 { font-size: clamp(28px, 5vw, 52px); font-weight: 800; letter-spacing: -1.5px; margin-bottom: 16px; }
+    #contacto .contact-sub { color: var(--muted); font-size: 18px; margin-bottom: 48px; }
+    .contact-actions { display: flex; flex-wrap: wrap; gap: 14px; justify-content: center; margin-bottom: 48px; }
+    .btn-wsp-big {
+      display: inline-flex; align-items: center; gap: 10px;
+      background: #25d366; color: #fff;
+      text-decoration: none; padding: 16px 32px; border-radius: 16px;
+      font-size: 17px; font-weight: 700;
+      box-shadow: 0 8px 28px rgba(37,211,102,0.35);
+      transition: background .2s, transform .1s, box-shadow .2s;
+    }
+    .btn-wsp-big:hover { background: #1fb658; box-shadow: 0 12px 36px rgba(37,211,102,0.45); }
+    .btn-wsp-big:active { transform: scale(0.97); }
+    .btn-mail-big {
+      display: inline-flex; align-items: center; gap: 10px;
+      background: var(--card); border: 1px solid var(--border);
+      color: var(--text); text-decoration: none; padding: 16px 32px;
+      border-radius: 16px; font-size: 17px; font-weight: 600;
+      transition: background .2s, transform .1s;
+    }
+    .btn-mail-big:hover { background: var(--card2); }
+    .contact-info { color: var(--muted); font-size: 14px; line-height: 2; }
+    .contact-info a { color: var(--blue); text-decoration: none; }
+
+    /* ── FOOTER ──────────────────────────────────────── */
+    footer {
+      background: var(--surface); border-top: 1px solid var(--border);
+      padding: 40px 24px;
+      display: flex; flex-direction: column; align-items: center; gap: 16px;
+      text-align: center;
+    }
+    .footer-logo { width: 44px; height: 44px; border-radius: 50%; object-fit: cover; border: 1.5px solid rgba(255,255,255,0.1); }
+    .footer-brand { font-size: 15px; font-weight: 700; }
+    .footer-links { display: flex; gap: 20px; flex-wrap: wrap; justify-content: center; }
+    .footer-links a { color: var(--muted); text-decoration: none; font-size: 13px; transition: color .2s; }
+    .footer-links a:hover { color: var(--text); }
+    .footer-copy { color: var(--muted); font-size: 12px; }
+
+    /* ── SCROLL ANIMATIONS ───────────────────────────── */
+    .fade-up { opacity: 0; transform: translateY(30px); transition: opacity .6s ease, transform .6s ease; }
+    .fade-up.visible { opacity: 1; transform: none; }
+
+    /* ── RESPONSIVE ──────────────────────────────────── */
+    @media (max-width: 768px) {
+      nav { padding: 0 18px; }
+      .nav-links { display: none; }
+      .nav-hamburger { display: block; }
+      section { padding: 70px 18px; }
+      .about-grid { grid-template-columns: 1fr; }
+      .about-logo-wrap { display: none; }
+      .stats-grid { grid-template-columns: repeat(3, 1fr); gap: 10px; }
+      .stat-card { padding: 16px 10px; }
+      .stat-num { font-size: 28px; }
+    }
+    @media (max-width: 480px) {
+      h1.hero-title { letter-spacing: -1.5px; }
+      .stats-grid { grid-template-columns: 1fr; }
+      .services-grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ── NAV ───────────────────────────────────────────────── -->
+<nav>
+  <a href="#hero" class="nav-left">
+    <img src="/LOGO-IA-RUBIK.jpg" alt="Rubik Bolivia" class="nav-logo">
+    <span class="nav-brand">Rubik Bolivia</span>
+  </a>
+  <div class="nav-links">
+    <a href="#servicios" class="nav-link">Servicios</a>
+    <a href="#portafolio" class="nav-link">Portafolio</a>
+    <a href="#nosotros" class="nav-link">Nosotros</a>
+    <a href="#contacto" class="nav-link">Contacto</a>
+    <a href="/index.html" class="nav-cta">Acceso Hub</a>
+  </div>
+  <button class="nav-hamburger" onclick="toggleMobileMenu()" aria-label="Menú">☰</button>
+</nav>
+
+<!-- Mobile menu overlay -->
+<div id="mobile-menu" style="display:none; position:fixed; inset:0; z-index:999; background:rgba(0,0,0,0.95); backdrop-filter:blur(20px); flex-direction:column; align-items:center; justify-content:center; gap:28px;">
+  <button onclick="toggleMobileMenu()" style="position:absolute;top:20px;right:24px;background:none;border:none;color:#fff;font-size:28px;cursor:pointer;">✕</button>
+  <a href="#servicios" onclick="toggleMobileMenu()" style="color:#fff;text-decoration:none;font-size:24px;font-weight:700;">Servicios</a>
+  <a href="#portafolio" onclick="toggleMobileMenu()" style="color:#fff;text-decoration:none;font-size:24px;font-weight:700;">Portafolio</a>
+  <a href="#nosotros" onclick="toggleMobileMenu()" style="color:#fff;text-decoration:none;font-size:24px;font-weight:700;">Nosotros</a>
+  <a href="#contacto" onclick="toggleMobileMenu()" style="color:#fff;text-decoration:none;font-size:24px;font-weight:700;">Contacto</a>
+  <a href="/index.html" style="background:#007aff;color:#fff;text-decoration:none;padding:14px 32px;border-radius:14px;font-size:17px;font-weight:700;">Acceso Hub →</a>
+</div>
+
+<!-- ── HERO ───────────────────────────────────────────────── -->
+<section id="hero">
+  <div class="hero-mesh"></div>
+  <div class="hero-grid"></div>
+  <div class="hero-inner">
+    <div class="hero-badge">Ingeniería & Creatividad · Bolivia</div>
+    <div class="hero-logo-wrap">
+      <img src="/LOGO-IA-RUBIK.jpg" alt="Rubik Bolivia">
+    </div>
+    <h1 class="hero-title">
+      Construimos el futuro<br>
+      <span class="gradient-text">con ingeniería creativa</span>
+    </h1>
+    <p class="hero-sub">Gestión de proyectos, consultoría, construcción y tecnología al servicio de tu visión. Desde La Paz para Bolivia y el mundo.</p>
+    <div class="hero-ctas">
+      <a href="#portafolio" class="btn-primary">Ver Portafolio</a>
+      <a href="https://wa.me/59176868833" target="_blank" rel="noopener" class="btn-wsp">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
+        WhatsApp
+      </a>
+    </div>
+  </div>
+  <a href="#servicios" class="hero-scroll">
+    <span class="hero-scroll-arrow">↓</span>
+    <span>Descubrir</span>
+  </a>
+</section>
+
+<!-- ── SERVICIOS ─────────────────────────────────────────── -->
+<section id="servicios">
+  <div class="section-inner">
+    <div class="section-header fade-up">
+      <div class="section-tag">Qué hacemos</div>
+      <h2 class="section-title">Servicios</h2>
+      <p class="section-sub">Soluciones integrales para proyectos de ingeniería, construcción, tecnología y diseño.</p>
+    </div>
+    <div class="services-grid">
+      <div class="service-card">
+        <div class="service-icon" style="background:rgba(0,122,255,0.12);">🏗️</div>
+        <h3>Gestión de Proyectos</h3>
+        <p>Planificación, control y seguimiento de obras desde la concepción hasta la entrega. Supervisión in situ y reportes en tiempo real.</p>
+      </div>
+      <div class="service-card">
+        <div class="service-icon" style="background:rgba(175,82,222,0.12);">📐</div>
+        <h3>Ingeniería & Consultoría</h3>
+        <p>Levantamientos topográficos, planos técnicos, memorias de cálculo, presupuestos referenciales y análisis de precios unitarios.</p>
+      </div>
+      <div class="service-card">
+        <div class="service-icon" style="background:rgba(48,209,88,0.12);">🔨</div>
+        <h3>Construcción Ejecutiva</h3>
+        <p>Ejecución directa de obras con estándares de calidad, cronograma riguroso y transparencia total en cada etapa del proceso.</p>
+      </div>
+      <div class="service-card">
+        <div class="service-icon" style="background:rgba(255,159,10,0.12);">🎨</div>
+        <h3>Diseño & Agencia Creativa</h3>
+        <p>Identidad corporativa, diseño gráfico, branding y presencia digital. Comunicación visual que conecta con tu audiencia.</p>
+      </div>
+      <div class="service-card">
+        <div class="service-icon" style="background:rgba(90,200,250,0.12);">💻</div>
+        <h3>Software a Medida</h3>
+        <p>Desarrollo de sistemas de gestión, aplicaciones web y móvil, automatización de procesos y soluciones de IA para empresas.</p>
+      </div>
+      <div class="service-card">
+        <div class="service-icon" style="background:rgba(255,69,58,0.12);">📋</div>
+        <h3>Licitaciones & Concursos</h3>
+        <p>Preparación de expedientes técnicos, propuestas económicas y acompañamiento en procesos de licitación pública y privada.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── PORTAFOLIO ─────────────────────────────────────────── -->
+<section id="portafolio">
+  <div class="section-inner">
+    <div class="section-header fade-up">
+      <div class="section-tag">Nuestros trabajos</div>
+      <h2 class="section-title">Portafolio</h2>
+      <p class="section-sub">Proyectos que hablan por sí solos.</p>
+    </div>
+    <div class="portfolio-filter" id="portfolio-filter">
+      <button class="filter-btn active" data-cat="all">Todos</button>
+      <button class="filter-btn" data-cat="construccion">Construcción</button>
+      <button class="filter-btn" data-cat="ingenieria">Ingeniería</button>
+      <button class="filter-btn" data-cat="digital">Digital</button>
+      <button class="filter-btn" data-cat="diseno">Diseño</button>
+    </div>
+    <div id="portfolio-grid" class="portfolio-grid">
+      <div class="portfolio-empty">
+        <div class="empty-icon">🚧</div>
+        <p>Cargando portafolio...</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── NOSOTROS ───────────────────────────────────────────── -->
+<section id="nosotros">
+  <div class="section-inner">
+    <div class="about-grid">
+      <div class="about-text fade-up">
+        <div class="section-tag">Quiénes somos</div>
+        <h2>Rubik Bolivia<br>— Ingeniería Creativa</h2>
+        <p>Somos un equipo multidisciplinario boliviano que fusiona la precisión de la ingeniería con la innovación del diseño y la tecnología. Cada proyecto es una oportunidad de crear algo excepcional.</p>
+        <p>Desde gestión de obras en La Paz hasta desarrollo de software personalizado, aplicamos rigor técnico y creatividad en cada entrega. Nuestro compromiso es tu resultado.</p>
+        <div class="hero-ctas" style="justify-content:flex-start; margin-top:28px;">
+          <a href="https://wa.me/59176868833?text=Hola%2C%20me%20interesa%20conocer%20más%20sobre%20Rubik%20Bolivia" target="_blank" rel="noopener" class="btn-wsp">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
+            Contáctanos
+          </a>
+        </div>
+      </div>
+      <div class="about-logo-wrap">
+        <img src="/LOGO-IA-RUBIK.jpg" alt="Rubik Bolivia" class="about-logo">
+      </div>
+    </div>
+    <div class="stats-grid fade-up">
+      <div class="stat-card">
+        <span class="stat-num" data-target="5">0</span>
+        <span class="stat-label">Años de experiencia</span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-num" data-target="50">0</span>
+        <span class="stat-label">Proyectos completados</span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-num" data-target="30">0</span>
+        <span class="stat-label">Clientes satisfechos</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── CONTACTO ───────────────────────────────────────────── -->
+<section id="contacto">
+  <div class="section-inner">
+    <div class="fade-up">
+      <h2>¿Tienes un proyecto?<br><span class="gradient-text">Hablemos.</span></h2>
+      <p class="contact-sub">Cuéntanos tu idea y la hacemos realidad con ingeniería y creatividad.</p>
+      <div class="contact-actions">
+        <a href="https://wa.me/59176868833?text=Hola%20Renzo%2C%20me%20interesa%20un%20proyecto%20con%20Rubik%20Bolivia" target="_blank" rel="noopener" class="btn-wsp-big">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
+          +591 76868833
+        </a>
+        <a href="mailto:renzo@rubikbolivia.com" class="btn-mail-big">
+          ✉️ renzo@rubikbolivia.com
+        </a>
+      </div>
+      <p class="contact-info">
+        📍 La Paz, Bolivia<br>
+        <a href="https://rubikbolivia.com">rubikbolivia.com</a>
+      </p>
+    </div>
+  </div>
+</section>
+
+<!-- ── FOOTER ─────────────────────────────────────────────── -->
+<footer>
+  <img src="/LOGO-IA-RUBIK.jpg" alt="Rubik Bolivia" class="footer-logo">
+  <span class="footer-brand">Rubik Bolivia</span>
+  <div class="footer-links">
+    <a href="#servicios">Servicios</a>
+    <a href="#portafolio">Portafolio</a>
+    <a href="#nosotros">Nosotros</a>
+    <a href="#contacto">Contacto</a>
+    <a href="https://wa.me/59176868833" target="_blank" rel="noopener">WhatsApp</a>
+  </div>
+  <p class="footer-copy">© 2025 Rubik Bolivia — Ingeniería Creativa · La Paz, Bolivia</p>
+</footer>
+
+<script>
+  // Firebase (public read only for portafolio)
+  const firebaseConfig = {
+    apiKey:        "AIzaSyDXYlofy31cDP14xVAVxWo_7TqXdSgsIjA",
+    authDomain:    "rubik-bolivia.firebaseapp.com",
+    databaseURL:   "https://rubik-bolivia-default-rtdb.firebaseio.com",
+    projectId:     "rubik-bolivia",
+    storageBucket: "rubik-bolivia.firebasestorage.app",
+    messagingSenderId: "4153087958",
+    appId:         "1:4153087958:web:cf2dd16106580ed6437677"
+  };
+  if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
+
+  // ── Portfolio ──────────────────────────────────────────────
+  const CAT_LABELS = {
+    construccion: 'Construcción',
+    ingenieria:   'Ingeniería',
+    digital:      'Digital',
+    diseno:       'Diseño',
+    otro:         'Otro',
+  };
+
+  function renderPortfolio(items) {
+    const grid = document.getElementById('portfolio-grid');
+    if (!items || items.length === 0) {
+      grid.innerHTML = `
+        <div class="portfolio-empty">
+          <div class="empty-icon">🏗️</div>
+          <p>Proyectos próximamente</p>
+        </div>`;
+      return;
+    }
+    grid.innerHTML = items.map((item, i) => {
+      const catLabel = CAT_LABELS[item.categoria] || item.categoria || '';
+      const imgHtml = item.imagen
+        ? `<img src="${item.imagen}" alt="${item.titulo}" class="portfolio-img" loading="lazy" onerror="this.parentElement.innerHTML='<div class=portfolio-img-placeholder>🏗️</div>'">`
+        : `<div class="portfolio-img-placeholder">${item.emoji || '🏗️'}</div>`;
+      return `
+        <div class="portfolio-card" data-cat="${item.categoria || 'otro'}" style="transition-delay:${i * 60}ms">
+          ${imgHtml}
+          <div class="portfolio-body">
+            ${catLabel ? `<div class="portfolio-cat">${catLabel}</div>` : ''}
+            <h3>${item.titulo || 'Proyecto'}</h3>
+            ${item.descripcion ? `<p>${item.descripcion}</p>` : ''}
+          </div>
+        </div>`;
+    }).join('');
+    // Animate in
+    setTimeout(() => {
+      grid.querySelectorAll('.portfolio-card').forEach(c => {
+        c._observer = observeEl(c);
+      });
+    }, 50);
+  }
+
+  firebase.database().ref('/portafolio')
+    .orderByChild('orden')
+    .once('value')
+    .then(snap => {
+      const items = [];
+      snap.forEach(child => {
+        const v = child.val();
+        if (v && v.activo !== false) items.push({ id: child.key, ...v });
+      });
+      renderPortfolio(items);
+    })
+    .catch(() => {
+      document.getElementById('portfolio-grid').innerHTML = `
+        <div class="portfolio-empty">
+          <div class="empty-icon">🏗️</div>
+          <p>Proyectos próximamente</p>
+        </div>`;
+    });
+
+  // ── Portfolio filter ───────────────────────────────────────
+  document.getElementById('portfolio-filter').addEventListener('click', e => {
+    const btn = e.target.closest('.filter-btn');
+    if (!btn) return;
+    document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    const cat = btn.dataset.cat;
+    document.querySelectorAll('.portfolio-card').forEach(card => {
+      const cardCat = card.dataset.cat || 'otro';
+      card.classList.toggle('hidden', cat !== 'all' && cardCat !== cat);
+    });
+  });
+
+  // ── Intersection Observer (scroll animations) ──────────────
+  function observeEl(el) {
+    const obs = new IntersectionObserver(entries => {
+      entries.forEach(e => {
+        if (e.isIntersecting) {
+          e.target.classList.add('visible');
+          obs.unobserve(e.target);
+        }
+      });
+    }, { threshold: 0.12 });
+    obs.observe(el);
+    return obs;
+  }
+
+  document.querySelectorAll('.fade-up, .service-card').forEach(el => observeEl(el));
+
+  // ── Counter animation ──────────────────────────────────────
+  document.querySelectorAll('.stat-num[data-target]').forEach(el => {
+    const target = parseInt(el.dataset.target);
+    const obs = new IntersectionObserver(entries => {
+      if (!entries[0].isIntersecting) return;
+      obs.unobserve(el);
+      let cur = 0;
+      const step = Math.ceil(target / 40);
+      const interval = setInterval(() => {
+        cur = Math.min(cur + step, target);
+        el.textContent = cur + '+';
+        if (cur >= target) clearInterval(interval);
+      }, 30);
+    }, { threshold: 0.5 });
+    obs.observe(el);
+  });
+
+  // ── Mobile menu ────────────────────────────────────────────
+  function toggleMobileMenu() {
+    const m = document.getElementById('mobile-menu');
+    m.style.display = m.style.display === 'none' ? 'flex' : 'none';
+  }
+</script>
+</body>
+</html>

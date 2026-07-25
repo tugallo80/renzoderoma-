@@ -18,7 +18,7 @@
     if (_sp.get('cid') && _sp.get('pid')) isExempt = true;
 
     if (path === '/' || path === '') {
-        location.replace('/login.html');
+        location.replace('/landing.html');
         return;
     }
 
