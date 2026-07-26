@@ -958,7 +958,7 @@
             const resp = await fetch('/api/gemini', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
-                body: JSON.stringify({ model: 'gemini-2.5-flash', text: promptText, advancedModel: true })
+                body: JSON.stringify({ model: 'gemini-2.5-flash', text: promptText, advancedModel: true, prefill: '[' })
             });
             if (!resp.ok) {
                 let detail = '';
@@ -970,6 +970,7 @@
         }
 
         function parseIA(txt) {
+            if (!txt || !txt.trim()) throw new Error("El modelo no devolvió contenido — intenta de nuevo");
             let clean = txt.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim();
             // Try extracting [ ... ] array first
             const start = clean.indexOf('[');
@@ -981,12 +982,14 @@
             try {
                 const parsed = JSON.parse(clean);
                 if (Array.isArray(parsed)) return parsed;
-                for (const k of Object.keys(parsed)) {
-                    if (Array.isArray(parsed[k])) return parsed[k];
+                if (parsed && typeof parsed === 'object') {
+                    for (const k of Object.keys(parsed)) {
+                        if (Array.isArray(parsed[k])) return parsed[k];
+                    }
                 }
             } catch(e) {}
             console.error('parseIA — respuesta cruda:', txt);
-            throw new Error("Respuesta inválida — revisa la consola para ver la respuesta del modelo");
+            throw new Error("Respuesta del modelo no contiene JSON válido — intenta de nuevo");
         }
 
         async function aplicarEtiquetasPersonalizadas(promptText) {
