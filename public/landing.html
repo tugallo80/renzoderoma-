@@ -467,6 +467,21 @@
         <p>Identidad visual, diseño de piezas gráficas, renders 3D y propuestas creativas. Del brief al producto final con un equipo especializado en comunicación visual.</p>
       </div>
     </div>
+
+  <!-- Clientes destacados -->
+  <div style="margin-top:60px;overflow:hidden;position:relative;">
+    <div style="font-size:12px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--muted);text-align:center;margin-bottom:20px;">Clientes que confían en Rubik</div>
+    <div style="display:flex;gap:32px;flex-wrap:wrap;justify-content:center;align-items:center;opacity:0.5;">
+      <span style="font-size:15px;font-weight:700;color:var(--text);">COTAS</span>
+      <span style="font-size:15px;font-weight:700;color:var(--text);">BISA</span>
+      <span style="font-size:15px;font-weight:700;color:var(--text);">IMBA</span>
+      <span style="font-size:15px;font-weight:700;color:var(--text);">SAMSUNG</span>
+      <span style="font-size:15px;font-weight:700;color:var(--text);">VIVA</span>
+      <span style="font-size:15px;font-weight:700;color:var(--text);">YPFB</span>
+      <span style="font-size:15px;font-weight:700;color:var(--text);">MERCANTIL</span>
+      <span style="font-size:15px;font-weight:700;color:var(--text);">MARCA SCZ</span>
+    </div>
+  </div>
   </div>
 </section>
 
@@ -606,14 +621,14 @@
     }
     grid.innerHTML = items.map((item, i) => {
       const catLabel = CAT_LABELS[item.categoria] || item.categoria || '';
-      const imgHtml = item.imagen
-        ? `<img src="${item.imagen}" alt="${item.titulo}" class="portfolio-img" loading="lazy" onerror="this.parentElement.innerHTML='<div class=portfolio-img-placeholder>🏗️</div>'">`
-        : `<div class="portfolio-img-placeholder">${item.emoji || '🏗️'}</div>`;
+      const imgContent = item.imagen
+        ? `<img src="${item.imagen}" alt="${item.titulo}" loading="lazy">`
+        : `<div class="portfolio-placeholder">🏗️</div>`;
       return `
-        <div class="portfolio-card" data-cat="${item.categoria || 'otro'}" style="transition-delay:${i * 60}ms">
-          ${imgHtml}
-          <div class="portfolio-body">
-            ${catLabel ? `<div class="portfolio-cat">${catLabel}</div>` : ''}
+        <div class="portfolio-card" data-cat="${item.categoria || 'otro'}" style="transition-delay:${Math.min(i,12) * 50}ms">
+          ${imgContent}
+          ${catLabel ? `<div class="portfolio-cat-tag">${catLabel}</div>` : ''}
+          <div class="portfolio-overlay">
             <h3>${item.titulo || 'Proyecto'}</h3>
             ${item.descripcion ? `<p>${item.descripcion}</p>` : ''}
           </div>
