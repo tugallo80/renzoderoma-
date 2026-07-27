@@ -122,6 +122,34 @@
     .public-link span { color: var(--muted); font-size: 14px; }
     .btn-view-site { background: var(--green); color: #fff; text-decoration: none; padding: 8px 16px; border-radius: 10px; font-size: 13px; font-weight: 700; white-space: nowrap; transition: .2s; }
     .btn-view-site:hover { background: #27b34a; }
+    .btn-import { background: linear-gradient(135deg,#bf5af2,#5856d6); color: #fff; border: none; padding: 10px 16px; border-radius: 12px; font-size: 13px; font-weight: 700; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; transition: .2s; white-space: nowrap; }
+    .btn-import:active { transform: scale(0.95); }
+
+    /* Import modal */
+    .imp-overlay { display: none; position: fixed; inset: 0; z-index: 600; background: rgba(0,0,0,0.92); backdrop-filter: blur(12px); flex-direction: column; align-items: center; justify-content: center; padding: 24px; }
+    .imp-overlay.open { display: flex; }
+    .imp-box { background: #111; border: 1px solid var(--border); border-radius: 24px; width: 100%; max-width: 540px; padding: 28px; }
+    .imp-box h2 { font-size: 20px; font-weight: 800; margin-bottom: 6px; }
+    .imp-subtitle { font-size: 14px; color: var(--muted); margin-bottom: 24px; }
+    .imp-dropzone { border: 2px dashed var(--border); border-radius: 16px; padding: 40px 24px; text-align: center; cursor: pointer; position: relative; transition: border-color .2s, background .2s; }
+    .imp-dropzone:hover { border-color: #bf5af2; background: rgba(191,90,242,0.04); }
+    .imp-dropzone input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+    .imp-dropzone .dz-icon { font-size: 44px; margin-bottom: 12px; }
+    .imp-dropzone p { font-size: 15px; font-weight: 600; color: var(--text); margin-bottom: 6px; }
+    .imp-dropzone small { font-size: 13px; color: var(--muted); }
+    .imp-progress { display: none; margin-top: 20px; }
+    .imp-counter { font-size: 22px; font-weight: 800; text-align: center; margin-bottom: 4px; }
+    .imp-counter span { color: #bf5af2; }
+    .imp-current { font-size: 13px; color: var(--muted); text-align: center; margin-bottom: 14px; min-height: 20px; }
+    .imp-bar-wrap { height: 6px; background: var(--card2); border-radius: 3px; overflow: hidden; margin-bottom: 16px; }
+    .imp-bar { height: 100%; background: linear-gradient(90deg,#bf5af2,#5856d6); border-radius: 3px; transition: width .3s; width: 0%; }
+    .imp-log { max-height: 180px; overflow-y: auto; font-size: 12px; color: var(--muted); background: var(--card); border-radius: 12px; padding: 12px; line-height: 2; }
+    .imp-log .ok { color: var(--green); }
+    .imp-log .err { color: var(--red); }
+    .imp-done { display: none; text-align: center; padding: 16px 0 4px; }
+    .imp-done p { font-size: 16px; font-weight: 700; margin-bottom: 16px; }
+    .btn-imp-close { background: var(--blue); color: #fff; border: none; padding: 13px 32px; border-radius: 14px; font-size: 15px; font-weight: 700; cursor: pointer; }
+    .btn-imp-cancel { margin-top: 16px; background: none; border: none; color: var(--muted); font-size: 14px; cursor: pointer; width: 100%; }
   </style>
 </head>
 <body>
@@ -129,7 +157,8 @@
 <div class="top-bar">
   <a href="/index.html" class="btn-nav">← Hub</a>
   <h1>🖼️ Portafolio</h1>
-  <button class="btn-add" onclick="abrirNuevo()">+ Agregar proyecto</button>
+  <button class="btn-import" onclick="abrirImportador()">✨ Importar</button>
+  <button class="btn-add" onclick="abrirNuevo()">+ Agregar</button>
 </div>
 
 <div class="container">
@@ -148,6 +177,35 @@
       <div class="big-icon">⏳</div>
       <p>Cargando proyectos...</p>
     </div>
+  </div>
+</div>
+
+<!-- Modal: importación masiva con IA -->
+<div class="imp-overlay" id="imp-overlay">
+  <div class="imp-box">
+    <h2>✨ Importar proyectos con IA</h2>
+    <p class="imp-subtitle">Seleccioná todas las imágenes de una vez. La IA analiza cada una y genera título, descripción y categoría automáticamente.</p>
+
+    <div class="imp-dropzone" id="imp-dropzone">
+      <input type="file" id="imp-file-input" accept="image/*" multiple onchange="iniciarImportacion(this.files)">
+      <div class="dz-icon">📁</div>
+      <p>Seleccionar imágenes</p>
+      <small>Podés elegir todas las 79 a la vez</small>
+    </div>
+
+    <div class="imp-progress" id="imp-progress">
+      <div class="imp-counter"><span id="imp-done-count">0</span> / <span id="imp-total-count">0</span></div>
+      <div class="imp-current" id="imp-current-file">Preparando...</div>
+      <div class="imp-bar-wrap"><div class="imp-bar" id="imp-bar"></div></div>
+      <div class="imp-log" id="imp-log"></div>
+    </div>
+
+    <div class="imp-done" id="imp-done">
+      <p>🎉 ¡Importación completada!</p>
+      <button class="btn-imp-close" onclick="cerrarImportador()">Ver proyectos</button>
+    </div>
+
+    <button class="btn-imp-cancel" id="imp-cancel-btn" onclick="cerrarImportador()">Cancelar</button>
   </div>
 </div>
 
@@ -184,10 +242,12 @@
       <div class="form-group">
         <label>Categoría</label>
         <select id="f-cat">
+          <option value="stands">Stands & Expo</option>
+          <option value="senaletica">Señalética</option>
+          <option value="btl">BTL & Eventos</option>
           <option value="construccion">Construcción</option>
-          <option value="ingenieria">Ingeniería</option>
-          <option value="digital">Digital</option>
           <option value="diseno">Diseño</option>
+          <option value="digital">Digital</option>
           <option value="otro">Otro</option>
         </select>
       </div>
@@ -225,6 +285,7 @@
   });
 
   const CAT_LABELS = {
+    stands: 'Stands & Expo', senaletica: 'Señalética', btl: 'BTL & Eventos',
     construccion: 'Construcción', ingenieria: 'Ingeniería',
     digital: 'Digital', diseno: 'Diseño', otro: 'Otro',
   };
@@ -375,6 +436,141 @@
   async function eliminar(id) {
     if (!confirm('¿Eliminar este proyecto del portafolio?')) return;
     await firebase.database().ref(`/portafolio/${id}`).remove();
+  }
+
+  // ── Importación masiva con IA ─────────────────────────────
+  let _impCancelled = false;
+
+  function abrirImportador() {
+    _impCancelled = false;
+    document.getElementById('imp-overlay').classList.add('open');
+    document.getElementById('imp-dropzone').style.display = 'block';
+    document.getElementById('imp-progress').style.display = 'none';
+    document.getElementById('imp-done').style.display = 'none';
+    document.getElementById('imp-cancel-btn').style.display = 'block';
+    document.getElementById('imp-file-input').value = '';
+    document.getElementById('imp-log').innerHTML = '';
+  }
+
+  function cerrarImportador() {
+    _impCancelled = true;
+    document.getElementById('imp-overlay').classList.remove('open');
+  }
+
+  async function iniciarImportacion(files) {
+    if (!files || !files.length) return;
+    const total = files.length;
+    // Ordenar por nombre de archivo (mantiene orden cronológico si nombres son secuenciales)
+    const sorted = Array.from(files).sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
+
+    document.getElementById('imp-dropzone').style.display = 'none';
+    document.getElementById('imp-progress').style.display = 'block';
+    document.getElementById('imp-total-count').textContent = total;
+    document.getElementById('imp-done-count').textContent = '0';
+    document.getElementById('imp-bar').style.width = '0%';
+    document.getElementById('imp-log').innerHTML = '';
+
+    // Calcular orden inicial (número de proyectos existentes + 1)
+    const snapOrd = await firebase.database().ref('/portafolio').once('value');
+    const baseOrden = snapOrd.numChildren() + 1;
+
+    let done = 0, errors = 0;
+    for (let i = 0; i < sorted.length; i++) {
+      if (_impCancelled) break;
+      const file = sorted[i];
+      document.getElementById('imp-current-file').textContent = `Procesando: ${file.name}`;
+      try {
+        // 1. Subir imagen a Storage
+        const url = await _subirImagen(file);
+        // 2. Analizar con IA
+        const ia = await _analizarConIA(file, url);
+        // 3. Guardar en RTDB
+        await firebase.database().ref('/portafolio').push({
+          titulo:      ia.titulo,
+          descripcion: ia.descripcion,
+          categoria:   ia.categoria,
+          orden:       baseOrden + i,
+          imagen:      url,
+          activo:      true,
+        });
+        done++;
+        _logImp(`✅ ${file.name} → <b>${ia.titulo}</b>`, 'ok');
+      } catch(e) {
+        errors++;
+        _logImp(`❌ ${file.name}: ${e.message}`, 'err');
+      }
+      document.getElementById('imp-done-count').textContent = done + errors;
+      document.getElementById('imp-bar').style.width = ((i + 1) / total * 100) + '%';
+    }
+
+    document.getElementById('imp-current-file').textContent = `✅ Listo — ${done} importados, ${errors} errores`;
+    document.getElementById('imp-done').style.display = 'block';
+    document.getElementById('imp-cancel-btn').style.display = 'none';
+  }
+
+  function _logImp(html, cls) {
+    const log = document.getElementById('imp-log');
+    const line = document.createElement('div');
+    line.className = cls || '';
+    line.innerHTML = html;
+    log.appendChild(line);
+    log.scrollTop = log.scrollHeight;
+  }
+
+  function _subirImagen(file) {
+    return new Promise((resolve, reject) => {
+      const ext = file.name.split('.').pop();
+      const ref = firebase.storage().ref(`portafolio/${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`);
+      const task = ref.put(file);
+      task.on('state_changed', null,
+        err => reject(err),
+        async () => resolve(await ref.getDownloadURL())
+      );
+    });
+  }
+
+  async function _analizarConIA(file, imgUrl) {
+    // Convertir imagen a base64 para enviar a Claude Vision
+    const base64 = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = e => resolve(e.target.result.split(',')[1]);
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+
+    const user = firebase.auth().currentUser;
+    const token = user ? await user.getIdToken() : null;
+    const headers = { 'Content-Type': 'application/json' };
+    if (token) headers['Authorization'] = 'Bearer ' + token;
+
+    const resp = await fetch(location.origin + '/api/gemini', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        text: `Analizás imágenes del portafolio de Rubik Bolivia — empresa de señalética, fabricación de stands, letreros luminosos, BTL y publicidad física en Santa Cruz, Bolivia.
+
+Devolvé ÚNICAMENTE este JSON sin texto adicional ni markdown:
+{"titulo":"Nombre profesional del proyecto (máx 60 chars, incluir cliente y evento/año si es visible)","descripcion":"Descripción profesional en 1-2 oraciones máx 160 chars (material, técnica, escala, premios si hay)","categoria":"stands"}
+
+Valores válidos para categoria: "stands" (feria/exposición/stand), "senaletica" (letreros/rótulos/señales), "btl" (activaciones/eventos/BTL), "diseno" (gráfico/identidad), "construccion" (obra civil/estructuras), "otro"
+
+El primer carácter de tu respuesta debe ser {`,
+        image: { data: base64, mimeType: file.type || 'image/jpeg' },
+        prefill: '{'
+      })
+    });
+
+    if (!resp.ok) throw new Error(`API ${resp.status}`);
+    const data = await resp.json();
+    const raw = (data?.candidates?.[0]?.content?.parts?.[0]?.text || '').trim();
+    const match = raw.match(/\{[\s\S]*\}/);
+    if (!match) throw new Error('Respuesta IA inválida');
+    const parsed = JSON.parse(match[0]);
+    return {
+      titulo:      parsed.titulo || file.name.replace(/\.[^.]+$/, ''),
+      descripcion: parsed.descripcion || '',
+      categoria:   parsed.categoria || 'otro',
+    };
   }
 </script>
 </body>
