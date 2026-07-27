@@ -330,8 +330,16 @@
         <span style="color:#25d366;">📱 +591 76868833</span> · rubikbolivia.com
       </div>
     </div>
+    <input type="file" id="compose-file-input" multiple style="display:none" onchange="handleAttachFiles(this)">
+    <div id="compose-attachments" style="display:none;padding:6px 14px 4px;border-top:1px solid var(--border);display:flex;flex-wrap:wrap;gap:6px;"></div>
     <div id="compose-footer">
-      <span id="compose-status"></span>
+      <div style="display:flex;align-items:center;gap:8px;">
+        <button id="btn-attach" onclick="document.getElementById('compose-file-input').click()" title="Adjuntar archivo"
+          style="background:none;border:1px solid var(--border);border-radius:8px;padding:8px 10px;cursor:pointer;color:var(--text-sub);font-size:15px;display:flex;align-items:center;">
+          <i class="ph-bold ph-paperclip"></i>
+        </button>
+        <span id="compose-status"></span>
+      </div>
       <button id="btn-compose-send" onclick="sendMail()">
         <i class="ph-bold ph-paper-plane-tilt"></i> Enviar
       </button>
@@ -591,7 +599,43 @@ window.openCompose = function() {
   document.getElementById("compose-overlay").classList.add("open");
 };
 
+// ── Attachments ───────────────────────────────────────────────────────────────
+let _attachments = []; // [{ filename, content (base64), contentType }]
+
+window.handleAttachFiles = function(input) {
+  Array.from(input.files).forEach(file => {
+    const reader = new FileReader();
+    reader.onload = function(e) {
+      const base64 = e.target.result.split(',')[1];
+      _attachments.push({ filename: file.name, content: base64, contentType: file.type || 'application/octet-stream', size: file.size });
+      _renderAttachments();
+    };
+    reader.readAsDataURL(file);
+  });
+  input.value = '';
+};
+
+function _renderAttachments() {
+  const el = document.getElementById('compose-attachments');
+  if (!_attachments.length) { el.style.display = 'none'; el.innerHTML = ''; return; }
+  el.style.display = 'flex';
+  el.innerHTML = _attachments.map((a, i) => `
+    <span style="display:inline-flex;align-items:center;gap:5px;background:var(--surface2,rgba(120,120,128,.12));border-radius:8px;padding:4px 8px;font-size:12px;max-width:180px;">
+      <i class="ph-bold ph-file" style="flex-shrink:0;"></i>
+      <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${a.filename}</span>
+      <button onclick="_removeAttachment(${i})" style="background:none;border:none;cursor:pointer;color:var(--text-sub);padding:0;font-size:13px;flex-shrink:0;">&times;</button>
+    </span>`).join('');
+}
+
+window._removeAttachment = function(i) {
+  _attachments.splice(i, 1);
+  _renderAttachments();
+};
+
 window.closeCompose = function() {
+  _attachments = [];
+  _renderAttachments();
+  document.getElementById('compose-file-input').value = '';
   document.getElementById("compose-overlay").classList.remove("open");
 };
 
@@ -656,6 +700,7 @@ window.sendMail = async function() {
 
   const payload = { to, subject, text };
   if (cc) payload.cc = cc;
+  if (_attachments.length) payload.attachments = _attachments.map(a => ({ filename: a.filename, content: a.content, contentType: a.contentType }));
   if ((_composeMode === "reply" || _composeMode === "replyAll") && _activeUid) {
     payload.replyToUid    = _activeUid;
     payload.replyToFolder = _folder;
