@@ -146,6 +146,7 @@
     .imp-log { max-height: 180px; overflow-y: auto; font-size: 12px; color: var(--muted); background: var(--card); border-radius: 12px; padding: 12px; line-height: 2; }
     .imp-log .ok { color: var(--green); }
     .imp-log .err { color: var(--red); }
+    .imp-log .skip { color: #636366; }
     .imp-done { display: none; text-align: center; padding: 16px 0 4px; }
     .imp-done p { font-size: 16px; font-weight: 700; margin-bottom: 16px; }
     .btn-imp-close { background: var(--blue); color: #fff; border: none; padding: 13px 32px; border-radius: 14px; font-size: 15px; font-weight: 700; cursor: pointer; }
@@ -560,16 +561,24 @@
     const snapOrd = await firebase.database().ref('/portafolio').once('value');
     const baseOrden = snapOrd.numChildren() + 1;
 
-    let done = 0, errors = 0;
+    let done = 0, errors = 0, skipped = 0;
     for (let i = 0; i < sorted.length; i++) {
       if (_impCancelled) break;
       const file = sorted[i];
-      document.getElementById('imp-current-file').textContent = `Procesando: ${file.name}`;
+      document.getElementById('imp-current-file').textContent = `Analizando: ${file.name}`;
       try {
-        // 1. Subir imagen a Storage
+        // 1. Analizar con IA PRIMERO — no subir si es página de menú/intro
+        const ia = await _analizarConIA(file);
+        if (ia.skip) {
+          skipped++;
+          _logImp(`⏭️ ${file.name} — omitida (portada/menú/intro)`, 'skip');
+          document.getElementById('imp-done-count').textContent = done + errors + skipped;
+          document.getElementById('imp-bar').style.width = ((i + 1) / total * 100) + '%';
+          continue;
+        }
+        // 2. Solo subir a Storage si es un proyecto real
+        document.getElementById('imp-current-file').textContent = `Subiendo: ${file.name}`;
         const url = await _subirImagen(file);
-        // 2. Analizar con IA
-        const ia = await _analizarConIA(file, url);
         // 3. Guardar en RTDB
         await firebase.database().ref('/portafolio').push({
           titulo:      ia.titulo,
@@ -585,11 +594,11 @@
         errors++;
         _logImp(`❌ ${file.name}: ${e.message}`, 'err');
       }
-      document.getElementById('imp-done-count').textContent = done + errors;
+      document.getElementById('imp-done-count').textContent = done + errors + skipped;
       document.getElementById('imp-bar').style.width = ((i + 1) / total * 100) + '%';
     }
 
-    document.getElementById('imp-current-file').textContent = `✅ Listo — ${done} importados, ${errors} errores`;
+    document.getElementById('imp-current-file').textContent = `✅ Listo — ${done} importados, ${skipped} omitidas, ${errors} errores`;
     document.getElementById('imp-done').style.display = 'block';
     document.getElementById('imp-cancel-btn').style.display = 'none';
   }
@@ -615,8 +624,7 @@
     });
   }
 
-  async function _analizarConIA(file, imgUrl) {
-    // Convertir imagen a base64 para enviar a Claude Vision
+  async function _analizarConIA(file) {
     const base64 = await new Promise((resolve, reject) => {
       const reader = new FileReader();
       reader.onload = e => resolve(e.target.result.split(',')[1]);
@@ -633,12 +641,18 @@
       method: 'POST',
       headers,
       body: JSON.stringify({
-        text: `Analizás imágenes del portafolio de Rubik Bolivia — empresa de señalética, fabricación de stands, letreros luminosos, BTL y publicidad física en Santa Cruz, Bolivia.
+        text: `Analizás páginas/imágenes del portafolio de Rubik Bolivia — empresa de señalética, fabricación de stands, letreros luminosos, BTL y publicidad física en Santa Cruz, Bolivia.
 
-Devolvé ÚNICAMENTE este JSON sin texto adicional ni markdown:
-{"titulo":"Nombre profesional del proyecto (máx 60 chars, incluir cliente y evento/año si es visible)","descripcion":"Descripción profesional en 1-2 oraciones máx 160 chars (material, técnica, escala, premios si hay)","categoria":"stands"}
+PASO 1 — ¿Esta imagen muestra un proyecto real fabricado/instalado?
+Proyecto real = tiene FOTOS de trabajos concretos (stands en ferias, letreros instalados, activaciones BTL, muebles, estructuras).
+NO es proyecto real = portada corporativa, página "Quiénes somos"/"Qué hacemos", menú de navegación con íconos, separador de categoría solo texto, o cualquier página sin fotos de trabajos reales.
 
-Valores válidos para categoria: "stands" (feria/exposición/stand), "senaletica" (letreros/rótulos/señales), "btl" (activaciones/eventos/BTL), "diseno" (gráfico/identidad), "construccion" (obra civil/estructuras), "otro"
+Si NO es proyecto real → devolvé exactamente: {"skip":true}
+
+Si SÍ es proyecto real → devolvé exactamente:
+{"titulo":"Nombre profesional máx 60 chars (cliente + evento/año si visible)","descripcion":"1-2 oraciones profesionales máx 160 chars (incluir premios si los hay)","categoria":"stands"}
+
+Categorías válidas: "stands" (ferias/exposiciones), "senaletica" (letreros/rótulos/señales), "btl" (activaciones/eventos), "diseno" (gráfico/identidad), "construccion" (obra civil/estructuras), "otro"
 
 El primer carácter de tu respuesta debe ser {`,
         image: { data: base64, mimeType: file.type || 'image/jpeg' },
@@ -652,6 +666,7 @@ El primer carácter de tu respuesta debe ser {`,
     const match = raw.match(/\{[\s\S]*\}/);
     if (!match) throw new Error('Respuesta IA inválida');
     const parsed = JSON.parse(match[0]);
+    if (parsed.skip) return { skip: true };
     return {
       titulo:      parsed.titulo || file.name.replace(/\.[^.]+$/, ''),
       descripcion: parsed.descripcion || '',
