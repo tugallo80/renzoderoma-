@@ -2832,6 +2832,12 @@ Devolvé exactamente este formato (sin texto adicional):
         btnGen.innerHTML = '<i class="ph-bold ph-spinner-gap anim-spin"></i> Generando...';
         _iaProgStart();
 
+        // Wake Lock: mantiene la pantalla encendida durante la generación
+        let _wakeLock = null;
+        try {
+            if ('wakeLock' in navigator) _wakeLock = await navigator.wakeLock.request('screen');
+        } catch(_) {}
+
         let parts = [];
 
         // 1. CREAR EL CATÁLOGO DE LA BASE DE DATOS PARA ENVIARSELO A LA IA
@@ -3279,7 +3285,8 @@ EJEMPLO SIN CAPÍTULOS (menos de 4 ítems):
             const _reqBody = JSON.stringify({
                 systemInstruction: { parts: [{ text: sysPrompt }] },
                 contents: [{ role: 'user', parts }],
-                generationConfig: { maxOutputTokens: 16000, temperature: 0.2 }
+                generationConfig: { maxOutputTokens: 16000, temperature: 0.2 },
+                prefill: '['
             });
 
             // Verificar tamaño antes de enviar
@@ -3292,28 +3299,35 @@ EJEMPLO SIN CAPÍTULOS (menos de 4 ítems):
 
             console.log('[Budget] Endpoint: /api/gemini | payload:', _payloadKB, 'KB');
 
-            let _resp, respData, _lastBudgetErr;
+            let respData, _lastBudgetErr;
             for (let _bAtt = 0; _bAtt < 3; _bAtt++) {
                 if (_bAtt > 0) {
                     const _pMsg = document.getElementById('ia-prog-msg');
                     if (_pMsg) _pMsg.textContent = 'Servidor ocupado, reintentando...';
                     await new Promise(r => setTimeout(r, 5000 * _bAtt));
                 }
-                _resp = await fetch('/api/gemini', { method: 'POST', headers, body: _reqBody });
-                if (_resp.status === 502 || _resp.status === 503 || _resp.status === 504) {
+                // Usar Web Worker para resistir background/pantalla apagada en móvil
+                let _workerResp;
+                try {
+                    _workerResp = await _fetchInWorker('/api/gemini', { method: 'POST', headers, body: _reqBody }, 480000);
+                } catch(_wErr) {
+                    _lastBudgetErr = _wErr;
+                    continue;
+                }
+                if (_workerResp.status === 502 || _workerResp.status === 503 || _workerResp.status === 504) {
                     _lastBudgetErr = new Error('Servidor temporalmente no disponible. Intentá de nuevo en unos segundos.');
                     continue;
                 }
-                if (!_resp.ok) {
-                    let _errMsg = `HTTP ${_resp.status}`;
+                if (!_workerResp.ok) {
+                    let _errMsg = `HTTP ${_workerResp.status}`;
                     try {
-                        const _errBody = await _resp.json();
+                        const _errBody = JSON.parse(_workerResp.text);
                         if (_errBody.detalle) _errMsg += ': ' + _errBody.detalle;
                         else if (_errBody.error) _errMsg += ': ' + _errBody.error;
                     } catch(_) {}
                     throw new Error(_errMsg);
                 }
-                respData = await _resp.json();
+                try { respData = JSON.parse(_workerResp.text); } catch(_) { respData = {}; }
                 _lastBudgetErr = null;
                 break;
             }
@@ -3510,6 +3524,7 @@ EJEMPLO SIN CAPÍTULOS (menos de 4 ítems):
         } finally {
             btnGen.disabled = false;
             btnGen.innerHTML = '<i class="ph-bold ph-check-circle"></i> Generar Presupuesto Completo';
+            if (_wakeLock) { try { _wakeLock.release(); } catch(_) {} _wakeLock = null; }
         }
     };
 </script>
@@ -4660,8 +4675,8 @@ Estos planos/croquis definen la GEOMETRÍA REAL del objeto. Son la autoridad má
         return prompt;
     }
 
-    // Helper: fetch en Web Worker para no bloquear el main thread durante generación de imagen
-    function _fetchInWorker(url, options) {
+    // Helper: fetch en Web Worker — resiste background en móvil mejor que fetch() directo
+    function _fetchInWorker(url, options, timeoutMs) {
         return new Promise((resolve, reject) => {
             const workerCode = `
                 self.onmessage = async function(e) {
@@ -4678,8 +4693,8 @@ Estos planos/croquis definen la GEOMETRÍA REAL del objeto. Son la autoridad má
             const worker = new Worker(URL.createObjectURL(blob));
             const timeoutId = setTimeout(() => {
                 worker.terminate();
-                reject(new Error('Tiempo de espera agotado (180s). Intentá de nuevo.'));
-            }, 180000);
+                reject(new Error('Tiempo de espera agotado. El proyecto es muy grande — intentá con menos imágenes o ítems.'));
+            }, timeoutMs || 480000);
             worker.onmessage = (e) => {
                 clearTimeout(timeoutId);
                 worker.terminate();
