@@ -279,7 +279,7 @@ exports.mailSend = onRequest(
         const user = await requireAuth(req, res);
         if (!user) return;
 
-        const { to, subject, text, html, cc, bcc, replyToUid, replyToFolder } = req.body || {};
+        const { to, subject, text, html, cc, bcc, replyToUid, replyToFolder, attachments } = req.body || {};
         if (!to || !subject) {
             return res.status(400).json({ error: "Faltan campos: to, subject" });
         }
@@ -332,6 +332,14 @@ exports.mailSend = onRequest(
             ? html + FIRMA_HTML
             : (text ? `<div style="white-space:pre-wrap;font-family:inherit;">${text}</div>` + FIRMA_HTML : undefined);
 
+        const nodemailerAttachments = Array.isArray(attachments)
+            ? attachments.map(a => ({
+                filename:    a.filename || "adjunto",
+                content:     Buffer.from(a.content, "base64"),
+                contentType: a.contentType || "application/octet-stream",
+            }))
+            : [];
+
         const mailOptions = {
             from:    `Renzo | Rubik Corp. <${ZOHO_USER}>`,
             to,
@@ -342,6 +350,7 @@ exports.mailSend = onRequest(
             ...(finalHtml ? { html: finalHtml } : {}),
             ...(inReplyTo  ? { inReplyTo }  : {}),
             ...(references ? { references } : {}),
+            ...(nodemailerAttachments.length ? { attachments: nodemailerAttachments } : {}),
         };
 
         try {
