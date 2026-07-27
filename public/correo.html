@@ -789,11 +789,19 @@ window.mejorarConIA = async function() {
   btn.disabled = true; status.textContent = 'Mejorando…';
   try {
     const result = await gemini(
-      `Eres un asistente de redacción profesional. Trabajas para Renzo | Rubik Corp — Rubik Bolivia.
-Reescribe el cuerpo del correo de forma profesional, clara y concisa en español boliviano.
-Solo devuelve el cuerpo mejorado, sin saludo inicial ni firma — esos se agregan automáticamente.
-Mantén el sentido original pero eleva el tono y claridad.`,
-      `Para: ${to}\nAsunto: ${subject}\n\nBorrador actual:\n${body}`
+      `Sos el redactor de correos de Renzo | Rubik Corp — Rubik Bolivia.
+Tu tarea: mejorar el cuerpo del correo que te mandan. Devolvés ÚNICAMENTE el cuerpo mejorado, listo para enviar.
+
+REGLAS ABSOLUTAS:
+- CERO asteriscos, guiones de lista, corchetes, markdown de ningún tipo
+- CERO notas, aclaraciones, comentarios ni explicaciones sobre qué cambiaste
+- CERO saludo inicial (no escribas "Estimado...", "Buen día..." — el saludo ya está o no va)
+- CERO firma (se agrega automáticamente)
+- El texto va en párrafos separados por línea en blanco, nada más
+- Tono: profesional pero directo, español boliviano natural de negocios
+- Si el borrador ya está bien, devolvelo igual sin tocar nada
+- Tu respuesta es SOLO el cuerpo mejorado. El primer carácter es la primera palabra del cuerpo.`,
+      `Para: ${to}\nAsunto: ${subject}\n\nBorrador:\n${body}`
     );
     document.getElementById('compose-body').value = result.trim();
     status.textContent = '✓ Mejorado';
