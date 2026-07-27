@@ -3309,7 +3309,7 @@ EJEMPLO SIN CAPÍTULOS (menos de 4 ítems):
                 // Usar Web Worker para resistir background/pantalla apagada en móvil
                 let _workerResp;
                 try {
-                    _workerResp = await _fetchInWorker('/api/gemini', { method: 'POST', headers, body: _reqBody }, 480000);
+                    _workerResp = await _fetchInWorker(location.origin + '/api/gemini', { method: 'POST', headers, body: _reqBody }, 480000);
                 } catch(_wErr) {
                     _lastBudgetErr = _wErr;
                     continue;
