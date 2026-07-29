@@ -37,8 +37,8 @@
         .client-name { font-size: 28px; font-weight: 900; letter-spacing: -0.5px; margin-bottom: 5px; }
         .client-sub { font-size: 13px; color: var(--gray); font-weight: 600; text-transform: uppercase; }
 
-        .project-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px 15px; margin-top: 10px; }
-        @media (max-width: 500px) { .project-grid { grid-template-columns: repeat(3, 1fr); } }
+        .project-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(88px, 1fr)); gap: 18px 12px; margin-top: 10px; }
+        @media (max-width: 600px) { .project-grid { grid-template-columns: repeat(4, 1fr); gap: 14px 10px; } }
 
         .app-item { display: flex; flex-direction: column; align-items: center; cursor: pointer; transition: transform 0.2s; position: relative; -webkit-touch-callout: none; }
         .app-item:active { transform: scale(0.92); }
@@ -306,7 +306,7 @@
 
     // Mostrar "Cargando..." inmediatamente — visible mientras auth resuelve
     document.getElementById('project-grid').innerHTML =
-        `<div style="grid-column:span 4;text-align:center;color:var(--gray);padding:40px;font-size:.85rem;">Cargando proyectos...</div>`;
+        `<div style="grid-column:1/-1;text-align:center;color:var(--gray);padding:40px;font-size:.85rem;">Cargando proyectos...</div>`;
 
     // Arrancar carga — usa rubikAuthReady de auth-guard para no registrar un segundo listener
     (function arrancarCarga() {
@@ -403,7 +403,7 @@
         }
     } catch(e) {}
 
-    grid.innerHTML = `<div style="grid-column:span 4;text-align:center;color:var(--gray);padding:40px;font-size:.85rem;">Cargando proyectos...</div>`;
+    grid.innerHTML = `<div style="grid-column:1/-1;text-align:center;color:var(--gray);padding:40px;font-size:.85rem;">Cargando proyectos...</div>`;
 
     let _yaRenderizado = false;
     // true once real project cards have been shown — prevents null/empty WebSocket from wiping them
@@ -434,7 +434,7 @@
             grid.innerHTML = '';
             globalProjectsArr = [];
             if (!dataObj || Object.keys(dataObj).length === 0) {
-                grid.innerHTML = `<div style="grid-column:span 4;text-align:center;color:var(--gray);padding:40px;">Este cliente no tiene proyectos.</div>`;
+                grid.innerHTML = `<div style="grid-column:1/-1;text-align:center;color:var(--gray);padding:40px;">Este cliente no tiene proyectos.</div>`;
                 return;
             }
             _hadGoodData = true;
@@ -458,7 +458,7 @@
 
             const wrap = document.createElement('div');
             wrap.className = 'proj-items';
-            wrap.style.cssText = 'grid-column:span 4;display:grid;grid-template-columns:repeat(4,1fr);gap:20px 15px;';
+            wrap.style.cssText = 'grid-column:1/-1;display:grid;grid-template-columns:repeat(auto-fill,minmax(88px,1fr));gap:18px 12px;';
 
             globalProjectsArr.forEach(p => {
                 const pid = p.pid;
@@ -485,7 +485,7 @@
             grid.appendChild(wrap);
         } catch(err) {
             console.error('[proyectos] _renderData error:', err);
-            grid.innerHTML = `<div style="grid-column:span 4;text-align:center;padding:30px;">
+            grid.innerHTML = `<div style="grid-column:1/-1;text-align:center;padding:30px;">
                 <div style="color:var(--red);font-weight:900;font-size:13px;margin-bottom:8px;">Error al cargar proyectos</div>
                 <div style="color:var(--gray);font-size:11px;margin-bottom:12px;">${err && err.message ? err.message : String(err)}</div>
                 <button onclick="_cargarProyectos()" style="background:var(--blue);color:#fff;border:none;border-radius:10px;padding:10px 22px;font-size:.9rem;cursor:pointer;">Reintentar</button>
@@ -500,7 +500,7 @@
         clearTimeout(window._proyectosTimeout);
         grid.innerHTML = '';
         const msg = document.createElement('div');
-        msg.style.cssText = 'grid-column:span 4;text-align:center;padding:40px;';
+        msg.style.cssText = 'grid-column:1/-1;text-align:center;padding:40px;';
         const txt = document.createElement('div');
         txt.style.cssText = 'color:var(--gray);font-size:.85rem;margin-bottom:12px;';
         txt.textContent = 'Sin conexión — tocá para reintentar';
