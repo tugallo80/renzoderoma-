@@ -254,6 +254,7 @@
         <button class="btn btn-dark" onclick="saveDB(true)"><i class="ph-bold ph-floppy-disk"></i> Forzar Guardado</button>
         <button class="btn btn-sec" style="color:var(--orange); border-color:var(--orange);" onclick="syncDatabasePrices()"><i class="ph-bold ph-arrows-clockwise"></i> Actualizar Precios BD</button>
         <button class="btn btn-sec" onclick="abrirModalPDF()"><i class="ph-bold ph-file-pdf"></i> PDF</button>
+        <button class="btn btn-sec" style="color:#5ac8fa;border-color:#5ac8fa;" onclick="abrirMailPresupuesto()"><i class="ph-bold ph-envelope"></i> Enviar</button>
         <button class="btn btn-sec" onclick="exportExcel()"><i class="ph-bold ph-file-xls"></i> Excel</button>
         <button class="btn btn-sec" id="btn-copy-mode" style="color:var(--green);border-color:var(--green);" onclick="toggleCopyMode()"><i class="ph-bold ph-copy"></i> Copiar ítems</button>
         <button class="btn btn-sec" style="color:var(--purple); border-color:var(--purple);" onclick="abrirModalIABudget()"><i class="ph-bold ph-magic-wand"></i> Presupuesto IA</button>
@@ -6328,6 +6329,223 @@ async function ejecutarCopia(targetPid, targetPname, el) {
         if (el) { el.style.opacity = ''; el.style.pointerEvents = ''; }
     }
 }
+
+// ── Enviar presupuesto por mail ──────────────────────────────
+let _mailPresPDF = null;
+
+async function abrirMailPresupuesto() {
+    const overlay = document.getElementById('mail-pres-overlay');
+    overlay.style.display = 'flex';
+
+    const cli = (document.getElementById('h-cli')?.innerText || 'Cliente').trim();
+    const pro = (document.getElementById('h-pro')?.innerText || 'Proyecto').trim();
+    const total = document.getElementById('t-total')?.innerText || '';
+    const fecha = document.getElementById('h-date')?.value || new Date().toLocaleDateString();
+
+    document.getElementById('mail-pres-subject').value = `Presupuesto: ${pro} — Rubik Bolivia`;
+    document.getElementById('mail-pres-body').value = '';
+    document.getElementById('mail-pres-attach-name').textContent = 'Generando PDF...';
+    document.getElementById('mail-pres-status').textContent = '⏳ Preparando PDF y redacción con IA...';
+    document.getElementById('btn-mail-pres-send').disabled = true;
+    document.getElementById('btn-mail-pres-send').style.opacity = '0.5';
+    document.getElementById('btn-redraft').disabled = true;
+    _mailPresPDF = null;
+
+    try {
+        const [pdfResult, draft] = await Promise.all([
+            _pdfParaMail(),
+            _redactarMailIA(cli, pro, total, fecha)
+        ]);
+        _mailPresPDF = pdfResult;
+        document.getElementById('mail-pres-attach-name').textContent = pdfResult.filename;
+        document.getElementById('mail-pres-body').value = draft;
+        document.getElementById('mail-pres-status').textContent = '';
+        document.getElementById('btn-mail-pres-send').disabled = false;
+        document.getElementById('btn-mail-pres-send').style.opacity = '1';
+        document.getElementById('btn-redraft').disabled = false;
+    } catch(e) {
+        document.getElementById('mail-pres-status').textContent = '❌ ' + e.message;
+        document.getElementById('btn-mail-pres-send').disabled = false;
+        document.getElementById('btn-mail-pres-send').style.opacity = '1';
+        document.getElementById('btn-redraft').disabled = false;
+    }
+}
+
+async function redraftMailIA() {
+    const cli = (document.getElementById('h-cli')?.innerText || 'Cliente').trim();
+    const pro = (document.getElementById('h-pro')?.innerText || 'Proyecto').trim();
+    const total = document.getElementById('t-total')?.innerText || '';
+    const fecha = document.getElementById('h-date')?.value || new Date().toLocaleDateString();
+    const btn = document.getElementById('btn-redraft');
+    btn.disabled = true;
+    btn.textContent = '⏳';
+    try {
+        const draft = await _redactarMailIA(cli, pro, total, fecha);
+        document.getElementById('mail-pres-body').value = draft;
+    } catch(e) {
+        document.getElementById('mail-pres-status').textContent = '❌ ' + e.message;
+    }
+    btn.disabled = false;
+    btn.innerHTML = '✨ Re-generar';
+}
+
+async function _redactarMailIA(cli, pro, total, fecha) {
+    const user = firebase.auth ? firebase.auth().currentUser : null;
+    const token = user ? await user.getIdToken() : null;
+    const headers = { 'Content-Type': 'application/json' };
+    if (token) headers['Authorization'] = 'Bearer ' + token;
+
+    const items = (data || [])
+        .filter(it => it.type !== 'chapter' && it.activo !== false && it.desc)
+        .slice(0, 12)
+        .map(it => `- ${it.desc}: ${parseFloat(it.cant)||1} ${it.und||'glb'} = ${fMoney((parseFloat(it.cant)||1)*(parseFloat(it.pu)||0))} Bs`)
+        .join('\n');
+
+    const prompt = `Sos el redactor de correos de Renzo | Rubik Corp — Rubik Bolivia (señalética, stands, activaciones BTL, fabricación, Santa Cruz de la Sierra, Bolivia).
+
+Redactá el cuerpo de un correo profesional para enviar un presupuesto al cliente. Datos:
+- Cliente: ${cli}
+- Proyecto: ${pro}
+- Total: ${total}
+- Fecha: ${fecha}
+${items ? `- Ítems principales:\n${items}` : ''}
+
+REGLAS ABSOLUTAS:
+- CERO asteriscos, guiones de lista, markdown, corchetes
+- CERO notas ni comentarios sobre la redacción
+- CERO firma (se agrega automáticamente)
+- Saludo inicial SÍ (por nombre si está disponible)
+- 3-4 párrafos: saludo cálido → contexto del presupuesto → puntos clave del proyecto → CTA para confirmar o consultar
+- Mencioná que el PDF con el detalle completo va adjunto
+- Tono: profesional y cercano, español boliviano de negocios natural`;
+
+    const resp = await fetch(location.origin + '/api/gemini', {
+        method: 'POST', headers,
+        body: JSON.stringify({ text: prompt, model: 'gemini-2.5-flash' })
+    });
+    if (!resp.ok) throw new Error('API ' + resp.status);
+    const res = await resp.json();
+    return (res?.candidates?.[0]?.content?.parts?.[0]?.text || '').trim();
+}
+
+function cerrarMailPres() {
+    document.getElementById('mail-pres-overlay').style.display = 'none';
+    document.getElementById('mail-pres-status').textContent = '';
+    document.getElementById('mail-pres-to').value = '';
+    _mailPresPDF = null;
+}
+
+async function enviarPresupuestoMail() {
+    const to = document.getElementById('mail-pres-to').value.trim();
+    if (!to) { document.getElementById('mail-pres-to').focus(); return; }
+
+    const subject = document.getElementById('mail-pres-subject').value.trim();
+    const text = document.getElementById('mail-pres-body').value.trim();
+    const btn = document.getElementById('btn-mail-pres-send');
+    const status = document.getElementById('mail-pres-status');
+    btn.disabled = true; btn.style.opacity = '0.5';
+    status.style.color = '#8e8e93';
+    status.textContent = '⏳ Enviando...';
+
+    const user = firebase.auth ? firebase.auth().currentUser : null;
+    if (!user) { status.textContent = '❌ No autenticado'; btn.disabled = false; btn.style.opacity='1'; return; }
+    const token = await user.getIdToken();
+
+    const payload = { to, subject, text };
+    if (_mailPresPDF) {
+        payload.attachments = [{
+            filename: _mailPresPDF.filename,
+            content:  _mailPresPDF.base64,
+            contentType: 'application/pdf'
+        }];
+    }
+
+    try {
+        const resp = await fetch(location.origin + '/api/mail/send', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+            body: JSON.stringify(payload)
+        });
+        const result = await resp.json();
+        if (!resp.ok) throw new Error(result.error || 'Error al enviar');
+        status.style.color = '#30d158';
+        status.textContent = '✅ Correo enviado correctamente';
+        setTimeout(() => cerrarMailPres(), 2200);
+    } catch(e) {
+        status.style.color = '#ff453a';
+        status.textContent = '❌ ' + e.message;
+        btn.disabled = false; btn.style.opacity = '1';
+    }
+}
+
+async function _pdfParaMail() {
+    if (!window.jspdf?.jsPDF) throw new Error('jsPDF no está cargado');
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF();
+
+    const cli = (document.getElementById('h-cli')?.innerText || 'CLIENTE').toUpperCase().trim();
+    const pro = (document.getElementById('h-pro')?.innerText || 'PROYECTO').toUpperCase().trim();
+    const fecha = document.getElementById('h-date')?.value || new Date().toLocaleDateString();
+
+    const logoB64 = typeof getLogoBase64 === 'function' ? getLogoBase64() : null;
+    if (logoB64) { try { doc.addImage(logoB64, 'JPEG', 165, 8, 30, 15); } catch(_) {} }
+
+    doc.setFontSize(16); doc.setFont(undefined, 'bold');
+    doc.text('PRESUPUESTO', 14, 20);
+    doc.setFontSize(10); doc.setFont(undefined, 'normal');
+    doc.text(`Cliente: ${cli}`, 14, 30);
+    doc.text(`Proyecto: ${pro}`, 14, 36);
+    doc.text(`Fecha: ${fecha}`, 14, 42);
+
+    const rows = []; let subtotal = 0;
+    (data || []).forEach(item => {
+        if (item.type === 'chapter') {
+            rows.push([{ content: (item.desc||'').toUpperCase(), colSpan: 5, styles: { fontStyle:'bold', fillColor:[40,40,40], textColor:[255,255,255] } }]);
+        } else {
+            if (item.activo === false) return;
+            const cant = parseFloat(item.cant) || 0;
+            const pu = parseFloat(item.pu) || 0;
+            const tot = cant * pu; subtotal += tot;
+            let desc = item.desc || '-';
+            if (item.feats?.length) desc += '\n' + item.feats.map(f => '  · ' + f).join('\n');
+            rows.push([desc, item.und||'glb', cant||'', fMoney(pu), fMoney(tot)]);
+        }
+    });
+
+    if (typeof doc.autoTable === 'function') {
+        doc.autoTable({
+            startY: 47,
+            head: [['Descripción','Und','Cant','P.U. (Bs)','Total (Bs)']],
+            body: rows,
+            styles: { cellPadding:3, fontSize:9, lineColor:[60,60,60], lineWidth:0.1 },
+            headStyles: { fillColor:[220,31,31], textColor:[255,255,255], fontStyle:'bold' },
+            columnStyles: { 0:{cellWidth:88}, 1:{cellWidth:18}, 2:{cellWidth:16,halign:'center'}, 3:{cellWidth:32,halign:'right'}, 4:{cellWidth:32,halign:'right'} }
+        });
+    }
+
+    const descPct = parseFloat(document.getElementById('t-desc-pct')?.value) || 0;
+    const descVal = subtotal * descPct / 100;
+    const base = subtotal - descVal;
+    const conImp = document.getElementById('sw-imp')?.checked || false;
+    const iva = conImp ? base * 0.13 : 0;
+    const it  = conImp ? base * 0.03 : 0;
+    const finalTotal = base + iva + it;
+
+    const fy = (doc.lastAutoTable?.finalY || 100) + 8;
+    doc.setDrawColor(180,180,180); doc.line(130, fy, 196, fy);
+    let ly = fy + 7; doc.setFontSize(10); doc.setFont(undefined, 'normal');
+    if (descPct > 0) { doc.text(`Subtotal: ${fMoney(subtotal)} Bs`, 130, ly); ly+=6; doc.text(`Descuento ${descPct}%: -${fMoney(descVal)} Bs`, 130, ly); ly+=6; }
+    if (conImp) { doc.text(`IVA 13%: ${fMoney(iva)} Bs`, 130, ly); ly+=6; doc.text(`IT 3%: ${fMoney(it)} Bs`, 130, ly); ly+=6; }
+    doc.setFontSize(13); doc.setFont(undefined, 'bold');
+    doc.text(`TOTAL: ${fMoney(finalTotal)} Bs`, 130, ly + 2);
+
+    doc.setFontSize(8); doc.setFont(undefined, 'normal'); doc.setTextColor(140);
+    doc.text('Rubik Bolivia — Ingeniería Creativa  ·  rubikbolivia.com  ·  +591 76868833', 14, 286);
+    doc.setTextColor(0);
+
+    const filename = 'Presupuesto_' + pro.replace(/[^A-Z0-9]/g, '_').substring(0, 28) + '.pdf';
+    return { base64: doc.output('datauristring').split(',')[1], filename };
+}
 </script>
 
 <!-- Modal Anotador (PAN) — notas y medidas sobre imágenes -->
@@ -6377,6 +6595,45 @@ async function ejecutarCopia(targetPid, targetPname, el) {
             <button onclick="confirmPanEdit()" style="flex:2;padding:12px;border-radius:12px;border:none;background:#ffd60a;color:#000;font-weight:900;cursor:pointer;font-size:15px;">✓ Guardar</button>
         </div>
     </div>
+</div>
+
+<!-- Modal: Enviar presupuesto por mail -->
+<div id="mail-pres-overlay" style="display:none;position:fixed;inset:0;z-index:3000;background:rgba(0,0,0,0.9);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);align-items:center;justify-content:center;padding:20px;">
+  <div style="background:#1c1c1e;border:1px solid #3a3a3c;border-radius:22px;width:100%;max-width:560px;padding:28px;max-height:92vh;overflow-y:auto;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:22px;">
+      <div style="font-size:18px;font-weight:900;color:#fff;">📧 Enviar Presupuesto</div>
+      <button onclick="cerrarMailPres()" style="background:none;border:none;color:#636366;font-size:22px;cursor:pointer;padding:0;line-height:1;">✕</button>
+    </div>
+
+    <div style="margin-bottom:14px;">
+      <div style="font-size:11px;font-weight:700;color:#636366;letter-spacing:.8px;text-transform:uppercase;margin-bottom:7px;">PARA</div>
+      <input id="mail-pres-to" type="email" placeholder="cliente@empresa.com" style="width:100%;background:#2c2c2e;border:1px solid #3a3a3c;color:#fff;padding:13px 15px;border-radius:13px;font-size:14px;outline:none;box-sizing:border-box;">
+    </div>
+
+    <div style="margin-bottom:14px;">
+      <div style="font-size:11px;font-weight:700;color:#636366;letter-spacing:.8px;text-transform:uppercase;margin-bottom:7px;">ASUNTO</div>
+      <input id="mail-pres-subject" type="text" style="width:100%;background:#2c2c2e;border:1px solid #3a3a3c;color:#fff;padding:13px 15px;border-radius:13px;font-size:14px;outline:none;box-sizing:border-box;">
+    </div>
+
+    <div style="margin-bottom:14px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:7px;">
+        <div style="font-size:11px;font-weight:700;color:#636366;letter-spacing:.8px;text-transform:uppercase;">MENSAJE</div>
+        <button id="btn-redraft" onclick="redraftMailIA()" style="background:rgba(175,82,222,0.15);border:1px solid rgba(175,82,222,0.3);color:#af52de;padding:5px 12px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;">✨ Re-generar</button>
+      </div>
+      <textarea id="mail-pres-body" rows="11" style="width:100%;background:#2c2c2e;border:1px solid #3a3a3c;color:#fff;padding:13px 15px;border-radius:13px;font-size:14px;outline:none;resize:vertical;font-family:inherit;line-height:1.65;box-sizing:border-box;"></textarea>
+    </div>
+
+    <div id="mail-pres-attach" style="background:rgba(90,200,250,0.08);border:1px solid rgba(90,200,250,0.2);border-radius:12px;padding:10px 15px;font-size:13px;color:#5ac8fa;margin-bottom:22px;display:flex;align-items:center;gap:8px;">
+      <i class="ph-bold ph-paperclip"></i>
+      <span id="mail-pres-attach-name">Generando PDF...</span>
+    </div>
+
+    <div style="display:flex;gap:10px;align-items:center;">
+      <div id="mail-pres-status" style="flex:1;font-size:13px;color:#636366;min-height:20px;"></div>
+      <button onclick="cerrarMailPres()" style="background:#2c2c2e;border:1px solid #3a3a3c;color:#8e8e93;padding:13px 20px;border-radius:13px;font-size:14px;font-weight:600;cursor:pointer;">Cancelar</button>
+      <button id="btn-mail-pres-send" onclick="enviarPresupuestoMail()" disabled style="background:#5ac8fa;border:none;color:#000;padding:13px 26px;border-radius:13px;font-size:14px;font-weight:800;cursor:pointer;opacity:0.5;transition:.2s;">Enviar →</button>
+    </div>
+  </div>
 </div>
 
 <!-- Modal: Copiar ítems a otro presupuesto -->
