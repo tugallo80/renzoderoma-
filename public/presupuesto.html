@@ -6333,9 +6333,24 @@ async function ejecutarCopia(targetPid, targetPname, el) {
 // ── Enviar presupuesto por mail ──────────────────────────────
 let _mailPresPDF = null;
 
+function _mailHistLoad() {
+    try { return JSON.parse(localStorage.getItem('rubik_mail_history') || '[]'); } catch { return []; }
+}
+function _mailHistSave(emails) {
+    const hist = _mailHistLoad();
+    emails.forEach(e => { e = e.trim().toLowerCase(); if (e && /\S+@\S+/.test(e) && !hist.includes(e)) hist.unshift(e); });
+    localStorage.setItem('rubik_mail_history', JSON.stringify(hist.slice(0, 60)));
+}
+function _mailHistRefreshDatalist() {
+    const dl = document.getElementById('mail-hist-list');
+    if (!dl) return;
+    dl.innerHTML = _mailHistLoad().map(e => `<option value="${e}">`).join('');
+}
+
 async function abrirMailPresupuesto() {
     const overlay = document.getElementById('mail-pres-overlay');
     overlay.style.display = 'flex';
+    _mailHistRefreshDatalist();
 
     const cli = (document.getElementById('h-cli')?.innerText || 'Cliente').trim();
     const pro = (document.getElementById('h-pro')?.innerText || 'Proyecto').trim();
@@ -6432,6 +6447,7 @@ function cerrarMailPres() {
     document.getElementById('mail-pres-overlay').style.display = 'none';
     document.getElementById('mail-pres-status').textContent = '';
     document.getElementById('mail-pres-to').value = '';
+    document.getElementById('mail-pres-cc').value = '';
     _mailPresPDF = null;
 }
 
@@ -6451,7 +6467,8 @@ async function enviarPresupuestoMail() {
     if (!user) { status.textContent = '❌ No autenticado'; btn.disabled = false; btn.style.opacity='1'; return; }
     const token = await user.getIdToken();
 
-    const payload = { to, subject, text };
+    const cc = document.getElementById('mail-pres-cc').value.trim();
+    const payload = { to, subject, text, ...(cc ? { cc } : {}) };
     if (_mailPresPDF) {
         payload.attachments = [{
             filename: _mailPresPDF.filename,
@@ -6468,6 +6485,9 @@ async function enviarPresupuestoMail() {
         });
         const result = await resp.json();
         if (!resp.ok) throw new Error(result.error || 'Error al enviar');
+        // Guardar emails en historial para autocompletado
+        const ccEmails = cc ? cc.split(',').map(e => e.trim()).filter(Boolean) : [];
+        _mailHistSave([to, ...ccEmails]);
         status.style.color = '#30d158';
         status.textContent = '✅ Correo enviado correctamente';
         setTimeout(() => cerrarMailPres(), 2200);
@@ -6605,9 +6625,16 @@ async function _pdfParaMail() {
       <button onclick="cerrarMailPres()" style="background:none;border:none;color:#636366;font-size:22px;cursor:pointer;padding:0;line-height:1;">✕</button>
     </div>
 
+    <datalist id="mail-hist-list"></datalist>
+
     <div style="margin-bottom:14px;">
       <div style="font-size:11px;font-weight:700;color:#636366;letter-spacing:.8px;text-transform:uppercase;margin-bottom:7px;">PARA</div>
-      <input id="mail-pres-to" type="email" placeholder="cliente@empresa.com" style="width:100%;background:#2c2c2e;border:1px solid #3a3a3c;color:#fff;padding:13px 15px;border-radius:13px;font-size:14px;outline:none;box-sizing:border-box;">
+      <input id="mail-pres-to" type="email" list="mail-hist-list" placeholder="cliente@empresa.com" style="width:100%;background:#2c2c2e;border:1px solid #3a3a3c;color:#fff;padding:13px 15px;border-radius:13px;font-size:14px;outline:none;box-sizing:border-box;">
+    </div>
+
+    <div style="margin-bottom:14px;">
+      <div style="font-size:11px;font-weight:700;color:#636366;letter-spacing:.8px;text-transform:uppercase;margin-bottom:7px;">CON COPIA <span style="font-weight:400;text-transform:none;letter-spacing:0;font-size:10px;color:#48484a;">(separar con comas)</span></div>
+      <input id="mail-pres-cc" type="text" list="mail-hist-list" placeholder="opcional: cc1@empresa.com, cc2@empresa.com" style="width:100%;background:#2c2c2e;border:1px solid #3a3a3c;color:#fff;padding:13px 15px;border-radius:13px;font-size:14px;outline:none;box-sizing:border-box;">
     </div>
 
     <div style="margin-bottom:14px;">
