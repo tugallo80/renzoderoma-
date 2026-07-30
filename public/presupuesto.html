@@ -359,7 +359,7 @@
             
             <div style="background:var(--bg); padding:10px; border-radius:8px; display:grid; grid-template-columns:1fr 1fr 1fr 1fr; gap:10px;">
                 <div><span class="lbl">MO Base</span><input id="apu-mo-base" class="mod-inp" readonly style="color:var(--gray)"></div>
-                <div><span class="lbl" title="Cargas sociales sobre MO — Bolivia: AFP+Salud+Pro-Viv ≈ 55%">CS MO % <span style="font-size:9px;color:var(--blue)">ℹ</span></span><input type="number" step="any" id="apu-cs" class="mod-inp" value="55" onchange="recalcApu()" style="color:var(--orange)"></div>
+                <div><span class="lbl" title="Cargas sociales sobre MO. Tarifas por m2 (Rubik): 0%. Personal en planilla formal: 55%">CS MO % <span style="font-size:9px;color:var(--blue)">ℹ</span></span><input type="number" step="any" id="apu-cs" class="mod-inp" value="0" onchange="recalcApu()" style="color:var(--orange)"></div>
                 <div><span class="lbl">Costo Directo</span><input id="apu-dir" class="mod-inp" readonly></div>
                 <div><span class="lbl">Indirectos %</span><input type="number" step="any" id="apu-ind" class="mod-inp" value="10" onchange="recalcApu()"></div>
                 <div><span class="lbl">Utilidad %</span><input type="number" step="any" id="apu-util" class="mod-inp" value="15" onchange="recalcApu()"></div>
@@ -1048,7 +1048,7 @@
         renderApuList('sub'); renderApuList('mat'); renderApuList('mo'); renderApuList('eq');
         document.getElementById('apu-ind').value = data[i].apu.ind != null ? stripZeros(data[i].apu.ind) : 10;
         document.getElementById('apu-util').value = data[i].apu.util != null ? stripZeros(data[i].apu.util) : 15;
-        document.getElementById('apu-cs').value = data[i].apu.cs != null ? stripZeros(data[i].apu.cs) : 55;
+        document.getElementById('apu-cs').value = data[i].apu.cs != null ? stripZeros(data[i].apu.cs) : 0;
         recalcApu(); document.getElementById('mod-apu').style.display = 'flex';
     }
 
@@ -2880,7 +2880,7 @@ Devolvé exactamente este formato (sin texto adicional):
         const _moEntries  = Object.values(dbMo).slice(0, 100);
         console.log('[Budget] DB: mats=' + Object.values(dbMats).length + ' mo=' + Object.values(dbMo).length + ' (enviando ' + _matEntries.length + '/' + _moEntries.length + ')');
         let catalogoMat = _matEntries.map(m => `${m.n || m.desc}: ${m.p || m.pu} Bs/${m.u || m.und}`).join(", ");
-        let catalogoMo  = _moEntries.map(m => `${m.n || m.desc}: ${m.p || m.pu} Bs`).join(", ");
+        let catalogoMo  = _moEntries.map(m => `${m.n || m.desc}: ${m.p || m.pu} Bs/${m.u || m.und || 'und'}`).join(", ");
 
         let textPrompt = `ERES EL ESTIMADOR DE COSTOS APU DE RUBIK BOLIVIA — empresa de señalética, fabricación de stands, letreros luminosos, BTL y publicidad física en Santa Cruz, Bolivia.
 
@@ -2911,9 +2911,15 @@ PASO 2 — GEOMETRÍA (calcular cantidades reales):
 PASO 3 — BUSCAR EN BASE DE DATOS:
   Para cada material/MO calculado, buscar PRIMERO en el catálogo Rubik:
   Materiales: ${catalogoMat || '(vacío — usá precios de mercado Santa Cruz)'}
-  Mano de obra: ${catalogoMo || '(vacío — usá tarifas de mercado Santa Cruz)'}
-  → Si aparece en catálogo: usar ESE nombre y precio exacto.
-  → Si NO aparece: crear nombre técnico corto + precio realista mercado boliviano.
+  Mano de obra: ${catalogoMo || '(vacío — aplicar TARIFAS FIJAS RUBIK abajo)'}
+  → Si aparece en catálogo: usar ESE nombre y precio exacto, respetando la UNIDAD indicada.
+  → Si NO aparece en catálogo MO: aplicar TARIFAS FIJAS RUBIK BOLIVIA (siempre por m2, NUNCA por jornal ni hora):
+      • Soldadura estructural (SOLDADOR):   10 Bs/m2  — q = área total del ítem en m2
+      • Tensado / tejado de lona (TENSADOR): 10 Bs/m2 — q = área total del ítem en m2
+      • Pintura + anticorrosivo (PINTOR):    15 Bs/m2 — q = área total del ítem en m2
+      • Armado / instalación (INSTALADOR):   10 Bs/m2 — q = área total del ítem en m2
+      CRÍTICO: cantidad SIEMPRE = m2 calculados en PASO 2. Precio = tarifa fija. NUNCA usar 2 soldadores × 240 Bs.
+  → Solo si el trabajo NO tiene área (ej: logística, flete, impresión digital unitaria): precio mercado boliviano.
 
 PASO 4 — ARMAR EL APU:
   Listar cada material por separado con su cantidad calculada en PASO 2 y precio de PASO 3.
@@ -5212,10 +5218,10 @@ INSTRUCCIONES:
                 return s;
             }).join(' | ');
 
-            const sysPrompt = `Eres un cotizador de proyectos de señalética, mobiliario y publicidad en Bolivia.
+            const sysPrompt = `Eres el cotizador APU de Rubik Bolivia — señalética, stands, BTL y publicidad física en Santa Cruz.
 Devuelve EXACTAMENTE este JSON (sin texto extra, sin markdown):
-[{"desc":"NOMBRE TÉCNICO DEL ÍTEM","cant":1,"und":"glb","feat":"- Característica 1\\n- Característica 2\\n- Material: ...\\n- Dimensiones: ...","apu":{"mat":[{"d":"MATERIAL","u":"und","q":1,"p":0}],"mo":[{"d":"MANO DE OBRA","u":"hr","q":4,"p":25}],"eq":[],"sub":[]},"util":40,"ind":15}]
-Cada precio "p" en bolivianos. util = % utilidad, ind = % indirectos. Incluye todos los materiales y mano de obra necesaria. Si hay múltiples elementos cotizá el conjunto como un ítem.`;
+[{"desc":"NOMBRE TÉCNICO DEL ÍTEM","cant":1,"und":"glb","feat":"- Característica 1\\n- Característica 2\\n- Material: ...\\n- Dimensiones: ...","apu":{"mat":[{"d":"MATERIAL","u":"m2","q":1,"p":0}],"mo":[{"d":"SOLDADOR","u":"m2","q":12.5,"p":10}],"eq":[],"sub":[]},"util":50,"ind":10}]
+Tarifas MO Rubik (por m2, NUNCA por jornal): Soldadura=10 Bs/m2, Tensado=10 Bs/m2, Pintura=15 Bs/m2, Instalador=10 Bs/m2. util=50, ind=10 siempre.`;
 
             const userPrompt = `Cotizar el siguiente ítem en Bolivia:
 Descripción general: ${desc}
