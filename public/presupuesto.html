@@ -1848,6 +1848,42 @@
         }
     }
 
+    // Agrega logo (esquina superior derecha) + pie de página membrete a TODAS las páginas
+    function _pdfAddMembrete(doc, logoB64) {
+        const pageW  = doc.internal.pageSize.getWidth();
+        const pageH  = doc.internal.pageSize.getHeight();
+        const n      = doc.internal.getNumberOfPages();
+        const isLand = pageW > pageH;
+        const lw = isLand ? 30 : 26;  // ancho logo
+        const lh = isLand ? 14 : 12;  // alto logo
+        const footY  = pageH - 8;
+
+        for (let i = 1; i <= n; i++) {
+            doc.setPage(i);
+            // ── Logo esquina superior derecha ──
+            if (logoB64) {
+                try { doc.addImage(logoB64, 'JPEG', pageW - lw - 10, 5, lw, lh); } catch(e) {}
+            }
+            // ── Línea separadora roja ──
+            doc.setDrawColor(220, 31, 31);
+            doc.setLineWidth(0.45);
+            doc.line(14, footY - 6, pageW - 14, footY - 6);
+            // ── Texto del pie ──
+            doc.setFontSize(7);
+            doc.setFont(undefined, 'normal');
+            doc.setTextColor(100, 100, 100);
+            doc.text(
+                'Renzo  |  Rubik Corp.   ·   Rubik Bolivia — Ingenieria Creativa   ·   +591 76868833   ·   rubikbolivia.com',
+                14, footY
+            );
+            doc.text(`${i} / ${n}`, pageW - 14, footY, { align: 'right' });
+            // reset
+            doc.setTextColor(0, 0, 0);
+            doc.setLineWidth(0.2);
+            doc.setDrawColor(0, 0, 0);
+        }
+    }
+
     // Versión async para landscape PDF — usa fetch+blob, evita restricciones CORS del canvas
     async function getLogoBase64Async() {
         try {
@@ -1878,8 +1914,7 @@
             const { jsPDF } = window.jspdf; 
             const doc = new jsPDF();
             
-            const logoB64 = getLogoBase64(); 
-            if(logoB64) { doc.addImage(logoB64, 'JPEG', 165, 10, 30, 15); }
+            const logoB64 = await getLogoBase64Async();
             
             doc.setFontSize(16); doc.setFont(undefined, 'bold'); doc.text("PRESUPUESTO MAESTRO", 14, 20); 
             doc.setFontSize(10); doc.setFont(undefined, 'normal');
@@ -1913,7 +1948,7 @@
 
             if (typeof doc.autoTable !== 'function') throw new Error("La librería de Tablas no cargó.");
 
-            doc.autoTable({ startY: 45, head: [['Descripción', 'Und', 'Cant', 'P.U. (Bs)', 'Total (Bs)']], body: rows, styles: { cellPadding: 3 } });
+            doc.autoTable({ startY: 45, head: [['Descripción', 'Und', 'Cant', 'P.U. (Bs)', 'Total (Bs)']], body: rows, styles: { cellPadding: 3 }, margin: { top: 20 } });
             const descPct = parseFloat(document.getElementById('t-desc-pct').value) || 0;
             const descVal = Math.round(subtotal * descPct / 100 * 100) / 100;
             const base = subtotal - descVal;
@@ -1994,13 +2029,14 @@
             let safeCliName = cNameStr.replace(/[^a-zA-Z0-9_\- ]/g, "").trim().replace(/ /g, '_');
             let finalFileName = `${mm}${dd}_${safeProName}_${safeCliName}.pdf`;
 
+            _pdfAddMembrete(doc, logoB64);
             doc.save(finalFileName);
-            
-        } catch (error) { 
-            console.error(error); 
-            alert("Error Técnico: " + error.message); 
-        } finally { 
-            document.getElementById('global-loader').style.display='none'; 
+
+        } catch (error) {
+            console.error(error);
+            alert("Error Técnico: " + error.message);
+        } finally {
+            document.getElementById('global-loader').style.display='none';
         }
     }
 
@@ -2048,10 +2084,6 @@
 
             // ── Header ───────────────────────────────────────────────────────
             const logoB64 = await getLogoBase64Async();
-            if (logoB64) {
-                // Top-right corner landscape A4: x=247, y=8, w=36, h=18
-                doc.addImage(logoB64, 'JPEG', 247, 8, 36, 18);
-            }
 
             // Thin accent line under header area
             doc.setDrawColor(30, 58, 95); doc.setLineWidth(0.5);
@@ -2145,7 +2177,7 @@
             // Anchuras: 14 + 85 + 15 + 18 + 28 + 30 + 25 + 22 + 31 + 14 = 282 ✓ (269mm usable)
             doc.autoTable({
                 startY: 45,
-                margin: { left: 14, right: 14 },
+                margin: { top: 20, left: 14, right: 14 },
                 head: [[
                     { content: 'Descripción' },
                     { content: 'Und', styles: { halign: 'center' } },
@@ -2261,6 +2293,7 @@
             const dd = String(dDate.getDate()).padStart(2, '0');
             let safeProName = pNameStr.replace(/[^a-zA-Z0-9_\- ]/g, "").trim().replace(/ /g, '_');
             let safeCliName = cNameStr.replace(/[^a-zA-Z0-9_\- ]/g, "").trim().replace(/ /g, '_');
+            _pdfAddMembrete(doc, logoB64);
             doc.save(`${mm}${dd}_${safeProName}_${safeCliName}_CON_IMP.pdf`);
 
         } catch (error) {
@@ -6507,8 +6540,7 @@ async function _pdfParaMail() {
     const pro = (document.getElementById('h-pro')?.innerText || 'PROYECTO').toUpperCase().trim();
     const fecha = document.getElementById('h-date')?.value || new Date().toLocaleDateString();
 
-    const logoB64 = typeof getLogoBase64 === 'function' ? getLogoBase64() : null;
-    if (logoB64) { try { doc.addImage(logoB64, 'JPEG', 165, 8, 30, 15); } catch(_) {} }
+    const logoB64 = await getLogoBase64Async();
 
     doc.setFontSize(16); doc.setFont(undefined, 'bold');
     doc.text('PRESUPUESTO', 14, 20);
@@ -6539,7 +6571,8 @@ async function _pdfParaMail() {
             body: rows,
             styles: { cellPadding:3, fontSize:9, lineColor:[60,60,60], lineWidth:0.1 },
             headStyles: { fillColor:[220,31,31], textColor:[255,255,255], fontStyle:'bold' },
-            columnStyles: { 0:{cellWidth:88}, 1:{cellWidth:18}, 2:{cellWidth:16,halign:'center'}, 3:{cellWidth:32,halign:'right'}, 4:{cellWidth:32,halign:'right'} }
+            columnStyles: { 0:{cellWidth:88}, 1:{cellWidth:18}, 2:{cellWidth:16,halign:'center'}, 3:{cellWidth:32,halign:'right'}, 4:{cellWidth:32,halign:'right'} },
+            margin: { top: 20 }
         });
     }
 
@@ -6559,9 +6592,7 @@ async function _pdfParaMail() {
     doc.setFontSize(13); doc.setFont(undefined, 'bold');
     doc.text(`TOTAL: ${fMoney(finalTotal)} Bs`, 130, ly + 2);
 
-    doc.setFontSize(8); doc.setFont(undefined, 'normal'); doc.setTextColor(140);
-    doc.text('Rubik Bolivia — Ingeniería Creativa  ·  rubikbolivia.com  ·  +591 76868833', 14, 286);
-    doc.setTextColor(0);
+    _pdfAddMembrete(doc, logoB64);
 
     const filename = 'Presupuesto_' + pro.replace(/[^A-Z0-9]/g, '_').substring(0, 28) + '.pdf';
     return { base64: doc.output('datauristring').split(',')[1], filename };
