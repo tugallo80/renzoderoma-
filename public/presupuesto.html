@@ -238,6 +238,21 @@
             <div class="row"><span>IVA 13%:</span> <span id="t-iva">0,00</span></div>
             <div class="row"><span>IT 3%:</span> <span id="t-it">0,00</span></div>
             <div class="big-total" id="t-total">0,00 Bs</div>
+            <div style="border-top:1px solid #444;margin-top:7px;padding-top:7px;">
+                <div class="row">
+                    <span style="color:#ff9f0a;font-size:10px;font-weight:800;">ANTICIPO:</span>
+                    <span style="display:flex;align-items:center;gap:3px;">
+                        <input id="t-anticipo" type="number" min="0" step="0.01" placeholder="0.00"
+                            style="background:transparent;border:none;border-bottom:1px dashed #ff9f0a;color:#ff9f0a;font-weight:800;font-size:12px;width:70px;text-align:right;outline:none;font-family:inherit;"
+                            oninput="calcGlobal();saveDB()">
+                        <span style="color:#ff9f0a;font-size:10px;">Bs</span>
+                    </span>
+                </div>
+                <div id="t-saldo-row" class="row" style="display:none;margin-top:5px;">
+                    <span id="t-saldo-lbl" style="font-size:10px;font-weight:800;">SALDO:</span>
+                    <span id="t-saldo" style="font-weight:800;font-size:14px;">0,00 Bs</span>
+                </div>
+            </div>
         </div>
     </div>
     <input type="hidden" id="t-desc-val" value="0">
@@ -254,6 +269,7 @@
         <button class="btn btn-dark" onclick="saveDB(true)"><i class="ph-bold ph-floppy-disk"></i> Forzar Guardado</button>
         <button class="btn btn-sec" style="color:var(--orange); border-color:var(--orange);" onclick="syncDatabasePrices()"><i class="ph-bold ph-arrows-clockwise"></i> Actualizar Precios BD</button>
         <button class="btn btn-sec" onclick="abrirModalPDF()"><i class="ph-bold ph-file-pdf"></i> PDF</button>
+        <button class="btn btn-sec" style="color:#30d158;border-color:#30d158;" onclick="exportReciboSaldo()"><i class="ph-bold ph-receipt"></i> Recibo</button>
         <button class="btn btn-sec" style="color:#5ac8fa;border-color:#5ac8fa;" onclick="abrirMailPresupuesto()"><i class="ph-bold ph-envelope"></i> Enviar</button>
         <button class="btn btn-sec" onclick="exportExcel()"><i class="ph-bold ph-file-xls"></i> Excel</button>
         <button class="btn btn-sec" id="btn-copy-mode" style="color:var(--green);border-color:var(--green);" onclick="toggleCopyMode()"><i class="ph-bold ph-copy"></i> Copiar ítems</button>
@@ -326,6 +342,10 @@
                 <div id="pdf-opt-con" class="pdf-opt-card" onclick="selectPDFOpt('con')" style="border:2px solid var(--gray); border-radius:10px; padding:14px; cursor:pointer;">
                     <div style="font-weight:700; margin-bottom:4px;">Con impuestos por ítem</div>
                     <div style="font-size:12px; color:var(--gray);">Cada ítem muestra su precio con IVA/IT incluido.</div>
+                </div>
+                <div id="pdf-opt-recibo" class="pdf-opt-card" onclick="selectPDFOpt('recibo')" style="border:2px solid var(--gray); border-radius:10px; padding:14px; cursor:pointer;">
+                    <div style="font-weight:700; margin-bottom:4px; color:#30d158;">Nota de cobro / Recibo</div>
+                    <div style="font-size:12px; color:var(--gray);">Resumen para el cliente: ítems contratados, total, anticipo y saldo a pagar.</div>
                 </div>
             </div>
             <button class="btn btn-dark" onclick="generarPDFSeleccionado()" style="width:100%; justify-content:center; padding:13px;">
@@ -515,6 +535,7 @@
         document.getElementById('sw-imp').checked = d.impuestos || false;
         document.getElementById('t-desc-pct').value = d.descuento_pct || 0;
         document.getElementById('t-desc-val').value = d.descuento || 0;
+        if (d.anticipo != null) document.getElementById('t-anticipo').value = d.anticipo;
         render();
     }
 
@@ -1013,12 +1034,32 @@
         document.getElementById('t-it').innerText = fMoney(it); document.getElementById('t-total').innerText = fMoney(finalTotal) + " Bs";
 
         db.ref('proyectos/' + cid + '/' + pid + '/presupuesto_total').set(finalTotal);
+
+        const anticipo = parseFloat(document.getElementById('t-anticipo').value) || 0;
+        const saldoRow = document.getElementById('t-saldo-row');
+        const saldoEl  = document.getElementById('t-saldo');
+        const saldoLbl = document.getElementById('t-saldo-lbl');
+        if (saldoRow) {
+            saldoRow.style.display = anticipo > 0 ? 'flex' : 'none';
+            if (anticipo > 0 && saldoEl && saldoLbl) {
+                const saldo = finalTotal - anticipo;
+                if (saldo <= 0) {
+                    saldoLbl.style.color = '#30d158'; saldoEl.style.color = '#30d158';
+                    saldoLbl.innerText = '✓ CANCELADO:';
+                    saldoEl.innerText = saldo < 0 ? '+ ' + fMoney(-saldo) + ' Bs' : 'PAGADO';
+                } else {
+                    saldoLbl.style.color = '#ff453a'; saldoEl.style.color = '#ff453a';
+                    saldoLbl.innerText = 'SALDO:';
+                    saldoEl.innerText = fMoney(saldo) + ' Bs';
+                }
+            }
+        }
     }
 
     function saveDB(force = false) {
         clearTimeout(saveTimeout);
         let execSave = () => {
-            let payload = { items: data, fecha: document.getElementById('h-date').value, impuestos: document.getElementById('sw-imp').checked, descuento: parseFloat(document.getElementById('t-desc-val').value) || 0, descuento_pct: parseFloat(document.getElementById('t-desc-pct').value) || 0, cond: { pago: document.getElementById('c-pago').value, validez: document.getElementById('c-validez').value, montaje: document.getElementById('sw-mont').checked, desmontaje: document.getElementById('sw-desm').checked } };
+            let payload = { items: data, fecha: document.getElementById('h-date').value, impuestos: document.getElementById('sw-imp').checked, descuento: parseFloat(document.getElementById('t-desc-val').value) || 0, descuento_pct: parseFloat(document.getElementById('t-desc-pct').value) || 0, anticipo: parseFloat(document.getElementById('t-anticipo').value) || 0, cond: { pago: document.getElementById('c-pago').value, validez: document.getElementById('c-validez').value, montaje: document.getElementById('sw-mont').checked, desmontaje: document.getElementById('sw-desm').checked } };
             db.ref('proyectos/' + cid + '/' + pid + '/presupuesto').set(JSON.parse(JSON.stringify(payload)));
         };
         if(force) execSave(); else saveTimeout = setTimeout(execSave, 1000);
@@ -2040,6 +2081,136 @@
         }
     }
 
+    // ── Nota de cobro / Recibo con saldo ────────────────────────────────
+    async function exportReciboSaldo() {
+        try {
+            document.getElementById('loader-title').innerText = "Generando recibo...";
+            document.getElementById('global-loader').style.display = 'flex';
+
+            if (!window.jspdf || !window.jspdf.jsPDF) throw new Error("La librería PDF no cargó.");
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF();
+            const logoB64 = await getLogoBase64Async();
+
+            const pNameStr = (document.getElementById('h-pro').innerText || 'PROYECTO').toUpperCase().replace(/\n/g, ' ');
+            const cNameStr = (document.getElementById('h-cli').innerText || 'CLIENTE').toUpperCase().replace(/\n/g, ' ');
+            const dateStrVal = document.getElementById('h-date').value || new Date().toLocaleDateString();
+
+            // ── Encabezado ───────────────────────────────────────────────
+            doc.setFontSize(18); doc.setFont(undefined, 'bold'); doc.setTextColor(0, 0, 0);
+            doc.text("NOTA DE COBRO", 14, 20);
+            doc.setFontSize(9); doc.setFont(undefined, 'normal'); doc.setTextColor(80);
+            doc.text(`Cliente: ${cNameStr}`, 14, 29);
+            doc.text(`Proyecto: ${pNameStr}`, 14, 34);
+            doc.text(`Fecha: ${dateStrVal}`, 14, 39);
+            doc.setTextColor(0);
+
+            // ── Tabla de ítems (sin características, sin P.U.) ───────────
+            const rows = [];
+            let subtotal = 0;
+            const conImp = document.getElementById('sw-imp').checked;
+
+            data.forEach(item => {
+                if (item.type === 'chapter') {
+                    rows.push([{ content: (item.name || 'CAPÍTULO').toUpperCase(), colSpan: 4, styles: { fillColor: [220, 220, 220], fontStyle: 'bold', fontSize: 9 } }]);
+                } else {
+                    if (item.activo === false) return;
+                    const cant = stripZeros(item.cant);
+                    const pu   = stripZeros(item.pu);
+                    const tot  = cant * pu;
+                    subtotal  += tot;
+                    rows.push([item.desc || '-', item.und || 'glb', cant, fMoney(tot)]);
+                }
+            });
+
+            if (typeof doc.autoTable !== 'function') throw new Error("La librería de Tablas no cargó.");
+
+            doc.autoTable({
+                startY: 45,
+                head: [['Descripción', 'Und', 'Cant', 'Total (Bs)']],
+                body: rows,
+                styles: { cellPadding: 3, fontSize: 9 },
+                headStyles: { fillColor: [28, 28, 30], textColor: 255, fontStyle: 'bold' },
+                columnStyles: { 0: { cellWidth: 100 }, 1: { cellWidth: 18, halign: 'center' }, 2: { cellWidth: 18, halign: 'center' }, 3: { cellWidth: 40, halign: 'right' } },
+                margin: { top: 20, left: 14, right: 14 }
+            });
+
+            // ── Bloque de totales ─────────────────────────────────────────
+            const pct     = parseFloat(document.getElementById('t-desc-pct').value) || 0;
+            const descVal = Math.round(subtotal * pct / 100 * 100) / 100;
+            const base    = subtotal - descVal;
+            const iva     = conImp ? base * 0.13 : 0;
+            const it      = conImp ? base * 0.03 : 0;
+            const totalFinal = montoCierre > 0 ? montoCierre : (base + iva + it);
+            const anticipo   = parseFloat(document.getElementById('t-anticipo').value) || 0;
+            const saldo      = totalFinal - anticipo;
+
+            let finalY = doc.lastAutoTable.finalY + 8;
+            if (finalY + 50 > 270) { doc.addPage(); finalY = 20; }
+
+            doc.setFontSize(9); doc.setFont(undefined, 'normal'); doc.setTextColor(0);
+            doc.text('Subtotal:', 140, finalY);
+            doc.text(fMoney(subtotal) + ' Bs', 195, finalY, { align: 'right' }); finalY += 5;
+            if (descVal > 0) {
+                doc.text((pct > 0 ? pct + '% Descuento:' : 'Descuento:'), 140, finalY);
+                doc.text('- ' + fMoney(descVal) + ' Bs', 195, finalY, { align: 'right' }); finalY += 5;
+            }
+            if (conImp) {
+                doc.text('IVA (13%):', 140, finalY); doc.text(fMoney(iva) + ' Bs', 195, finalY, { align: 'right' }); finalY += 5;
+                doc.text('IT (3%):', 140, finalY);  doc.text(fMoney(it)  + ' Bs', 195, finalY, { align: 'right' }); finalY += 5;
+            }
+
+            // Total contratado
+            doc.setFillColor(28, 28, 30);
+            doc.rect(130, finalY - 1, 65, 10, 'F');
+            doc.setFontSize(10); doc.setFont(undefined, 'bold'); doc.setTextColor(255, 255, 255);
+            doc.text(montoCierre > 0 ? 'PRECIO NEGOCIADO:' : 'TOTAL CONTRATADO:', 132, finalY + 6);
+            doc.text(fMoney(totalFinal) + ' Bs', 193, finalY + 6, { align: 'right' });
+            doc.setTextColor(0); finalY += 15;
+
+            // Anticipo
+            if (anticipo > 0) {
+                doc.setFontSize(9); doc.setFont(undefined, 'normal');
+                doc.text('Anticipo recibido:', 140, finalY);
+                doc.text('- ' + fMoney(anticipo) + ' Bs', 195, finalY, { align: 'right' }); finalY += 8;
+
+                // Saldo a pagar
+                if (finalY + 12 > 270) { doc.addPage(); finalY = 20; }
+                const pagoColor = saldo <= 0 ? [34, 139, 34] : [220, 31, 31];
+                doc.setFillColor(...pagoColor);
+                doc.rect(130, finalY - 1, 65, 11, 'F');
+                doc.setFontSize(11); doc.setFont(undefined, 'bold'); doc.setTextColor(255, 255, 255);
+                doc.text(saldo <= 0 ? '✓ CANCELADO' : 'SALDO A PAGAR:', 132, finalY + 7);
+                doc.text(fMoney(Math.abs(saldo)) + ' Bs', 193, finalY + 7, { align: 'right' });
+                doc.setTextColor(0); finalY += 18;
+            }
+
+            // ── Líneas de firma ───────────────────────────────────────────
+            if (finalY + 30 > 275) { doc.addPage(); finalY = 20; }
+            finalY += 12;
+            doc.setFontSize(8); doc.setFont(undefined, 'normal'); doc.setTextColor(100);
+            doc.line(14, finalY, 85, finalY);
+            doc.text('Firma y sello cliente', 14, finalY + 4);
+            doc.line(115, finalY, 195, finalY);
+            doc.text('Firma Rubik Bolivia', 115, finalY + 4);
+            doc.setTextColor(0);
+
+            _pdfAddMembrete(doc, logoB64);
+
+            const dDate = new Date();
+            const mm = String(dDate.getMonth() + 1).padStart(2, '0');
+            const dd = String(dDate.getDate()).padStart(2, '0');
+            const safeCliName = cNameStr.replace(/[^a-zA-Z0-9_\- ]/g, '').trim().replace(/ /g, '_');
+            doc.save(`${mm}${dd}_RECIBO_${safeCliName}.pdf`);
+
+        } catch (error) {
+            console.error(error);
+            alert("Error Técnico: " + error.message);
+        } finally {
+            document.getElementById('global-loader').style.display = 'none';
+        }
+    }
+
     // ── Modal PDF con opciones de impuestos ──────────────────────────────
     function abrirModalPDF() {
         document.getElementById('mod-pdf-opt').style.display = 'flex';
@@ -2067,8 +2238,10 @@
         cerrarModalPDF();
         if (opt === 'sin') {
             exportPDF();
-        } else {
+        } else if (opt === 'con') {
             exportPDFConImpuestosPorItem();
+        } else {
+            exportReciboSaldo();
         }
     }
 
