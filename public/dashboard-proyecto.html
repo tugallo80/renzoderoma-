@@ -539,8 +539,7 @@
     // ── Helpers PDF ──────────────────────────────────────────────────────
     async function _logoB64Dash() {
         try {
-            const img = document.getElementById('logo-hidden-dash');
-            const res = await fetch(img ? img.src : '/LOGO-IA-RUBIK.jpg');
+            const res = await fetch('/rubik-icon.png'); // PNG sin fondo (RGBA)
             const blob = await res.blob();
             return await new Promise(r => { const fr = new FileReader(); fr.onload = () => r(fr.result); fr.readAsDataURL(blob); });
         } catch(e) { return null; }
@@ -550,17 +549,16 @@
         const pageW = doc.internal.pageSize.getWidth();
         const pageH = doc.internal.pageSize.getHeight();
         const n = doc.internal.getNumberOfPages();
-        const lw = 26, lh = 12;
-        const footY = pageH - 8;
+        const footY = pageH - 7;
         for (let i = 1; i <= n; i++) {
             doc.setPage(i);
-            if (logoB64) { try { doc.addImage(logoB64, 'JPEG', pageW - lw - 10, 5, lw, lh); } catch(e) {} }
-            doc.setDrawColor(220, 31, 31); doc.setLineWidth(0.45);
-            doc.line(14, footY - 6, pageW - 14, footY - 6);
-            doc.setFontSize(7); doc.setFont(undefined, 'normal'); doc.setTextColor(100, 100, 100);
+            if (logoB64) { try { doc.addImage(logoB64, 'PNG', pageW - 32, 6, 22, 22); } catch(e) {} }
+            doc.setDrawColor(210, 210, 215); doc.setLineWidth(0.3);
+            doc.line(14, footY - 4, pageW - 14, footY - 4);
+            doc.setFontSize(6.5); doc.setFont(undefined, 'normal'); doc.setTextColor(130, 130, 135);
             doc.text('Renzo  |  Rubik Corp.   ·   Rubik Bolivia — Ingenieria Creativa   ·   +591 76868833   ·   rubikbolivia.com', 14, footY);
             doc.text(`${i} / ${n}`, pageW - 14, footY, { align: 'right' });
-            doc.setTextColor(0, 0, 0); doc.setLineWidth(0.2); doc.setDrawColor(0, 0, 0);
+            doc.setTextColor(0); doc.setLineWidth(0.2); doc.setDrawColor(0);
         }
     }
 
@@ -577,37 +575,62 @@
         } catch(e) { return null; }
     }
 
-    // ── Construir el doc PDF (reutilizable para exportar y para mail) ────
+    // ── Construir el doc PDF — diseño Apple ─────────────────────────────
     async function _buildReciboDoc() {
         const { jsPDF } = window.jspdf;
         const doc = new jsPDF();
+        if (typeof doc.autoTable !== 'function') throw new Error("jspdf-autotable no cargó.");
         const logoB64 = await _logoB64Dash();
 
-        const [pptoSnap, pagosSnap, cierreSnap] = await Promise.all([
+        const [pptoSnap, pagosSnap, cierreSnap, cliSnap] = await Promise.all([
             db.ref(`proyectos/${cid}/${pid}/presupuesto`).once('value'),
             db.ref(`proyectos/${cid}/${pid}/pagos`).once('value'),
-            db.ref(`proyectos/${cid}/${pid}/monto_cierre`).once('value')
+            db.ref(`proyectos/${cid}/${pid}/monto_cierre`).once('value'),
+            db.ref(`clientes/${cid}/nombre`).once('value').catch(() => ({ val: () => null }))
         ]);
-        const ppto = pptoSnap.val() || {};
-        const pagosObj = pagosSnap.val() ? Object.values(pagosSnap.val()) : [];
+        const ppto      = pptoSnap.val() || {};
+        const pagosObj  = pagosSnap.val() ? Object.values(pagosSnap.val()) : [];
         const montoCierreDB = parseFloat(cierreSnap.val()) || 0;
 
-        const clienteNom = (pname || localStorage.getItem('rubik_current_pname') || 'CLIENTE').toUpperCase();
-        const proyectoNom = (localStorage.getItem('rubik_current_pname') || 'PROYECTO').toUpperCase();
-        const fechaHoy = new Date().toLocaleDateString('es-BO', { day:'2-digit', month:'2-digit', year:'numeric' });
+        const clienteNom  = ((cliSnap.val && cliSnap.val()) || pname || 'CLIENTE').toUpperCase();
+        const proyectoNom = (pname || 'PROYECTO').toUpperCase();
+        const fechaHoy    = new Date().toLocaleDateString('es-BO', { day:'2-digit', month:'2-digit', year:'numeric' });
 
-        doc.setFontSize(18); doc.setFont(undefined, 'bold'); doc.setTextColor(0);
-        doc.text("NOTA DE COBRO", 14, 20);
-        doc.setFontSize(9); doc.setFont(undefined, 'normal'); doc.setTextColor(80);
-        doc.text(`Cliente: ${clienteNom}`, 14, 29);
-        doc.text(`Proyecto: ${proyectoNom}`, 14, 34);
-        doc.text(`Fecha: ${fechaHoy}`, 14, 39);
-        doc.setTextColor(0);
+        // Paleta Apple
+        const C = {
+            dark:   [29, 29, 31],
+            blue:   [0, 113, 227],
+            green:  [48, 209, 88],
+            orange: [255, 159, 10],
+            gray:   [110, 110, 115],
+            lgray:  [174, 174, 178],
+            light:  [245, 245, 247],
+            border: [210, 210, 215],
+            white:  [255, 255, 255]
+        };
+        const PW = doc.internal.pageSize.getWidth();
+        const ML = 14, MR = 14;
 
-        // Tabla de ítems (sin características, sin P.U.)
+        // Logo (PNG sin fondo, esquina superior derecha)
+        if (logoB64) { try { doc.addImage(logoB64, 'PNG', PW - 32, 7, 20, 20); } catch(e) {} }
+
+        // ── Encabezado ───────────────────────────────────────────────────
+        doc.setFontSize(22); doc.setFont(undefined, 'bold'); doc.setTextColor(...C.dark);
+        doc.text('CONSOLIDADO', ML, 21);
+        doc.setDrawColor(...C.blue); doc.setLineWidth(1);
+        doc.line(ML, 25, PW - MR, 25);
+        doc.setLineWidth(0.2); doc.setDrawColor(...C.border);
+
+        doc.setFontSize(8.5); doc.setFont(undefined, 'normal'); doc.setTextColor(...C.gray);
+        doc.text(`Cliente: ${clienteNom}`, ML, 31);
+        doc.text(`Proyecto: ${proyectoNom}`, ML, 36.5);
+        doc.text(`Fecha: ${fechaHoy}`, ML, 42);
+        doc.setTextColor(...C.dark);
+
+        // ── Tabla de ítems ───────────────────────────────────────────────
         const rows = [];
         let subtotalItems = 0;
-        const hasImp = ppto.impuestos || false;
+        const hasImp  = ppto.impuestos || false;
         const descPct = parseFloat(ppto.descuento_pct) || 0;
         const descFijo = parseFloat(ppto.descuento) || 0;
 
@@ -615,117 +638,169 @@
             Object.values(ppto.items).forEach(item => {
                 if (!item) return;
                 if (item.type === 'chapter') {
-                    rows.push([{ content: (item.name || 'CAPÍTULO').toUpperCase(), colSpan: 4, styles: { fillColor: [220,220,220], fontStyle:'bold', fontSize:9 } }]);
+                    rows.push([{ content: (item.name || 'CAPÍTULO').toUpperCase(), colSpan: 4,
+                        styles: { fillColor: C.light, textColor: C.gray, fontStyle: 'bold', fontSize: 8 } }]);
                 } else {
                     if (item.activo === false) return;
                     const cant = parseFloat(item.cant || 0);
-                    const pu = parseFloat(item.pu || 0);
-                    const tot = cant * pu;
+                    const pu   = parseFloat(item.pu   || 0);
+                    const tot  = cant * pu;
                     subtotalItems += tot;
                     rows.push([item.desc || '-', item.und || 'glb', cant, fMoney(tot)]);
                 }
             });
         }
 
-        if (typeof doc.autoTable !== 'function') throw new Error("jspdf-autotable no cargó.");
         doc.autoTable({
-            startY: 45,
+            startY: 47,
             head: [['Descripción', 'Und', 'Cant', 'Total (Bs)']],
             body: rows,
-            styles: { cellPadding: 3, fontSize: 9 },
-            headStyles: { fillColor: [28,28,30], textColor: 255, fontStyle: 'bold' },
-            columnStyles: { 0:{cellWidth:100}, 1:{cellWidth:18,halign:'center'}, 2:{cellWidth:18,halign:'center'}, 3:{cellWidth:40,halign:'right'} },
-            margin: { top:20, left:14, right:14 }
+            styles: { cellPadding: 3.5, fontSize: 9, textColor: C.dark, lineColor: C.border, lineWidth: 0.2 },
+            headStyles: { fillColor: C.dark, textColor: C.white, fontStyle: 'bold', fontSize: 8.5 },
+            alternateRowStyles: { fillColor: C.light },
+            columnStyles: {
+                0: { cellWidth: 100 },
+                1: { cellWidth: 18, halign: 'center' },
+                2: { cellWidth: 18, halign: 'center' },
+                3: { cellWidth: 40, halign: 'right', fontStyle: 'bold' }
+            },
+            margin: { top: 25, left: ML, right: MR },
+            tableLineColor: C.border,
+            tableLineWidth: 0.2
         });
 
-        // Bloque de totales
-        const descVal = descPct > 0 ? Math.round(subtotalItems * descPct / 100 * 100) / 100 : descFijo;
-        const base = subtotalItems - descVal;
-        const iva = hasImp ? base * 0.13 : 0;
-        const it = hasImp ? base * 0.03 : 0;
+        // ── Caja de totales (redondeada, alineada a la derecha) ───────────
+        const descVal  = descPct > 0 ? Math.round(subtotalItems * descPct / 100 * 100) / 100 : descFijo;
+        const base     = subtotalItems - descVal;
+        const iva      = hasImp ? base * 0.13 : 0;
+        const it       = hasImp ? base * 0.03 : 0;
         const totalFinal = montoCierreDB > 0 ? montoCierreDB : (base + iva + it);
 
-        let y = doc.lastAutoTable.finalY + 8;
-        if (y + 60 > 270) { doc.addPage(); y = 20; }
+        const totLines = 1 + (descVal > 0 ? 1 : 0) + (hasImp ? 2 : 0);
+        const totInnerH = totLines * 7;
+        const totBoxW = 80, totBoxX = PW - MR - totBoxW;
+        let totBoxY = doc.lastAutoTable.finalY + 5;
+        const totBoxH = totInnerH + 7 + 14; // padding-top 7 + rows + total pill 14
 
-        doc.setFontSize(9); doc.setFont(undefined, 'normal'); doc.setTextColor(0);
-        doc.text('Subtotal:', 140, y); doc.text(fMoney(subtotalItems) + ' Bs', 195, y, {align:'right'}); y += 5;
+        if (totBoxY + totBoxH + 50 > 275) { doc.addPage(); totBoxY = 20; }
+
+        doc.setFillColor(...C.light); doc.setDrawColor(...C.border); doc.setLineWidth(0.3);
+        doc.roundedRect(totBoxX, totBoxY, totBoxW, totBoxH, 4, 4, 'FD');
+
+        let ty = totBoxY + 7;
+        const numX = totBoxX + totBoxW - 5;
+
+        doc.setFontSize(8.5); doc.setFont(undefined, 'normal'); doc.setTextColor(...C.gray);
+        doc.text('Subtotal:', totBoxX + 5, ty);
+        doc.setTextColor(...C.dark); doc.setFont(undefined, 'bold');
+        doc.text(fMoney(subtotalItems) + ' Bs', numX, ty, { align: 'right' }); ty += 7;
+
         if (descVal > 0) {
-            doc.text(descPct > 0 ? descPct + '% Descuento:' : 'Descuento:', 140, y);
-            doc.text('- ' + fMoney(descVal) + ' Bs', 195, y, {align:'right'}); y += 5;
+            doc.setFont(undefined, 'normal'); doc.setTextColor(...C.gray);
+            doc.text(descPct > 0 ? `Descuento ${descPct}%:` : 'Descuento:', totBoxX + 5, ty);
+            doc.setTextColor(200, 100, 0); doc.setFont(undefined, 'bold');
+            doc.text('- ' + fMoney(descVal) + ' Bs', numX, ty, { align: 'right' }); ty += 7;
         }
         if (hasImp) {
-            doc.text('IVA (13%):', 140, y); doc.text(fMoney(iva) + ' Bs', 195, y, {align:'right'}); y += 5;
-            doc.text('IT (3%):', 140, y);   doc.text(fMoney(it)  + ' Bs', 195, y, {align:'right'}); y += 5;
+            doc.setFont(undefined, 'normal'); doc.setTextColor(...C.gray);
+            doc.text('IVA (13%):', totBoxX + 5, ty);
+            doc.setTextColor(...C.dark); doc.setFont(undefined, 'bold');
+            doc.text(fMoney(iva) + ' Bs', numX, ty, { align: 'right' }); ty += 7;
+            doc.setFont(undefined, 'normal'); doc.setTextColor(...C.gray);
+            doc.text('IT (3%):', totBoxX + 5, ty);
+            doc.setTextColor(...C.dark); doc.setFont(undefined, 'bold');
+            doc.text(fMoney(it) + ' Bs', numX, ty, { align: 'right' }); ty += 7;
         }
-        doc.setFillColor(28,28,30);
-        doc.rect(130, y - 1, 65, 10, 'F');
-        doc.setFontSize(10); doc.setFont(undefined, 'bold'); doc.setTextColor(255,255,255);
-        doc.text(montoCierreDB > 0 ? 'PRECIO NEGOCIADO:' : 'TOTAL CONTRATADO:', 132, y + 6);
-        doc.text(fMoney(totalFinal) + ' Bs', 193, y + 6, {align:'right'});
-        doc.setTextColor(0); y += 16;
 
-        // Historial de pagos
+        // Píldora total (azul redondeada)
+        doc.setFillColor(...C.blue);
+        doc.roundedRect(totBoxX, ty - 1, totBoxW, 12, 4, 4, 'F');
+        doc.setFontSize(8.5); doc.setFont(undefined, 'bold'); doc.setTextColor(...C.white);
+        doc.text(montoCierreDB > 0 ? 'PRECIO NEGOCIADO' : 'TOTAL CONTRATADO', totBoxX + 5, ty + 7);
+        doc.text(fMoney(totalFinal) + ' Bs', numX, ty + 7, { align: 'right' });
+        doc.setTextColor(...C.dark);
+
+        let y = totBoxY + totBoxH + 10;
+
+        // ── Historial de pagos ───────────────────────────────────────────
         let totalPagado = 0;
         if (pagosObj.length > 0) {
-            if (y + 15 + pagosObj.length * 6 > 270) { doc.addPage(); y = 20; }
-            doc.setFontSize(10); doc.setFont(undefined, 'bold'); doc.setTextColor(0);
-            doc.text('PAGOS REGISTRADOS:', 14, y); y += 6;
+            const pagoBoxH = pagosObj.length * 7 + 8;
+            if (y + pagoBoxH + 45 > 272) { doc.addPage(); y = 20; }
+
+            doc.setFontSize(9); doc.setFont(undefined, 'bold'); doc.setTextColor(...C.dark);
+            doc.text('PAGOS REGISTRADOS', ML, y + 1); y += 7;
+
+            doc.setFillColor(...C.light); doc.setDrawColor(...C.border); doc.setLineWidth(0.3);
+            doc.roundedRect(ML, y, PW - ML - MR, pagoBoxH, 4, 4, 'FD');
+            y += 5;
+
             doc.setFontSize(8.5); doc.setFont(undefined, 'normal');
             pagosObj.forEach(p => {
                 const m = parseFloat(p.monto || 0);
                 totalPagado += m;
-                doc.setTextColor(80); doc.text(`${p.fecha || '-'}  ${p.nota || ''}`, 14, y);
-                doc.setTextColor(34, 139, 34); doc.text('+ ' + fMoney(m) + ' Bs', 195, y, {align:'right'});
-                doc.setTextColor(0); y += 5;
+                doc.setTextColor(...C.gray);
+                doc.text(`${p.fecha || '-'}   ${p.nota || ''}`, ML + 5, y);
+                doc.setTextColor(...C.green); doc.setFont(undefined, 'bold');
+                doc.text('+ ' + fMoney(m) + ' Bs', PW - MR - 5, y, { align: 'right' });
+                doc.setFont(undefined, 'normal');
+                y += 7;
                 if (y > 270) { doc.addPage(); y = 20; }
             });
-            y += 2;
-            doc.setFontSize(9); doc.setFont(undefined, 'bold');
-            doc.setTextColor(34, 139, 34);
-            doc.text('Total pagado: ' + fMoney(totalPagado) + ' Bs', 195, y, {align:'right'});
-            doc.setTextColor(0); y += 10;
+            y += 4;
+
+            doc.setFontSize(9); doc.setFont(undefined, 'bold'); doc.setTextColor(...C.green);
+            doc.text('Total pagado: ' + fMoney(totalPagado) + ' Bs', PW - MR - 5, y, { align: 'right' });
+            doc.setTextColor(...C.dark); y += 12;
         }
 
-        // Saldo
+        // ── Saldo (píldora redondeada) ───────────────────────────────────
         const saldo = totalFinal - totalPagado;
-        if (y + 13 > 270) { doc.addPage(); y = 20; }
-        doc.setFillColor(...(saldo <= 0 ? [34,139,34] : [220,31,31]));
-        doc.rect(130, y - 1, 65, 11, 'F');
-        doc.setFontSize(11); doc.setFont(undefined, 'bold'); doc.setTextColor(255,255,255);
-        doc.text(saldo <= 0 ? '✓ CANCELADO' : 'SALDO A PAGAR:', 132, y + 7);
-        doc.text(fMoney(Math.abs(saldo)) + ' Bs', 193, y + 7, {align:'right'});
-        doc.setTextColor(0); y += 18;
+        if (y + 16 > 272) { doc.addPage(); y = 20; }
+        const saldoCol = saldo <= 0 ? C.green : C.orange;
+        doc.setFillColor(...saldoCol);
+        doc.roundedRect(PW - MR - 82, y, 82, 14, 4, 4, 'F');
+        doc.setFontSize(10); doc.setFont(undefined, 'bold'); doc.setTextColor(...C.white);
+        doc.text(saldo <= 0 ? '✓  CANCELADO' : 'SALDO A PAGAR:', PW - MR - 78, y + 9);
+        doc.text(fMoney(Math.abs(saldo)) + ' Bs', PW - MR - 4, y + 9, { align: 'right' });
+        doc.setTextColor(...C.dark); y += 22;
 
-        // Firma
-        if (y + 30 > 275) { doc.addPage(); y = 20; }
-        y += 10;
-        doc.setFontSize(8); doc.setFont(undefined, 'normal'); doc.setTextColor(100);
-        doc.line(14, y, 85, y); doc.text('Firma y sello cliente', 14, y + 4);
-        doc.line(115, y, 195, y); doc.text('Firma Rubik Bolivia', 115, y + 4);
-        doc.setTextColor(0);
+        // ── Firmas ────────────────────────────────────────────────────────
+        if (y + 22 > 278) { doc.addPage(); y = 30; }
+        y += 12;
+        doc.setDrawColor(...C.border); doc.setLineWidth(0.4);
+        doc.line(ML, y, ML + 72, y);
+        doc.line(PW - MR - 72, y, PW - MR, y);
+        doc.setFontSize(7.5); doc.setFont(undefined, 'normal'); doc.setTextColor(...C.lgray);
+        doc.text('Firma y sello cliente', ML, y + 4);
+        doc.text('Firma Rubik Bolivia', PW - MR - 72, y + 4);
+        doc.setTextColor(...C.dark);
 
-        // Comprobantes adjuntos escaneados
+        // ── Comprobantes escaneados ───────────────────────────────────────
         const conComprobante = pagosObj.filter(p => p.comprobante_url);
         if (conComprobante.length > 0) {
             doc.addPage();
-            doc.setFontSize(13); doc.setFont(undefined, 'bold'); doc.setTextColor(0);
-            doc.text('COMPROBANTES DE PAGO', 14, 20);
-            let py = 30;
+            if (logoB64) { try { doc.addImage(logoB64, 'PNG', PW - 32, 7, 20, 20); } catch(e) {} }
+            doc.setFontSize(14); doc.setFont(undefined, 'bold'); doc.setTextColor(...C.dark);
+            doc.text('COMPROBANTES DE PAGO', ML, 22);
+            doc.setDrawColor(...C.blue); doc.setLineWidth(1);
+            doc.line(ML, 25, PW - MR, 25);
+            doc.setLineWidth(0.2); doc.setDrawColor(...C.border);
+            let py = 32;
             for (let i = 0; i < conComprobante.length; i++) {
                 const p = conComprobante[i];
-                if (py > 220) { doc.addPage(); py = 20; }
-                doc.setFontSize(9); doc.setFont(undefined, 'bold');
-                doc.text(`${p.fecha || '-'} — ${p.nota || 'Comprobante ' + (i+1)}: ${fMoney(p.monto||0)} Bs`, 14, py);
+                if (py > 218) { doc.addPage(); py = 20; }
+                doc.setFontSize(8.5); doc.setFont(undefined, 'bold'); doc.setTextColor(...C.gray);
+                doc.text(`${p.fecha||'-'}  ${p.nota||'Comprobante '+(i+1)}  ·  + ${fMoney(p.monto||0)} Bs`, ML, py);
                 py += 4;
                 try {
                     const b64 = await _fetchImgB64(p.comprobante_url);
                     if (b64) {
                         const props = doc.getImageProperties(b64);
                         const ratio = props.width / props.height;
-                        let w = 160, h = w / ratio;
-                        if (h > 170) { h = 170; w = h * ratio; }
-                        doc.addImage(b64, 'JPEG', 14 + (180 - w) / 2, py, w, h);
+                        let w = 170, h = w / ratio;
+                        if (h > 172) { h = 172; w = h * ratio; }
+                        doc.addImage(b64, 'JPEG', ML + (182-w)/2, py, w, h);
                         py += h + 10;
                     }
                 } catch(e) { py += 5; }
