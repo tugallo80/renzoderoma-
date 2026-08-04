@@ -5,6 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>HUB del Proyecto - Rubik</title>
     <script src="https://unpkg.com/@phosphor-icons/web" defer></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.1.3/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.1.3/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.1.3/firebase-database-compat.js"></script>
@@ -160,7 +162,44 @@
                     <button class="btn-action btn-success" style="flex:1; margin:0; padding:10px;" onclick="registrarPagoCliente()">Añadir</button>
                 </div>
                 <div id="lista-pagos-admin" style="margin-top:15px; max-height:150px; overflow-y:auto; font-size:12px; border-top:1px dashed var(--border); padding-top:10px;"></div>
+                <div style="display:flex; gap:8px; margin-top:12px; flex-wrap:wrap;">
+                    <button onclick="exportReciboSaldo()" class="btn-action btn-success" style="flex:1; padding:10px; font-size:12px; min-width:150px;">
+                        <i class="ph-bold ph-receipt"></i> Nota de Cobro PDF
+                    </button>
+                    <button onclick="abrirMailRecibo()" class="btn-action" style="flex:1; padding:10px; font-size:12px; min-width:150px; background:#5ac8fa;">
+                        <i class="ph-bold ph-envelope"></i> Enviar al cliente
+                    </button>
+                </div>
             </div>
+        </div>
+    </div>
+
+    <!-- Hidden logo for PDF -->
+    <img id="logo-hidden-dash" src="/LOGO-IA-RUBIK.jpg" style="display:none;" crossorigin="anonymous">
+
+    <!-- Modal: Enviar Nota de Cobro por mail -->
+    <div id="mod-mail-recibo" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.85); z-index:6000; align-items:center; justify-content:center; backdrop-filter:blur(4px);">
+        <div style="background:var(--card); width:92%; max-width:580px; max-height:92vh; overflow-y:auto; padding:22px; border-radius:20px; color:var(--text); position:relative;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+                <h3 style="margin:0; font-size:17px;">Enviar Nota de Cobro</h3>
+                <button onclick="cerrarMailRecibo()" style="background:none; border:none; font-size:24px; cursor:pointer; color:var(--gray); line-height:1;">&times;</button>
+            </div>
+            <label style="font-size:10px; font-weight:800; color:var(--gray); display:block; margin-bottom:5px; text-transform:uppercase;">PARA</label>
+            <input id="mail-rec-to" type="email" placeholder="cliente@email.com"
+                style="width:100%; background:var(--bg); border:1px solid var(--border); color:var(--text); padding:12px 14px; border-radius:12px; font-size:14px; outline:none; box-sizing:border-box; margin-bottom:10px;">
+            <label style="font-size:10px; font-weight:800; color:var(--gray); display:block; margin-bottom:5px; text-transform:uppercase;">CON COPIA (opcional)</label>
+            <input id="mail-rec-cc" type="text" placeholder="cc1@empresa.com, cc2@..."
+                style="width:100%; background:var(--bg); border:1px solid var(--border); color:var(--text); padding:12px 14px; border-radius:12px; font-size:14px; outline:none; box-sizing:border-box; margin-bottom:10px;">
+            <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:5px;">
+                <label style="font-size:10px; font-weight:800; color:var(--gray); text-transform:uppercase;">CUERPO DEL MAIL</label>
+                <span id="mail-rec-ai-badge" style="font-size:10px; color:#bf5af2; font-weight:700; display:none;"><i class="ph-bold ph-magic-wand"></i> Generando con IA...</span>
+            </div>
+            <textarea id="mail-rec-body" rows="8" placeholder="Cargando descripción..."
+                style="width:100%; background:var(--bg); border:1px solid var(--border); color:var(--text); padding:12px 14px; border-radius:12px; font-size:13px; outline:none; box-sizing:border-box; resize:vertical; font-family:inherit; margin-bottom:14px;"></textarea>
+            <div id="mail-rec-status" style="display:none; font-size:12px; padding:10px; border-radius:10px; margin-bottom:12px;"></div>
+            <button id="btn-enviar-recibo" onclick="enviarReciboMail()" class="btn-action btn-success" style="width:100%; padding:14px; font-size:14px;">
+                <i class="ph-bold ph-paper-plane-right"></i> Enviar con PDF adjunto
+            </button>
         </div>
     </div>
 
@@ -495,6 +534,338 @@
 
     window.eliminarFactura = function(key) {
         if(confirm('¿Eliminar esta factura?')) db.ref(`proyectos/${cid}/${pid}/facturas_emitidas/${key}`).remove();
+    };
+
+    // ── Helpers PDF ──────────────────────────────────────────────────────
+    async function _logoB64Dash() {
+        try {
+            const img = document.getElementById('logo-hidden-dash');
+            const res = await fetch(img ? img.src : '/LOGO-IA-RUBIK.jpg');
+            const blob = await res.blob();
+            return await new Promise(r => { const fr = new FileReader(); fr.onload = () => r(fr.result); fr.readAsDataURL(blob); });
+        } catch(e) { return null; }
+    }
+
+    function _membreteD(doc, logoB64) {
+        const pageW = doc.internal.pageSize.getWidth();
+        const pageH = doc.internal.pageSize.getHeight();
+        const n = doc.internal.getNumberOfPages();
+        const lw = 26, lh = 12;
+        const footY = pageH - 8;
+        for (let i = 1; i <= n; i++) {
+            doc.setPage(i);
+            if (logoB64) { try { doc.addImage(logoB64, 'JPEG', pageW - lw - 10, 5, lw, lh); } catch(e) {} }
+            doc.setDrawColor(220, 31, 31); doc.setLineWidth(0.45);
+            doc.line(14, footY - 6, pageW - 14, footY - 6);
+            doc.setFontSize(7); doc.setFont(undefined, 'normal'); doc.setTextColor(100, 100, 100);
+            doc.text('Renzo  |  Rubik Corp.   ·   Rubik Bolivia — Ingenieria Creativa   ·   +591 76868833   ·   rubikbolivia.com', 14, footY);
+            doc.text(`${i} / ${n}`, pageW - 14, footY, { align: 'right' });
+            doc.setTextColor(0, 0, 0); doc.setLineWidth(0.2); doc.setDrawColor(0, 0, 0);
+        }
+    }
+
+    async function _fetchImgB64(url) {
+        try {
+            const res = await fetch(url);
+            const blob = await res.blob();
+            return await new Promise((resolve, reject) => {
+                const fr = new FileReader();
+                fr.onload = () => resolve(fr.result);
+                fr.onerror = reject;
+                fr.readAsDataURL(blob);
+            });
+        } catch(e) { return null; }
+    }
+
+    // ── Construir el doc PDF (reutilizable para exportar y para mail) ────
+    async function _buildReciboDoc() {
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF();
+        const logoB64 = await _logoB64Dash();
+
+        const [pptoSnap, pagosSnap, cierreSnap] = await Promise.all([
+            db.ref(`proyectos/${cid}/${pid}/presupuesto`).once('value'),
+            db.ref(`proyectos/${cid}/${pid}/pagos`).once('value'),
+            db.ref(`proyectos/${cid}/${pid}/monto_cierre`).once('value')
+        ]);
+        const ppto = pptoSnap.val() || {};
+        const pagosObj = pagosSnap.val() ? Object.values(pagosSnap.val()) : [];
+        const montoCierreDB = parseFloat(cierreSnap.val()) || 0;
+
+        const clienteNom = (pname || localStorage.getItem('rubik_current_pname') || 'CLIENTE').toUpperCase();
+        const proyectoNom = (localStorage.getItem('rubik_current_pname') || 'PROYECTO').toUpperCase();
+        const fechaHoy = new Date().toLocaleDateString('es-BO', { day:'2-digit', month:'2-digit', year:'numeric' });
+
+        doc.setFontSize(18); doc.setFont(undefined, 'bold'); doc.setTextColor(0);
+        doc.text("NOTA DE COBRO", 14, 20);
+        doc.setFontSize(9); doc.setFont(undefined, 'normal'); doc.setTextColor(80);
+        doc.text(`Cliente: ${clienteNom}`, 14, 29);
+        doc.text(`Proyecto: ${proyectoNom}`, 14, 34);
+        doc.text(`Fecha: ${fechaHoy}`, 14, 39);
+        doc.setTextColor(0);
+
+        // Tabla de ítems (sin características, sin P.U.)
+        const rows = [];
+        let subtotalItems = 0;
+        const hasImp = ppto.impuestos || false;
+        const descPct = parseFloat(ppto.descuento_pct) || 0;
+        const descFijo = parseFloat(ppto.descuento) || 0;
+
+        if (ppto.items) {
+            Object.values(ppto.items).forEach(item => {
+                if (!item) return;
+                if (item.type === 'chapter') {
+                    rows.push([{ content: (item.name || 'CAPÍTULO').toUpperCase(), colSpan: 4, styles: { fillColor: [220,220,220], fontStyle:'bold', fontSize:9 } }]);
+                } else {
+                    if (item.activo === false) return;
+                    const cant = parseFloat(item.cant || 0);
+                    const pu = parseFloat(item.pu || 0);
+                    const tot = cant * pu;
+                    subtotalItems += tot;
+                    rows.push([item.desc || '-', item.und || 'glb', cant, fMoney(tot)]);
+                }
+            });
+        }
+
+        if (typeof doc.autoTable !== 'function') throw new Error("jspdf-autotable no cargó.");
+        doc.autoTable({
+            startY: 45,
+            head: [['Descripción', 'Und', 'Cant', 'Total (Bs)']],
+            body: rows,
+            styles: { cellPadding: 3, fontSize: 9 },
+            headStyles: { fillColor: [28,28,30], textColor: 255, fontStyle: 'bold' },
+            columnStyles: { 0:{cellWidth:100}, 1:{cellWidth:18,halign:'center'}, 2:{cellWidth:18,halign:'center'}, 3:{cellWidth:40,halign:'right'} },
+            margin: { top:20, left:14, right:14 }
+        });
+
+        // Bloque de totales
+        const descVal = descPct > 0 ? Math.round(subtotalItems * descPct / 100 * 100) / 100 : descFijo;
+        const base = subtotalItems - descVal;
+        const iva = hasImp ? base * 0.13 : 0;
+        const it = hasImp ? base * 0.03 : 0;
+        const totalFinal = montoCierreDB > 0 ? montoCierreDB : (base + iva + it);
+
+        let y = doc.lastAutoTable.finalY + 8;
+        if (y + 60 > 270) { doc.addPage(); y = 20; }
+
+        doc.setFontSize(9); doc.setFont(undefined, 'normal'); doc.setTextColor(0);
+        doc.text('Subtotal:', 140, y); doc.text(fMoney(subtotalItems) + ' Bs', 195, y, {align:'right'}); y += 5;
+        if (descVal > 0) {
+            doc.text(descPct > 0 ? descPct + '% Descuento:' : 'Descuento:', 140, y);
+            doc.text('- ' + fMoney(descVal) + ' Bs', 195, y, {align:'right'}); y += 5;
+        }
+        if (hasImp) {
+            doc.text('IVA (13%):', 140, y); doc.text(fMoney(iva) + ' Bs', 195, y, {align:'right'}); y += 5;
+            doc.text('IT (3%):', 140, y);   doc.text(fMoney(it)  + ' Bs', 195, y, {align:'right'}); y += 5;
+        }
+        doc.setFillColor(28,28,30);
+        doc.rect(130, y - 1, 65, 10, 'F');
+        doc.setFontSize(10); doc.setFont(undefined, 'bold'); doc.setTextColor(255,255,255);
+        doc.text(montoCierreDB > 0 ? 'PRECIO NEGOCIADO:' : 'TOTAL CONTRATADO:', 132, y + 6);
+        doc.text(fMoney(totalFinal) + ' Bs', 193, y + 6, {align:'right'});
+        doc.setTextColor(0); y += 16;
+
+        // Historial de pagos
+        let totalPagado = 0;
+        if (pagosObj.length > 0) {
+            if (y + 15 + pagosObj.length * 6 > 270) { doc.addPage(); y = 20; }
+            doc.setFontSize(10); doc.setFont(undefined, 'bold'); doc.setTextColor(0);
+            doc.text('PAGOS REGISTRADOS:', 14, y); y += 6;
+            doc.setFontSize(8.5); doc.setFont(undefined, 'normal');
+            pagosObj.forEach(p => {
+                const m = parseFloat(p.monto || 0);
+                totalPagado += m;
+                doc.setTextColor(80); doc.text(`${p.fecha || '-'}  ${p.nota || ''}`, 14, y);
+                doc.setTextColor(34, 139, 34); doc.text('+ ' + fMoney(m) + ' Bs', 195, y, {align:'right'});
+                doc.setTextColor(0); y += 5;
+                if (y > 270) { doc.addPage(); y = 20; }
+            });
+            y += 2;
+            doc.setFontSize(9); doc.setFont(undefined, 'bold');
+            doc.setTextColor(34, 139, 34);
+            doc.text('Total pagado: ' + fMoney(totalPagado) + ' Bs', 195, y, {align:'right'});
+            doc.setTextColor(0); y += 10;
+        }
+
+        // Saldo
+        const saldo = totalFinal - totalPagado;
+        if (y + 13 > 270) { doc.addPage(); y = 20; }
+        doc.setFillColor(...(saldo <= 0 ? [34,139,34] : [220,31,31]));
+        doc.rect(130, y - 1, 65, 11, 'F');
+        doc.setFontSize(11); doc.setFont(undefined, 'bold'); doc.setTextColor(255,255,255);
+        doc.text(saldo <= 0 ? '✓ CANCELADO' : 'SALDO A PAGAR:', 132, y + 7);
+        doc.text(fMoney(Math.abs(saldo)) + ' Bs', 193, y + 7, {align:'right'});
+        doc.setTextColor(0); y += 18;
+
+        // Firma
+        if (y + 30 > 275) { doc.addPage(); y = 20; }
+        y += 10;
+        doc.setFontSize(8); doc.setFont(undefined, 'normal'); doc.setTextColor(100);
+        doc.line(14, y, 85, y); doc.text('Firma y sello cliente', 14, y + 4);
+        doc.line(115, y, 195, y); doc.text('Firma Rubik Bolivia', 115, y + 4);
+        doc.setTextColor(0);
+
+        // Comprobantes adjuntos escaneados
+        const conComprobante = pagosObj.filter(p => p.comprobante_url);
+        if (conComprobante.length > 0) {
+            doc.addPage();
+            doc.setFontSize(13); doc.setFont(undefined, 'bold'); doc.setTextColor(0);
+            doc.text('COMPROBANTES DE PAGO', 14, 20);
+            let py = 30;
+            for (let i = 0; i < conComprobante.length; i++) {
+                const p = conComprobante[i];
+                if (py > 220) { doc.addPage(); py = 20; }
+                doc.setFontSize(9); doc.setFont(undefined, 'bold');
+                doc.text(`${p.fecha || '-'} — ${p.nota || 'Comprobante ' + (i+1)}: ${fMoney(p.monto||0)} Bs`, 14, py);
+                py += 4;
+                try {
+                    const b64 = await _fetchImgB64(p.comprobante_url);
+                    if (b64) {
+                        const props = doc.getImageProperties(b64);
+                        const ratio = props.width / props.height;
+                        let w = 160, h = w / ratio;
+                        if (h > 170) { h = 170; w = h * ratio; }
+                        doc.addImage(b64, 'JPEG', 14 + (180 - w) / 2, py, w, h);
+                        py += h + 10;
+                    }
+                } catch(e) { py += 5; }
+            }
+        }
+
+        _membreteD(doc, logoB64);
+        return { doc, totalFinal, totalPagado, saldo };
+    }
+
+    // ── Exportar PDF a archivo ───────────────────────────────────────────
+    window.exportReciboSaldo = async function() {
+        const btn = event ? event.currentTarget : null;
+        const origText = btn ? btn.innerHTML : '';
+        if (btn) { btn.disabled = true; btn.innerHTML = '<i class="ph-bold ph-spinner"></i> Generando...'; }
+        try {
+            if (!window.jspdf || !window.jspdf.jsPDF) throw new Error("jsPDF no cargó aún.");
+            const { doc } = await _buildReciboDoc();
+            const dDate = new Date();
+            const mm = String(dDate.getMonth() + 1).padStart(2, '0');
+            const dd = String(dDate.getDate()).padStart(2, '0');
+            const safeName = (pname || 'CLIENTE').replace(/[^a-zA-Z0-9_\- ]/g, '').trim().replace(/ /g, '_');
+            doc.save(`${mm}${dd}_RECIBO_${safeName}.pdf`);
+        } catch(e) {
+            alert('Error generando PDF: ' + e.message);
+            console.error(e);
+        } finally {
+            if (btn) { btn.disabled = false; btn.innerHTML = origText; }
+        }
+    };
+
+    // ── Abrir modal de mail (genera descripción con IA) ──────────────────
+    window.abrirMailRecibo = async function() {
+        document.getElementById('mod-mail-recibo').style.display = 'flex';
+        document.getElementById('mail-rec-body').value = '';
+        document.getElementById('mail-rec-status').style.display = 'none';
+        document.getElementById('btn-enviar-recibo').disabled = false;
+
+        // Pre-cargar email del cliente desde Firebase
+        try {
+            const cliSnap = await db.ref(`clientes/${cid}/email`).once('value');
+            if (cliSnap.val()) document.getElementById('mail-rec-to').value = cliSnap.val();
+        } catch(e) {}
+
+        // Generar descripción con IA
+        const badge = document.getElementById('mail-rec-ai-badge');
+        badge.style.display = 'inline';
+        try {
+            const [pptoSnap, pagosSnap, cierreSnap] = await Promise.all([
+                db.ref(`proyectos/${cid}/${pid}/presupuesto`).once('value'),
+                db.ref(`proyectos/${cid}/${pid}/pagos`).once('value'),
+                db.ref(`proyectos/${cid}/${pid}/monto_cierre`).once('value')
+            ]);
+            const ppto = pptoSnap.val() || {};
+            const pagosObj = pagosSnap.val() ? Object.values(pagosSnap.val()) : [];
+            const montoCierreDB = parseFloat(cierreSnap.val()) || 0;
+            let subtotal = 0;
+            if (ppto.items) Object.values(ppto.items).forEach(it => { if(it && it.type !== 'chapter') subtotal += (parseFloat(it.cant||0) * parseFloat(it.pu||0)); });
+            const base = subtotal - (parseFloat(ppto.descuento) || 0);
+            const totalFinal = montoCierreDB > 0 ? montoCierreDB : (ppto.impuestos ? base*1.16 : base);
+            let totalPagado = 0; pagosObj.forEach(p => totalPagado += parseFloat(p.monto||0));
+            const saldo = totalFinal - totalPagado;
+
+            const token = firebase.auth().currentUser ? await firebase.auth().currentUser.getIdToken() : null;
+            const headers = { 'Content-Type': 'application/json' };
+            if (token) headers['Authorization'] = 'Bearer ' + token;
+
+            const ctxPrompt = `Proyecto: ${pname || 'proyecto'}. Total contratado: ${fMoney(totalFinal)} Bs. Total pagado hasta la fecha: ${fMoney(totalPagado)} Bs. Saldo pendiente: ${fMoney(saldo)} Bs. Empresa: Rubik Bolivia — señalética, stands y publicidad en Santa Cruz, Bolivia. Remitente: Renzo.`;
+            const resp = await fetch('/api/gemini', {
+                method: 'POST', headers,
+                body: JSON.stringify({
+                    model: 'gemini-2.5-flash',
+                    systemInstruction: { parts: [{ text: 'Sos el asistente de Renzo de Rubik Bolivia. Redactá correos profesionales, cálidos y directos en español (no uses "estimado", usa el nombre del proyecto). Solo devolvé el cuerpo del mail, sin asunto, sin firma.' }] },
+                    contents: [{ role: 'user', parts: [{ text: `Redactá el cuerpo de un mail para enviarle al cliente la nota de cobro adjunta en PDF. ${ctxPrompt} El mail debe mencionar el saldo pendiente de forma clara y amable, e indicar que el PDF adjunto tiene el detalle de los ítems contratados y los pagos registrados.` }] }]
+                })
+            });
+            const data = await resp.json();
+            const aiText = data?.candidates?.[0]?.content?.parts?.[0]?.text || data?.text || '';
+            document.getElementById('mail-rec-body').value = aiText.trim();
+        } catch(e) {
+            document.getElementById('mail-rec-body').placeholder = 'No se pudo generar con IA. Escribí el mensaje manualmente.';
+        } finally {
+            badge.style.display = 'none';
+        }
+    };
+
+    window.cerrarMailRecibo = function() {
+        document.getElementById('mod-mail-recibo').style.display = 'none';
+    };
+
+    // ── Enviar mail con PDF adjunto ──────────────────────────────────────
+    window.enviarReciboMail = async function() {
+        const to = document.getElementById('mail-rec-to').value.trim();
+        const cc = document.getElementById('mail-rec-cc').value.trim();
+        const body = document.getElementById('mail-rec-body').value.trim();
+        if (!to) return alert('Ingresá el email del cliente.');
+        if (!body) return alert('El cuerpo del mail está vacío.');
+
+        const btn = document.getElementById('btn-enviar-recibo');
+        btn.disabled = true; btn.innerHTML = '<i class="ph-bold ph-spinner"></i> Generando PDF y enviando...';
+        const statusEl = document.getElementById('mail-rec-status');
+        statusEl.style.display = 'none';
+
+        try {
+            if (!window.jspdf || !window.jspdf.jsPDF) throw new Error("jsPDF no cargó.");
+            const { doc } = await _buildReciboDoc();
+            const pdfB64 = doc.output('datauristring').split(',')[1];
+
+            const subject = `Nota de Cobro — ${pname || 'Proyecto'} | Rubik Bolivia`;
+            const htmlBody = `<div style="white-space:pre-wrap;font-family:inherit;">${body.replace(/\n/g, '<br>')}</div>`;
+
+            const token = await firebase.auth().currentUser.getIdToken();
+            const payload = {
+                to, subject, html: htmlBody, text: body,
+                ...(cc ? { cc } : {}),
+                attachments: [{ filename: 'Nota_de_Cobro.pdf', content: pdfB64, contentType: 'application/pdf' }]
+            };
+            const resp = await fetch('/api/mail/send', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+                body: JSON.stringify(payload)
+            });
+            const result = await resp.json();
+            if (!resp.ok) throw new Error(result.error || 'Error al enviar');
+            statusEl.style.display = 'block';
+            statusEl.style.background = 'rgba(52,199,89,0.1)';
+            statusEl.style.border = '1px solid rgba(52,199,89,0.4)';
+            statusEl.style.color = 'var(--green)';
+            statusEl.innerText = '✓ Mail enviado correctamente con el PDF adjunto.';
+            btn.innerHTML = '✓ Enviado';
+            setTimeout(() => cerrarMailRecibo(), 2500);
+        } catch(e) {
+            statusEl.style.display = 'block';
+            statusEl.style.background = 'rgba(255,59,48,0.1)';
+            statusEl.style.border = '1px solid rgba(255,59,48,0.4)';
+            statusEl.style.color = 'var(--red)';
+            statusEl.innerText = 'Error: ' + e.message;
+            btn.disabled = false;
+            btn.innerHTML = '<i class="ph-bold ph-paper-plane-right"></i> Enviar con PDF adjunto';
+        }
     };
 
     // ── Escaneo IA de documentos (bouchers y facturas) ─────────────────
