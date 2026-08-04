@@ -610,15 +610,14 @@
         };
         const PW = doc.internal.pageSize.getWidth();
         const ML = 14, MR = 14;
-
-        // Logo (PNG sin fondo, esquina superior derecha)
-        if (logoB64) { try { doc.addImage(logoB64, 'PNG', PW - 32, 7, 20, 20); } catch(e) {} }
+        const logoX = PW - 32; // 178mm — posición del logo (gestionado por _membreteD)
 
         // ── Encabezado ───────────────────────────────────────────────────
         doc.setFontSize(22); doc.setFont(undefined, 'bold'); doc.setTextColor(...C.dark);
         doc.text('CONSOLIDADO', ML, 21);
+        // Línea azul se detiene 4mm antes del logo para no solaparse
         doc.setDrawColor(...C.blue); doc.setLineWidth(1);
-        doc.line(ML, 25, PW - MR, 25);
+        doc.line(ML, 25, logoX - 4, 25);
         doc.setLineWidth(0.2); doc.setDrawColor(...C.border);
 
         doc.setFontSize(8.5); doc.setFont(undefined, 'normal'); doc.setTextColor(...C.gray);
@@ -627,11 +626,11 @@
         doc.text(`Fecha: ${fechaHoy}`, ML, 42);
         doc.setTextColor(...C.dark);
 
-        // ── Tabla de ítems ───────────────────────────────────────────────
+        // ── Preparar filas e importes ────────────────────────────────────
         const rows = [];
         let subtotalItems = 0;
-        const hasImp  = ppto.impuestos || false;
-        const descPct = parseFloat(ppto.descuento_pct) || 0;
+        const hasImp   = ppto.impuestos || false;
+        const descPct  = parseFloat(ppto.descuento_pct) || 0;
         const descFijo = parseFloat(ppto.descuento) || 0;
 
         if (ppto.items) {
@@ -651,38 +650,18 @@
             });
         }
 
-        doc.autoTable({
-            startY: 47,
-            head: [['Descripción', 'Und', 'Cant', 'Total (Bs)']],
-            body: rows,
-            styles: { cellPadding: 3.5, fontSize: 9, textColor: C.dark, lineColor: C.border, lineWidth: 0.2 },
-            headStyles: { fillColor: C.dark, textColor: C.white, fontStyle: 'bold', fontSize: 8.5 },
-            alternateRowStyles: { fillColor: C.light },
-            columnStyles: {
-                0: { cellWidth: 100 },
-                1: { cellWidth: 18, halign: 'center' },
-                2: { cellWidth: 18, halign: 'center' },
-                3: { cellWidth: 40, halign: 'right', fontStyle: 'bold' }
-            },
-            margin: { top: 25, left: ML, right: MR },
-            tableLineColor: C.border,
-            tableLineWidth: 0.2
-        });
-
-        // ── Caja de totales (redondeada, alineada a la derecha) ───────────
-        const descVal  = descPct > 0 ? Math.round(subtotalItems * descPct / 100 * 100) / 100 : descFijo;
-        const base     = subtotalItems - descVal;
-        const iva      = hasImp ? base * 0.13 : 0;
-        const it       = hasImp ? base * 0.03 : 0;
+        const descVal    = descPct > 0 ? Math.round(subtotalItems * descPct / 100 * 100) / 100 : descFijo;
+        const base       = subtotalItems - descVal;
+        const iva        = hasImp ? base * 0.13 : 0;
+        const it         = hasImp ? base * 0.03 : 0;
         const totalFinal = montoCierreDB > 0 ? montoCierreDB : (base + iva + it);
 
+        // ── Caja de totales (derecha, misma línea que tabla) ─────────────
         const totLines = 1 + (descVal > 0 ? 1 : 0) + (hasImp ? 2 : 0);
-        const totInnerH = totLines * 7;
-        const totBoxW = 80, totBoxX = PW - MR - totBoxW;
-        let totBoxY = doc.lastAutoTable.finalY + 5;
-        const totBoxH = totInnerH + 7 + 14; // padding-top 7 + rows + total pill 14
-
-        if (totBoxY + totBoxH + 50 > 275) { doc.addPage(); totBoxY = 20; }
+        const totBoxW  = 69;
+        const totBoxX  = PW - MR - totBoxW; // x=127
+        const totBoxY  = 47;
+        const totBoxH  = 7 + totLines * 7 + 14 + 5; // padTop + filas + píldora + padBot
 
         doc.setFillColor(...C.light); doc.setDrawColor(...C.border); doc.setLineWidth(0.3);
         doc.roundedRect(totBoxX, totBoxY, totBoxW, totBoxH, 4, 4, 'FD');
@@ -712,28 +691,49 @@
             doc.text(fMoney(it) + ' Bs', numX, ty, { align: 'right' }); ty += 7;
         }
 
-        // Píldora total (azul redondeada)
+        // Píldora total azul
         doc.setFillColor(...C.blue);
         doc.roundedRect(totBoxX, ty - 1, totBoxW, 12, 4, 4, 'F');
-        doc.setFontSize(8.5); doc.setFont(undefined, 'bold'); doc.setTextColor(...C.white);
-        doc.text(montoCierreDB > 0 ? 'PRECIO NEGOCIADO' : 'TOTAL CONTRATADO', totBoxX + 5, ty + 7);
+        doc.setFontSize(8); doc.setFont(undefined, 'bold'); doc.setTextColor(...C.white);
+        doc.text(montoCierreDB > 0 ? 'NEGOCIADO' : 'TOTAL', totBoxX + 5, ty + 7);
         doc.text(fMoney(totalFinal) + ' Bs', numX, ty + 7, { align: 'right' });
         doc.setTextColor(...C.dark);
 
-        let y = totBoxY + totBoxH + 10;
+        // ── Tabla de ítems (izquierda, misma línea y=47) ─────────────────
+        doc.autoTable({
+            startY: 47,
+            head: [['Descripción', 'Und', 'Cant', 'Total (Bs)']],
+            body: rows,
+            styles: { cellPadding: 3.5, fontSize: 9, textColor: C.dark, lineColor: C.border, lineWidth: 0.2 },
+            headStyles: { fillColor: C.dark, textColor: C.white, fontStyle: 'bold', fontSize: 8.5 },
+            alternateRowStyles: { fillColor: C.light },
+            columnStyles: {
+                0: { cellWidth: 57 },
+                1: { cellWidth: 15, halign: 'center' },
+                2: { cellWidth: 15, halign: 'center' },
+                3: { cellWidth: 23, halign: 'right', fontStyle: 'bold' }
+            },
+            margin: { top: 25, left: ML, right: 86 },
+            tableLineColor: C.border,
+            tableLineWidth: 0.2
+        });
+
+        let y = Math.max(doc.lastAutoTable.finalY, totBoxY + totBoxH) + 12;
 
         // ── Historial de pagos ───────────────────────────────────────────
         let totalPagado = 0;
         if (pagosObj.length > 0) {
-            const pagoBoxH = pagosObj.length * 7 + 8;
+            const padV     = 5;
+            const pagoBoxH = padV + pagosObj.length * 7 + 3 + 7 + padV;
             if (y + pagoBoxH + 45 > 272) { doc.addPage(); y = 20; }
 
             doc.setFontSize(9); doc.setFont(undefined, 'bold'); doc.setTextColor(...C.dark);
             doc.text('PAGOS REGISTRADOS', ML, y + 1); y += 7;
 
+            const pagoBoxTop = y;
             doc.setFillColor(...C.light); doc.setDrawColor(...C.border); doc.setLineWidth(0.3);
-            doc.roundedRect(ML, y, PW - ML - MR, pagoBoxH, 4, 4, 'FD');
-            y += 5;
+            doc.roundedRect(ML, pagoBoxTop, PW - ML - MR, pagoBoxH, 4, 4, 'FD');
+            y += padV;
 
             doc.setFontSize(8.5); doc.setFont(undefined, 'normal');
             pagosObj.forEach(p => {
@@ -747,11 +747,18 @@
                 y += 7;
                 if (y > 270) { doc.addPage(); y = 20; }
             });
-            y += 4;
 
-            doc.setFontSize(9); doc.setFont(undefined, 'bold'); doc.setTextColor(...C.green);
-            doc.text('Total pagado: ' + fMoney(totalPagado) + ' Bs', PW - MR - 5, y, { align: 'right' });
-            doc.setTextColor(...C.dark); y += 12;
+            // Separador interno + fila "Total pagado" dentro del cuadro
+            doc.setDrawColor(...C.border); doc.setLineWidth(0.2);
+            doc.line(ML + 4, y, PW - MR - 4, y);
+            y += 3;
+            doc.setFontSize(9); doc.setFont(undefined, 'bold'); doc.setTextColor(...C.dark);
+            doc.text('Total pagado:', ML + 5, y + 5);
+            doc.setTextColor(...C.green);
+            doc.text(fMoney(totalPagado) + ' Bs', PW - MR - 5, y + 5, { align: 'right' });
+            doc.setTextColor(...C.dark);
+
+            y = pagoBoxTop + pagoBoxH + 10;
         }
 
         // ── Saldo (píldora redondeada) ───────────────────────────────────
@@ -780,11 +787,10 @@
         const conComprobante = pagosObj.filter(p => p.comprobante_url);
         if (conComprobante.length > 0) {
             doc.addPage();
-            if (logoB64) { try { doc.addImage(logoB64, 'PNG', PW - 32, 7, 20, 20); } catch(e) {} }
             doc.setFontSize(14); doc.setFont(undefined, 'bold'); doc.setTextColor(...C.dark);
             doc.text('COMPROBANTES DE PAGO', ML, 22);
             doc.setDrawColor(...C.blue); doc.setLineWidth(1);
-            doc.line(ML, 25, PW - MR, 25);
+            doc.line(ML, 25, logoX - 4, 25);
             doc.setLineWidth(0.2); doc.setDrawColor(...C.border);
             let py = 32;
             for (let i = 0; i < conComprobante.length; i++) {
