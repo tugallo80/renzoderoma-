@@ -181,6 +181,16 @@
         </div>
     </div>
 
+    <!-- MODAL LIMPIEZA DUPLICADOS -->
+    <div class="modal" id="mod-dedup">
+        <div class="modal-box" style="max-width:560px; max-height:85vh; overflow-y:auto;">
+            <i class="ph-bold ph-x" style="position:absolute;top:20px;right:20px;font-size:24px;color:var(--gray);cursor:pointer;" onclick="document.getElementById('mod-dedup').style.display='none'"></i>
+            <h3 style="margin-top:0;display:flex;align-items:center;gap:8px;"><i class="ph-bold ph-broom" style="color:var(--orange);"></i> Limpiar Materiales Duplicados</h3>
+            <p style="font-size:12px;color:var(--gray);margin:0 0 16px;">Los grupos siguientes contienen materiales con nombres similares. Eliminá las entradas incorrectas o duplicadas. Las entradas con <span style="background:rgba(48,209,88,0.15);color:var(--green);padding:2px 6px;border-radius:4px;font-size:11px;">proveedor</span> son las originales válidas.</p>
+            <div id="dedup-content"></div>
+        </div>
+    </div>
+
     <!-- MODAL CHAT CEREBRO CENTRAL IA -->
     <div class="modal" id="mod-ia-chat">
         <div class="modal-box" style="display:flex; flex-direction:column; height:85vh; padding:0; overflow:hidden; max-width: 500px;">
@@ -474,7 +484,15 @@ Puedo ayudarte con:<br>
             }
         });
 
-        box.innerHTML = count > 0 ? html : '<div class="empty-state">No hay registros aquí.</div>';
+        let toolbar = '';
+        if (currentTab === 'mat') {
+            toolbar = `<div style="display:flex;justify-content:flex-end;margin-bottom:8px;">
+                <button onclick="abrirDedupTool()" style="font-size:11px;padding:6px 14px;border-radius:20px;border:1px solid rgba(255,159,10,0.4);background:rgba(255,159,10,0.1);color:var(--orange);cursor:pointer;display:flex;align-items:center;gap:6px;">
+                    <i class="ph-bold ph-broom"></i> Limpiar Duplicados
+                </button>
+            </div>`;
+        }
+        box.innerHTML = toolbar + (count > 0 ? html : '<div class="empty-state">No hay registros aquí.</div>');
     }
 
     function abrirModalPrincipal() {
@@ -759,10 +777,10 @@ Reglas: si proveedor existe usa nombre exacto con es_nuevo:false. Convierte USD�
 
             } else {
                 // ── MODO AGENTE: multi-turn con contexto de BD SIEMPRE fresco ──
-                const moEntries = Object.values(dbData.mo||{});
-                const matEntries = Object.values(dbData.mat||{});
-                const moList = moEntries.map(m=>`${m.n||m.desc||''}: ${m.p||0}Bs/${m.u||''}`).join('\n');
-                const matList = matEntries.map(m=>`${m.n||m.desc||''}: ${m.p||0}Bs/${m.u||''}${m.proveedor?' ('+m.proveedor+')':''}`).join('\n');
+                const moEntries = Object.entries(dbData.mo||{});
+                const matEntries = Object.entries(dbData.mat||{});
+                const moList = moEntries.map(([k,m])=>`[${k}] ${m.n||m.desc||''}: ${m.p||0}Bs/${m.u||''}`).join('\n');
+                const matList = matEntries.map(([k,m])=>`[${k}] ${m.n||m.desc||''}: ${m.p||0}Bs/${m.u||''}${m.proveedor?' ('+m.proveedor+')':''}`).join('\n');
                 const provList = Object.values(dbData.prov||{}).map(p=>`${p.nombre||''}${p.categoria?' – '+p.categoria:''}`).filter(Boolean).join('\n');
 
                 // Contexto reconstruido en cada llamada → la IA siempre ve datos actuales
@@ -775,7 +793,7 @@ CAPACIDADES:
 • Analizar y comparar proveedores ("¿quién es el más barato en acrílico?")
 • Cálculos de costos y análisis
 
-BASE DE DATOS ACTUAL:
+BASE DE DATOS ACTUAL (cada registro muestra su KEY entre corchetes [KEY]):
 
 == MANO DE OBRA (${moEntries.length} registros) ==
 ${moList || 'Vacío'}
@@ -790,7 +808,7 @@ ESTRUCTURA FIREBASE para acciones:
 - Mano de obra: base_datos/mano_obra/{KEY}
 - Materiales:   base_datos/materiales/{KEY}
 - Otros/Equipos: base_datos/otros/{KEY}
-- KEY = nombre en MAYÚSCULAS, espacios y especiales reemplazados por "_"
+- CRÍTICO — KEY: para update/delete de un registro existente, usá EXACTAMENTE el [KEY] que aparece entre corchetes en el contexto de arriba. Para create de un registro NUEVO usá nombre en MAYÚSCULAS con espacios reemplazados por "_".
 
 FORMATO DE RESPUESTA — CRÍTICO: Responde ÚNICAMENTE con un objeto JSON válido, sin texto antes ni después, sin bloques markdown.
 
@@ -798,13 +816,13 @@ Para consultas/respuestas:
 {"tipo":"chat","mensaje":"respuesta en texto","tabla":[{"col":"val"}]}
 
 Para ejecutar cambios en BD:
-{"tipo":"accion","mensaje":"Descripción","acciones":[{"op":"update","coleccion":"mano_obra","key":"KEY","data":{"p":15},"desc":"descripción del cambio"}]}
+{"tipo":"accion","mensaje":"Descripción","acciones":[{"op":"update","coleccion":"mano_obra","key":"KEY_EXACTO_DEL_CONTEXTO","data":{"p":15},"desc":"descripción del cambio"}]}
 
 ops válidas: update | delete | create
 
 Reglas:
 - Siempre mencioná el valor anterior antes de cambiarlo.
-- KEY = nombre en MAYÚSCULAS, espacios reemplazados por "_".
+- Para update/delete: KEY debe ser el valor exacto entre [] del contexto, NO lo inventes.
 - Para comparar proveedores: listá todos con su precio en una tabla.
 - Tu respuesta es SOLO el JSON. Nunca texto plano, nunca markdown.`;
 
@@ -1106,6 +1124,94 @@ Reglas:
             renderCurrentTab();
         } catch(err) {
             chat.innerHTML += `<div class="msg msg-ai" style="color:var(--red);">Error guardando: ${err.message}</div>`;
+        }
+    }
+
+    // ── Herramienta Limpiar Duplicados ──────────────────────────────────────
+    function normMatName(n) {
+        return String(n || '')
+            .toLowerCase()
+            .replace(/\(.*?\)/g, ' ')           // quitar paréntesis
+            .replace(/\s+mm/gi, 'mm')           // "12 MM" → "12mm"
+            .replace(/[^a-z0-9]/g, ' ')         // solo alfanumérico
+            .replace(/\s+/g, ' ')
+            .trim();
+    }
+
+    function abrirDedupTool() {
+        const mat = dbData.mat || {};
+        const groups = {};
+
+        Object.entries(mat).forEach(([k, m]) => {
+            const rawName = m.n || m.desc || '';
+            const norm = normMatName(rawName);
+            const groupKey = norm.split(' ').slice(0, 5).join(' '); // primeras 5 palabras
+            if (!groups[groupKey]) groups[groupKey] = [];
+            groups[groupKey].push({ k, m, rawName });
+        });
+
+        // Solo grupos con 2+ entradas
+        const dups = Object.entries(groups).filter(([, arr]) => arr.length > 1);
+
+        const box = document.getElementById('dedup-content');
+        if (dups.length === 0) {
+            box.innerHTML = `<div style="text-align:center;padding:32px;color:var(--gray);">
+                <i class="ph-bold ph-check-circle" style="font-size:40px;color:var(--green);display:block;margin-bottom:8px;"></i>
+                No se detectaron duplicados. La base de datos está limpia.
+            </div>`;
+            document.getElementById('mod-dedup').style.display = 'flex';
+            return;
+        }
+
+        let html = `<p style="font-size:11px;color:var(--gray);margin-bottom:16px;"><b>${dups.length} grupo(s)</b> con posibles duplicados encontrados.</p>`;
+
+        dups.forEach(([gk, arr]) => {
+            html += `<div style="margin-bottom:20px;border:1px solid var(--border);border-radius:12px;overflow:hidden;">
+                <div style="padding:8px 12px;background:var(--light, #f5f5f7);font-size:11px;font-weight:700;color:var(--gray);text-transform:uppercase;letter-spacing:.5px;">
+                    Grupo: "${gk}" — ${arr.length} entradas
+                </div>`;
+            arr.forEach(({ k, m }) => {
+                const hasProveedor = m.proveedor && m.proveedor.trim();
+                const provBadge = hasProveedor
+                    ? `<span style="background:rgba(48,209,88,0.15);color:#30D158;padding:2px 7px;border-radius:10px;font-size:10px;font-weight:700;"><i class="ph-bold ph-storefront"></i> ${m.proveedor}</span>`
+                    : `<span style="background:rgba(174,174,178,0.2);color:var(--gray);padding:2px 7px;border-radius:10px;font-size:10px;">sin proveedor</span>`;
+                const isNameKey = /^[A-Z0-9_]+$/.test(k) && !k.startsWith('-');
+                const keyBadge = isNameKey
+                    ? `<span style="font-size:9px;color:#FF453A;background:rgba(255,69,58,0.1);padding:2px 5px;border-radius:4px;">⚠ clave IA</span>`
+                    : `<span style="font-size:9px;color:var(--gray);background:rgba(0,0,0,0.05);padding:2px 5px;border-radius:4px;">clave original</span>`;
+                html += `<div style="display:flex;align-items:center;gap:8px;padding:10px 12px;border-top:1px solid var(--border);">
+                    <div style="flex:1;min-width:0;">
+                        <div style="font-weight:700;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${m.n || m.desc || k}</div>
+                        <div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:4px;align-items:center;">
+                            ${provBadge} ${keyBadge}
+                            <span style="font-size:11px;color:var(--gray);">${m.u || m.und || '—'}</span>
+                        </div>
+                    </div>
+                    <div style="font-weight:800;font-size:15px;color:var(--blue);white-space:nowrap;">${(m.p || m.pu || 0).toLocaleString('es-BO', {minimumFractionDigits:2})} Bs</div>
+                    <button onclick="eliminarMatDedup('${k}', this)" style="padding:6px 10px;border-radius:8px;border:1px solid rgba(255,69,58,0.4);background:rgba(255,69,58,0.1);color:#FF453A;cursor:pointer;font-size:12px;flex-shrink:0;">
+                        <i class="ph-bold ph-trash"></i>
+                    </button>
+                </div>`;
+            });
+            html += `</div>`;
+        });
+
+        box.innerHTML = html;
+        document.getElementById('mod-dedup').style.display = 'flex';
+    }
+
+    async function eliminarMatDedup(key, btn) {
+        if (!confirm(`¿Eliminar este material de la base de datos?`)) return;
+        btn.disabled = true;
+        btn.innerHTML = '<i class="ph-bold ph-spinner-gap"></i>';
+        try {
+            await db.ref(`base_datos/materiales/${key}`).remove();
+            // Actualizar dbData local y re-renderizar el grupo
+            btn.closest('div[style*="border-top"]').remove();
+        } catch(e) {
+            alert('Error: ' + e.message);
+            btn.disabled = false;
+            btn.innerHTML = '<i class="ph-bold ph-trash"></i>';
         }
     }
 </script>
