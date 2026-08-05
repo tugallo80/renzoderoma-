@@ -808,10 +808,9 @@
             }
 
             let showInPrints = mainIsGraphic || gApus.length > 0;
-            let showInItems = !mainIsGraphic || sApus.length > 0;
 
             if(currentTab === 'prints' && !showInPrints) return;
-            if(currentTab === 'items' && !showInItems) return;
+            // Todos los ítems aparecen en la pestaña Ítems — prints es una vista adicional, no exclusiva
 
             let statusField = currentTab === 'prints' ? 'print_status' : 'prod_status';
             let status = item[statusField] || 'pendiente';
@@ -828,10 +827,13 @@
             
             let valResp = item[respField] || ''; let valDate = item[dateField] || '';
 
+            const graphicBadge = (currentTab === 'items' && showInPrints)
+                ? `<span style="font-size:9px;font-weight:800;background:rgba(100,210,255,0.15);color:#5ac8fa;border:1px solid rgba(90,200,250,0.3);border-radius:8px;padding:2px 6px;margin-left:6px;vertical-align:middle;"><i class="ph-bold ph-printer"></i> Impresión</span>`
+                : '';
             let html = `
             <div class="task-card ${doneClass}">
                 <div class="t-header" onclick="toggleTaskBody(${idx})" style="cursor:pointer; background:var(--blue-light); padding:12px 15px; border-radius:8px; margin:-5px -5px 15px -5px;">
-                    <span class="t-title" style="margin:0;">${item.desc || 'Ítem sin nombre'}</span>
+                    <span class="t-title" style="margin:0;">${item.desc || 'Ítem sin nombre'}${graphicBadge}</span>
                     <div style="display:flex; gap:10px; align-items:center;">
                         <span class="t-qty">${stripZeros(item.cant)} ${item.und || 'glb'}</span>
                         <i class="ph-bold ph-caret-down" id="task-icon-${idx}" style="color:var(--blue); transition:0.3s;"></i>
