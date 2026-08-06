@@ -5,48 +5,31 @@ on:
     branches:
       - main
   workflow_dispatch:
-concurrency:
-  group: firebase-deploy-main
-  cancel-in-progress: false
 jobs:
-  deploy_hosting:
-    name: Deploy Hosting
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Deploy Hosting
-        run: npx firebase-tools deploy --only hosting --token "${{ secrets.FIREBASE_TOKEN }}" --project rubik-bolivia --non-interactive
-
-  deploy_database_rules:
-    name: Deploy Database Rules
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Deploy Database Rules
-        run: npx firebase-tools deploy --only database --token "${{ secrets.FIREBASE_TOKEN }}" --project rubik-bolivia --non-interactive
-
-  deploy_functions:
-    name: Deploy Functions
+  deploy:
+    name: Deploy to Firebase
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 2
+      - name: Deploy Hosting
+        run: npx firebase-tools deploy --only hosting --token "${{ secrets.FIREBASE_TOKEN }}" --project rubik-bolivia --non-interactive
+      - name: Deploy Database Rules
+        run: npx firebase-tools deploy --only database --token "${{ secrets.FIREBASE_TOKEN }}" --project rubik-bolivia --non-interactive
       - name: Check if functions changed
         id: changes
         run: |
           if git diff --name-only HEAD~1 HEAD | grep -q "^functions/"; then
             echo "changed=true" >> $GITHUB_OUTPUT
-            echo "Functions directory changed — deploying"
           else
             echo "changed=false" >> $GITHUB_OUTPUT
-            echo "No functions changes — skipping deploy"
           fi
       - uses: actions/setup-node@v4
         if: steps.changes.outputs.changed == 'true'
         with:
           node-version: '20'
-      - name: Instalar dependencias de Functions
+      - name: Install function dependencies
         if: steps.changes.outputs.changed == 'true'
         run: npm install
         working-directory: functions
