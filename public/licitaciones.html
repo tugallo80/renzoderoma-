@@ -2496,18 +2496,33 @@ LICITACIONES ACTUALES DEL PROYECTO:
             // ════════════════════════════════════════════════
             //  MODO DETALLE — desglose costo por ítem
             // ════════════════════════════════════════════════
-            const isLlm = (_licMode === 'llave_en_mano');
+            const licMode = lic.lic_mode || _licMode || 'mo';
+            const isLlm = (licMode === 'llave_en_mano');
             if (modo === 'detalle') {
                 let y = 44;
                 for (const k of groupOrder) {
                     const g = groups[k], it = g.item;
-                    // En modo llave_en_mano usamos solo los sub-componentes que el usuario tildó (g.tareas)
-                    const moSrc  = isLlm
-                        ? Object.values(g.tareas).filter(t => t.originType === 'llm_mo')
-                        : ((it && it.prod_apu && it.prod_apu.mo  && it.prod_apu.mo.length  > 0) ? it.prod_apu.mo  : []);
+                    // Índices realmente tildados en venta_mat / venta_mo
+                    const checkedMatIdxs = new Set(
+                        g.tareas.filter(t => t.originType === 'venta_mat').map(t => t.originMatidx)
+                    );
+                    const checkedMoIdxs = new Set(
+                        g.tareas.filter(t => t.originType === 'venta_mo').map(t => t.originMoidx)
+                    );
+                    const moSrc = isLlm
+                        ? g.tareas.filter(t => t.originType === 'llm_mo')
+                        : ((it && it.prod_apu && it.prod_apu.mo && it.prod_apu.mo.length > 0)
+                            ? (checkedMoIdxs.size > 0
+                                ? it.prod_apu.mo.filter((m, i) => checkedMoIdxs.has(i))
+                                : it.prod_apu.mo)
+                            : []);
                     const matSrc = isLlm
-                        ? Object.values(g.tareas).filter(t => t.originType === 'llm_mat')
-                        : ((it && it.prod_apu && it.prod_apu.mat && it.prod_apu.mat.length > 0) ? it.prod_apu.mat.filter(m => !m.es_arte) : []);
+                        ? g.tareas.filter(t => t.originType === 'llm_mat')
+                        : ((it && it.prod_apu && it.prod_apu.mat && it.prod_apu.mat.length > 0)
+                            ? (checkedMatIdxs.size > 0
+                                ? it.prod_apu.mat.filter((m, i) => checkedMatIdxs.has(i) && !m.es_arte)
+                                : it.prod_apu.mat.filter(m => !m.es_arte))
+                            : []);
 
                     // Nueva página si no cabe
                     const minH = 14 + (matSrc.length + moSrc.length) * 5 + 20;
