@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - main
+concurrency:
+  group: firebase-deploy-main
+  cancel-in-progress: false
 jobs:
   deploy_hosting:
     name: Deploy Hosting
