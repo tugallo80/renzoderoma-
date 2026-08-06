@@ -163,10 +163,13 @@
                 </div>
                 <div id="lista-pagos-admin" style="margin-top:15px; max-height:150px; overflow-y:auto; font-size:12px; border-top:1px dashed var(--border); padding-top:10px;"></div>
                 <div style="display:flex; gap:8px; margin-top:12px; flex-wrap:wrap;">
-                    <button onclick="exportReciboSaldo()" class="btn-action btn-success" style="flex:1; padding:10px; font-size:12px; min-width:150px;">
-                        <i class="ph-bold ph-receipt"></i> Nota de Cobro PDF
+                    <button onclick="exportReciboSaldo()" class="btn-action btn-success" style="flex:1; padding:10px; font-size:12px; min-width:140px;">
+                        <i class="ph-bold ph-receipt"></i> Consolidado PDF
                     </button>
-                    <button onclick="abrirMailRecibo()" class="btn-action" style="flex:1; padding:10px; font-size:12px; min-width:150px; background:#5ac8fa;">
+                    <button onclick="exportReciboResumido()" class="btn-action" style="flex:1; padding:10px; font-size:12px; min-width:140px; background:#bf5af2;">
+                        <i class="ph-bold ph-file-text"></i> Resumen PDF
+                    </button>
+                    <button onclick="abrirMailRecibo()" class="btn-action" style="flex:1; padding:10px; font-size:12px; min-width:140px; background:#5ac8fa;">
                         <i class="ph-bold ph-envelope"></i> Enviar al cliente
                     </button>
                 </div>
@@ -830,6 +833,263 @@
             const dd = String(dDate.getDate()).padStart(2, '0');
             const safeName = (pname || 'CLIENTE').replace(/[^a-zA-Z0-9_\- ]/g, '').trim().replace(/ /g, '_');
             doc.save(`${mm}${dd}_RECIBO_${safeName}.pdf`);
+        } catch(e) {
+            alert('Error generando PDF: ' + e.message);
+            console.error(e);
+        } finally {
+            if (btn) { btn.disabled = false; btn.innerHTML = origText; }
+        }
+    };
+
+    // ── Resumen PDF (sin precios por ítem) ──────────────────────────────
+    async function _buildReciboResumidoDoc() {
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF();
+        if (typeof doc.autoTable !== 'function') throw new Error("jspdf-autotable no cargó.");
+        const logoB64 = await _logoB64Dash();
+
+        const [pptoSnap, pagosSnap, cierreSnap, cliSnap] = await Promise.all([
+            db.ref(`proyectos/${cid}/${pid}/presupuesto`).once('value'),
+            db.ref(`proyectos/${cid}/${pid}/pagos`).once('value'),
+            db.ref(`proyectos/${cid}/${pid}/monto_cierre`).once('value'),
+            db.ref(`clientes/${cid}/nombre`).once('value').catch(() => ({ val: () => null }))
+        ]);
+        const ppto          = pptoSnap.val() || {};
+        const pagosRaw      = pagosSnap.val() || {};
+        const pagosObj      = Object.values(pagosRaw);
+        const montoCierreDB = parseFloat(cierreSnap.val()) || 0;
+
+        const clienteNom  = ((cliSnap.val && cliSnap.val()) || pname || 'CLIENTE').toUpperCase();
+        const proyectoNom = (pname || 'PROYECTO').toUpperCase();
+        const fechaHoy    = new Date().toLocaleDateString('es-BO', { day:'2-digit', month:'2-digit', year:'numeric' });
+
+        const C = {
+            dark:   [29, 29, 31],
+            blue:   [0, 113, 227],
+            green:  [48, 209, 88],
+            orange: [255, 159, 10],
+            gray:   [110, 110, 115],
+            lgray:  [174, 174, 178],
+            light:  [245, 245, 247],
+            border: [210, 210, 215],
+            white:  [255, 255, 255]
+        };
+        const PW   = doc.internal.pageSize.getWidth();
+        const ML   = 14, MR = 14;
+        const logoX = PW - 32;
+
+        // ── Encabezado ────────────────────────────────────────────────────
+        doc.setFontSize(22); doc.setFont(undefined, 'bold'); doc.setTextColor(...C.dark);
+        doc.text('RESUMEN DE CONTRATO', ML, 21);
+        doc.setDrawColor(...C.blue); doc.setLineWidth(1);
+        doc.line(ML, 25, logoX - 4, 25);
+        doc.setLineWidth(0.2); doc.setDrawColor(...C.border);
+
+        doc.setFontSize(8.5); doc.setFont(undefined, 'normal'); doc.setTextColor(...C.gray);
+        doc.text(`Cliente: ${clienteNom}`, ML, 31);
+        doc.text(`Proyecto: ${proyectoNom}`, ML, 36.5);
+        doc.text(`Fecha: ${fechaHoy}`, ML, 42);
+        doc.setTextColor(...C.dark);
+
+        // ── Calcular totales ──────────────────────────────────────────────
+        const itemNames   = [];
+        let subtotalItems = 0;
+        const hasImp   = ppto.impuestos || false;
+        const descPct  = parseFloat(ppto.descuento_pct) || 0;
+        const descFijo = parseFloat(ppto.descuento) || 0;
+
+        if (ppto.items) {
+            Object.values(ppto.items).forEach(item => {
+                if (!item || item.type === 'chapter') return;
+                if (item.activo === false) return;
+                const cant = parseFloat(item.cant || 0);
+                const pu   = parseFloat(item.pu   || 0);
+                subtotalItems += cant * pu;
+                if (item.desc) itemNames.push(item.desc);
+            });
+        }
+
+        const descVal    = descPct > 0 ? Math.round(subtotalItems * descPct / 100 * 100) / 100 : descFijo;
+        const base       = subtotalItems - descVal;
+        const iva        = hasImp ? base * 0.13 : 0;
+        const it         = hasImp ? base * 0.03 : 0;
+        const totalFinal = montoCierreDB > 0 ? montoCierreDB : (base + iva + it);
+
+        // ── Lista de ítems (caja redondeada, sólo nombres) ────────────────
+        let y = 50;
+        doc.setFontSize(9); doc.setFont(undefined, 'bold'); doc.setTextColor(...C.dark);
+        doc.text('ÍTEMS CONTRATADOS', ML, y); y += 5;
+
+        const itemLineH  = 7;
+        const itemPadV   = 5;
+        const itemBoxH   = itemPadV + itemNames.length * itemLineH + itemPadV;
+        doc.setFillColor(...C.light); doc.setDrawColor(...C.border); doc.setLineWidth(0.3);
+        doc.roundedRect(ML, y, PW - ML - MR, itemBoxH, 4, 4, 'FD');
+        y += itemPadV;
+
+        doc.setFontSize(8.5); doc.setFont(undefined, 'normal'); doc.setTextColor(...C.dark);
+        itemNames.forEach(name => {
+            doc.setTextColor(...C.blue);
+            doc.text('•', ML + 4, y);
+            doc.setTextColor(...C.dark);
+            doc.text(name, ML + 9, y);
+            y += itemLineH;
+            if (y > 270) { doc.addPage(); y = 20; }
+        });
+        y += itemPadV + 4;
+
+        // ── Caja de totales (ancho completo) ──────────────────────────────
+        const totLines = 1 + (descVal > 0 ? 1 : 0) + (hasImp ? 2 : 0);
+        const totBoxH  = 7 + totLines * 7 + 14 + 5;
+        const totBoxW  = PW - ML - MR;
+        if (y + totBoxH + 10 > 272) { doc.addPage(); y = 20; }
+
+        doc.setFillColor(...C.light); doc.setDrawColor(...C.border); doc.setLineWidth(0.3);
+        doc.roundedRect(ML, y, totBoxW, totBoxH, 4, 4, 'FD');
+
+        let ty     = y + 7;
+        const numX = ML + totBoxW - 5;
+
+        doc.setFontSize(8.5); doc.setFont(undefined, 'normal'); doc.setTextColor(...C.gray);
+        doc.text('Subtotal:', ML + 5, ty);
+        doc.setTextColor(...C.dark); doc.setFont(undefined, 'bold');
+        doc.text(fMoney(subtotalItems) + ' Bs', numX, ty, { align: 'right' }); ty += 7;
+
+        if (descVal > 0) {
+            doc.setFont(undefined, 'normal'); doc.setTextColor(...C.gray);
+            doc.text(descPct > 0 ? `Descuento ${descPct}%:` : 'Descuento:', ML + 5, ty);
+            doc.setTextColor(200, 100, 0); doc.setFont(undefined, 'bold');
+            doc.text('- ' + fMoney(descVal) + ' Bs', numX, ty, { align: 'right' }); ty += 7;
+        }
+        if (hasImp) {
+            doc.setFont(undefined, 'normal'); doc.setTextColor(...C.gray);
+            doc.text('IVA (13%):', ML + 5, ty);
+            doc.setTextColor(...C.dark); doc.setFont(undefined, 'bold');
+            doc.text(fMoney(iva) + ' Bs', numX, ty, { align: 'right' }); ty += 7;
+            doc.setFont(undefined, 'normal'); doc.setTextColor(...C.gray);
+            doc.text('IT (3%):', ML + 5, ty);
+            doc.setTextColor(...C.dark); doc.setFont(undefined, 'bold');
+            doc.text(fMoney(it) + ' Bs', numX, ty, { align: 'right' }); ty += 7;
+        }
+
+        // Píldora azul total
+        doc.setFillColor(...C.blue);
+        doc.roundedRect(ML, ty - 1, totBoxW, 12, 4, 4, 'F');
+        doc.setFontSize(8); doc.setFont(undefined, 'bold'); doc.setTextColor(...C.white);
+        doc.text(montoCierreDB > 0 ? 'PRECIO NEGOCIADO' : 'TOTAL CONTRATADO', ML + 5, ty + 7);
+        doc.text(fMoney(totalFinal) + ' Bs', numX, ty + 7, { align: 'right' });
+        doc.setTextColor(...C.dark);
+
+        y += totBoxH + 10;
+
+        // ── Historial de pagos ────────────────────────────────────────────
+        let totalPagado = 0;
+        if (pagosObj.length > 0) {
+            const padV     = 5;
+            const pagoBoxH = padV + pagosObj.length * 7 + 3 + 7 + padV;
+            if (y + pagoBoxH + 45 > 272) { doc.addPage(); y = 20; }
+
+            doc.setFontSize(9); doc.setFont(undefined, 'bold'); doc.setTextColor(...C.dark);
+            doc.text('PAGOS REGISTRADOS', ML, y + 1); y += 7;
+
+            const pagoBoxTop = y;
+            doc.setFillColor(...C.light); doc.setDrawColor(...C.border); doc.setLineWidth(0.3);
+            doc.roundedRect(ML, pagoBoxTop, PW - ML - MR, pagoBoxH, 4, 4, 'FD');
+            y += padV;
+
+            doc.setFontSize(8.5); doc.setFont(undefined, 'normal');
+            pagosObj.forEach(p => {
+                const m = parseFloat(p.monto || 0);
+                totalPagado += m;
+                doc.setTextColor(...C.gray);
+                doc.text(`${p.fecha || '-'}   ${p.nota || ''}`, ML + 5, y);
+                doc.setTextColor(...C.green); doc.setFont(undefined, 'bold');
+                doc.text('+ ' + fMoney(m) + ' Bs', PW - MR - 5, y, { align: 'right' });
+                doc.setFont(undefined, 'normal');
+                y += 7;
+                if (y > 270) { doc.addPage(); y = 20; }
+            });
+
+            doc.setDrawColor(...C.border); doc.setLineWidth(0.2);
+            doc.line(ML + 4, y, PW - MR - 4, y);
+            y += 3;
+            doc.setFontSize(9); doc.setFont(undefined, 'bold'); doc.setTextColor(...C.dark);
+            doc.text('Total pagado:', ML + 5, y + 5);
+            doc.setTextColor(...C.green);
+            doc.text(fMoney(totalPagado) + ' Bs', PW - MR - 5, y + 5, { align: 'right' });
+            doc.setTextColor(...C.dark);
+
+            y = pagoBoxTop + pagoBoxH + 10;
+        }
+
+        // ── Saldo ─────────────────────────────────────────────────────────
+        const saldo = totalFinal - totalPagado;
+        if (y + 16 > 272) { doc.addPage(); y = 20; }
+        const saldoCol = saldo <= 0 ? C.green : C.orange;
+        doc.setFillColor(...saldoCol);
+        doc.roundedRect(PW - MR - 82, y, 82, 14, 4, 4, 'F');
+        doc.setFontSize(10); doc.setFont(undefined, 'bold'); doc.setTextColor(...C.white);
+        doc.text(saldo <= 0 ? '✓  CANCELADO' : 'SALDO A PAGAR:', PW - MR - 78, y + 9);
+        doc.text(fMoney(Math.abs(saldo)) + ' Bs', PW - MR - 4, y + 9, { align: 'right' });
+        doc.setTextColor(...C.dark); y += 22;
+
+        // ── Firmas ────────────────────────────────────────────────────────
+        if (y + 22 > 278) { doc.addPage(); y = 30; }
+        y += 12;
+        doc.setDrawColor(...C.border); doc.setLineWidth(0.4);
+        doc.line(ML, y, ML + 72, y);
+        doc.line(PW - MR - 72, y, PW - MR, y);
+        doc.setFontSize(7.5); doc.setFont(undefined, 'normal'); doc.setTextColor(...C.lgray);
+        doc.text('Firma y sello cliente', ML, y + 4);
+        doc.text('Firma Rubik Bolivia', PW - MR - 72, y + 4);
+        doc.setTextColor(...C.dark);
+
+        // ── Comprobantes ──────────────────────────────────────────────────
+        const conComprobante = pagosObj.filter(p => p.comprobante_url);
+        if (conComprobante.length > 0) {
+            doc.addPage();
+            doc.setFontSize(14); doc.setFont(undefined, 'bold'); doc.setTextColor(...C.dark);
+            doc.text('COMPROBANTES DE PAGO', ML, 22);
+            doc.setDrawColor(...C.blue); doc.setLineWidth(1);
+            doc.line(ML, 25, logoX - 4, 25);
+            doc.setLineWidth(0.2); doc.setDrawColor(...C.border);
+            let py = 32;
+            for (let i = 0; i < conComprobante.length; i++) {
+                const p = conComprobante[i];
+                if (py > 218) { doc.addPage(); py = 20; }
+                doc.setFontSize(8.5); doc.setFont(undefined, 'bold'); doc.setTextColor(...C.gray);
+                doc.text(`${p.fecha||'-'}  ${p.nota||'Comprobante '+(i+1)}  ·  + ${fMoney(p.monto||0)} Bs`, ML, py);
+                py += 4;
+                try {
+                    const b64 = await _fetchImgB64(p.comprobante_url);
+                    if (b64) {
+                        const props = doc.getImageProperties(b64);
+                        const ratio = props.width / props.height;
+                        let w = 170, h = w / ratio;
+                        if (h > 172) { h = 172; w = h * ratio; }
+                        doc.addImage(b64, 'JPEG', ML + (182-w)/2, py, w, h);
+                        py += h + 10;
+                    }
+                } catch(e) { py += 5; }
+            }
+        }
+
+        _membreteD(doc, logoB64);
+        return { doc, totalFinal, totalPagado, saldo };
+    }
+
+    window.exportReciboResumido = async function() {
+        const btn = event ? event.currentTarget : null;
+        const origText = btn ? btn.innerHTML : '';
+        if (btn) { btn.disabled = true; btn.innerHTML = '<i class="ph-bold ph-spinner"></i> Generando...'; }
+        try {
+            if (!window.jspdf || !window.jspdf.jsPDF) throw new Error("jsPDF no cargó aún.");
+            const { doc } = await _buildReciboResumidoDoc();
+            const dDate = new Date();
+            const mm = String(dDate.getMonth() + 1).padStart(2, '0');
+            const dd = String(dDate.getDate()).padStart(2, '0');
+            const safeName = (pname || 'CLIENTE').replace(/[^a-zA-Z0-9_\- ]/g, '').trim().replace(/ /g, '_');
+            doc.save(`${mm}${dd}_RESUMEN_${safeName}.pdf`);
         } catch(e) {
             alert('Error generando PDF: ' + e.message);
             console.error(e);
