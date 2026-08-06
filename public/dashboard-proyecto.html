@@ -1047,14 +1047,17 @@
         doc.setTextColor(...C.dark); y += 22;
 
         // ── Firmas ────────────────────────────────────────────────────────
-        if (y + 22 > 278) { doc.addPage(); y = 30; }
-        y += 12;
+        // Si la firma no cabe en la pág 1, anclarla al fondo en vez de crear pág 2
+        const PAGE_H = doc.internal.pageSize.height;
+        const sigLineY = (y + 22 > PAGE_H - 18)
+            ? PAGE_H - 24          // fondo de página 1, encima del pie
+            : y + 12;
         doc.setDrawColor(...C.border); doc.setLineWidth(0.4);
-        doc.line(ML, y, ML + 72, y);
-        doc.line(PW - MR - 72, y, PW - MR, y);
+        doc.line(ML, sigLineY, ML + 72, sigLineY);
+        doc.line(PW - MR - 72, sigLineY, PW - MR, sigLineY);
         doc.setFontSize(7.5); doc.setFont(undefined, 'normal'); doc.setTextColor(...C.lgray);
-        doc.text('Firma y sello cliente', ML, y + 4);
-        doc.text('Firma Rubik Bolivia', PW - MR - 72, y + 4);
+        doc.text('Firma y sello cliente', ML, sigLineY + 4);
+        doc.text('Firma Rubik Bolivia', PW - MR - 72, sigLineY + 4);
         doc.setTextColor(...C.dark);
 
         // ── Comprobantes ──────────────────────────────────────────────────
