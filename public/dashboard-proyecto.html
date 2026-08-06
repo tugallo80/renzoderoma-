@@ -878,25 +878,38 @@
         const ML   = 14, MR = 14;
         const logoX = PW - 32;
 
+        // ── Pre-calcular descuento para el encabezado ─────────────────────
+        const hasImp   = ppto.impuestos || false;
+        const descPct  = parseFloat(ppto.descuento_pct) || 0;
+        const descFijo = parseFloat(ppto.descuento) || 0;
+        const hasDiscHeader = descPct > 0 || descFijo > 0;
+        const discLabel = descPct > 0 ? `${descPct}%` : `${fMoney(descFijo)} Bs`;
+
         // ── Encabezado ────────────────────────────────────────────────────
         doc.setFontSize(22); doc.setFont(undefined, 'bold'); doc.setTextColor(...C.dark);
         doc.text('RESUMEN DE CONTRATO', ML, 21);
+
+        let lineY = 25;
+        if (hasDiscHeader) {
+            doc.setFontSize(11); doc.setFont(undefined, 'bold'); doc.setTextColor(...C.blue);
+            doc.text(`CON DESCUENTO DE ${discLabel}`, ML, 26.5);
+            lineY = 30;
+        }
+
         doc.setDrawColor(...C.blue); doc.setLineWidth(1);
-        doc.line(ML, 25, logoX - 4, 25);
+        doc.line(ML, lineY, logoX - 4, lineY);
         doc.setLineWidth(0.2); doc.setDrawColor(...C.border);
 
+        const metaOff = lineY - 25;
         doc.setFontSize(8.5); doc.setFont(undefined, 'normal'); doc.setTextColor(...C.gray);
-        doc.text(`Cliente: ${clienteNom}`, ML, 31);
-        doc.text(`Proyecto: ${proyectoNom}`, ML, 36.5);
-        doc.text(`Fecha: ${fechaHoy}`, ML, 42);
+        doc.text(`Cliente: ${clienteNom}`, ML, 31 + metaOff);
+        doc.text(`Proyecto: ${proyectoNom}`, ML, 36.5 + metaOff);
+        doc.text(`Fecha: ${fechaHoy}`, ML, 42 + metaOff);
         doc.setTextColor(...C.dark);
 
         // ── Calcular totales ──────────────────────────────────────────────
         const itemNames   = [];
         let subtotalItems = 0;
-        const hasImp   = ppto.impuestos || false;
-        const descPct  = parseFloat(ppto.descuento_pct) || 0;
-        const descFijo = parseFloat(ppto.descuento) || 0;
 
         if (ppto.items) {
             Object.values(ppto.items).forEach(item => {
@@ -916,7 +929,7 @@
         const totalFinal = montoCierreDB > 0 ? montoCierreDB : (base + iva + it);
 
         // ── Lista de ítems (caja redondeada, sólo nombres) ────────────────
-        let y = 50;
+        let y = 50 + metaOff;
         doc.setFontSize(9); doc.setFont(undefined, 'bold'); doc.setTextColor(...C.dark);
         doc.text('ÍTEMS CONTRATADOS', ML, y); y += 5;
 
