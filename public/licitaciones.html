@@ -2496,13 +2496,18 @@ LICITACIONES ACTUALES DEL PROYECTO:
             // ════════════════════════════════════════════════
             //  MODO DETALLE — desglose costo por ítem
             // ════════════════════════════════════════════════
+            const isLlm = (_licMode === 'llave_en_mano');
             if (modo === 'detalle') {
                 let y = 44;
                 for (const k of groupOrder) {
                     const g = groups[k], it = g.item;
-                    const moSrc  = (it && it.prod_apu && it.prod_apu.mo  && it.prod_apu.mo.length  > 0) ? it.prod_apu.mo  : [];
-                    const matSrc = (it && it.prod_apu && it.prod_apu.mat && it.prod_apu.mat.length > 0)
-                        ? it.prod_apu.mat.filter(m => !m.es_arte) : [];
+                    // En modo llave_en_mano usamos solo los sub-componentes que el usuario tildó (g.tareas)
+                    const moSrc  = isLlm
+                        ? Object.values(g.tareas).filter(t => t.originType === 'llm_mo')
+                        : ((it && it.prod_apu && it.prod_apu.mo  && it.prod_apu.mo.length  > 0) ? it.prod_apu.mo  : []);
+                    const matSrc = isLlm
+                        ? Object.values(g.tareas).filter(t => t.originType === 'llm_mat')
+                        : ((it && it.prod_apu && it.prod_apu.mat && it.prod_apu.mat.length > 0) ? it.prod_apu.mat.filter(m => !m.es_arte) : []);
 
                     // Nueva página si no cabe
                     const minH = 14 + (matSrc.length + moSrc.length) * 5 + 20;
@@ -2532,11 +2537,11 @@ LICITACIONES ACTUALES DEL PROYECTO:
                             startY: y,
                             head:[['Material','Cant.','U.','P.U.','Subtotal']],
                             body: matSrc.map(m=>[
-                                cleanTxt(m.d).substring(0,55),
-                                parseFloat(m.q||0).toFixed(2),
-                                m.u||'',
-                                fM(m.p)+' Bs',
-                                fM(parseFloat(m.q||0)*parseFloat(m.p||0))+' Bs'
+                                cleanTxt(isLlm ? (m.task_name||m.desc||'') : m.d).substring(0,55),
+                                parseFloat((isLlm ? m.cant : m.q)||0).toFixed(2),
+                                (isLlm ? m.und : m.u)||'',
+                                fM(isLlm ? m.pu : m.p)+' Bs',
+                                fM(isLlm ? m.subtotal : parseFloat(m.q||0)*parseFloat(m.p||0))+' Bs'
                             ]),
                             theme:'plain',
                             headStyles:{fillColor:[230,240,255],fontSize:7,cellPadding:2,fontStyle:'bold'},
@@ -2555,11 +2560,11 @@ LICITACIONES ACTUALES DEL PROYECTO:
                             startY: y,
                             head:[['Actividad','Cant.','U.','P.U.','Subtotal']],
                             body: moSrc.map(m=>[
-                                cleanTxt(m.d).substring(0,55),
-                                parseFloat(m.q||0).toFixed(2),
-                                m.u||'',
-                                fM(m.p)+' Bs',
-                                fM(parseFloat(m.q||0)*parseFloat(m.p||0))+' Bs'
+                                cleanTxt(isLlm ? (m.task_name||m.desc||'') : m.d).substring(0,55),
+                                parseFloat((isLlm ? m.cant : m.q)||0).toFixed(2),
+                                (isLlm ? m.und : m.u)||'',
+                                fM(isLlm ? m.pu : m.p)+' Bs',
+                                fM(isLlm ? m.subtotal : parseFloat(m.q||0)*parseFloat(m.p||0))+' Bs'
                             ]),
                             theme:'plain',
                             headStyles:{fillColor:[255,245,225],fontSize:7,cellPadding:2,fontStyle:'bold'},
@@ -2606,8 +2611,12 @@ LICITACIONES ACTUALES DEL PROYECTO:
             // ════════════════════════════════════════════════
             for (const k of groupOrder) {
                 const g = groups[k], it = g.item;
-                const moSrc  = (it && it.prod_apu && it.prod_apu.mo)  ? it.prod_apu.mo  : [];
-                const matSrc = (it && it.prod_apu && it.prod_apu.mat) ? it.prod_apu.mat.filter(m=>!m.es_arte) : [];
+                const moSrc  = isLlm
+                    ? Object.values(g.tareas).filter(t => t.originType === 'llm_mo')
+                    : ((it && it.prod_apu && it.prod_apu.mo)  ? it.prod_apu.mo  : []);
+                const matSrc = isLlm
+                    ? Object.values(g.tareas).filter(t => t.originType === 'llm_mat')
+                    : ((it && it.prod_apu && it.prod_apu.mat) ? it.prod_apu.mat.filter(m=>!m.es_arte) : []);
                 const featTxt = it && it.feat ? cleanTxt(it.feat) : '';
                 const lblItem = cleanTxt(g.label).substring(0,85);
                 const uniqueImgs = g.imgs.slice(0, 10);
@@ -2645,7 +2654,10 @@ LICITACIONES ACTUALES DEL PROYECTO:
                     matSrc.forEach(m => {
                         if (y > 265) { doc.addPage(); y = 14; }
                         doc.setFont('helvetica','normal'); doc.setFontSize(8.5);
-                        doc.text(`•  ${cleanTxt(m.d).substring(0,56)}   ×   ${parseFloat(m.q||0).toFixed(2)} ${m.u||''}`, mL+3, y);
+                        const mName = cleanTxt(isLlm ? (m.task_name||m.desc||'') : m.d).substring(0,56);
+                        const mCant = parseFloat((isLlm ? m.cant : m.q)||0).toFixed(2);
+                        const mUnd  = (isLlm ? m.und : m.u)||'';
+                        doc.text(`•  ${mName}   ×   ${mCant} ${mUnd}`, mL+3, y);
                         y += 5.5;
                     });
                     y += 4;
@@ -2658,7 +2670,10 @@ LICITACIONES ACTUALES DEL PROYECTO:
                     moSrc.forEach(m => {
                         if (y > 265) { doc.addPage(); y = 14; }
                         doc.setFont('helvetica','normal'); doc.setFontSize(8.5);
-                        doc.text(`•  ${cleanTxt(m.d).substring(0,56)}   ×   ${parseFloat(m.q||0).toFixed(2)} ${m.u||''}`, mL+3, y);
+                        const mName = cleanTxt(isLlm ? (m.task_name||m.desc||'') : m.d).substring(0,56);
+                        const mCant = parseFloat((isLlm ? m.cant : m.q)||0).toFixed(2);
+                        const mUnd  = (isLlm ? m.und : m.u)||'';
+                        doc.text(`•  ${mName}   ×   ${mCant} ${mUnd}`, mL+3, y);
                         y += 5.5;
                     });
                     y += 4;

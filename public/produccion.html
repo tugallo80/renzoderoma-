@@ -1029,7 +1029,7 @@
                 const cant = parseFloat(it.cant  || 1);
                 const vendido = pu * cant;
                 totalVendido += vendido;
-                const costo = _calcProdApuCosto(idx).total;
+                const costo = _calcProdApuCosto(idx).total * cant;
                 if (costo > 0) itemsConCosto++;
                 totalCosto += costo;
             });
@@ -1663,7 +1663,7 @@
         const vendidoUnit = parseFloat(item.pu || 0);
         const cant        = parseFloat(item.cant || 1);
         const vendido     = vendidoUnit * cant;
-        const costoReal   = cost.total;
+        const costoReal   = cost.total * cant;
         const utilidad    = vendido - costoReal;
         const margen      = vendido > 0 ? (utilidad / vendido) * 100 : 0;
         const positivo    = utilidad >= 0;
