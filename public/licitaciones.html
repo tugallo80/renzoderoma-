@@ -1752,13 +1752,6 @@ ${reqTxt}<div style="margin-top:4px;">${badgeMo}</div>
 
         document.getElementById('mod-new-lic').style.display = 'none'; editingLicId = null; _adjDirecta = false;
 
-        if(worker.telefono && (!isInternal || isSupervision)) { 
-            const fileName = isSupervision ? 'supervisor-index.html' : (isGraphic ? 'proveedor-grafico.html' : 'contratista/index.html');
-            const basePath = generateCleanBaseLink(); const linkApp = `${basePath}${fileName}?wid=${workerId}&lic=${finalLicKey}`; let msg = '';
-            if(payload.estado === 'aprobado' || payload.estado === 'adjudicado') { msg = encodeURIComponent(`Hola ${worker.nombre},\n\nSe han actualizado las tareas de tu contrato en el proyecto *${pName}*.\n\n👉 Revisa los cambios en tu portal:\n${linkApp}`); } 
-            else { msg = encodeURIComponent(`Hola ${worker.nombre},\n\nTienes una solicitud de trabajo/supervisión para el proyecto *${pName}*.\n\n👉 Entra a cotizarla/aceptarla aquí:\n${linkApp}`); }
-            window.open(`https://wa.me/${worker.telefono}?text=${msg}`, '_blank');
-        }
     }
 
     function editarLicitacion(key) {
