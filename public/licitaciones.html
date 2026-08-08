@@ -994,17 +994,20 @@
                         const _moArr  = (_pa.mo  && _pa.mo.length  > 0) ? _pa.mo  : (it.apu && it.apu.mo  ? getValidObjects(it.apu.mo)  : []);
                         const _matAll = (_pa.mat && _pa.mat.length > 0) ? _pa.mat : (it.apu && it.apu.mat ? getValidObjects(it.apu.mat) : []);
                         const _matNorm = _matAll.filter(m => m.d && !m.es_arte);
-                        const _totalMoProd  = _moArr.reduce((s,m)  => s + (parseFloat(m.q||0)*parseFloat(m.p||0)), 0);
-                        const _totalMatProd = _matNorm.reduce((s,m) => s + (parseFloat(m.q||0)*parseFloat(m.p||0)), 0);
+                        // prod_apu ya almacena cant total; apu legacy almacena cant por unidad → multiplicar
+                        const _itemCant = _usandoProdApu ? 1 : parseFloat(it.cant || 1);
+                        const _totalMoProd  = _moArr.reduce((s,m)  => s + (parseFloat(m.q||0)*parseFloat(m.p||0)), 0) * _itemCant;
+                        const _totalMatProd = _matNorm.reduce((s,m) => s + (parseFloat(m.q||0)*parseFloat(m.p||0)), 0) * _itemCant;
                         const _prodTotal    = _totalMoProd + _totalMatProd;
 
                         // Sub-filas MO
                         let _moRowsHtml = '';
                         _moArr.forEach((mo, moIdx) => {
                             if (!mo.d) return;
-                            const moBase = parseFloat(mo.q||0) * parseFloat(mo.p||0);
+                            const moQTotal = parseFloat(mo.q||0) * _itemCant;
+                            const moBase = moQTotal * parseFloat(mo.p||0);
                             _moRowsHtml += `<label class="item-row apu-row" style="margin:0;padding:7px 0;border-bottom:1px solid var(--border);cursor:pointer;" onclick="event.stopPropagation()">
-<div style="flex:1;min-width:0;"><div style="font-size:12px;font-weight:800;">${mo.d}</div><div style="font-size:10px;color:var(--gray);">${mo.q} ${mo.u} × ${fMoney(mo.p)} Bs</div></div>
+<div style="flex:1;min-width:0;"><div style="font-size:12px;font-weight:800;">${mo.d}</div><div style="font-size:10px;color:var(--gray);">${moQTotal.toFixed(2)} ${mo.u} × ${fMoney(mo.p)} Bs</div></div>
 <div style="display:flex;flex-direction:column;align-items:flex-end;gap:3px;">
 <input type="checkbox" class="chk-box lic-chk" data-type="venta_mo" data-idx="${i}" data-moidx="${moIdx}" data-base="${moBase}" onchange="onVentaSubChk(${i},this);recalcularSeleccionInterna()" onclick="event.stopPropagation()">
 <span style="font-size:9px;color:var(--gray);">BASE: ${fMoney(moBase)} Bs</span>
@@ -1016,9 +1019,10 @@
                         let _matRowsHtml = '';
                         _matNorm.forEach(mat => {
                             const origIdx = _matAll.indexOf(mat);
-                            const matBase = parseFloat(mat.q||0) * parseFloat(mat.p||0);
+                            const matQTotal = parseFloat(mat.q||0) * _itemCant;
+                            const matBase = matQTotal * parseFloat(mat.p||0);
                             _matRowsHtml += `<label class="item-row apu-row" style="margin:0;padding:7px 0;border-bottom:1px solid var(--border);cursor:pointer;" onclick="event.stopPropagation()">
-<div style="flex:1;min-width:0;"><div style="font-size:12px;font-weight:800;">${mat.d}</div><div style="font-size:10px;color:var(--gray);">${mat.q} ${mat.u} × ${fMoney(mat.p)} Bs</div></div>
+<div style="flex:1;min-width:0;"><div style="font-size:12px;font-weight:800;">${mat.d}</div><div style="font-size:10px;color:var(--gray);">${matQTotal.toFixed(2)} ${mat.u} × ${fMoney(mat.p)} Bs</div></div>
 <div style="display:flex;flex-direction:column;align-items:flex-end;gap:3px;">
 <input type="checkbox" class="chk-box lic-chk" data-type="venta_mat" data-idx="${i}" data-matidx="${origIdx}" data-base="${matBase}" onchange="onVentaSubChk(${i},this);recalcularSeleccionInterna()" onclick="event.stopPropagation()">
 <span style="font-size:9px;color:var(--gray);">BASE: ${fMoney(matBase)} Bs</span>
@@ -2537,6 +2541,10 @@ LICITACIONES ACTUALES DEL PROYECTO:
                     doc.text(fM(g.subtotal)+' Bs', W-mR, y+7, {align:'right'});
                     doc.setTextColor(0,0,0); y += 14;
 
+                    // prod_apu ya tiene cant total; apu legacy usa cant por unidad → multiplicar
+                    const usandoProdApuPdf = !!(it && it.prod_apu && it.prod_apu.mo && it.prod_apu.mo.length > 0);
+                    const itemCant = usandoProdApuPdf ? 1 : parseFloat((it && it.cant) || 1);
+
                     // Tabla Materiales
                     if (matSrc.length > 0) {
                         doc.setFont('helvetica','bold'); doc.setFontSize(7.5); doc.setTextColor(0,100,200);
@@ -2546,10 +2554,10 @@ LICITACIONES ACTUALES DEL PROYECTO:
                             head:[['Material','Cant.','U.','P.U.','Subtotal']],
                             body: matSrc.map(m=>[
                                 cleanTxt(isLlm ? (m.task_name||m.desc||'') : m.d).substring(0,55),
-                                parseFloat((isLlm ? m.cant : m.q)||0).toFixed(2),
+                                isLlm ? parseFloat(m.cant||0).toFixed(2) : (parseFloat(m.q||0)*itemCant).toFixed(2),
                                 (isLlm ? m.und : m.u)||'',
                                 fM(isLlm ? m.pu : m.p)+' Bs',
-                                fM(isLlm ? m.subtotal : parseFloat(m.q||0)*parseFloat(m.p||0))+' Bs'
+                                fM(isLlm ? m.subtotal : parseFloat(m.q||0)*itemCant*parseFloat(m.p||0))+' Bs'
                             ]),
                             theme:'plain',
                             headStyles:{fillColor:[230,240,255],fontSize:7,cellPadding:2,fontStyle:'bold'},
@@ -2569,10 +2577,10 @@ LICITACIONES ACTUALES DEL PROYECTO:
                             head:[['Actividad','Cant.','U.','P.U.','Subtotal']],
                             body: moSrc.map(m=>[
                                 cleanTxt(isLlm ? (m.task_name||m.desc||'') : m.d).substring(0,55),
-                                parseFloat((isLlm ? m.cant : m.q)||0).toFixed(2),
+                                isLlm ? parseFloat(m.cant||0).toFixed(2) : (parseFloat(m.q||0)*itemCant).toFixed(2),
                                 (isLlm ? m.und : m.u)||'',
                                 fM(isLlm ? m.pu : m.p)+' Bs',
-                                fM(isLlm ? m.subtotal : parseFloat(m.q||0)*parseFloat(m.p||0))+' Bs'
+                                fM(isLlm ? m.subtotal : parseFloat(m.q||0)*itemCant*parseFloat(m.p||0))+' Bs'
                             ]),
                             theme:'plain',
                             headStyles:{fillColor:[255,245,225],fontSize:7,cellPadding:2,fontStyle:'bold'},
