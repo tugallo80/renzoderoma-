@@ -585,14 +585,21 @@
         if (typeof doc.autoTable !== 'function') throw new Error("jspdf-autotable no cargó.");
         const logoB64 = await _logoB64Dash();
 
-        const [pptoSnap, pagosSnap, cierreSnap, cliSnap] = await Promise.all([
+        const [pptoSnap, pagosSnap, facturasSnap, cierreSnap, cliSnap] = await Promise.all([
             db.ref(`proyectos/${cid}/${pid}/presupuesto`).once('value'),
             db.ref(`proyectos/${cid}/${pid}/pagos`).once('value'),
+            db.ref(`proyectos/${cid}/${pid}/facturas_emitidas`).once('value'),
             db.ref(`proyectos/${cid}/${pid}/monto_cierre`).once('value'),
             db.ref(`clientes/${cid}/nombre`).once('value').catch(() => ({ val: () => null }))
         ]);
         const ppto      = pptoSnap.val() || {};
-        const pagosObj  = pagosSnap.val() ? Object.values(pagosSnap.val()) : [];
+        const pagosReg  = pagosSnap.val() ? Object.values(pagosSnap.val()) : [];
+        const facturasArr = facturasSnap.val() ? Object.values(facturasSnap.val()).map(f => ({
+            monto: f.monto, fecha: f.fecha,
+            nota: `Factura F-${f.nro_factura||'S/N'}${f.razon_social ? ' — '+f.razon_social : ''}`,
+            comprobante_url: f.url || null
+        })) : [];
+        const pagosObj  = [...pagosReg, ...facturasArr].sort((a,b) => (a.fecha||'') < (b.fecha||'') ? -1 : 1);
         const montoCierreDB = parseFloat(cierreSnap.val()) || 0;
 
         const clienteNom  = ((cliSnap.val && cliSnap.val()) || pname || 'CLIENTE').toUpperCase();
@@ -848,15 +855,21 @@
         if (typeof doc.autoTable !== 'function') throw new Error("jspdf-autotable no cargó.");
         const logoB64 = await _logoB64Dash();
 
-        const [pptoSnap, pagosSnap, cierreSnap, cliSnap] = await Promise.all([
+        const [pptoSnap, pagosSnap, facturasSnap, cierreSnap, cliSnap] = await Promise.all([
             db.ref(`proyectos/${cid}/${pid}/presupuesto`).once('value'),
             db.ref(`proyectos/${cid}/${pid}/pagos`).once('value'),
+            db.ref(`proyectos/${cid}/${pid}/facturas_emitidas`).once('value'),
             db.ref(`proyectos/${cid}/${pid}/monto_cierre`).once('value'),
             db.ref(`clientes/${cid}/nombre`).once('value').catch(() => ({ val: () => null }))
         ]);
         const ppto          = pptoSnap.val() || {};
-        const pagosRaw      = pagosSnap.val() || {};
-        const pagosObj      = Object.values(pagosRaw);
+        const pagosReg      = pagosSnap.val() ? Object.values(pagosSnap.val()) : [];
+        const facturasArr   = facturasSnap.val() ? Object.values(facturasSnap.val()).map(f => ({
+            monto: f.monto, fecha: f.fecha,
+            nota: `Factura F-${f.nro_factura||'S/N'}${f.razon_social ? ' — '+f.razon_social : ''}`,
+            comprobante_url: f.url || null
+        })) : [];
+        const pagosObj      = [...pagosReg, ...facturasArr].sort((a,b) => (a.fecha||'') < (b.fecha||'') ? -1 : 1);
         const montoCierreDB = parseFloat(cierreSnap.val()) || 0;
 
         const clienteNom  = ((cliSnap.val && cliSnap.val()) || pname || 'CLIENTE').toUpperCase();
