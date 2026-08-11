@@ -5229,17 +5229,59 @@ INSTRUCCIONES:
                 return s;
             }).join(' | ');
 
-            const sysPrompt = `Eres el cotizador APU de Rubik Bolivia — señalética, stands, BTL y publicidad física en Santa Cruz.
-Devuelve EXACTAMENTE este JSON (sin texto extra, sin markdown):
-[{"desc":"NOMBRE TÉCNICO DEL ÍTEM","cant":1,"und":"glb","feat":"- Característica 1\\n- Característica 2\\n- Material: ...\\n- Dimensiones: ...","apu":{"mat":[{"d":"MATERIAL","u":"m2","q":1,"p":0}],"mo":[{"d":"SOLDADOR","u":"m2","q":12.5,"p":10}],"eq":[],"sub":[]},"util":50,"ind":10}]
-Tarifas MO Rubik (por m2, NUNCA por jornal): Soldadura=10 Bs/m2, Tensado=10 Bs/m2, Pintura=15 Bs/m2, Instalador=10 Bs/m2. util=50, ind=10 siempre.`;
+            // Catálogo de precios de la base de datos
+            const _r3dCatMat = Object.values(dbMats || {}).map(m => `${m.n||m.desc}: ${m.p||m.pu} Bs/${m.u||m.und}`).join(', ');
+            const _r3dCatMo  = Object.values(dbMo   || {}).map(m => `${m.n||m.desc}: ${m.p||m.pu} Bs`).join(', ');
 
-            const userPrompt = `Cotizar el siguiente ítem en Bolivia:
-Descripción general: ${desc}
-${elemsStr ? `Elementos: ${elemsStr}` : ''}
+            const sysPrompt = `REGLA ABSOLUTA: Responde SOLO con un array JSON válido de exactamente UN ítem. Sin texto antes ni después. Sin markdown. Sin comentarios dentro del JSON.
+CAMPOS OBLIGATORIOS:
+- desc: string con nombre técnico del ítem
+- cant: número
+- und: string (glb, m2, ml, pza, etc.)
+- feat: string con características orientadas AL CLIENTE. Cada línea empieza con "- " y separadas por \\n. OBLIGATORIO, mínimo 4 líneas, máximo 8 líneas.
+  ✅ feat incluye SOLO: qué es el ítem, materiales principales (sin cantidades exactas), acabado, dimensiones generales.
+  ❌ feat NUNCA incluye: metros lineales, perímetros calculados, cantidades de remaches/barras/costillas, mermas, fórmulas, cálculos intermedios, precios.
+- apu: objeto con mat, mo, eq, sub como arrays de {d, u, q, p} donde p es el precio numérico
+- util: 50 (entero)
+- ind: 10 (entero)
+IMPORTANTE: En los objetos de apu usar EXACTAMENTE los campos d, u, q, p.
+
+REGLA MANO DE OBRA — CRÍTICA: Cada rubro MO lleva su tipo ESPECÍFICO: SOLDADOR, TENSADOR, INSTALADOR, PINTOR, CORTADOR, ARMADOR, CARPINTERO, MASILLADOR, etc. NUNCA usar "Mano de obra" genérico. NUNCA cotizar MO por m² con precio de 10 Bs — usar jornal de 150-280 Bs o precio real por m² según el oficio.
+REGLA UNIDADES MATERIAL — CRÍTICA: Si el catálogo da precio por "barra" (tubería 6ml), "pliego" o "lámina", la cantidad en el APU va en esa unidad. Calculá cuántas barras/pliegos/láminas necesita el ítem.
+REGLA CÁLCULO OBLIGATORIO — PASO A PASO:
+  1. Leer todas las dimensiones indicadas (m² = largo × ancho, perímetro = 2×(largo+ancho))
+  2. Cantidad de material = medida ÷ rendimiento por unidad
+  3. Mano de obra = área o perímetro × tarifa por m² o cantidad de jornales realistas
+  4. NUNCA poner q=1 para materiales que tienen dimensiones calculables`;
+
+            const userPrompt = `ERES EL ESTIMADOR DE COSTOS APU DE RUBIK BOLIVIA — empresa de señalética, bastidores, stands y publicidad física en Santa Cruz, Bolivia.
+BASE DE DATOS DE PRECIOS:
+  Materiales: ${_r3dCatMat || '(usá precios de mercado Santa Cruz)'}
+  Mano de obra: ${_r3dCatMo || '(usá tarifas de mercado Santa Cruz)'}
+
+TARIFAS MO BOLIVIA (Santa Cruz) — REFERENCIA:
+  SOLDADOR ESTRUCTURAL: jornal 200-280 Bs
+  CARPINTERO MDF/MELAMINA: jornal 150-200 Bs
+  ROTULISTA/APLICADOR VINIL: jornal 150-200 Bs | m² 15-25 Bs
+  INSTALADOR GENERAL: jornal 120-160 Bs
+  MASILLADOR: jornal 130-160 Bs
+  TENSADOR LONA: m² 8-15 Bs
+  ELECTRICISTA LED: jornal 180-240 Bs
+
+Ítem a cotizar: ${desc}
+${elemsStr ? `Elementos del ítem: ${elemsStr}` : ''}
 ${dimStr   ? `Dimensiones: ${dimStr}` : ''}
 
-Genera UN ítem de presupuesto detallado con APU completo (materiales con precios en Bs, mano de obra).`;
+PROCESO OBLIGATORIO ANTES DE GENERAR EL JSON:
+① GEOMETRÍA: Calculá áreas y perímetros con las dimensiones indicadas. Cada cantidad del APU sale de un cálculo real.
+② BASE DE DATOS: Para cada material/MO, buscá primero en el catálogo Rubik. Usá ese precio exacto.
+③ APU: Solo materiales de ESTE ítem específico.
+④ VERIFICACIÓN: ¿Las cantidades son coherentes con las dimensiones?
+⑤ feat: 4-8 líneas para el cliente. Incluí dimensiones totales. Sin cálculos internos ni cantidades de insumos.
+⑥ RECIÉN AHÍ: Generar el JSON.
+
+Devolvé exactamente este formato (sin texto adicional):
+[{"desc":"NOMBRE TÉCNICO","cant":1,"und":"glb","feat":"- Característica\\n- Dimensiones\\n- Material principal\\n- Acabado","apu":{"mat":[{"d":"MATERIAL","u":"barra","q":3,"p":55}],"mo":[{"d":"SOLDADOR estructura","u":"jornal","q":2,"p":250}],"eq":[],"sub":[]},"util":50,"ind":10}]`;
 
             const token = firebase.auth().currentUser ? await firebase.auth().currentUser.getIdToken() : null;
             const headers = { 'Content-Type': 'application/json' };
@@ -5249,7 +5291,10 @@ Genera UN ítem de presupuesto detallado con APU completo (materiales con precio
                 method: 'POST', headers,
                 body: JSON.stringify({
                     systemInstruction: { parts: [{ text: sysPrompt }] },
-                    contents: [{ role: 'user', parts: [{ text: userPrompt }] }]
+                    contents: [{ role: 'user', parts: [{ text: userPrompt }] }],
+                    generationConfig: { maxOutputTokens: 8192, temperature: 0.1 },
+                    advancedModel: true,
+                    prefill: '['
                 })
             });
             if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
