@@ -2497,6 +2497,7 @@ LICITACIONES ACTUALES DEL PROYECTO:
             const isLlm = (licMode === 'llave_en_mano');
             if (modo === 'detalle') {
                 let y = 44;
+                let grandTotalMo = 0, grandTotalMat = 0;
                 for (const k of groupOrder) {
                     const g = groups[k], it = g.item;
                     // Índices realmente tildados en venta_mat / venta_mo
@@ -2621,15 +2622,58 @@ LICITACIONES ACTUALES DEL PROYECTO:
                         y = doc.lastAutoTable.finalY + 3;
                     }
 
-                    y += 6;
+                    // ── Subtotales por ítem ─────────────────────────────
+                    const _calcSub = (src) => src.reduce((s,m) => s + (isLlm
+                        ? parseFloat(m.subtotal||0)
+                        : parseFloat(m.q||0)*itemCant*parseFloat(m.p||0)), 0);
+                    const totalMoItem  = _calcSub(moSrc);
+                    const totalMatItem = _calcSub(matSrc);
+                    grandTotalMo  += totalMoItem;
+                    grandTotalMat += totalMatItem;
+
+                    if (moSrc.length > 0 || matSrc.length > 0) {
+                        const rowH = 8;
+                        doc.setFillColor(245,245,247); doc.rect(mL-2, y, usableW+4, rowH, 'F');
+                        doc.setFontSize(7.5); doc.setFont('helvetica','normal'); doc.setTextColor(110,110,115);
+                        let subX = mL + 3;
+                        if (moSrc.length > 0) {
+                            doc.text('M.O.: ' + fM(totalMoItem) + ' Bs', subX, y + 5.5);
+                            subX += 55;
+                        }
+                        if (matSrc.length > 0) {
+                            doc.text('Mat.: ' + fM(totalMatItem) + ' Bs', subX, y + 5.5);
+                        }
+                        doc.setFont('helvetica','bold'); doc.setTextColor(20,20,20);
+                        doc.text('TOTAL ÍTEM: ' + fM(totalMoItem + totalMatItem) + ' Bs', W - mR, y + 5.5, {align:'right'});
+                        doc.setTextColor(0,0,0);
+                        y += rowH + 2;
+                    }
+
+                    y += 4;
                 }
 
-                // Pie de página con total
-                if (y > 270) { doc.addPage(); y = 20; }
-                doc.setFillColor(20,20,20); doc.rect(mL-2, y, usableW+4, 12, 'F');
-                doc.setTextColor(255,255,255); doc.setFont('helvetica','bold'); doc.setFontSize(12);
-                doc.text('TOTAL GENERAL', mL, y+8.5);
-                doc.text(fM(totalFinal)+' Bs', W-mR, y+8.5, {align:'right'});
+                // Pie de página con desglose MO / Mat / Total
+                if (y + 34 > 272) { doc.addPage(); y = 20; }
+                // Fila Total M.O.
+                doc.setFillColor(255,245,225); doc.rect(mL-2, y, usableW+4, 9, 'F');
+                doc.setDrawColor(210,210,215); doc.setLineWidth(0.2);
+                doc.rect(mL-2, y, usableW+4, 9, 'S');
+                doc.setFontSize(9); doc.setFont('helvetica','bold'); doc.setTextColor(160,80,0);
+                doc.text('TOTAL MANO DE OBRA', mL+2, y+6.5);
+                doc.text(fM(grandTotalMo)+' Bs', W-mR, y+6.5, {align:'right'});
+                y += 9;
+                // Fila Total Materiales
+                doc.setFillColor(230,240,255); doc.rect(mL-2, y, usableW+4, 9, 'F');
+                doc.rect(mL-2, y, usableW+4, 9, 'S');
+                doc.setTextColor(0,70,160);
+                doc.text('TOTAL MATERIALES', mL+2, y+6.5);
+                doc.text(fM(grandTotalMat)+' Bs', W-mR, y+6.5, {align:'right'});
+                y += 9;
+                // Fila Total General
+                doc.setFillColor(20,20,20); doc.rect(mL-2, y, usableW+4, 13, 'F');
+                doc.setTextColor(255,255,255); doc.setFontSize(12);
+                doc.text('TOTAL GENERAL', mL+2, y+9.5);
+                doc.text(fM(totalFinal)+' Bs', W-mR, y+9.5, {align:'right'});
                 doc.setTextColor(0,0,0);
             }
 
