@@ -516,6 +516,8 @@ MATERIALES — ESPEJOS/VIDRIO: Estructura = tubín + espejo. NO plancha galvaniz
             } else if (typeof systemInstruction.text === "string") {
                 systemText = systemInstruction.text + DOMAIN_SUFFIX;
             }
+        } else if (body.skipDomain) {
+            systemText = null;
         } else {
             systemText = DOMAIN_SUFFIX.trim();
         }
