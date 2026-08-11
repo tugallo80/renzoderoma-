@@ -2460,11 +2460,18 @@ PROCESO OBLIGATORIO ANTES DE GENERAR EL JSON:
 
 No cambies el nombre del ítem — el desc lo pone el usuario.
 
-REGLA MANO DE OBRA — CRÍTICA: Cada rubro MO lleva su tipo ESPECÍFICO: SOLDADOR, TENSADOR, INSTALADOR, PINTOR, CORTADOR, ARMADOR, etc. NUNCA usar "Mano de obra" genérico.
-REGLA UNIDADES MATERIAL — CRÍTICA: Si el catálogo da precio por "barra" (tubería 6ml, ángulo 6ml) o "rollo" o "pliego", la cantidad en el APU va en esa unidad. Calculá cuántas barras/rollos/pliegos necesita el ítem. Ej: si necesitás 12ml de tubín y la barra es 6ml → q=2 barras. NUNCA poner q=12 con precio por barra (eso sería 12×precio_barra = 6 veces el costo real).
+REGLA MANO DE OBRA — CRÍTICA: Cada rubro MO lleva su tipo ESPECÍFICO: SOLDADOR, TENSADOR, INSTALADOR, PINTOR, CORTADOR, ARMADOR, CARPINTERO, MASILLADOR, etc. NUNCA usar "Mano de obra" genérico.
+REGLA UNIDADES MATERIAL — CRÍTICA: Si el catálogo da precio por "barra" (tubería 6ml, ángulo 6ml), "rollo", "pliego" o "lámina", la cantidad en el APU va en esa unidad. Calculá cuántas barras/rollos/pliegos/láminas necesita el ítem. Ej: si necesitás 12ml de tubín y la barra es 6ml → q=2 barras. Si el usuario dice "8 láminas de MDF" → q=8 láminas con precio por lámina. NUNCA poner q=área_total con precio por lámina.
+REGLA CÁLCULO OBLIGATORIO — PASO A PASO: Antes de asignar cualquier cantidad, calculá explícitamente:
+  1. Mediciones → geometría exacta (área m², perímetro ml, volumen m³)
+  2. Cantidad de material = medida ÷ rendimiento por unidad (ej: láminas MDF 1.22×2.44 = 2.98m² c/u)
+  3. Mano de obra = área o perímetro × rendimiento del oficio
+  4. Verificar: precio_total_APU ÷ util_factor ≈ PU final coherente con el mercado
+REGLA MDF ESPECÍFICA: Una lámina MDF estándar mide 1.22×2.44m = 2.98m². Si el usuario indica N láminas → area = N × 2.98m². Si indica dimensiones diferentes → calcular esa área. Masillado/sellado/lijado = jornal de MASILLADOR. Instalación = jornal de CARPINTERO/INSTALADOR.
+REGLA ADHESIVO IMPRESO: Si pide "adhesivo impreso" o "vinilo impreso" sobre superficie → calcular m² de superficie × precio por m² de impresión (incluir laminado).
 
 Devolvé exactamente este formato (sin texto adicional):
-[{"desc":"NOMBRE TÉCNICO","cant":1,"und":"glb","feat":"- Característica 1\\n- Área: (2×11×1.2)+(2×9×1.2) = 48 m2\\n- Característica 3","apu":{"mat":[{"d":"TUBIN 20X20","u":"barra","q":3,"p":55}],"mo":[{"d":"SOLDADOR estructura","u":"jornal","q":1,"p":250},{"d":"TENSADOR lona","u":"m2","q":12,"p":8}],"eq":[],"sub":[]},"util":50,"ind":10}]`;
+[{"desc":"NOMBRE TÉCNICO","cant":1,"und":"glb","feat":"- Estructura tubín 20×20×0.8mm soldado\\n- Enchapado MDF 9mm en ambas caras (8 láminas 175×260cm = 36.4m²)\\n- Masillado, sellado y lijado de uniones\\n- Adhesivo impreso en ambas caras\\n- Paneles individuales modulares","apu":{"mat":[{"d":"TUBIN 20X20X0.8","u":"barra","q":5,"p":45},{"d":"LAMINA MDF 9mm 175x260","u":"lám","q":8,"p":320},{"d":"MASILLA INTERIOR","u":"kg","q":4,"p":18},{"d":"ADHESIVO VINILO IMPRESO","u":"m2","q":36,"p":65}],"mo":[{"d":"SOLDADOR estructura tubín","u":"jornal","q":2,"p":250},{"d":"CARPINTERO enchapado MDF","u":"jornal","q":3,"p":180},{"d":"MASILLADOR uniones","u":"jornal","q":1,"p":150},{"d":"ROTULISTA adhesivo impreso","u":"m2","q":36,"p":20}],"eq":[],"sub":[]},"util":50,"ind":10}]`;
 
             // Enrich prompt and parts with per-item ctx context
             let _regenFullPrompt = userPrompt;
@@ -2520,7 +2527,10 @@ Devolvé exactamente este formato (sin texto adicional):
                 method: 'POST', headers,
                 body: JSON.stringify({
                     systemInstruction: { parts: [{ text: sysPrompt }] },
-                    contents: [{ role: 'user', parts: _regenParts }]
+                    contents: [{ role: 'user', parts: _regenParts }],
+                    generationConfig: { maxOutputTokens: 8192, temperature: 0.1 },
+                    advancedModel: true,
+                    prefill: '['
                 })
             });
             if(!resp.ok) throw new Error(`HTTP ${resp.status}`);
@@ -3325,7 +3335,8 @@ EJEMPLO SIN CAPÍTULOS (menos de 4 ítems):
             const _reqBody = JSON.stringify({
                 systemInstruction: { parts: [{ text: sysPrompt }] },
                 contents: [{ role: 'user', parts }],
-                generationConfig: { maxOutputTokens: 16000, temperature: 0.2 },
+                generationConfig: { maxOutputTokens: 16000, temperature: 0.1 },
+                advancedModel: true,
                 prefill: '['
             });
 
