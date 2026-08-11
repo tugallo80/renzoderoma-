@@ -545,7 +545,7 @@ MATERIALES — ESPEJOS/VIDRIO: Estructura = tubín + espejo. NO plancha galvaniz
         }
 
         // advancedModel=true usa Sonnet para cotizaciones/APU complejos; default Haiku para tareas simples
-        const chosenModel = body.advancedModel === true ? "claude-sonnet-5-20251001" : "claude-haiku-4-5-20251001";
+        const chosenModel = body.advancedModel === true ? "claude-sonnet-5" : "claude-haiku-4-5";
         const maxOut = body.advancedModel === true
             ? Math.min(generationConfig?.maxOutputTokens || 16000, 16000)
             : generationConfig?.maxOutputTokens;

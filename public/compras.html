@@ -512,11 +512,11 @@
         document.getElementById('global-loader').style.display = 'none'; document.getElementById('mod-req').style.display = 'none'; alert("Compra procesada.");
     }
 
-    function handleFile(inp, txtId) { if(inp.files[0]) { document.getElementById(txtId).innerText = "Comprimiendo..."; compressImage(inp.files[0], 800, 0.7).then(b64 => { tempB64Receipt = b64; document.getElementById(txtId).innerText = "✅ Comprobante Listo"; }); } }
+    function handleFile(inp, txtId) { if(inp.files[0]) { document.getElementById(txtId).innerText = "Comprimiendo..."; compressImage(inp.files[0], 1400, 0.85).then(b64 => { tempB64Receipt = b64; document.getElementById(txtId).innerText = "✅ Comprobante Listo"; }); } }
     function handlePayFile(inp) {
         if (!inp.files[0]) return;
         document.getElementById('txt-file-name').innerText = "Comprimiendo...";
-        compressImage(inp.files[0], 800, 0.7).then(b64 => {
+        compressImage(inp.files[0], 1400, 0.85).then(b64 => {
             tempB64Receipt = b64;
             document.getElementById('txt-file-name').innerText = "✅ Comprobante Listo";
             const btn = document.getElementById('btn-scan-receipt');
@@ -528,7 +528,7 @@
             let isPago = document.getElementById('mod-pago').style.display === 'flex';
             let txtId = isPago ? 'txt-file-name' : 'txt-req-file';
             document.getElementById(txtId).innerText = "Comprimiendo...";
-            compressImage(e.clipboardData.files[0], 800, 0.7).then(b64 => {
+            compressImage(e.clipboardData.files[0], 1400, 0.85).then(b64 => {
                 tempB64Receipt = b64;
                 document.getElementById(txtId).innerText = "✅ Imagen Pegada";
                 if (isPago) {
@@ -551,8 +551,10 @@
                 headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + tok },
                 body: JSON.stringify({
                     prompt: 'Eres un asistente que lee comprobantes de pago bolivianos (transferencias, depósitos, recibos). Extrae el monto total pagado y la fecha. Responde ÚNICAMENTE con JSON válido, sin texto adicional: {"monto": 1500.50, "fecha": "2026-06-24"}. Usa formato YYYY-MM-DD para la fecha. Si no encontrás la fecha usa la de hoy. Si no encontrás el monto usa 0.',
-                    model: 'gemini-2.5-flash',
                     advancedModel: true,
+                    temperature: 0,
+                    prefill: '{',
+                    generationConfig: { maxOutputTokens: 256 },
                     image: { data: imgData, mimeType: 'image/jpeg' }
                 })
             });
