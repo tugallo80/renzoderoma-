@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Presupuesto Maestro Rubik</title>
     <script src="https://unpkg.com/@phosphor-icons/web" defer></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.0/Sortable.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
@@ -407,12 +408,19 @@
     </select>
 </div>
 
-<div style="margin-bottom: 15px; padding: 10px; background: rgba(175,82,222,0.1); border: 1px dashed var(--purple); border-radius: 12px; display: flex; justify-content: space-between; align-items: center;">
+<div style="margin-bottom: 8px; padding: 10px; background: rgba(175,82,222,0.1); border: 1px dashed var(--purple); border-radius: 12px; display: flex; justify-content: space-between; align-items: center;">
     <div style="font-size:12px; font-weight:600; color:var(--purple); display:flex; align-items:center; gap:5px;"><i class="ph-bold ph-file-pdf" style="font-size:18px;"></i> Cargar Pliego / Lista (PDF)</div>
     <button class="btn-mini" style="background:var(--purple); width: auto; padding: 8px 12px;" onclick="document.getElementById('ia-pdf-upload').click()">Examinar PDF</button>
     <input type="file" id="ia-pdf-upload" accept="application/pdf" style="display:none" onchange="handleIAPdfUpload(this)">
 </div>
-<div id="ia-pdf-name" style="font-size: 11px; color: var(--green); margin-bottom: 10px; display: none; font-weight:bold;">PDF cargado: <span id="ia-pdf-filename"></span> <i class="ph-bold ph-x" style="cursor:pointer; color:var(--red); font-size:14px; vertical-align:middle; margin-left:5px;" onclick="removeIAPdf()"></i></div>
+<div id="ia-pdf-name" style="font-size: 11px; color: var(--green); margin-bottom: 6px; display: none; font-weight:bold;">PDF cargado: <span id="ia-pdf-filename"></span> <i class="ph-bold ph-x" style="cursor:pointer; color:var(--red); font-size:14px; vertical-align:middle; margin-left:5px;" onclick="removeIAPdf()"></i></div>
+
+<div style="margin-bottom: 15px; padding: 10px; background: rgba(255,214,10,0.08); border: 1px dashed #ffd60a; border-radius: 12px; display: flex; justify-content: space-between; align-items: center; gap:8px;">
+    <div style="font-size:12px; font-weight:600; color:#ffd60a; display:flex; align-items:center; gap:5px; flex:1;"><i class="ph-bold ph-presentation" style="font-size:18px;"></i> Importar PPTX / Presentación <span style="font-size:10px; color:#aaa; font-weight:400;">(auto-carga todos los ítems)</span></div>
+    <button class="btn-mini" style="background:#ffd60a; color:#000; width: auto; padding: 8px 12px; font-weight:800;" onclick="document.getElementById('ia-pptx-upload').click()"><i class="ph-bold ph-upload-simple"></i> Cargar PPTX</button>
+    <input type="file" id="ia-pptx-upload" accept=".pptx,.ppt" style="display:none" onchange="handleIAPptxUpload(this.files[0])">
+</div>
+<div id="ia-pptx-status" style="display:none; font-size:11px; color:#ffd60a; margin-bottom:10px; font-weight:bold; padding:6px 10px; background:rgba(255,214,10,0.1); border-radius:6px;"></div>
 
 <div style="margin-bottom: 10px; padding: 10px; background: rgba(255,149,0,0.08); border: 1px dashed var(--orange); border-radius: 12px; display: flex; justify-content: space-between; align-items: center;">
     <div style="font-size:12px; font-weight:600; color:var(--orange); display:flex; align-items:center; gap:5px;"><i class="ph-bold ph-images" style="font-size:18px;"></i> Fotos del Proyecto (contexto IA)</div>
@@ -2687,6 +2695,89 @@ Devolvé exactamente este formato (sin texto adicional):
         }
     }
 
+    // --- IMPORTAR PPTX ---
+    window.handleIAPptxUpload = async function(file) {
+        if (!file) return;
+        const statusEl = document.getElementById('ia-pptx-status');
+        statusEl.style.display = 'block';
+        statusEl.textContent = '⏳ Procesando PPTX...';
+
+        try {
+            const arrayBuffer = await file.arrayBuffer();
+            const zip = await JSZip.loadAsync(arrayBuffer);
+
+            // Leer todos los slides ordenados por número
+            const slideFiles = Object.keys(zip.files)
+                .filter(n => /^ppt\/slides\/slide\d+\.xml$/.test(n))
+                .sort((a, b) => {
+                    const na = parseInt(a.match(/slide(\d+)/)[1]);
+                    const nb = parseInt(b.match(/slide(\d+)/)[1]);
+                    return na - nb;
+                });
+
+            let rowsCreated = 0;
+
+            for (const slidePath of slideFiles) {
+                const slideNum = slidePath.match(/slide(\d+)/)[1];
+                const slideXml = await zip.file(slidePath).async('string');
+
+                // Extraer texto del slide
+                const textMatches = slideXml.match(/<a:t[^>]*>([^<]+)<\/a:t>/g) || [];
+                const texts = textMatches.map(m => m.replace(/<[^>]+>/g, '').trim()).filter(t => t);
+                if (texts.length === 0) continue; // slide vacío (ej: portada sin texto)
+
+                const title = texts[0];
+                const body = texts.slice(1).join(' · ');
+
+                // Leer imágenes del slide via rels
+                const relsPath = `ppt/slides/_rels/slide${slideNum}.xml.rels`;
+                const relsFile = zip.file(relsPath);
+                const slideImages = [];
+                if (relsFile) {
+                    const relsXml = await relsFile.async('string');
+                    const imgRefs = [...relsXml.matchAll(/Target="\.\.\/(media\/[^"]+)"/g)];
+                    for (const ref of imgRefs) {
+                        const mediaPath = 'ppt/' + ref[1];
+                        const mediaFile = zip.file(mediaPath);
+                        if (!mediaFile) continue;
+                        const ext = mediaPath.split('.').pop().toLowerCase();
+                        if (!['png','jpg','jpeg','gif','webp'].includes(ext)) continue;
+                        const b64 = await mediaFile.async('base64');
+                        const mime = ext === 'jpg' || ext === 'jpeg' ? 'image/jpeg' : 'image/' + ext;
+                        slideImages.push({ data: b64, mimeType: mime });
+                    }
+                }
+
+                // Crear fila
+                window.addIARow();
+                const container = document.getElementById('ia-items-container');
+                const row = container.lastElementChild;
+
+                row.querySelector('.ia-inp-name').value = title;
+                row.querySelector('.ia-inp-prompt').value = body;
+
+                // Adjuntar imágenes del slide a la fila (máx 2 por slide)
+                const imgContainer = row.querySelector('[id^="ia-img-container-"]');
+                for (const imgObj of slideImages.slice(0, 2)) {
+                    const imgEl = document.createElement('img');
+                    imgEl.src = `data:${imgObj.mimeType};base64,${imgObj.data}`;
+                    imgEl.style.cssText = 'height:60px; border-radius:4px; border:1px solid #555; object-fit:cover;';
+                    imgEl.className = 'ia-row-image-data';
+                    imgContainer.appendChild(_makeIAImgWrap(imgEl));
+                }
+
+                rowsCreated++;
+            }
+
+            statusEl.textContent = `✅ PPTX importado: ${rowsCreated} ítems cargados. Revisá y ajustá, luego generá.`;
+            statusEl.style.color = '#30d158';
+        } catch (err) {
+            statusEl.textContent = '❌ Error al leer PPTX: ' + err.message;
+            statusEl.style.color = '#ff4444';
+            console.error('PPTX import error:', err);
+        }
+    };
+
     // --- FILAS MANUALES MULTI-FOTO (PASTE Y UPLOAD) ---
     function _makeIAImgWrap(imgEl) {
         const wrap = document.createElement('div');
@@ -3292,6 +3383,7 @@ F3. MATERIALES POR PIEZAS COMPLEJAS — preguntar si no se especifica:
             } catch(_ce) {
                 parts.push({ inlineData: { data: _ctxImg.data, mimeType: _ctxImg.mimeType } });
             }
+            textPrompt += `\n⚠️ IMAGEN DE CONTEXTO: Si esta imagen muestra medidas explícitas anotadas por el cliente (ej: "15,03m", "Total 14m", "Longitud = X"), esas medidas son VERDAD ABSOLUTA y tienen PRIORIDAD sobre cualquier cálculo geométrico propio. Usá esas medidas sin recalcular.\n`;
         }
         if(currentIAPdfBase64) {
             parts.push({ inlineData: { data: currentIAPdfBase64.split(',')[1], mimeType: "application/pdf" } });
@@ -3304,6 +3396,7 @@ F3. MATERIALES POR PIEZAS COMPLEJAS — preguntar si no se especifica:
 LECTURA DE PLANOS / CAD / RENDERS 3D — OBLIGATORIO:
 Si hay imagen técnica o 3D con cotas:
 1. Lee TODAS las cotas exactamente como aparecen. "945,5" = 945.5 (coma = decimal europeo).
+   PRIORIDAD DE FUENTES: Si el cliente anotó medidas explícitas en una imagen de contexto (ej: "Longitud total = 15,03m", "Total 14m"), esas son las medidas reales. Usálas directamente sin recalcular. Las medidas del cliente siempre ganan sobre el cálculo geométrico.
 2. UNIDAD: el prompt indica explícitamente la unidad (busca "UNIDADES CAD"). Aplicá esa conversión. Si dice cm → ×0.01 para metros; si dice mm → ÷1000; si dice m → ya son metros. Un bastidor real mide 0.3m–4m; verificá que tus resultados sean coherentes.
 3. CÁLCULO PASO A PASO OBLIGATORIO — antes de poner cualquier cantidad en el APU, calculá así:
    a) Listá cotas convertidas: "L=0.9455m, A=0.425m, r=0.200m" (mostrando la conversión)
