@@ -402,14 +402,21 @@ REGLAS ABSOLUTAS
 ADHERENCIA: Cuando el usuario especifica materiales o procesos, seguílos EXACTAMENTE. No los sustituyás. Tubín + foam = tubín + foam. Drywall = drywall. Lona impresa = lona impresa.
 MODO ÍTEM ÚNICO: Si dice [MODO ÍTEM ÚNICO], el array tiene exactamente 1 objeto JSON. No más.
 MODO DESGLOSE: Si dice [MODO DESGLOSE → CAPÍTULO: "X"], el array empieza con {"type":"chapter","name":"X"} y luego los sub-ítems. El capítulo es el primero del array y no se cuenta como ítem.
-MATEMÁTICA: Calculá cantidades explícitamente. Mostrá el cálculo en feat. NUNCA pongas cantidades de 1 cuando hay medidas reales. SIEMPRE trabajá en METROS (no en mm ni cm).
-UNIDADES CAD: Los planos y renders 3D tienen medidas en mm. Convertí SIEMPRE antes de calcular: 945mm = 0.945m, 425mm = 0.425m, 100mm = 0.10m. Si ves un número como "945,5" en un render 3D, es 945.5 mm = 0.9455 m. NUNCA uses las cifras del CAD directamente como metros.
-FÓRMULAS SEGÚN FORMA:
-  - Rectangular: Área = largo × alto; Perímetro = 2×(largo+alto)
-  - Oval/Estadio/Pill (dos semicírculos + rectas): largo_recto = largo_total - ancho; Perímetro = 2×largo_recto + π×ancho; Área = largo_recto×ancho + π×(ancho/2)²
-  - Circular: Perímetro = π×diámetro; Área = π×(diámetro/2)²
+MATEMÁTICA — PROCEDIMIENTO OBLIGATORIO (4 pasos siempre):
+PASO 1 — LEER COTAS: Extrae cada número del render/plano exactamente como aparece. "945,5" = 945.5 (coma = decimal europeo).
+PASO 2 — CONVERTIR A METROS: Las cotas CAD/3D están SIEMPRE en mm (milímetros). Dividí cada cota por 1000. Ejemplos: 945.5mm → 0.9455m; 425mm → 0.425m; 200mm → 0.200m; 100mm → 0.100m. NUNCA son metros directos ni centímetros. Un bastidor real mide 0.3m a 4m. Si tu resultado da >10m en una dimensión, tus unidades están mal.
+PASO 3 — IDENTIFICAR FORMA y aplicar fórmula:
+  - Rectangular: Área = L × A; Perímetro = 2×(L+A)
+  - Oval/Estadio/Pill (dos semicírculos + rectas): largo_recto = L_total - ancho_total; Perímetro = 2×largo_recto + π×ancho_total; Área = largo_recto × ancho + π×(ancho/2)²
+  - Circular: Perímetro = π×D; Área = π×(D/2)²
+  - Forma con radio en esquinas: Perímetro = 2×(L-2r) + 2×(A-2r) + 2π×r; Área ≈ L×A - (4-π)×r²
   - Irregular: sumá segmentos uno a uno
-NEON FLEX EN BORDE: Si el neon va "arriba y abajo" del bastidor = neon_total = 2 × perímetro_del_bastidor (un contorno en el borde superior y otro en el inferior).
+PASO 4 — SANITY CHECK de magnitudes antes de confirmar:
+  Un bastidor de 1m×0.5m: lona ≈ 0.5m², tubín ≈ 3-4 barras, remaches ≈ 50 pzas, neon (top+bottom) ≈ 3ml.
+  Escalá linealmente según el área. Si tu lona da >5m² para un bastidor bajo 2m×2m, revisá las unidades.
+  Si neon da >10ml para un bastidor de 1m perímetro, está mal.
+NEON FLEX EN BORDE: "arriba y abajo" = 2 × perímetro_total (un contorno por cada borde). Para radio en esquinas: perímetro con la fórmula de PASO 3.
+REMACHES: 1 remache cada 10cm de perímetro → cantidad = perímetro_en_cm ÷ 10.
 PRECIOS DB: Si el catálogo de materiales incluye el precio de un material, usá ESE precio exacto. Solo usá precios de mercado para materiales no encontrados en el catálogo.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
