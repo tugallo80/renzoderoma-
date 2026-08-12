@@ -404,7 +404,7 @@ MODO ÍTEM ÚNICO: Si dice [MODO ÍTEM ÚNICO], el array tiene exactamente 1 obj
 MODO DESGLOSE: Si dice [MODO DESGLOSE → CAPÍTULO: "X"], el array empieza con {"type":"chapter","name":"X"} y luego los sub-ítems. El capítulo es el primero del array y no se cuenta como ítem.
 MATEMÁTICA — PROCEDIMIENTO OBLIGATORIO (4 pasos siempre):
 PASO 1 — LEER COTAS: Extrae cada número del render/plano exactamente como aparece. "945,5" = 945.5 (coma = decimal europeo).
-PASO 2 — CONVERTIR A METROS: Las cotas CAD/3D están SIEMPRE en mm (milímetros). Dividí cada cota por 1000. Ejemplos: 945.5mm → 0.9455m; 425mm → 0.425m; 200mm → 0.200m; 100mm → 0.100m. NUNCA son metros directos ni centímetros. Un bastidor real mide 0.3m a 4m. Si tu resultado da >10m en una dimensión, tus unidades están mal.
+PASO 2 — CONVERTIR A METROS: La unidad de las cotas está indicada explícitamente en el prompt (busca "UNIDADES CAD"). Seguí esa indicación. Si dice cm → ×0.01; si dice mm → ÷1000; si dice m → ya están en metros. Un bastidor real mide 0.3m a 4m. Si tu resultado da >10m en una dimensión, tus unidades están mal.
 PASO 3 — IDENTIFICAR FORMA y aplicar fórmula:
   - Rectangular: Área = L × A; Perímetro = 2×(L+A)
   - Oval/Estadio/Pill (dos semicírculos + rectas): largo_recto = L_total - ancho_total; Perímetro = 2×largo_recto + π×ancho_total; Área = largo_recto × ancho + π×(ancho/2)²

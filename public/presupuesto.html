@@ -423,6 +423,29 @@
     <input type="file" id="ia-imgs-upload" accept="image/*" multiple style="display:none" onchange="handleIAImgsUpload(this)">
 </div>
 <div id="ia-imgs-preview" style="display:flex; flex-wrap:wrap; gap:6px; margin-bottom:10px;"></div>
+
+<div style="margin-bottom:12px; padding:10px 12px; background:rgba(48,209,88,0.08); border:1px solid rgba(48,209,88,0.35); border-radius:10px; display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+    <div style="font-size:11px; font-weight:800; color:var(--green); display:flex; align-items:center; gap:5px; white-space:nowrap;"><i class="ph-bold ph-ruler"></i> UNIDAD DEL PLANO / CAD</div>
+    <div style="display:flex; gap:8px; flex-wrap:wrap; flex:1;">
+        <label style="display:flex; align-items:center; gap:5px; cursor:pointer; font-size:12px; font-weight:700; color:#fff;">
+            <input type="radio" name="ia-units" value="cm" id="ia-unit-cm" style="accent-color:var(--green);">
+            <span>cm</span>
+        </label>
+        <label style="display:flex; align-items:center; gap:5px; cursor:pointer; font-size:12px; font-weight:700; color:#fff;">
+            <input type="radio" name="ia-units" value="mm" id="ia-unit-mm" style="accent-color:var(--green);">
+            <span>mm</span>
+        </label>
+        <label style="display:flex; align-items:center; gap:5px; cursor:pointer; font-size:12px; font-weight:700; color:#fff;">
+            <input type="radio" name="ia-units" value="m" id="ia-unit-m" style="accent-color:var(--green);">
+            <span>m</span>
+        </label>
+        <label style="display:flex; align-items:center; gap:5px; cursor:pointer; font-size:12px; font-weight:700; color:#aaa;">
+            <input type="radio" name="ia-units" value="auto" id="ia-unit-auto" checked style="accent-color:#888;">
+            <span style="color:#aaa;">auto (sin imagen)</span>
+        </label>
+    </div>
+</div>
+
 <div id="ia-items-container" style="display:flex; flex-direction:column; gap:10px; margin-bottom:15px; max-height: 45vh; overflow-y:auto; padding-right:5px;"></div>
 
 <button class="btn" style="background:transparent; color:var(--purple); border:1px dashed var(--purple); margin-bottom:15px; width: 100%; justify-content: center; padding: 12px; font-size:12px;" onclick="addIARow()"><i class="ph-bold ph-plus"></i> Añadir fila de ítem</button>
@@ -2904,13 +2927,13 @@ PASO 1 — LEER Y ENTENDER:
 
   ⚠️ REGLA CRÍTICA DE UNIDADES EN IMÁGENES:
   Cuando el usuario adjunta una imagen con medidas (SketchUp, CAD, plano):
-  → Si el usuario especifica la unidad en su prompt (ej: "medidas en cm", "está en metros", "son mm") → usá ESA unidad.
-  → Si NO especifica → inferí por sentido común según el objeto:
+  → La unidad de las cotas en la imagen se indica explícitamente al inicio del prompt (UNIDADES CAD). Usá ESA unidad sin dudar.
+  → Si no se indicó unidad → inferí por sentido común según el objeto:
       • Un arco/puerta transitable: altura entre 2.0 m y 5.0 m
       • Una mesa/mostrador: altura entre 0.70 m y 1.10 m
       • Un letrero de pared: entre 0.30 m y 3.0 m de ancho
     Si el valor numérico de la imagen NO da un resultado coherente asumiendo metros → probá dividir por 100 (cm) o por 1000 (mm).
-  Siempre indicá en feat qué unidad interpretaste: "- Dimensiones leídas de imagen: 974.6 cm = 9.75 m de ancho"
+  Siempre indicá en feat qué unidad interpretaste: "- Dimensiones leídas de imagen: 94.55 cm → 0.9455 m de largo"
 
 PASO 2 — GEOMETRÍA (calcular cantidades reales):
   Aplicá los BLOQUEs A-G de más abajo según corresponda.
@@ -3199,6 +3222,18 @@ F3. MATERIALES POR PIEZAS COMPLEJAS — preguntar si no se especifica:
             }
         } catch(e) { /* Si falla Firebase, continúa sin reglas */ }
 
+        // Inyectar unidad CAD seleccionada por el usuario
+        const _selUnit = document.querySelector('input[name="ia-units"]:checked')?.value || 'auto';
+        if (_selUnit !== 'auto') {
+            const _unitMap = {
+                cm: { label: 'CENTÍMETROS (cm)', factor: '× 0.01', example: '94.55 cm → 0.9455 m' },
+                mm: { label: 'MILÍMETROS (mm)', factor: '÷ 1000', example: '945.5 mm → 0.9455 m' },
+                m:  { label: 'METROS (m)', factor: 'ya en metros', example: '0.9455 m → 0.9455 m' },
+            };
+            const _u = _unitMap[_selUnit];
+            textPrompt += `\n⚠️ UNIDADES CAD — INDICADO POR EL USUARIO: Las cotas en la imagen están en ${_u.label}. Para convertir a metros: ${_u.factor}. Ejemplo: ${_u.example}. NO asumas otra unidad.\n\n`;
+        }
+
         // 2. Procesar Filas Manuales y TODAS sus fotos (async para comprimir imágenes)
         for (let index = 0; index < rows.length; index++) {
             const row = rows[index];
@@ -3269,9 +3304,9 @@ F3. MATERIALES POR PIEZAS COMPLEJAS — preguntar si no se especifica:
 LECTURA DE PLANOS / CAD / RENDERS 3D — OBLIGATORIO:
 Si hay imagen técnica o 3D con cotas:
 1. Lee TODAS las cotas exactamente como aparecen. "945,5" = 945.5 (coma = decimal europeo).
-2. Las cotas CAD/3D están SIEMPRE en mm (milímetros). Dividí por 1000 para convertir a metros. NUNCA las uses directamente como metros ni cm. Un bastidor real mide 0.3m–4m; si ves "945,5" eso es 0.9455m, NO 945.5m ni 9.455m.
+2. UNIDAD: el prompt indica explícitamente la unidad (busca "UNIDADES CAD"). Aplicá esa conversión. Si dice cm → ×0.01 para metros; si dice mm → ÷1000; si dice m → ya son metros. Un bastidor real mide 0.3m–4m; verificá que tus resultados sean coherentes.
 3. CÁLCULO PASO A PASO OBLIGATORIO — antes de poner cualquier cantidad en el APU, calculá así:
-   a) Listá cotas convertidas: "L=0.9455m, A=0.425m, r=0.200m"
+   a) Listá cotas convertidas: "L=0.9455m, A=0.425m, r=0.200m" (mostrando la conversión)
    b) Identificá forma (rectangular/oval/circular/otro)
    c) Calculá área y perímetro con la fórmula correcta para esa forma
    d) Aplicá mermas y factores
