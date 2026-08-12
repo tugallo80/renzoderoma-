@@ -552,12 +552,8 @@ MATERIALES — ESPEJOS/VIDRIO: Estructura = tubín + espejo. NO plancha galvaniz
             ? Math.min(generationConfig?.maxOutputTokens || 16000, 16000)
             : generationConfig?.maxOutputTokens;
 
-        // Prefill: fuerza a Claude a empezar su respuesta con el string dado (útil para JSON-only)
-        const prefill = typeof body.prefill === "string" ? body.prefill : null;
-        if (prefill) messages.push({ role: "assistant", content: prefill });
-
         const text = await llamarClaude(anthropicKey, messages, systemText, maxOut, chosenModel);
-        const finalText = prefill ? prefill + text : text;
+        const finalText = text;
 
         // Devolver en formato Gemini para que el frontend existente lo lea sin cambios
         return res.status(200).json({

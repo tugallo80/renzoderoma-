@@ -2529,8 +2529,7 @@ Devolvé exactamente este formato (sin texto adicional):
                     systemInstruction: { parts: [{ text: sysPrompt }] },
                     contents: [{ role: 'user', parts: _regenParts }],
                     generationConfig: { maxOutputTokens: 8192, temperature: 0.1 },
-                    advancedModel: true,
-                    prefill: '['
+                    advancedModel: true
                 })
             });
             if(!resp.ok) throw new Error(`HTTP ${resp.status}`);
@@ -3336,8 +3335,7 @@ EJEMPLO SIN CAPÍTULOS (menos de 4 ítems):
                 systemInstruction: { parts: [{ text: sysPrompt }] },
                 contents: [{ role: 'user', parts }],
                 generationConfig: { maxOutputTokens: 16000, temperature: 0.1 },
-                advancedModel: true,
-                prefill: '['
+                advancedModel: true
             });
 
             // Verificar tamaño antes de enviar
@@ -5293,8 +5291,7 @@ Devolvé exactamente este formato (sin texto adicional):
                     systemInstruction: { parts: [{ text: sysPrompt }] },
                     contents: [{ role: 'user', parts: [{ text: userPrompt }] }],
                     generationConfig: { maxOutputTokens: 8192, temperature: 0.1 },
-                    advancedModel: true,
-                    prefill: '['
+                    advancedModel: true
                 })
             });
             if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
