@@ -2846,6 +2846,89 @@ Devolvé exactamente este formato (sin texto adicional):
     };
     window.handleIAPptxUpload = function(f) { window.handleIADocUpload(f); };
 
+    // --- IMPORTAR PPTX ---
+    window.handleIAPptxUpload = async function(file) {
+        if (!file) return;
+        const statusEl = document.getElementById('ia-pptx-status');
+        statusEl.style.display = 'block';
+        statusEl.textContent = '⏳ Procesando PPTX...';
+
+        try {
+            const arrayBuffer = await file.arrayBuffer();
+            const zip = await JSZip.loadAsync(arrayBuffer);
+
+            // Leer todos los slides ordenados por número
+            const slideFiles = Object.keys(zip.files)
+                .filter(n => /^ppt\/slides\/slide\d+\.xml$/.test(n))
+                .sort((a, b) => {
+                    const na = parseInt(a.match(/slide(\d+)/)[1]);
+                    const nb = parseInt(b.match(/slide(\d+)/)[1]);
+                    return na - nb;
+                });
+
+            let rowsCreated = 0;
+
+            for (const slidePath of slideFiles) {
+                const slideNum = slidePath.match(/slide(\d+)/)[1];
+                const slideXml = await zip.file(slidePath).async('string');
+
+                // Extraer texto del slide
+                const textMatches = slideXml.match(/<a:t[^>]*>([^<]+)<\/a:t>/g) || [];
+                const texts = textMatches.map(m => m.replace(/<[^>]+>/g, '').trim()).filter(t => t);
+                if (texts.length === 0) continue; // slide vacío (ej: portada sin texto)
+
+                const title = texts[0];
+                const body = texts.slice(1).join(' · ');
+
+                // Leer imágenes del slide via rels
+                const relsPath = `ppt/slides/_rels/slide${slideNum}.xml.rels`;
+                const relsFile = zip.file(relsPath);
+                const slideImages = [];
+                if (relsFile) {
+                    const relsXml = await relsFile.async('string');
+                    const imgRefs = [...relsXml.matchAll(/Target="\.\.\/(media\/[^"]+)"/g)];
+                    for (const ref of imgRefs) {
+                        const mediaPath = 'ppt/' + ref[1];
+                        const mediaFile = zip.file(mediaPath);
+                        if (!mediaFile) continue;
+                        const ext = mediaPath.split('.').pop().toLowerCase();
+                        if (!['png','jpg','jpeg','gif','webp'].includes(ext)) continue;
+                        const b64 = await mediaFile.async('base64');
+                        const mime = ext === 'jpg' || ext === 'jpeg' ? 'image/jpeg' : 'image/' + ext;
+                        slideImages.push({ data: b64, mimeType: mime });
+                    }
+                }
+
+                // Crear fila
+                window.addIARow();
+                const container = document.getElementById('ia-items-container');
+                const row = container.lastElementChild;
+
+                row.querySelector('.ia-inp-name').value = title;
+                row.querySelector('.ia-inp-prompt').value = body;
+
+                // Adjuntar imágenes del slide a la fila (máx 2 por slide)
+                const imgContainer = row.querySelector('[id^="ia-img-container-"]');
+                for (const imgObj of slideImages.slice(0, 2)) {
+                    const imgEl = document.createElement('img');
+                    imgEl.src = `data:${imgObj.mimeType};base64,${imgObj.data}`;
+                    imgEl.style.cssText = 'height:60px; border-radius:4px; border:1px solid #555; object-fit:cover;';
+                    imgEl.className = 'ia-row-image-data';
+                    imgContainer.appendChild(_makeIAImgWrap(imgEl));
+                }
+
+                rowsCreated++;
+            }
+
+            statusEl.textContent = `✅ PPTX importado: ${rowsCreated} ítems cargados. Revisá y ajustá, luego generá.`;
+            statusEl.style.color = '#30d158';
+        } catch (err) {
+            statusEl.textContent = '❌ Error al leer PPTX: ' + err.message;
+            statusEl.style.color = '#ff4444';
+            console.error('PPTX import error:', err);
+        }
+    };
+
     // --- FILAS MANUALES MULTI-FOTO (PASTE Y UPLOAD) ---
     function _makeIAImgWrap(imgEl) {
         const wrap = document.createElement('div');
