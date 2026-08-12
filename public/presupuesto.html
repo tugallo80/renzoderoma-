@@ -3266,12 +3266,17 @@ F3. MATERIALES POR PIEZAS COMPLEJAS — preguntar si no se especifica:
         // 4. Armar el JSON final de la petición
         const sysPrompt = `REGLA ABSOLUTA: Responde SOLO con un array JSON válido. Cero texto antes o después. Cero markdown.
 
-LECTURA DE PLANOS TÉCNICOS / CAD — OBLIGATORIO:
-Si hay una imagen de plano técnico, dibujo CAD o croquis acotado:
-1. Lee TODAS las cotas numéricas anotadas en el dibujo — son las ÚNICAS medidas válidas. NUNCA inventes ni estimes.
-2. Para dimensiones no anotadas directamente, calculalas: ej. si altura total=250, faja superior=56.6, faja inferior=100 → apertura central=250-56.6-100=93.4 cm.
-3. Usá esos valores exactos en "feat" (totales y aperturas/huecos) y en el APU para calcular cantidades de materiales.
-4. La profundidad del cajón/estructura también es una cota del plano — no la omitas.
+LECTURA DE PLANOS / CAD / RENDERS 3D — OBLIGATORIO:
+Si hay imagen técnica o 3D con cotas:
+1. Lee TODAS las cotas exactamente como aparecen. "945,5" = 945.5 (coma = decimal europeo).
+2. Las cotas CAD/3D están SIEMPRE en mm (milímetros). Dividí por 1000 para convertir a metros. NUNCA las uses directamente como metros ni cm. Un bastidor real mide 0.3m–4m; si ves "945,5" eso es 0.9455m, NO 945.5m ni 9.455m.
+3. CÁLCULO PASO A PASO OBLIGATORIO — antes de poner cualquier cantidad en el APU, calculá así:
+   a) Listá cotas convertidas: "L=0.9455m, A=0.425m, r=0.200m"
+   b) Identificá forma (rectangular/oval/circular/otro)
+   c) Calculá área y perímetro con la fórmula correcta para esa forma
+   d) Aplicá mermas y factores
+   e) VERIFICÁ que los resultados tengan sentido: lona para 1m×0.5m ≈ 0.55m², neon top+bottom para perímetro 2m ≈ 4ml, tubín ≈ 3-4 barras. Ajustá si tus cantidades son 5× mayores o menores.
+4. Para ovalados/pill (radio en extremos): Perímetro = 2×(L−D) + π×D donde D=ancho o D=2r. Área = (L−D)×D + π×(D/2)².
 
 CAMPOS OBLIGATORIOS por ítem:
 - "desc": string — REGLA DE NOMBRES:
