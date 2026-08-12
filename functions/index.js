@@ -118,15 +118,20 @@ async function llamarClaude(anthropicKey, messages, systemText, maxTokens, model
     for (let attempt = 0; attempt < 3; attempt++) {
         if (attempt > 0) await new Promise(r => setTimeout(r, 3000 * attempt));
         let res;
+        const ctrl = new AbortController();
+        const tId = setTimeout(() => ctrl.abort(), 120000);
         try {
             res = await fetch("https://api.anthropic.com/v1/messages", {
                 method: "POST",
                 headers: reqHeaders,
                 body: reqBodyStr,
+                signal: ctrl.signal,
             });
+            clearTimeout(tId);
         } catch (netErr) {
+            clearTimeout(tId);
             lastErr = netErr;
-            console.warn(`[llamarClaude] red error intento ${attempt + 1}:`, netErr.message);
+            console.warn(`[llamarClaude] error intento ${attempt + 1}:`, netErr.message);
             continue;
         }
         // Retry en errores transitorios de Anthropic

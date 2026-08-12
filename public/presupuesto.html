@@ -2884,9 +2884,9 @@ Devolvé exactamente este formato (sin texto adicional):
         let parts = [];
 
         // 1. CREAR EL CATÁLOGO DE LA BASE DE DATOS PARA ENVIARSELO A LA IA
-        // Limitar a 300 materiales y 100 MO para no inflar el payload
-        const _matEntries = Object.values(dbMats).slice(0, 300);
-        const _moEntries  = Object.values(dbMo).slice(0, 100);
+        // Limitar a 150 materiales y 80 MO para mantener payload bajo ~25KB
+        const _matEntries = Object.values(dbMats).slice(0, 150);
+        const _moEntries  = Object.values(dbMo).slice(0, 80);
         console.log('[Budget] DB: mats=' + Object.values(dbMats).length + ' mo=' + Object.values(dbMo).length + ' (enviando ' + _matEntries.length + '/' + _moEntries.length + ')');
         let catalogoMat = _matEntries.map(m => `${m.n || m.desc}: ${m.p || m.pu} Bs/${m.u || m.und}`).join(", ");
         let catalogoMo  = _moEntries.map(m => `${m.n || m.desc}: ${m.p || m.pu} Bs/${m.u || m.und || 'und'}`).join(", ");
