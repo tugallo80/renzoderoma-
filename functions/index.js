@@ -410,6 +410,7 @@ PASO 3 — IDENTIFICAR FORMA y aplicar fórmula:
   - Oval/Estadio/Pill (dos semicírculos + rectas): largo_recto = L_total - ancho_total; Perímetro = 2×largo_recto + π×ancho_total; Área = largo_recto × ancho + π×(ancho/2)²
   - Circular: Perímetro = π×D; Área = π×(D/2)²
   - Forma con radio en esquinas: Perímetro = 2×(L-2r) + 2×(A-2r) + 2π×r; Área ≈ L×A - (4-π)×r²
+  - Irregular: sumá segmentos uno a uno
 PASO 4 — SANITY CHECK de magnitudes antes de confirmar:
   Un bastidor de 1m×0.5m: lona ≈ 0.5m², tubín ≈ 3-4 barras, remaches ≈ 50 pzas, neon (top+bottom) ≈ 3ml.
   Escalá linealmente según el área. Si tu lona da >5m² para un bastidor bajo 2m×2m, revisá las unidades.
