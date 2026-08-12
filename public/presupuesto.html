@@ -3641,12 +3641,6 @@ EJEMPLO SIN CAPÍTULOS (menos de 4 ítems):
         const _headerText = textPrompt; // snapshot del prompt base (catálogo + bloques A-G + unidades)
 
         try {
-            const token = firebase.auth().currentUser
-                ? await firebase.auth().currentUser.getIdToken()
-                : null;
-            const _authHeaders = { 'Content-Type': 'application/json' };
-            if (token) _authHeaders['Authorization'] = 'Bearer ' + token;
-
             const BATCH_SIZE = 5;
             const _allResultItems = [];
             const _totalBatches = Math.max(1, Math.ceil(_allRowData.length / BATCH_SIZE));
@@ -3654,6 +3648,13 @@ EJEMPLO SIN CAPÍTULOS (menos de 4 ítems):
             for (let _bi = 0; _bi < _allRowData.length; _bi += BATCH_SIZE) {
                 const _batchRows  = _allRowData.slice(_bi, _bi + BATCH_SIZE);
                 const _batchNum   = Math.floor(_bi / BATCH_SIZE) + 1;
+
+                // Refrescar token en cada lote — evita 401 si el token expiró entre batches
+                const _freshToken = firebase.auth().currentUser
+                    ? await firebase.auth().currentUser.getIdToken()
+                    : null;
+                const _authHeaders = { 'Content-Type': 'application/json' };
+                if (_freshToken) _authHeaders['Authorization'] = 'Bearer ' + _freshToken;
 
                 const _pMsgEl = document.getElementById('ia-prog-msg');
                 if (_pMsgEl) _pMsgEl.textContent = _totalBatches > 1
