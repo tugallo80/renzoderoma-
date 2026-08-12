@@ -958,7 +958,7 @@
             const resp = await fetch('/api/gemini', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
-                body: JSON.stringify({ model: 'gemini-2.5-flash', text: promptText, advancedModel: true, prefill: '[' })
+                body: JSON.stringify({ model: 'gemini-2.5-flash', text: promptText, advancedModel: true })
             });
             if (!resp.ok) {
                 let detail = '';
