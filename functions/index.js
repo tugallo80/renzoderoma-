@@ -424,13 +424,41 @@ CONOCIMIENTO DE INDUSTRIA — RUBRO GRÁFICO/SEÑALÉTICA BOLIVIA
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 ▶ BASTIDOR CON LONA IMPRESA
-Estructura: tubín 20×20 o 25×25mm soldado en perímetro + costillas internas.
+REGLA: Todo ítem que diga "bastidor" lleva SIEMPRE lona impresa a una cara (nunca suponer que es solo estructura).
+Estructura: tubín 20×20 o 25×25mm soldado en perímetro + costillas internas cada 1m.
 Materiales: tubín (ml = perímetro + costillas internas), lona mate/brillante 440g-510g (m² = área_cara + 10% merma), remaches cada 10cm del perímetro, pintura anticorrosiva para tubín.
 Cálculo tubín rectangular: perímetro = 2×(ancho+alto), costillas_vert = int(ancho÷1m), costillas_horiz = int(alto÷1m), ml_total = perímetro + (costillas_vert × alto) + (costillas_horiz × ancho).
-Cálculo bastidor OVAL/ESTADIO: usar fórmulas de Oval/Estadio de FÓRMULAS SEGÚN FORMA. Costilla interna = una barra transversal cada metro de longitud recta.
+Cálculo bastidor OVAL/ESTADIO: usar fórmulas de Oval/Estadio. Costilla interna = una barra transversal cada metro de longitud recta.
 Cálculo remaches: (perímetro en cm) ÷ 10 = cantidad de remaches. Ej: perímetro 2.38m = 238cm → 23-24 remaches.
 Mano de obra: SOLDADOR (estructura), TENSADOR (m² 8-12 Bs lona), IMPRESOR (subcontrato impresión lona).
 ERROR COMÚN: No olvidar las costillas internas en el cálculo de tubín.
+
+▶ NEON FLEX / LED EN BORDE PERFILADO (NO letras)
+REGLA: Cuando el ítem dice "borde led", "led perimetral", "led superior/inferior" sobre una cenefa, bastidor o superficie (NO sobre letras corpóreas), el sistema es:
+1. Canal PVC rígido 10×10mm o 20×10mm como soporte (ml = mismos ml que el neon flex, precio ~8-12 Bs/ml)
+2. Neon flex LED de color pegado al canal con silicona líquida transparente ("gotita") — NO con cinta doble faz
+3. Transformador 12V: potencia = ml_led × 7W/m → watts totales; 1 transformador cada 50W. Ej: 15ml × 7W = 105W → 2 transformadores 60W (o 1 de 120W)
+4. Cable eléctrico 2×0.75mm² del transformador al primer punto (ml según distancia, mínimo 3m)
+5. Conector de empalme cada 5ml de neon flex
+IMPORTANTE: Si el cliente especifica ml (ej: "15m arriba + 15m abajo = 30m total"), usá esa medida directamente. Si no, calculá perímetro × repeticiones.
+Mano de obra: ELECTRICISTA (instalación LED, jornal 180-240 Bs)
+
+▶ INSTALACIÓN EN ALTURA
+REGLA: Si el ítem menciona altura >2.5m, instalación en feria/expo, o el usuario indica "altura X metros":
+- Incluir andamio tubular: precio 80-150 Bs/día según tamaño. Cantidad de días = duración estimada de instalación.
+- Si la altura supera 4m: agregar arnés de seguridad (alquiler 50 Bs/día) y supervisor.
+- Para instalación en feria: generalmente 1-2 días de armado.
+ERROR COMÚN: Olvidar el andamio cuando la instalación es en cielorraso o muro alto.
+
+▶ MUEBLES CON CURVAS (MDF DOBLADO)
+REGLA: Cuando un mueble, stand o elemento lleva curvas o formas redondeadas:
+1. Las piezas curvas se hacen con MDF 3mm (flexible), NO con MDF 15-18mm
+2. Proceso curva: MDF 3mm → mojar con agua → doblar sobre molde → secar 24h → pegar capas hasta espesor deseado (3-6 capas de 3mm = 9-18mm)
+3. Acabado superficie curva: masilla poliéster automotriz (kg/m²: ~0.3kg por m² a lijar), lija P80 → P120 → P220, fondo sellador, pintura duco
+4. Cálculo MDF 3mm: ml_curva × ancho_pieza = m² de MDF 3mm necesario × capas (mínimo 3 capas) × 10% merma
+5. Plancha MDF 3mm: 1.22×2.44m = 2.98m². Precio ~80-120 Bs/plancha.
+Mano de obra: CARPINTERO (fabricación curvas, jornal 150-200 Bs), PINTOR (masilla+pintura, jornal 120-170 Bs)
+ERROR COMÚN: Usar una sola capa de MDF 3mm — siempre mínimo 3 capas para rigidez.
 
 ▶ CAJA DE LUZ (LIGHTBOX)
 Estructura: marco de tubín o perfil de aluminio, fondo de plancha galvanizada o MDF, frente de acrílico difusor o lona translúcida backlit.

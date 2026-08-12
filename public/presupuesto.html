@@ -3476,76 +3476,105 @@ F3. MATERIALES POR PIEZAS COMPLEJAS — preguntar si no se especifica:
             textPrompt += `\n⚠️ UNIDADES CAD — INDICADO POR EL USUARIO: Las cotas en la imagen están en ${_u.label}. Para convertir a metros: ${_u.factor}. Ejemplo: ${_u.example}. NO asumas otra unidad.\n\n`;
         }
 
-        // 2. Procesar Filas Manuales y TODAS sus fotos (async para comprimir imágenes)
+        // 2. Recolectar datos de todas las filas (preparación antes de enviar)
+        const _allRowData = [];
+        const _MAX_IMG_BYTES_ROW = 80000;
         for (let index = 0; index < rows.length; index++) {
             const row = rows[index];
             const name = row.querySelector('.ia-inp-name').value.trim();
-            const cant = row.querySelector('.ia-inp-cant').value;
-            const prompt = row.querySelector('.ia-inp-prompt').value.trim();
-
-            const mat  = row.querySelector('.ia-inp-mat')?.value?.trim()  || '';
-            const est  = row.querySelector('.ia-inp-est')?.value?.trim()  || '';
-            const acab = row.querySelector('.ia-inp-acab')?.value?.trim() || '';
-            const modo = row.querySelector('.ia-inp-modo:checked')?.value || 'unico';
+            if (!name) continue;
+            const cant     = row.querySelector('.ia-inp-cant').value;
+            const prompt   = row.querySelector('.ia-inp-prompt').value.trim();
+            const mat      = row.querySelector('.ia-inp-mat')?.value?.trim()  || '';
+            const est      = row.querySelector('.ia-inp-est')?.value?.trim()  || '';
+            const acab     = row.querySelector('.ia-inp-acab')?.value?.trim() || '';
+            const modo     = row.querySelector('.ia-inp-modo:checked')?.value || 'unico';
             const capitulo = row.querySelector('.ia-inp-capitulo')?.value?.trim() || name.toUpperCase();
 
-            if(name) {
-                if (modo === 'unico') {
-                    textPrompt += `ÍTEM ${index+1}: ${name} (Cantidad: ${cant}). [MODO ÍTEM ÚNICO — Generá EXACTAMENTE 1 objeto JSON en el array, sin capitulos, sin desgloses. Todo el APU va dentro de ese único ítem.]\n`;
-                } else {
-                    textPrompt += `ÍTEM ${index+1}: ${name} (Cantidad: ${cant}). [MODO DESGLOSE — Generá múltiples ítems agrupados bajo el capítulo "${capitulo}". El array para este ítem DEBE empezar con {"type":"chapter","name":"${capitulo}"} seguido de los sub-ítems.]\n`;
-                }
-                textPrompt += `Instrucciones del usuario: ${prompt}\n`;
-                if (mat || est || acab) {
-                    textPrompt += 'Contexto del ítem:';
-                    if (mat)  textPrompt += `\nMateriales: ${mat}`;
-                    if (est)  textPrompt += `\nEstructura: ${est}`;
-                    if (acab) textPrompt += `\nAcabado/Branding: ${acab}`;
-                    textPrompt += '\n';
-                }
-
-                const rowImages = row.querySelectorAll('.ia-row-image-data');
-                const MAX_IMG_BYTES = 80000; // 80KB por imagen en base64
-                const MAX_TOTAL_IMG_PARTS = 1; // máximo 1 imagen por ítem para mantener payload bajo
-                let imgCount = 0;
-                for (let imgIdx = 0; imgIdx < rowImages.length && imgCount < MAX_TOTAL_IMG_PARTS; imgIdx++) {
-                    const imgEl = rowImages[imgIdx];
-                    const b64Full = imgEl.src;
-                    if (!b64Full || !b64Full.startsWith('data:')) continue;
+            let compImage = null;
+            const rowImages = row.querySelectorAll('.ia-row-image-data');
+            if (rowImages.length > 0) {
+                const imgEl = rowImages[0];
+                const b64Full = imgEl.src;
+                if (b64Full && b64Full.startsWith('data:')) {
                     let comp = await _compressB64(b64Full, 300, 0.35);
-                    if (comp.split(',')[1].length > MAX_IMG_BYTES) {
+                    if (comp.split(',')[1].length > _MAX_IMG_BYTES_ROW) {
                         comp = await _compressB64(b64Full, 220, 0.28);
                     }
-                    parts.push({ inlineData: { data: comp.split(',')[1], mimeType: 'image/jpeg' } });
-                    textPrompt += `-> FOTO ADJUNTA ${imgIdx+1} PARA ÍTEM ${index+1}.\n`;
-                    imgCount++;
+                    compImage = comp;
                 }
             }
+            _allRowData.push({ origIndex: index, name, cant, prompt, mat, est, acab, modo, capitulo, compImage });
         }
 
-        // 3. Adjuntar imágenes de contexto (máx 1) + PDF si existe
-        if(currentIAImages.length > 0) {
-            // Solo 1 imagen de contexto, recomprimida a 250px/0.3 para mantener payload bajo 150KB
+        // 3. Preparar partes de contexto (imagen del proyecto + PDF) — se incluyen en cada batch
+        const _ctxParts = [];
+        let _ctxNote = '';
+        if (currentIAImages.length > 0) {
             const _ctxImg = currentIAImages[0];
             try {
                 const _ctxFull = 'data:' + _ctxImg.mimeType + ';base64,' + _ctxImg.data;
                 const _ctxComp = await _compressB64(_ctxFull, 250, 0.3);
-                parts.push({ inlineData: { data: _ctxComp.split(',')[1], mimeType: 'image/jpeg' } });
+                _ctxParts.push({ inlineData: { data: _ctxComp.split(',')[1], mimeType: 'image/jpeg' } });
             } catch(_ce) {
-                parts.push({ inlineData: { data: _ctxImg.data, mimeType: _ctxImg.mimeType } });
+                _ctxParts.push({ inlineData: { data: _ctxImg.data, mimeType: _ctxImg.mimeType } });
             }
-            textPrompt += `\n⚠️ IMAGEN DE CONTEXTO: Si esta imagen muestra medidas explícitas anotadas por el cliente (ej: "15,03m", "Total 14m", "Longitud = X"), esas medidas son VERDAD ABSOLUTA y tienen PRIORIDAD sobre cualquier cálculo geométrico propio. Usá esas medidas sin recalcular.\n`;
+            _ctxNote += '\n⚠️ IMAGEN DE CONTEXTO: Si esta imagen muestra medidas explícitas anotadas por el cliente (ej: "15,03m", "Total 14m", "Longitud = X"), esas medidas son VERDAD ABSOLUTA y tienen PRIORIDAD sobre cualquier cálculo geométrico propio. Usá esas medidas sin recalcular.\n';
         }
-        if(currentIAPdfBase64) {
-            parts.push({ inlineData: { data: currentIAPdfBase64.split(',')[1], mimeType: "application/pdf" } });
-            textPrompt += `\nDOCUMENTO PDF ADJUNTO: Extrae los ítems de aquí también.\n`;
+        if (currentIAPdfBase64) {
+            _ctxParts.push({ inlineData: { data: currentIAPdfBase64.split(',')[1], mimeType: "application/pdf" } });
+            _ctxNote += '\nDOCUMENTO PDF ADJUNTO: Extrae los ítems de aquí también.\n';
         }
         if (window._iaExcelContext) {
-            textPrompt += `\nDOCUMENTO EXCEL ADJUNTO — contenido de las celdas (usá esto como contexto de ítems o dimensiones):\n${window._iaExcelContext}\n`;
+            _ctxNote += '\nDOCUMENTO EXCEL ADJUNTO — contenido de las celdas (usá esto como contexto de ítems o dimensiones):\n' + window._iaExcelContext + '\n';
         }
 
-        // 4. Armar el JSON final de la petición
-        const sysPrompt = `REGLA ABSOLUTA: Responde SOLO con un array JSON válido. Cero texto antes o después. Cero markdown.
+        // Helpers de parseo JSON compartidos entre batches
+        function _extractBalancedArray(str) {
+            const start = str.indexOf('[');
+            if (start === -1) return null;
+            let depth = 0, inStr = false, esc = false;
+            for (let i = start; i < str.length; i++) {
+                const ch = str[i];
+                if (esc) { esc = false; continue; }
+                if (ch === '\\' && inStr) { esc = true; continue; }
+                if (ch === '"') { inStr = !inStr; continue; }
+                if (inStr) continue;
+                if (ch === '[' || ch === '{') depth++;
+                else if (ch === ']' || ch === '}') {
+                    depth--;
+                    if (depth === 0) return str.slice(start, i + 1);
+                }
+            }
+            return null;
+        }
+
+        function _repairTruncatedArray(str) {
+            const start = str.indexOf('[');
+            if (start === -1) return null;
+            const completedItems = [];
+            let i = start + 1, depth = 0, inStr = false, esc = false, itemStart = -1;
+            while (i < str.length) {
+                const ch = str[i];
+                if (esc) { esc = false; i++; continue; }
+                if (ch === '\\' && inStr) { esc = true; i++; continue; }
+                if (ch === '"') { inStr = !inStr; i++; continue; }
+                if (inStr) { i++; continue; }
+                if (ch === '{') { if (depth === 0) itemStart = i; depth++; }
+                else if (ch === '}') {
+                    depth--;
+                    if (depth === 0 && itemStart !== -1) {
+                        completedItems.push(str.slice(itemStart, i + 1));
+                        itemStart = -1;
+                    }
+                }
+                i++;
+            }
+            return completedItems.length > 0 ? '[' + completedItems.join(',') + ']' : null;
+        }
+
+        // 4. sysPrompt + envío en batches de 5 ítems
+        const _sysPrompt = `REGLA ABSOLUTA: Responde SOLO con un array JSON válido. Cero texto antes o después. Cero markdown.
 
 LECTURA DE PLANOS / CAD / RENDERS 3D — OBLIGATORIO:
 Si hay imagen técnica o 3D con cotas:
@@ -3609,142 +3638,130 @@ EJEMPLO CON CAPÍTULOS (4+ ítems):
 EJEMPLO SIN CAPÍTULOS (menos de 4 ítems):
 [{"desc":"BASTIDOR TUBIN CON LONA","cant":1,"und":"glb","feat":"- Estructura tubín 20x20x1mm\\n- Lona backlight 510g\\n- Impresión digital una cara","apu":{"mat":[{"d":"TUBIN 20X20X1","u":"barra","q":3,"p":55}],"mo":[{"d":"SOLDADOR","u":"jornal","q":1,"p":250}],"eq":[],"sub":[]},"util":50,"ind":10}]`;
 
-        parts.unshift({ text: textPrompt });
+        const _headerText = textPrompt; // snapshot del prompt base (catálogo + bloques A-G + unidades)
 
         try {
             const token = firebase.auth().currentUser
                 ? await firebase.auth().currentUser.getIdToken()
                 : null;
-            const headers = { 'Content-Type': 'application/json' };
-            if (token) headers['Authorization'] = 'Bearer ' + token;
+            const _authHeaders = { 'Content-Type': 'application/json' };
+            if (token) _authHeaders['Authorization'] = 'Bearer ' + token;
 
-            const _reqBody = JSON.stringify({
-                systemInstruction: { parts: [{ text: sysPrompt }] },
-                contents: [{ role: 'user', parts }],
-                generationConfig: { maxOutputTokens: 16000, temperature: 0.1 },
-                advancedModel: true
-            });
+            const BATCH_SIZE = 5;
+            const _allResultItems = [];
+            const _totalBatches = Math.max(1, Math.ceil(_allRowData.length / BATCH_SIZE));
 
-            // Verificar tamaño antes de enviar
-            // PDFs van a Cloud Function (32MB limit) — solo bloqueamos si es absurdamente grande
-            const _payloadKB = Math.round(_reqBody.length / 1024);
-            console.log('[Budget] Payload size:', _payloadKB, 'KB');
-            if (_payloadKB > 18000) {
-                throw new Error(`El archivo adjunto es demasiado grande (${_payloadKB} KB). Para PDFs, intentá con un archivo de menos de 15 MB. Para imágenes, usá 1-3 fotos.`);
-            }
+            for (let _bi = 0; _bi < _allRowData.length; _bi += BATCH_SIZE) {
+                const _batchRows  = _allRowData.slice(_bi, _bi + BATCH_SIZE);
+                const _batchNum   = Math.floor(_bi / BATCH_SIZE) + 1;
 
-            console.log('[Budget] Endpoint: /api/gemini | payload:', _payloadKB, 'KB');
+                const _pMsgEl = document.getElementById('ia-prog-msg');
+                if (_pMsgEl) _pMsgEl.textContent = _totalBatches > 1
+                    ? 'Generando lote ' + _batchNum + ' de ' + _totalBatches + ' (' + _batchRows.length + ' ítems)...'
+                    : 'Generando presupuesto...';
 
-            let respData, _lastBudgetErr;
-            for (let _bAtt = 0; _bAtt < 3; _bAtt++) {
-                if (_bAtt > 0) {
-                    const _pMsg = document.getElementById('ia-prog-msg');
-                    if (_pMsg) _pMsg.textContent = 'Servidor ocupado, reintentando...';
-                    await new Promise(r => setTimeout(r, 5000 * _bAtt));
+                let _batchText = _headerText;
+                if (_ctxNote) _batchText += _ctxNote;
+                const _batchParts = [..._ctxParts];
+
+                _batchRows.forEach(function(rd) {
+                    if (rd.modo === 'unico') {
+                        _batchText += 'ÍTEM ' + (rd.origIndex+1) + ': ' + rd.name + ' (Cantidad: ' + rd.cant + '). [MODO ÍTEM ÚNICO — Generá EXACTAMENTE 1 objeto JSON en el array, sin capitulos, sin desgloses. Todo el APU va dentro de ese único ítem.]\n';
+                    } else {
+                        _batchText += 'ÍTEM ' + (rd.origIndex+1) + ': ' + rd.name + ' (Cantidad: ' + rd.cant + '). [MODO DESGLOSE — Generá múltiples ítems agrupados bajo el capítulo "' + rd.capitulo + '". El array para este ítem DEBE empezar con {"type":"chapter","name":"' + rd.capitulo + '"} seguido de los sub-ítems.]\n';
+                    }
+                    _batchText += 'Instrucciones del usuario: ' + rd.prompt + '\n';
+                    if (rd.mat || rd.est || rd.acab) {
+                        _batchText += 'Contexto del ítem:';
+                        if (rd.mat)  _batchText += '\nMateriales: ' + rd.mat;
+                        if (rd.est)  _batchText += '\nEstructura: ' + rd.est;
+                        if (rd.acab) _batchText += '\nAcabado/Branding: ' + rd.acab;
+                        _batchText += '\n';
+                    }
+                    if (rd.compImage) {
+                        _batchParts.push({ inlineData: { data: rd.compImage.split(',')[1], mimeType: 'image/jpeg' } });
+                        _batchText += '-> FOTO ADJUNTA 1 PARA ÍTEM ' + (rd.origIndex+1) + '.\n';
+                    }
+                });
+
+                _batchParts.unshift({ text: _batchText });
+
+                const _reqBody = JSON.stringify({
+                    systemInstruction: { parts: [{ text: _sysPrompt }] },
+                    contents: [{ role: 'user', parts: _batchParts }],
+                    generationConfig: { maxOutputTokens: 16000, temperature: 0.1 },
+                    advancedModel: true
+                });
+
+                const _payloadKB = Math.round(_reqBody.length / 1024);
+                console.log('[Budget] Batch ' + _batchNum + '/' + _totalBatches + ' payload:', _payloadKB, 'KB');
+                if (_payloadKB > 18000) {
+                    throw new Error('Lote ' + _batchNum + ': adjunto demasiado grande (' + _payloadKB + ' KB). Reducí las imágenes.');
                 }
-                // Usar Web Worker para resistir background/pantalla apagada en móvil
-                let _workerResp;
-                try {
-                    _workerResp = await _fetchInWorker(location.origin + '/api/gemini', { method: 'POST', headers, body: _reqBody }, 480000);
-                } catch(_wErr) {
-                    _lastBudgetErr = _wErr;
-                    continue;
-                }
-                if (_workerResp.status === 502 || _workerResp.status === 503 || _workerResp.status === 504) {
-                    _lastBudgetErr = new Error('Servidor temporalmente no disponible. Intentá de nuevo en unos segundos.');
-                    continue;
-                }
-                if (!_workerResp.ok) {
-                    let _errMsg = `HTTP ${_workerResp.status}`;
+
+                let _respData, _lastBudgetErr;
+                for (let _bAtt = 0; _bAtt < 3; _bAtt++) {
+                    if (_bAtt > 0) {
+                        const _pMsg2 = document.getElementById('ia-prog-msg');
+                        if (_pMsg2) _pMsg2.textContent = 'Lote ' + _batchNum + ': servidor ocupado, reintentando...';
+                        await new Promise(r => setTimeout(r, 5000 * _bAtt));
+                    }
+                    let _workerResp;
                     try {
-                        const _errBody = JSON.parse(_workerResp.text);
-                        if (_errBody.detalle) _errMsg += ': ' + _errBody.detalle;
-                        else if (_errBody.error) _errMsg += ': ' + _errBody.error;
-                    } catch(_) {}
-                    throw new Error(_errMsg);
-                }
-                try { respData = JSON.parse(_workerResp.text); } catch(_) { respData = {}; }
-                _lastBudgetErr = null;
-                break;
-            }
-            if (_lastBudgetErr) throw _lastBudgetErr;
-
-            let raw = '';
-            if (respData?.candidates?.[0]?.content?.parts?.[0]?.text) {
-                raw = respData.candidates[0].content.parts[0].text;
-            } else if (typeof respData === 'string') {
-                raw = respData;
-            }
-
-            raw = raw.replace(/```json|```/g, '').trim();
-            console.log('[IA Budget] Raw response (primeros 500 chars):', raw.substring(0, 500));
-
-            // Extrae el array JSON balanceado — ignora texto antes y después
-            function _extractBalancedArray(str) {
-                const start = str.indexOf('[');
-                if (start === -1) return null;
-                let depth = 0, inStr = false, esc = false;
-                for (let i = start; i < str.length; i++) {
-                    const ch = str[i];
-                    if (esc) { esc = false; continue; }
-                    if (ch === '\\' && inStr) { esc = true; continue; }
-                    if (ch === '"') { inStr = !inStr; continue; }
-                    if (inStr) continue;
-                    if (ch === '[' || ch === '{') depth++;
-                    else if (ch === ']' || ch === '}') {
-                        depth--;
-                        if (depth === 0) return str.slice(start, i + 1);
+                        _workerResp = await _fetchInWorker(location.origin + '/api/gemini', { method: 'POST', headers: _authHeaders, body: _reqBody }, 480000);
+                    } catch(_wErr) { _lastBudgetErr = _wErr; continue; }
+                    if (_workerResp.status === 502 || _workerResp.status === 503 || _workerResp.status === 504) {
+                        _lastBudgetErr = new Error('Servidor temporalmente no disponible. Intentá de nuevo en unos segundos.');
+                        continue;
                     }
-                }
-                return null;
-            }
-
-            // Recupera todos los objetos {…} completos de un array truncado
-            function _repairTruncatedArray(str) {
-                const start = str.indexOf('[');
-                if (start === -1) return null;
-                const completedItems = [];
-                let i = start + 1, depth = 0, inStr = false, esc = false, itemStart = -1;
-                while (i < str.length) {
-                    const ch = str[i];
-                    if (esc) { esc = false; i++; continue; }
-                    if (ch === '\\' && inStr) { esc = true; i++; continue; }
-                    if (ch === '"') { inStr = !inStr; i++; continue; }
-                    if (inStr) { i++; continue; }
-                    if (ch === '{') { if (depth === 0) itemStart = i; depth++; }
-                    else if (ch === '}') {
-                        depth--;
-                        if (depth === 0 && itemStart !== -1) {
-                            completedItems.push(str.slice(itemStart, i + 1));
-                            itemStart = -1;
-                        }
+                    if (!_workerResp.ok) {
+                        let _errMsg = 'HTTP ' + _workerResp.status;
+                        try {
+                            const _errBody = JSON.parse(_workerResp.text);
+                            if (_errBody.detalle) _errMsg += ': ' + _errBody.detalle;
+                            else if (_errBody.error) _errMsg += ': ' + _errBody.error;
+                        } catch(_) {}
+                        throw new Error(_errMsg);
                     }
-                    i++;
+                    try { _respData = JSON.parse(_workerResp.text); } catch(_) { _respData = {}; }
+                    _lastBudgetErr = null;
+                    break;
                 }
-                return completedItems.length > 0 ? '[' + completedItems.join(',') + ']' : null;
+                if (_lastBudgetErr) throw _lastBudgetErr;
+
+                let _raw = '';
+                if (_respData?.candidates?.[0]?.content?.parts?.[0]?.text) {
+                    _raw = _respData.candidates[0].content.parts[0].text;
+                } else if (typeof _respData === 'string') {
+                    _raw = _respData;
+                }
+                _raw = _raw.replace(/```json|```/g, '').trim();
+                console.log('[IA Budget] Batch ' + _batchNum + ' raw (primeros 500):', _raw.substring(0, 500));
+
+                let _batchItems;
+                let _extracted = _extractBalancedArray(_raw);
+                try {
+                    if (!_extracted) {
+                        _extracted = _repairTruncatedArray(_raw);
+                        if (_extracted) console.warn('[IA Budget] Batch ' + _batchNum + ': array truncado, recuperando objetos completos.');
+                        else throw new Error('Sin array JSON balanceado');
+                    }
+                    _batchItems = JSON.parse(_extracted);
+                } catch(_parseErr) {
+                    console.warn('[IA Budget] Batch ' + _batchNum + ': parse error, limpiando:', _parseErr.message);
+                    let _cleaned = (_extracted || _raw)
+                        .replace(/[\x00-\x1F\x7F]/g, ' ')
+                        .replace(/,(\s*[}\]])/g, '$1')
+                        .replace(/([^\\])\\([^"\\\/bfnrtu])/g, '$1 $2');
+                    let _extracted2 = _extractBalancedArray(_cleaned) || _repairTruncatedArray(_cleaned);
+                    if (!_extracted2) throw new Error('Lote ' + _batchNum + ': no se pudo extraer JSON válido. Intentá de nuevo.');
+                    _batchItems = JSON.parse(_extracted2);
+                }
+                if (!Array.isArray(_batchItems)) throw new Error('Lote ' + _batchNum + ': la IA no devolvió un array válido.');
+                _allResultItems.push(..._batchItems);
             }
 
-            let items;
-            let extracted = _extractBalancedArray(raw);
-            try {
-                if (!extracted) {
-                    // Respuesta truncada — intentar recuperar objetos completos
-                    extracted = _repairTruncatedArray(raw);
-                    if (extracted) console.warn('[IA Budget] Array truncado, recuperando objetos completos.');
-                    else throw new Error('Sin array JSON balanceado');
-                }
-                items = JSON.parse(extracted);
-            } catch(parseErr) {
-                console.warn('[IA Budget] Parse error, limpiando:', parseErr.message);
-                // Limpiar caracteres problemáticos y reintentar
-                let cleaned = (extracted || raw)
-                    .replace(/[\x00-\x1F\x7F]/g, ' ')
-                    .replace(/,(\s*[}\]])/g, '$1')
-                    .replace(/([^\\])\\([^"\\\/bfnrtu])/g, '$1 $2');
-                let extracted2 = _extractBalancedArray(cleaned) || _repairTruncatedArray(cleaned);
-                if (!extracted2) throw new Error('No se pudo extraer JSON válido de la respuesta. Intentá de nuevo.');
-                items = JSON.parse(extracted2);
-            }
+            let items = _allResultItems;
             if (!Array.isArray(items) || items.length === 0) throw new Error('La IA no generó ítems. Intentá con un prompt más simple.');
 
             // Post-proceso: si hay ítems (no capítulos) con desc duplicado, diferenciar con primera línea de feat
