@@ -402,7 +402,14 @@ REGLAS ABSOLUTAS
 ADHERENCIA: Cuando el usuario especifica materiales o procesos, seguílos EXACTAMENTE. No los sustituyás. Tubín + foam = tubín + foam. Drywall = drywall. Lona impresa = lona impresa.
 MODO ÍTEM ÚNICO: Si dice [MODO ÍTEM ÚNICO], el array tiene exactamente 1 objeto JSON. No más.
 MODO DESGLOSE: Si dice [MODO DESGLOSE → CAPÍTULO: "X"], el array empieza con {"type":"chapter","name":"X"} y luego los sub-ítems. El capítulo es el primero del array y no se cuenta como ítem.
-MATEMÁTICA: Calculá cantidades explícitamente. Superficie = ancho × alto. Perímetro = 2×(ancho+alto). Volumen = largo × ancho × alto. Mostrá el cálculo en feat. NUNCA pongas cantidades de 1 cuando hay medidas reales.
+MATEMÁTICA: Calculá cantidades explícitamente. Mostrá el cálculo en feat. NUNCA pongas cantidades de 1 cuando hay medidas reales. SIEMPRE trabajá en METROS (no en mm ni cm).
+UNIDADES CAD: Los planos y renders 3D tienen medidas en mm. Convertí SIEMPRE antes de calcular: 945mm = 0.945m, 425mm = 0.425m, 100mm = 0.10m. Si ves un número como "945,5" en un render 3D, es 945.5 mm = 0.9455 m. NUNCA uses las cifras del CAD directamente como metros.
+FÓRMULAS SEGÚN FORMA:
+  - Rectangular: Área = largo × alto; Perímetro = 2×(largo+alto)
+  - Oval/Estadio/Pill (dos semicírculos + rectas): largo_recto = largo_total - ancho; Perímetro = 2×largo_recto + π×ancho; Área = largo_recto×ancho + π×(ancho/2)²
+  - Circular: Perímetro = π×diámetro; Área = π×(diámetro/2)²
+  - Irregular: sumá segmentos uno a uno
+NEON FLEX EN BORDE: Si el neon va "arriba y abajo" del bastidor = neon_total = 2 × perímetro_del_bastidor (un contorno en el borde superior y otro en el inferior).
 PRECIOS DB: Si el catálogo de materiales incluye el precio de un material, usá ESE precio exacto. Solo usá precios de mercado para materiales no encontrados en el catálogo.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -410,9 +417,11 @@ CONOCIMIENTO DE INDUSTRIA — RUBRO GRÁFICO/SEÑALÉTICA BOLIVIA
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 ▶ BASTIDOR CON LONA IMPRESA
-Estructura: tubín 20×20 o 25×25mm soldado en perímetro + costillas internas cada 80-100cm.
-Materiales: tubín (ml = perímetro + costillas internas), lona mate/brillante 440g-510g (m² = ancho×alto + 10% merma), remaches cada 10cm perímetro, pintura anticorrosiva para tubín.
-Cálculo tubín: perímetro = 2×(ancho+alto), costillas = (ancho÷1m - 1) verticales + (alto÷1m - 1) horizontales, total ml = perímetro + costillas × su longitud.
+Estructura: tubín 20×20 o 25×25mm soldado en perímetro + costillas internas.
+Materiales: tubín (ml = perímetro + costillas internas), lona mate/brillante 440g-510g (m² = área_cara + 10% merma), remaches cada 10cm del perímetro, pintura anticorrosiva para tubín.
+Cálculo tubín rectangular: perímetro = 2×(ancho+alto), costillas_vert = int(ancho÷1m), costillas_horiz = int(alto÷1m), ml_total = perímetro + (costillas_vert × alto) + (costillas_horiz × ancho).
+Cálculo bastidor OVAL/ESTADIO: usar fórmulas de Oval/Estadio de FÓRMULAS SEGÚN FORMA. Costilla interna = una barra transversal cada metro de longitud recta.
+Cálculo remaches: (perímetro en cm) ÷ 10 = cantidad de remaches. Ej: perímetro 2.38m = 238cm → 23-24 remaches.
 Mano de obra: SOLDADOR (estructura), TENSADOR (m² 8-12 Bs lona), IMPRESOR (subcontrato impresión lona).
 ERROR COMÚN: No olvidar las costillas internas en el cálculo de tubín.
 
