@@ -411,7 +411,7 @@
 <div style="margin-bottom: 10px; padding: 10px 12px; background: rgba(175,82,222,0.08); border: 1px dashed var(--purple); border-radius: 12px; display: flex; justify-content: space-between; align-items: center; gap:8px; flex-wrap:wrap;">
     <div style="flex:1; min-width:0;">
         <div style="font-size:12px; font-weight:700; color:var(--purple); display:flex; align-items:center; gap:5px; margin-bottom:3px;"><i class="ph-bold ph-file-arrow-up" style="font-size:17px;"></i> Importar Documento</div>
-        <div id="ia-doc-loaded" style="font-size:10px; color:#aaa; font-weight:400;">PDF, PPTX o Excel — PPTX auto-carga ítems; PDF/Excel se mandan como contexto</div>
+        <div id="ia-doc-loaded" style="font-size:10px; color:#aaa; font-weight:400;">PDF, PPTX o Excel — PDF y PPTX auto-cargan ítems; Excel se manda como contexto</div>
     </div>
     <button class="btn-mini" style="background:var(--purple); width:auto; padding:8px 14px; font-weight:800; white-space:nowrap;" onclick="document.getElementById('ia-doc-upload').click()"><i class="ph-bold ph-upload-simple"></i> Cargar</button>
     <input type="file" id="ia-doc-upload" accept="application/pdf,.pptx,.ppt,.xlsx,.xls" style="display:none" onchange="handleIADocUpload(this.files[0])">
@@ -2354,7 +2354,7 @@
         const _docStatus = document.getElementById('ia-doc-status');
         if (_docStatus) { _docStatus.style.display = 'none'; _docStatus.textContent = ''; }
         const _docLoaded = document.getElementById('ia-doc-loaded');
-        if (_docLoaded) _docLoaded.textContent = 'PDF, PPTX o Excel — PPTX auto-carga ítems; PDF/Excel se mandan como contexto';
+        if (_docLoaded) _docLoaded.textContent = 'PDF, PPTX o Excel — PDF y PPTX auto-cargan ítems; Excel se manda como contexto';
         const _docInput = document.getElementById('ia-doc-upload');
         if (_docInput) _docInput.value = '';
 
@@ -2694,23 +2694,98 @@ Devolvé exactamente este formato (sin texto adicional):
         const ext = file.name.split('.').pop().toLowerCase();
         const sizeMB = (file.size / 1024 / 1024).toFixed(1);
 
-        // PDF — enviar como documento base64 a la IA
+        // PDF — extraer ítems automáticamente + guardar como contexto
         if (ext === 'pdf') {
-            statusEl.textContent = '⏳ Cargando PDF...';
+            statusEl.textContent = '⏳ Leyendo PDF...';
             if (file.size > 15 * 1024 * 1024) {
                 statusEl.textContent = '⚠️ PDF muy grande (' + sizeMB + ' MB), puede fallar. Intentá con uno más liviano.';
                 statusEl.style.color = '#ff9f0a';
                 return;
             }
-            const reader = new FileReader();
-            reader.onload = (e) => {
-                currentIAPdfBase64 = e.target.result;
-                statusEl.textContent = `✅ PDF cargado: ${file.name} (${sizeMB} MB) — se enviará como contexto a la IA.`;
-                statusEl.style.color = '#30d158';
-                statusEl.style.background = 'rgba(48,209,88,0.08)';
-                labelEl.textContent = `📄 ${file.name}`;
-            };
-            reader.readAsDataURL(file);
+            try {
+                const _pdfB64 = await new Promise((res, rej) => {
+                    const r = new FileReader();
+                    r.onload = e => res(e.target.result);
+                    r.onerror = rej;
+                    r.readAsDataURL(file);
+                });
+                currentIAPdfBase64 = _pdfB64;
+                labelEl.textContent = '📄 ' + file.name;
+
+                // Extraer ítems con IA
+                statusEl.textContent = '⏳ Extrayendo ítems del PDF...';
+                statusEl.style.color = '#ffd60a';
+
+                const _pdfToken = firebase.auth().currentUser
+                    ? await firebase.auth().currentUser.getIdToken() : null;
+                const _pdfHeaders = { 'Content-Type': 'application/json' };
+                if (_pdfToken) _pdfHeaders['Authorization'] = 'Bearer ' + _pdfToken;
+
+                const _pdfReq = JSON.stringify({
+                    systemInstruction: { parts: [{ text: 'Extrae todos los ítems de este documento. Devolvé SOLO un array JSON válido, sin texto antes ni después: [{"n":"nombre del ítem","q":1,"d":"descripción completa con materiales, dimensiones y acabado"}]. q es la cantidad numérica.' }] },
+                    contents: [{ role: 'user', parts: [
+                        { inlineData: { data: _pdfB64.split(',')[1], mimeType: 'application/pdf' } },
+                        { text: 'Extraé todos los ítems de este PDF como array JSON.' }
+                    ]}],
+                    generationConfig: { maxOutputTokens: 4000, temperature: 0.1 },
+                    advancedModel: false
+                });
+
+                let _pdfRespData;
+                try {
+                    const _pdfResp = await _fetchInWorker(location.origin + '/api/gemini', { method: 'POST', headers: _pdfHeaders, body: _pdfReq }, 60000);
+                    if (_pdfResp.ok) _pdfRespData = JSON.parse(_pdfResp.text);
+                } catch(_pe) { _pdfRespData = null; }
+
+                let _pdfItems = null;
+                if (_pdfRespData?.candidates?.[0]?.content?.parts?.[0]?.text) {
+                    const _raw = _pdfRespData.candidates[0].content.parts[0].text.replace(/```json|```/g, '').trim();
+                    const _start = _raw.indexOf('[');
+                    const _end = _raw.lastIndexOf(']');
+                    if (_start !== -1 && _end !== -1) {
+                        try { _pdfItems = JSON.parse(_raw.slice(_start, _end + 1)); } catch(_) {}
+                    }
+                }
+
+                if (_pdfItems && Array.isArray(_pdfItems) && _pdfItems.length > 0) {
+                    // Poblar filas igual que el PPTX
+                    const _existingRows = document.querySelectorAll('.ia-item-row');
+                    const _firstEmpty = Array.from(_existingRows).find(r => !r.querySelector('.ia-inp-name')?.value?.trim());
+                    let _rowsCreated = 0;
+                    _pdfItems.forEach(function(it, idx) {
+                        const nm = (it.n || it.name || it.nombre || '').trim();
+                        if (!nm) return;
+                        let row;
+                        if (idx === 0 && _firstEmpty) {
+                            row = _firstEmpty;
+                        } else {
+                            window.addIARow();
+                            const allRows = document.querySelectorAll('.ia-item-row');
+                            row = allRows[allRows.length - 1];
+                        }
+                        if (!row) return;
+                        const nameInp = row.querySelector('.ia-inp-name');
+                        const cantInp = row.querySelector('.ia-inp-cant');
+                        const promptInp = row.querySelector('.ia-inp-prompt');
+                        if (nameInp) nameInp.value = nm.toUpperCase();
+                        if (cantInp && it.q) cantInp.value = parseInt(it.q) || 1;
+                        if (promptInp && it.d) promptInp.value = it.d;
+                        _rowsCreated++;
+                    });
+                    statusEl.textContent = '✅ PDF importado: ' + _rowsCreated + ' ítems cargados. Revisá y ajustá, luego generá.';
+                    statusEl.style.color = '#30d158';
+                    statusEl.style.background = 'rgba(48,209,88,0.08)';
+                } else {
+                    // Fallback: solo guardar como contexto
+                    statusEl.textContent = '✅ PDF cargado: ' + file.name + ' (' + sizeMB + ' MB) — se enviará como contexto a la IA.';
+                    statusEl.style.color = '#30d158';
+                    statusEl.style.background = 'rgba(48,209,88,0.08)';
+                }
+            } catch(_pdfErr) {
+                currentIAPdfBase64 = null;
+                statusEl.textContent = '❌ Error al procesar PDF: ' + _pdfErr.message;
+                statusEl.style.color = '#ff453a';
+            }
             return;
         }
 
