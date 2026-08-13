@@ -1962,20 +1962,36 @@
                 else {
                     // Saltar ítems inactivos (ojito apagado)
                     if(item.activo === false) return;
-                    let desc = item.desc || '-'; 
+                    let desc = item.desc || '-';
                     if(item.feat) { const lineas = item.feat.split('\n'); lineas.forEach(linea => { const t = linea.trim().replace(/^[-–•*]+\s*/, ''); if(t) desc += `\n• ${t}`; }); }
                     if(item.img) anexos.push({ desc: (item.desc || 'Item') + " (Ref)", img: item.img });
                     if(item.cortes && Array.isArray(item.cortes)) item.cortes.forEach((c, idx) => anexos.push({ desc: (item.desc || 'Item') + ` (Corte Ppal ${idx+1})`, img: c }));
                     if(item.apu) { ['mat', 'sub', 'mo', 'eq'].forEach(t => { if(item.apu[t] && Array.isArray(item.apu[t])) { item.apu[t].forEach(mat => { if(mat.corte_url) anexos.push({ desc: (item.desc || 'Item') + ` - Plano: ${mat.d || ''}`, img: mat.corte_url }); }); } }); }
-                    
-                    let cant = stripZeros(item.cant); let pu = stripZeros(item.pu); const totalItem = cant * pu; subtotal += totalItem; 
-                    rows.push([desc, item.und || 'glb', cant, fMoney(pu), fMoney(totalItem)]);
+
+                    let cant = stripZeros(item.cant); let pu = stripZeros(item.pu); const totalItem = cant * pu; subtotal += totalItem;
+                    rows.push([{content: desc, _type:'item_desc', _title: item.desc||'-'}, item.und || 'glb', cant, fMoney(pu), fMoney(totalItem)]);
                 }
             });
 
             if (typeof doc.autoTable !== 'function') throw new Error("La librería de Tablas no cargó.");
 
-            doc.autoTable({ startY: 45, head: [['Descripción', 'Und', 'Cant', 'P.U. (Bs)', 'Total (Bs)']], body: rows, styles: { cellPadding: 3 }, margin: { top: 20 } });
+            doc.autoTable({ startY: 45, head: [['Descripción', 'Und', 'Cant', 'P.U. (Bs)', 'Total (Bs)']], body: rows, styles: { cellPadding: 3 }, margin: { top: 20 },
+                didDrawCell: function(_dd) {
+                    if (_dd.section !== 'body' || _dd.column.index !== 0) return;
+                    const _raw = _dd.cell.raw;
+                    if (!_raw || typeof _raw !== 'object' || _raw._type !== 'item_desc' || !_raw._title) return;
+                    const _fs = _dd.cell.styles.fontSize || 9; const _sc = doc.internal.scaleFactor;
+                    const _lh = (_fs * 1.15) / _sc;
+                    const _padL = typeof _dd.cell.padding === 'function' ? _dd.cell.padding('left') : 3;
+                    const _padT = typeof _dd.cell.padding === 'function' ? _dd.cell.padding('top') : 3;
+                    const _fc = _dd.cell.styles.fillColor;
+                    if (Array.isArray(_fc)) doc.setFillColor(_fc[0], _fc[1], _fc[2]); else doc.setFillColor(255, 255, 255);
+                    doc.rect(_dd.cell.x + 0.3, _dd.cell.y + 0.3, _dd.cell.width - 0.6, _padT + _lh, 'F');
+                    doc.setFontSize(_fs); doc.setFont(undefined, 'bold'); doc.setTextColor(0, 0, 0);
+                    doc.text(_raw._title, _dd.cell.x + _padL, _dd.cell.y + _padT + (_fs * 0.75) / _sc);
+                    doc.setFont(undefined, 'normal');
+                }
+            });
             const descPct = parseFloat(document.getElementById('t-desc-pct').value) || 0;
             const descVal = Math.round(subtotal * descPct / 100 * 100) / 100;
             const base = subtotal - descVal;
@@ -2146,7 +2162,8 @@
                     }]);
                 } else {
                     if (item.activo === false) return;
-                    let desc = item.desc || '-';
+                    let _descTitle = item.desc || '-';
+                    let desc = _descTitle;
                     if (item.feat) {
                         const lineas = item.feat.split('\n');
                         lineas.forEach(l => { const t = l.trim().replace(/^[-–•*]+\s*/, ''); if (t) desc += `\n• ${t}`; });
@@ -2177,7 +2194,7 @@
                     sumConImp += conImp;
 
                     rows.push([
-                        desc,
+                        {content: desc, _type:'item_desc', _title: _descTitle},
                         item.und || 'glb',
                         cant,
                         fMoney(pu),
@@ -2244,6 +2261,22 @@
                 },
                 // Separador visual entre "Total" y bloque de impuestos, y antes de "Total c/Imp"
                 didDrawCell: function(d) {
+                    // Título de ítem en negrita (col 0)
+                    if (d.section === 'body' && d.column.index === 0) {
+                        const _raw = d.cell.raw;
+                        if (_raw && typeof _raw === 'object' && _raw._type === 'item_desc' && _raw._title) {
+                            const _fs = d.cell.styles.fontSize || 7; const _sc = doc.internal.scaleFactor;
+                            const _lh = (_fs * 1.15) / _sc;
+                            const _padL = typeof d.cell.padding === 'function' ? d.cell.padding('left') : 3;
+                            const _padT = typeof d.cell.padding === 'function' ? d.cell.padding('top') : 2;
+                            const _fc = d.cell.styles.fillColor;
+                            if (Array.isArray(_fc)) doc.setFillColor(_fc[0], _fc[1], _fc[2]); else doc.setFillColor(255, 255, 255);
+                            doc.rect(d.cell.x + 0.3, d.cell.y + 0.3, d.cell.width - 0.6, _padT + _lh, 'F');
+                            doc.setFontSize(_fs); doc.setFont(undefined, 'bold'); doc.setTextColor(0, 0, 0);
+                            doc.text(_raw._title, d.cell.x + _padL, d.cell.y + _padT + (_fs * 0.75) / _sc);
+                            doc.setFont(undefined, 'normal');
+                        }
+                    }
                     if (d.section === 'body' || d.section === 'head') {
                         // Línea azul sutil a la izquierda de col 4 (Total) — separa datos base de impuestos
                         if (d.column.index === 4) {
