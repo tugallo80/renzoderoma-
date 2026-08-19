@@ -6073,12 +6073,24 @@ window.actualizarPreciosBDProd = async function() {
     function _parseFichaJSON(raw) {
         const clean = raw.replace(/```json/gi,'').replace(/```/g,'').trim();
         const startJ = clean.indexOf('['), startO = clean.indexOf('{');
-        if (startJ !== -1 && (startO === -1 || startJ < startO)) {
-            return JSON.parse(clean.substring(startJ, clean.lastIndexOf(']') + 1));
+        function _extractArr(str) {
+            try { return JSON.parse(str); } catch(_) {}
+            // Reparar array truncado: extraer objetos completos balanceando llaves
+            const items = []; let depth = 0, start = -1;
+            for (let i = 0; i < str.length; i++) {
+                if (str[i] === '{') { if (depth === 0) start = i; depth++; }
+                else if (str[i] === '}') { depth--; if (depth === 0 && start !== -1) { try { items.push(JSON.parse(str.substring(start, i+1))); } catch(_) {} start = -1; } }
+            }
+            return items;
         }
-        const parsed = JSON.parse(clean.substring(startO, clean.lastIndexOf('}') + 1));
+        if (startJ !== -1 && (startO === -1 || startJ < startO)) {
+            return _extractArr(clean.substring(startJ));
+        }
+        let parsed;
+        try { parsed = JSON.parse(clean.substring(startO, clean.lastIndexOf('}') + 1)); } catch(_) { parsed = {}; }
         return parsed.items || parsed.fichas || parsed.fichasTecnicas || parsed.data ||
-            Object.values(parsed).find(v => Array.isArray(v)) || [];
+            Object.values(parsed).find(v => Array.isArray(v)) ||
+            _extractArr(clean.substring(startO));
     }
 
     // Helper: llamar /api/gemini para un lote de ítems de ficha
@@ -6115,7 +6127,7 @@ SIN markdown.`;
                     body: JSON.stringify({
                         systemInstruction: { parts: [{ text: 'Ingeniero técnico Rubik Bolivia. Devuelve SOLO JSON válido, clave raíz "items".' }] },
                         contents: [{ role: 'user', parts: [{ text: prompt }] }],
-                        generationConfig: { maxOutputTokens: 2000, temperature: 0.2 },
+                        generationConfig: { maxOutputTokens: 4000, temperature: 0.2 },
                         advancedModel: false
                     })
                 });
