@@ -6115,8 +6115,8 @@ SIN markdown.`;
                     body: JSON.stringify({
                         systemInstruction: { parts: [{ text: 'Ingeniero técnico Rubik Bolivia. Devuelve SOLO JSON válido, clave raíz "items".' }] },
                         contents: [{ role: 'user', parts: [{ text: prompt }] }],
-                        generationConfig: { maxOutputTokens: 3000, temperature: 0.2 },
-                        advancedModel: true
+                        generationConfig: { maxOutputTokens: 2000, temperature: 0.2 },
+                        advancedModel: false
                     })
                 });
             } catch(fetchErr) {
