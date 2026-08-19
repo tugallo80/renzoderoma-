@@ -6095,28 +6095,41 @@ SIN markdown.`;
 
         if (btn) btn.innerHTML = `<i class="ph-bold ph-spinner-gap"></i> Lote ${loteNum}/${totalLotes}...`;
 
-        // Token fresco por lote
-        const user = firebase.auth().currentUser;
-        const token = user ? await user.getIdToken() : null;
-        const headers = {'Content-Type':'application/json'};
-        if (token) headers['Authorization'] = 'Bearer ' + token;
+        let resp, data, lastErr;
+        for (let att = 0; att < 3; att++) {
+            if (att > 0) {
+                if (btn) btn.innerHTML = `<i class="ph-bold ph-spinner-gap"></i> Lote ${loteNum}/${totalLotes} (reintento ${att})...`;
+                await new Promise(r => setTimeout(r, 3000 * att));
+            }
+            // Token fresco por intento
+            const user = firebase.auth().currentUser;
+            const token = user ? await user.getIdToken() : null;
+            const headers = {'Content-Type':'application/json'};
+            if (token) headers['Authorization'] = 'Bearer ' + token;
 
-        const ctrl = new AbortController();
-        const timeout = setTimeout(() => ctrl.abort(), 90000);
-        let resp, data;
-        try {
-            resp = await fetch('/api/gemini', {
-                method: 'POST', headers, signal: ctrl.signal,
-                body: JSON.stringify({
-                    systemInstruction: { parts: [{ text: 'Ingeniero técnico Rubik Bolivia. Devuelve SOLO JSON válido, clave raíz "items".' }] },
-                    contents: [{ role: 'user', parts: [{ text: prompt }] }],
-                    generationConfig: { maxOutputTokens: 3000, temperature: 0.2 },
-                    advancedModel: true
-                })
-            });
-        } finally { clearTimeout(timeout); }
-        if (!resp.ok) { const t = await resp.text(); throw new Error(t.startsWith('<') ? 'Error servidor lote ' + loteNum : t); }
-        data = await resp.json();
+            const ctrl = new AbortController();
+            const timeout = setTimeout(() => ctrl.abort(), 80000);
+            try {
+                resp = await fetch('/api/gemini', {
+                    method: 'POST', headers, signal: ctrl.signal,
+                    body: JSON.stringify({
+                        systemInstruction: { parts: [{ text: 'Ingeniero técnico Rubik Bolivia. Devuelve SOLO JSON válido, clave raíz "items".' }] },
+                        contents: [{ role: 'user', parts: [{ text: prompt }] }],
+                        generationConfig: { maxOutputTokens: 3000, temperature: 0.2 },
+                        advancedModel: true
+                    })
+                });
+            } catch(fetchErr) {
+                clearTimeout(timeout);
+                lastErr = fetchErr; continue;
+            }
+            clearTimeout(timeout);
+            if (resp.status === 502 || resp.status === 503 || resp.status === 504) { lastErr = new Error('Servidor no disponible'); continue; }
+            if (!resp.ok) { const t = await resp.text(); throw new Error(t.startsWith('<') ? 'Error servidor lote ' + loteNum : t); }
+            data = await resp.json();
+            lastErr = null; break;
+        }
+        if (lastErr) throw lastErr;
         const raw = data?.candidates?.[0]?.content?.parts?.[0]?.text || data?.text || '';
         return _parseFichaJSON(raw);
     }
