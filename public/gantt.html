@@ -938,26 +938,27 @@
             const mobileList = document.getElementById('mobile-gantt-list');
             const mobileFab = document.getElementById('mobile-fab-bar');
             const rotHint = document.getElementById('rotate-hint');
+            const noPrintBar = document.getElementById('no-print-bar');
             // Guardar estilos originales
             const _s = (el, ps) => { const o = {}; ps.forEach(p => { o[p] = el.style[p]; }); return o; };
             const savedPdf = _s(pdfContent, ['width','overflow','maxWidth']);
-            const savedGantt = _s(ganttCont, ['display','overflow','maxHeight','width','minWidth']);
             const savedBody = _s(document.body, ['overflow']);
-            // Expandir todo para captura
+            // Expandir todo para captura — usar setProperty 'important' para vencer los !important del CSS mobile
             document.body.style.overflow = 'visible';
             pdfContent.style.width = TARGET_W + 'px';
             pdfContent.style.maxWidth = 'none';
             pdfContent.style.overflow = 'visible';
-            ganttCont.style.display = 'block';
-            ganttCont.style.overflow = 'visible';
-            ganttCont.style.maxHeight = 'none';
+            ganttCont.style.setProperty('display', 'block', 'important');
+            ganttCont.style.setProperty('overflow', 'visible', 'important');
+            ganttCont.style.setProperty('max-height', 'none', 'important');
             ganttCont.style.width = TARGET_W + 'px';
             ganttCont.style.minWidth = TARGET_W + 'px';
-            if (mobileList) mobileList.style.display = 'none';
+            if (mobileList) mobileList.style.setProperty('display', 'none', 'important');
             if (mobileFab) mobileFab.style.display = 'none';
             if (rotHint) rotHint.style.display = 'none';
+            if (noPrintBar) noPrintBar.style.display = 'none';
             renderGanttWeb();
-            await new Promise(r => setTimeout(r, 350));
+            await new Promise(r => setTimeout(r, 400));
             showLoader('Generando PDF...');
             try {
                 const totalW = pdfContent.scrollWidth;
@@ -1003,11 +1004,16 @@
                 alert('Error al generar PDF: ' + err.message);
             } finally {
                 Object.assign(pdfContent.style, savedPdf);
-                Object.assign(ganttCont.style, savedGantt);
                 Object.assign(document.body.style, savedBody);
-                if (mobileList) mobileList.style.display = '';
+                ganttCont.style.removeProperty('display');
+                ganttCont.style.removeProperty('overflow');
+                ganttCont.style.removeProperty('max-height');
+                ganttCont.style.width = '';
+                ganttCont.style.minWidth = '';
+                if (mobileList) mobileList.style.removeProperty('display');
                 if (mobileFab) mobileFab.style.display = '';
                 if (rotHint) rotHint.style.display = '';
+                if (noPrintBar) noPrintBar.style.display = '';
                 renderGanttWeb();
                 hideLoader();
             }
