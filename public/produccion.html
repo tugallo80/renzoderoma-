@@ -6069,6 +6069,58 @@ window.actualizarPreciosBDProd = async function() {
         document.getElementById('ficha-ia-subtitle').textContent = 'Seleccioná los ítems a incluir';
     };
 
+    // Helper: parsear JSON de respuesta IA de ficha
+    function _parseFichaJSON(raw) {
+        const clean = raw.replace(/```json/gi,'').replace(/```/g,'').trim();
+        const startJ = clean.indexOf('['), startO = clean.indexOf('{');
+        if (startJ !== -1 && (startO === -1 || startJ < startO)) {
+            return JSON.parse(clean.substring(startJ, clean.lastIndexOf(']') + 1));
+        }
+        const parsed = JSON.parse(clean.substring(startO, clean.lastIndexOf('}') + 1));
+        return parsed.items || parsed.fichas || parsed.fichasTecnicas || parsed.data ||
+            Object.values(parsed).find(v => Array.isArray(v)) || [];
+    }
+
+    // Helper: llamar /api/gemini para un lote de ítems de ficha
+    async function _fichaLote(batchItems, projName, clientName, loteNum, totalLotes, btn) {
+        const itemsText = batchItems.map((it, i) =>
+            `${i+1}. ${it.desc} — Cant: ${parseFloat(it.cant||1).toLocaleString('es-BO')} ${it.und||'glb'}`
+        ).join('\n');
+        const prompt = `Sos un ingeniero técnico de Rubik Bolivia (señalética, carpintería, metalmecanica, impresión gran formato, Santa Cruz).
+Generá una FICHA TÉCNICA para: "${projName}"${clientName ? ` — Cliente: ${clientName}` : ''}.
+Ítems:\n${itemsText}\n
+Para CADA ítem: materiales (2-4 ítems), proceso (3-5 pasos), acabado, observaciones si aplica.
+SOLO JSON exacto: {"items":[{"nombre":"...","materiales":"...","proceso":"...","acabado":"...","observaciones":"..."}]}
+SIN markdown.`;
+
+        if (btn) btn.innerHTML = `<i class="ph-bold ph-spinner-gap"></i> Lote ${loteNum}/${totalLotes}...`;
+
+        // Token fresco por lote
+        const user = firebase.auth().currentUser;
+        const token = user ? await user.getIdToken() : null;
+        const headers = {'Content-Type':'application/json'};
+        if (token) headers['Authorization'] = 'Bearer ' + token;
+
+        const ctrl = new AbortController();
+        const timeout = setTimeout(() => ctrl.abort(), 90000);
+        let resp, data;
+        try {
+            resp = await fetch('/api/gemini', {
+                method: 'POST', headers, signal: ctrl.signal,
+                body: JSON.stringify({
+                    systemInstruction: { parts: [{ text: 'Ingeniero técnico Rubik Bolivia. Devuelve SOLO JSON válido, clave raíz "items".' }] },
+                    contents: [{ role: 'user', parts: [{ text: prompt }] }],
+                    generationConfig: { maxOutputTokens: 3000, temperature: 0.2 },
+                    advancedModel: true
+                })
+            });
+        } finally { clearTimeout(timeout); }
+        if (!resp.ok) { const t = await resp.text(); throw new Error(t.startsWith('<') ? 'Error servidor lote ' + loteNum : t); }
+        data = await resp.json();
+        const raw = data?.candidates?.[0]?.content?.parts?.[0]?.text || data?.text || '';
+        return _parseFichaJSON(raw);
+    }
+
     window.generarFichaTecnicaIA = async function() {
         const selected = [];
         document.querySelectorAll('#ficha-ia-items-list input[type=checkbox]:checked').forEach(cb => {
@@ -6083,71 +6135,23 @@ window.actualizarPreciosBDProd = async function() {
         const projName = document.getElementById('h-pro')?.innerText || 'Proyecto';
         const clientName = localStorage.getItem('rubik_client_name') || '';
 
-        const itemsText = selected.map((it, i) =>
-            `${i+1}. ${it.desc} — Cant: ${parseFloat(it.cant||1).toLocaleString('es-BO')} ${it.und||'glb'}`
-        ).join('\n');
-
-        const prompt = `Sos un ingeniero técnico de Rubik Bolivia (señalética, carpintería, metalmecanica, impresión gran formato, Santa Cruz).
-Generá una FICHA TÉCNICA profesional para el proyecto: "${projName}"${clientName ? ` - Cliente: ${clientName}` : ''}.
-
-Ítems del proyecto:
-${itemsText}
-
-Para CADA ítem generá:
-- Materiales principales (lista concisa de 2-4 materiales)
-- Proceso resumido (3-5 pasos clave)
-- Acabado/terminación
-- Observaciones técnicas si aplica
-
-Respondé SOLO con JSON:
-{"items":[{"nombre":"...","materiales":"...","proceso":"...","acabado":"...","observaciones":"..."}]}
-SIN markdown, SIN texto fuera del JSON.`;
-
         try {
-            const user = firebase.auth().currentUser;
-            const token = user ? await user.getIdToken() : null;
-            const headers = {'Content-Type':'application/json'};
-            if (token) headers['Authorization'] = 'Bearer ' + token;
+            const BATCH = 4;
+            const totalLotes = Math.ceil(selected.length / BATCH);
+            const allItems = [];
 
-            let resp, data, lastErr;
-            for (let att = 0; att < 3; att++) {
-                if (att > 0) await new Promise(r => setTimeout(r, 2000 * att));
-                resp = await fetch('/api/gemini', {
-                    method: 'POST', headers,
-                    body: JSON.stringify({
-                        systemInstruction: { parts: [{ text: 'Eres un ingeniero técnico de Rubik Bolivia. Devuelve SOLO JSON válido, sin markdown, sin texto adicional. La clave raíz del JSON debe llamarse exactamente "items".' }] },
-                        contents: [{ role: 'user', parts: [{ text: prompt }] }],
-                        generationConfig: { maxOutputTokens: 8000, temperature: 0.2 },
-                        advancedModel: true
-                    })
-                });
-                if (resp.status === 502 || resp.status === 503 || resp.status === 504) { lastErr = new Error('Servidor no disponible (' + resp.status + ')'); continue; }
-                if (!resp.ok) { const t = await resp.text(); throw new Error(t.startsWith('<') ? 'Error del servidor' : t); }
-                data = await resp.json();
-                lastErr = null; break;
+            for (let bi = 0; bi < selected.length; bi += BATCH) {
+                const lote = selected.slice(bi, bi + BATCH);
+                const loteNum = Math.floor(bi / BATCH) + 1;
+                const loteItems = await _fichaLote(lote, projName, clientName, loteNum, totalLotes, btn);
+                if (!loteItems.length) throw new Error('Lote ' + loteNum + ' no generó ítems. Intentá de nuevo.');
+                allItems.push(...loteItems);
             }
-            if (lastErr) throw lastErr;
-
-            const raw = (data?.candidates?.[0]?.content?.parts?.[0]?.text || data?.text || '').replace(/```json/gi,'').replace(/```/g,'').trim();
-            let parsed, fichaItems = [];
-            // Intentar parsear como objeto con clave "items" o cualquier array interno
-            const startJ = raw.indexOf('['); const startO = raw.indexOf('{');
-            if (startJ !== -1 && (startO === -1 || startJ < startO)) {
-                // El modelo devolvió un array directamente
-                fichaItems = JSON.parse(raw.substring(startJ, raw.lastIndexOf(']') + 1));
-            } else {
-                const end = raw.lastIndexOf('}');
-                parsed = JSON.parse(raw.substring(startO, end + 1));
-                // Buscar el primer valor que sea array
-                fichaItems = parsed.items || parsed.fichas || parsed.fichasTecnicas || parsed.data ||
-                    Object.values(parsed).find(v => Array.isArray(v)) || [];
-            }
-            if (!fichaItems.length) throw new Error('La IA no generó ítems en la ficha. Intentá de nuevo.');
 
             // Renderizar resultado
             const result = document.getElementById('ficha-ia-result');
             result.innerHTML = `<div class="ft-title"><i class="ph-bold ph-file-doc" style="color:var(--purple);"></i> ${projName}${clientName ? ' — ' + clientName : ''}</div>`;
-            fichaItems.forEach((fi, i) => {
+            allItems.forEach((fi, i) => {
                 const div = document.createElement('div');
                 div.className = 'ft-item';
                 div.innerHTML = `<div class="ft-item-name">${i+1}. ${fi.nombre || selected[i]?.desc || 'Ítem'}</div>
@@ -6159,14 +6163,15 @@ SIN markdown, SIN texto fuera del JSON.`;
             });
 
             // Guardar para PDF
-            window._fichaIAData = { projName, clientName, items: fichaItems, selected };
+            window._fichaIAData = { projName, clientName, items: allItems, selected };
 
             document.getElementById('ficha-ia-step1').style.display = 'none';
             document.getElementById('ficha-ia-step2').style.display = 'flex';
             document.getElementById('ficha-ia-subtitle').textContent = 'Ficha generada';
 
         } catch(e) {
-            alert('Error al generar ficha: ' + (e.message || 'desconocido'));
+            const msg = e.name === 'AbortError' ? 'Tiempo de espera agotado. Seleccioná menos ítems e intentá de nuevo.' : (e.message || 'desconocido');
+            alert('Error al generar ficha: ' + msg);
             console.error('[FichaTecnicaIA]', e);
         } finally {
             btn.disabled = false; btn.innerHTML = '<i class="ph-bold ph-sparkle"></i> Generar Ficha Técnica';
