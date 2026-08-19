@@ -6115,9 +6115,10 @@ SIN markdown, SIN texto fuera del JSON.`;
                 resp = await fetch('/api/gemini', {
                     method: 'POST', headers,
                     body: JSON.stringify({
-                        systemInstruction: { parts: [{ text: 'Eres un ingeniero técnico de Rubik Bolivia. Devuelve SOLO JSON válido, sin markdown.' }] },
+                        systemInstruction: { parts: [{ text: 'Eres un ingeniero técnico de Rubik Bolivia. Devuelve SOLO JSON válido, sin markdown, sin texto adicional. La clave raíz del JSON debe llamarse exactamente "items".' }] },
                         contents: [{ role: 'user', parts: [{ text: prompt }] }],
-                        generationConfig: { maxOutputTokens: 8000, temperature: 0.2 }
+                        generationConfig: { maxOutputTokens: 8000, temperature: 0.2 },
+                        advancedModel: true
                     })
                 });
                 if (resp.status === 502 || resp.status === 503 || resp.status === 504) { lastErr = new Error('Servidor no disponible (' + resp.status + ')'); continue; }
@@ -6128,9 +6129,20 @@ SIN markdown, SIN texto fuera del JSON.`;
             if (lastErr) throw lastErr;
 
             const raw = (data?.candidates?.[0]?.content?.parts?.[0]?.text || data?.text || '').replace(/```json/gi,'').replace(/```/g,'').trim();
-            const start = raw.indexOf('{'); const end = raw.lastIndexOf('}');
-            const parsed = JSON.parse(raw.substring(start, end + 1));
-            const fichaItems = parsed.items || [];
+            let parsed, fichaItems = [];
+            // Intentar parsear como objeto con clave "items" o cualquier array interno
+            const startJ = raw.indexOf('['); const startO = raw.indexOf('{');
+            if (startJ !== -1 && (startO === -1 || startJ < startO)) {
+                // El modelo devolvió un array directamente
+                fichaItems = JSON.parse(raw.substring(startJ, raw.lastIndexOf(']') + 1));
+            } else {
+                const end = raw.lastIndexOf('}');
+                parsed = JSON.parse(raw.substring(startO, end + 1));
+                // Buscar el primer valor que sea array
+                fichaItems = parsed.items || parsed.fichas || parsed.fichasTecnicas || parsed.data ||
+                    Object.values(parsed).find(v => Array.isArray(v)) || [];
+            }
+            if (!fichaItems.length) throw new Error('La IA no generó ítems en la ficha. Intentá de nuevo.');
 
             // Renderizar resultado
             const result = document.getElementById('ficha-ia-result');
