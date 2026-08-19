@@ -899,11 +899,118 @@
         function toggleDarkMode() { document.body.classList.toggle('dark-mode'); }
         function showLoader(t) { document.getElementById('loader-text').innerText = t; document.getElementById('loader').style.display = 'flex'; }
         function hideLoader() { document.getElementById('loader').style.display = 'none'; }
-        function exportSmartPDF() { window.print(); }
+        function exportSmartPDF() {
+            if (document.body.getAttribute('data-view') === 'mobile') { _exportGanttPDFMobile(false); }
+            else { window.print(); }
+        }
         function exportExpandedPDF() {
-            projectInfo.items.forEach(item => { if (item.tasks && item.tasks.length > 0) expandedItems.add(item.id); });
+            if (document.body.getAttribute('data-view') === 'mobile') { _exportGanttPDFMobile(true); }
+            else {
+                projectInfo.items.forEach(item => { if (item.tasks && item.tasks.length > 0) expandedItems.add(item.id); });
+                renderGanttWeb();
+                setTimeout(() => { window.print(); }, 500);
+            }
+        }
+        async function _exportGanttPDFMobile(expanded) {
+            // Cargar html2canvas dinámicamente
+            if (typeof html2canvas === 'undefined') {
+                showLoader('Cargando librería...');
+                await new Promise((ok, fail) => {
+                    const s = document.createElement('script');
+                    s.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js';
+                    s.onload = ok; s.onerror = fail; document.head.appendChild(s);
+                });
+            }
+            // Cargar jsPDF dinámicamente
+            if (!window.jspdf) {
+                await new Promise((ok, fail) => {
+                    const s = document.createElement('script');
+                    s.src = 'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js';
+                    s.onload = ok; s.onerror = fail; document.head.appendChild(s);
+                });
+            }
+            if (expanded) {
+                projectInfo.items.forEach(item => { if (item.tasks && item.tasks.length > 0) expandedItems.add(item.id); });
+            }
+            const TARGET_W = 1400;
+            const pdfContent = document.getElementById('pdf-content');
+            const ganttCont = document.getElementById('gantt-container');
+            const mobileList = document.getElementById('mobile-gantt-list');
+            const mobileFab = document.getElementById('mobile-fab-bar');
+            const rotHint = document.getElementById('rotate-hint');
+            // Guardar estilos originales
+            const _s = (el, ps) => { const o = {}; ps.forEach(p => { o[p] = el.style[p]; }); return o; };
+            const savedPdf = _s(pdfContent, ['width','overflow','maxWidth']);
+            const savedGantt = _s(ganttCont, ['display','overflow','maxHeight','width','minWidth']);
+            const savedBody = _s(document.body, ['overflow']);
+            // Expandir todo para captura
+            document.body.style.overflow = 'visible';
+            pdfContent.style.width = TARGET_W + 'px';
+            pdfContent.style.maxWidth = 'none';
+            pdfContent.style.overflow = 'visible';
+            ganttCont.style.display = 'block';
+            ganttCont.style.overflow = 'visible';
+            ganttCont.style.maxHeight = 'none';
+            ganttCont.style.width = TARGET_W + 'px';
+            ganttCont.style.minWidth = TARGET_W + 'px';
+            if (mobileList) mobileList.style.display = 'none';
+            if (mobileFab) mobileFab.style.display = 'none';
+            if (rotHint) rotHint.style.display = 'none';
             renderGanttWeb();
-            setTimeout(() => { window.print(); }, 500);
+            await new Promise(r => setTimeout(r, 350));
+            showLoader('Generando PDF...');
+            try {
+                const totalW = pdfContent.scrollWidth;
+                const totalH = pdfContent.scrollHeight;
+                const canvas = await html2canvas(pdfContent, {
+                    scale: 1.5, useCORS: true, allowTaint: true,
+                    scrollX: 0, scrollY: 0, x: 0, y: 0,
+                    width: totalW, height: totalH,
+                    windowWidth: totalW, windowHeight: totalH,
+                    logging: false,
+                    ignoreElements: function(el) { return el.id === 'loader'; }
+                });
+                const { jsPDF } = window.jspdf;
+                // A3 landscape: 420 × 297 mm
+                const PW = 420, PH = 297, M = 8;
+                const uw = PW - M * 2, uh = PH - M * 2;
+                const ratio = canvas.height / canvas.width;
+                const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a3' });
+                if (ratio <= uh / uw) {
+                    // Una sola página
+                    const dH = uw * ratio;
+                    doc.addImage(canvas.toDataURL('image/jpeg', 0.88), 'JPEG', M, M + (uh - dH) / 2, uw, dH);
+                } else {
+                    // Múltiples páginas — dividir verticalmente
+                    const pages = Math.ceil(ratio / (uh / uw));
+                    const slicePx = Math.ceil(canvas.height / pages);
+                    const tmp = document.createElement('canvas'); tmp.width = canvas.width;
+                    const ctx = tmp.getContext('2d');
+                    for (let p = 0; p < pages; p++) {
+                        if (p > 0) doc.addPage('a3', 'landscape');
+                        const sy = p * slicePx;
+                        const sh = Math.min(slicePx, canvas.height - sy);
+                        tmp.height = sh;
+                        ctx.drawImage(canvas, 0, sy, canvas.width, sh, 0, 0, canvas.width, sh);
+                        doc.addImage(tmp.toDataURL('image/jpeg', 0.88), 'JPEG', M, M, uw, uw * (sh / canvas.width));
+                    }
+                }
+                const safe = (document.getElementById('ui-project-name').innerText || 'gantt')
+                    .replace(/[^a-zA-Z0-9\s]/g, '_').trim().replace(/\s+/g, '_').substring(0, 30);
+                doc.save('gantt_' + safe + '.pdf');
+            } catch(err) {
+                console.error('PDF error:', err);
+                alert('Error al generar PDF: ' + err.message);
+            } finally {
+                Object.assign(pdfContent.style, savedPdf);
+                Object.assign(ganttCont.style, savedGantt);
+                Object.assign(document.body.style, savedBody);
+                if (mobileList) mobileList.style.display = '';
+                if (mobileFab) mobileFab.style.display = '';
+                if (rotHint) rotHint.style.display = '';
+                renderGanttWeb();
+                hideLoader();
+            }
         }
 
         document.addEventListener('DOMContentLoaded', initApp);
