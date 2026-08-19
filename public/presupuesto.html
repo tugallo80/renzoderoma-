@@ -9,6 +9,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.0/Sortable.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     
     <script src="https://www.gstatic.com/firebasejs/9.1.3/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.1.3/firebase-auth-compat.js"></script>
@@ -1852,10 +1853,121 @@
     }
     
     function exportExcel() {
-        let csv = "DESCRIPCION,UNIDAD,CANTIDAD,PRECIO UNITARIO,TOTAL\n";
-        data.forEach(row => { if(row.type!=='chapter' && row.activo !== false) { csv += `"${row.desc || ''}","${row.und || ''}",${stripZeros(row.cant)},${stripZeros(row.pu)},${(stripZeros(row.cant)*stripZeros(row.pu)).toFixed(2)}\n`; } });
-        let safeName = (document.getElementById('h-pro').innerText || 'Proyecto').replace(/[^a-zA-Z0-9_\- ]/g, "").trim();
-        const link = document.createElement("a"); link.href = "data:text/csv;charset=utf-8," + encodeURI(csv); link.download = `presupuesto_${safeName}.csv`; document.body.appendChild(link); link.click();
+        if (typeof XLSX === 'undefined') { alert('Librería Excel no cargó. Recargá la página e intentá de nuevo.'); return; }
+
+        const cliente   = document.getElementById('h-cli')?.innerText || '';
+        const proyecto  = document.getElementById('h-pro')?.innerText || '';
+        const fecha     = new Date().toLocaleDateString('es-BO', { day:'2-digit', month:'2-digit', year:'numeric' });
+        const safeName  = proyecto.replace(/[^a-zA-Z0-9_\- ]/g, '').trim() || 'Presupuesto';
+        const descPct   = parseFloat(document.getElementById('t-desc-pct')?.value) || 0;
+
+        const aoa = []; // array of arrays
+        const styles = {}; // row index → style hints (managed via cell refs)
+
+        // Encabezado
+        aoa.push(['Cliente:', cliente, '', '', '']);
+        aoa.push(['Proyecto:', proyecto, '', '', '']);
+        aoa.push(['Fecha:', fecha, '', '', '']);
+        aoa.push([]); // blank
+        aoa.push(['Descripción', 'Und', 'Cant', 'P.U. (Bs)', 'Total (Bs)']);
+
+        const headerRow = 4; // 0-indexed row of the column headers
+        let subtotal = 0;
+
+        data.forEach(item => {
+            if (item.activo === false) return;
+            if (item.type === 'chapter') {
+                aoa.push([item.name || 'CAPÍTULO', '', '', '', '']);
+            } else {
+                const cant  = stripZeros(item.cant);
+                const pu    = stripZeros(item.pu);
+                const total = cant * pu;
+                subtotal += total;
+                // Desc: title + feat lines
+                let descText = item.desc || '';
+                if (item.feat) {
+                    item.feat.split('\n').forEach(l => {
+                        const t = l.trim().replace(/^[-–•*]+\s*/, '');
+                        if (t) descText += '\n• ' + t;
+                    });
+                }
+                aoa.push([descText, item.und || 'glb', cant, pu, total]);
+            }
+        });
+
+        aoa.push([]); // blank
+
+        // Subtotal
+        if (descPct > 0) {
+            const descVal = Math.round(subtotal * descPct / 100 * 100) / 100;
+            aoa.push(['Subtotal', '', '', '', subtotal]);
+            aoa.push(['Descuento (' + descPct + '%)', '', '', '', -descVal]);
+            aoa.push(['TOTAL', '', '', '', subtotal - descVal]);
+        } else {
+            aoa.push(['TOTAL', '', '', '', subtotal]);
+        }
+
+        // Crear workbook
+        const ws = XLSX.utils.aoa_to_sheet(aoa);
+
+        // Anchos de columna
+        ws['!cols'] = [
+            { wch: 55 }, // Descripción
+            { wch: 8  }, // Und
+            { wch: 8  }, // Cant
+            { wch: 14 }, // P.U.
+            { wch: 16 }, // Total
+        ];
+
+        // Altura de filas — las de ítem con feat pueden ser altas
+        ws['!rows'] = [];
+        aoa.forEach((row, ri) => {
+            if (ri >= 5 && row.length > 0 && typeof row[0] === 'string' && row[0].includes('\n')) {
+                const lines = row[0].split('\n').length;
+                ws['!rows'][ri] = { hpt: Math.max(15, lines * 13) };
+            }
+        });
+
+        // Aplicar estilos básicos disponibles en xlsx (wrapping de texto)
+        const range = XLSX.utils.decode_range(ws['!ref'] || 'A1:E1');
+        for (let R = range.s.r; R <= range.e.r; R++) {
+            for (let C = range.s.c; C <= range.e.c; C++) {
+                const addr = XLSX.utils.encode_cell({ r: R, c: C });
+                if (!ws[addr]) continue;
+                ws[addr].s = ws[addr].s || {};
+                ws[addr].s.alignment = { wrapText: true, vertical: 'top' };
+                // Encabezados de columna (fila headerRow)
+                if (R === headerRow) {
+                    ws[addr].s.font = { bold: true };
+                    ws[addr].s.fill = { fgColor: { rgb: '1E3A5F' } };
+                    ws[addr].s.font = { bold: true, color: { rgb: 'FFFFFF' } };
+                }
+                // Fila de capítulo: texto bold con fondo gris
+                const rowData = aoa[R];
+                if (rowData && rowData.length > 0 && R > headerRow) {
+                    const isChap = data.find(d => d.type === 'chapter' && (d.name || 'CAPÍTULO') === rowData[0]);
+                    if (isChap) {
+                        ws[addr].s.font = { bold: true };
+                        ws[addr].s.fill = { fgColor: { rgb: 'DCDCDC' } };
+                    }
+                }
+                // TOTAL fila: bold
+                if (R === aoa.length - 1 && C === 0) {
+                    ws[addr].s.font = { bold: true };
+                }
+                // Formato numérico para cols P.U. y Total
+                if (C === 3 || C === 4) {
+                    if (typeof ws[addr].v === 'number') {
+                        ws[addr].z = '#,##0.00';
+                        ws[addr].t = 'n';
+                    }
+                }
+            }
+        }
+
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, 'Presupuesto');
+        XLSX.writeFile(wb, 'presupuesto_' + safeName + '.xlsx');
     }
     
     function getBase64ImageFromUrl(imageUrl) { return new Promise((resolve, reject) => { var img = new Image(); img.crossOrigin = "Anonymous"; img.onload = function() { var canvas = document.createElement("canvas"); canvas.width = img.width; canvas.height = img.height; canvas.getContext("2d").drawImage(img, 0, 0); resolve(canvas.toDataURL("image/jpeg")); }; img.onerror = function() { resolve(null); }; img.src = imageUrl; }); }
