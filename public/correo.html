@@ -554,9 +554,9 @@ function renderMessage(d) {
 
   const bodyEl = document.getElementById("msg-body");
   if (d.html) {
-    // Sandbox iframe to prevent JS execution
+    // Sandbox iframe — allow-popups para que los links se abran en nueva pestaña
     const iframe = document.createElement("iframe");
-    iframe.setAttribute("sandbox", "allow-same-origin");
+    iframe.setAttribute("sandbox", "allow-same-origin allow-popups allow-top-navigation-by-user-activation");
     iframe.style.cssText = "width:100%;border:none;border-radius:8px;min-height:300px;background:#fff;";
     bodyEl.innerHTML = "";
     bodyEl.appendChild(iframe);
@@ -564,8 +564,20 @@ function renderMessage(d) {
     doc.open();
     doc.write(d.html);
     doc.close();
-    // Auto-resize iframe
+    // Reparar links y iframes internos bloqueados
     setTimeout(() => {
+      // Todos los links abren en nueva pestaña
+      doc.querySelectorAll('a[href]').forEach(a => { a.target = '_blank'; a.rel = 'noopener noreferrer'; });
+      // Reemplazar iframes internos (ej: Teams) con link clickeable — evita "rechazó la conexión"
+      doc.querySelectorAll('iframe[src]').forEach(f => {
+        const url = f.getAttribute('src');
+        if (!url || url.startsWith('cid:')) return;
+        const link = doc.createElement('a');
+        link.href = url; link.target = '_blank'; link.rel = 'noopener noreferrer';
+        link.textContent = '🔗 Abrir enlace: ' + url.replace(/^https?:\/\//, '').substring(0, 60) + (url.length > 70 ? '…' : '');
+        link.style.cssText = 'display:block;padding:10px 12px;margin:6px 0;background:#f0f4ff;border:1px solid #c7d7ff;border-radius:8px;color:#0052cc;font-size:12px;word-break:break-all;text-decoration:none;';
+        f.parentNode.replaceChild(link, f);
+      });
       iframe.style.height = (doc.documentElement.scrollHeight + 20) + "px";
     }, 300);
   } else {
