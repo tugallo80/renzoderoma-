@@ -655,7 +655,7 @@
                     const pu   = parseFloat(item.pu   || 0);
                     const tot  = cant * pu;
                     subtotalItems += tot;
-                    rows.push([item.desc || '-', item.und || 'glb', cant, fMoney(tot)]);
+                    rows.push([item.desc || '-', item.und || 'glb', parseFloat(cant.toFixed(2)), fMoney(tot)]);
                 }
             });
         }
