@@ -1056,9 +1056,8 @@
     </script>
 
     <script>
-        // Helper: llamar al proxy /api/gemini autenticado
+        // Helper: llamar al proxy /api/gemini autenticado (con reintentos)
         async function _llamarGeminiGantt(promptText) {
-            // Esperar hasta 5s a que Firebase Auth esté listo
             let user = firebase.auth().currentUser;
             if (!user) {
                 user = await new Promise((resolve) => {
@@ -1067,19 +1066,32 @@
                 });
             }
             if (!user) throw new Error('No autenticado');
-            const token = await user.getIdToken();
-            const resp = await fetch('/api/gemini', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
-                body: JSON.stringify({ model: 'gemini-2.5-flash', text: promptText, advancedModel: true })
-            });
-            if (!resp.ok) {
-                let detail = '';
-                try { const e = await resp.json(); detail = e.detalle || e.error || ''; } catch(_) {}
-                throw new Error(`Error API Gemini: ${resp.status}${detail ? ' — ' + detail : ''}`);
+
+            let lastErr;
+            for (let att = 0; att < 3; att++) {
+                if (att > 0) await new Promise(r => setTimeout(r, 3000 * att));
+                const token = await user.getIdToken();
+                let resp;
+                try {
+                    resp = await fetch('/api/gemini', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+                        body: JSON.stringify({ model: 'gemini-2.5-flash', text: promptText, advancedModel: true })
+                    });
+                } catch(e) { lastErr = e; continue; }
+                if (resp.status === 502 || resp.status === 503 || resp.status === 504) {
+                    lastErr = new Error('Servidor no disponible (' + resp.status + ')');
+                    continue;
+                }
+                if (!resp.ok) {
+                    let detail = '';
+                    try { const e = await resp.json(); detail = e.detalle || e.error || ''; } catch(_) {}
+                    throw new Error(`Error API Gemini: ${resp.status}${detail ? ' — ' + detail : ''}`);
+                }
+                const data = await resp.json();
+                return data?.candidates?.[0]?.content?.parts?.[0]?.text || data.text || '';
             }
-            const data = await resp.json();
-            return data?.candidates?.[0]?.content?.parts?.[0]?.text || data.text || '';
+            throw lastErr || new Error('Error de conexión — intenta de nuevo');
         }
 
         function parseIA(txt) {
