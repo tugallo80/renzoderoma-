@@ -403,10 +403,17 @@ exports.geminiProxy = onRequest(GEMINI_PROXY_OPTS, async (req, res) => {
             const geminiPayload = { contents: geminiContents };
             if (generationConfig) geminiPayload.generationConfig = generationConfig;
             if (systemInstruction) geminiPayload.systemInstruction = systemInstruction;
-            const geminiRes = await fetch(
-                `https://generativelanguage.googleapis.com/v1beta/models/${geminiModel}:generateContent?key=${geminiKey}`,
-                { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(geminiPayload) }
-            );
+            const ctrl = new AbortController();
+            const timeoutId = setTimeout(() => ctrl.abort(), 50000);
+            let geminiRes;
+            try {
+                geminiRes = await fetch(
+                    `https://generativelanguage.googleapis.com/v1beta/models/${geminiModel}:generateContent?key=${geminiKey}`,
+                    { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(geminiPayload), signal: ctrl.signal }
+                );
+            } finally {
+                clearTimeout(timeoutId);
+            }
             if (!geminiRes.ok) {
                 const errData = await geminiRes.json().catch(() => ({}));
                 throw new Error("Gemini " + geminiModel + ": " + (errData.error?.message || geminiRes.status));

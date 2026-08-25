@@ -1076,7 +1076,7 @@
                     resp = await fetch('/api/gemini', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
-                        body: JSON.stringify({ model: 'gemini-2.5-flash', text: promptText, advancedModel: false })
+                        body: JSON.stringify({ text: promptText, advancedModel: false, generationConfig: { maxOutputTokens: 8192 } })
                     });
                 } catch(e) { lastErr = e; continue; }
                 if (resp.status === 502 || resp.status === 503 || resp.status === 504) {
@@ -1097,13 +1097,12 @@
         function parseIA(txt) {
             if (!txt || !txt.trim()) throw new Error("El modelo no devolvió contenido — intenta de nuevo");
             let clean = txt.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim();
-            // Try extracting [ ... ] array first
-            const start = clean.indexOf('[');
-            const end = clean.lastIndexOf(']');
-            if (start !== -1 && end !== -1 && end > start) {
-                try { return JSON.parse(clean.substring(start, end + 1)); } catch(e) {}
+            // Try full parse first
+            const startBracket = clean.indexOf('[');
+            const endBracket = clean.lastIndexOf(']');
+            if (startBracket !== -1 && endBracket !== -1 && endBracket > startBracket) {
+                try { return JSON.parse(clean.substring(startBracket, endBracket + 1)); } catch(e) {}
             }
-            // Try parsing entire response as JSON
             try {
                 const parsed = JSON.parse(clean);
                 if (Array.isArray(parsed)) return parsed;
@@ -1113,6 +1112,20 @@
                     }
                 }
             } catch(e) {}
+            // Fallback: extract complete objects from potentially truncated JSON
+            const str = startBracket !== -1 ? clean.substring(startBracket) : clean;
+            const items = []; let depth = 0, start = -1;
+            for (let i = 0; i < str.length; i++) {
+                if (str[i] === '{') { if (depth === 0) start = i; depth++; }
+                else if (str[i] === '}') {
+                    depth--;
+                    if (depth === 0 && start !== -1) {
+                        try { items.push(JSON.parse(str.substring(start, i + 1))); } catch(_) {}
+                        start = -1;
+                    }
+                }
+            }
+            if (items.length > 0) return items;
             console.error('parseIA — respuesta cruda:', txt);
             throw new Error("Respuesta del modelo no contiene JSON válido — intenta de nuevo");
         }
