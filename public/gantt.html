@@ -1076,7 +1076,7 @@
                     resp = await fetch('/api/gemini', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
-                        body: JSON.stringify({ model: 'gemini-2.5-flash', text: promptText, advancedModel: true })
+                        body: JSON.stringify({ model: 'gemini-2.5-flash', text: promptText, advancedModel: false })
                     });
                 } catch(e) { lastErr = e; continue; }
                 if (resp.status === 502 || resp.status === 503 || resp.status === 504) {
