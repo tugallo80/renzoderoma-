@@ -393,6 +393,28 @@ exports.geminiProxy = onRequest(GEMINI_PROXY_OPTS, async (req, res) => {
         const generationConfig = body.generationConfig;
         const systemInstruction = body.systemInstruction;
 
+        // ── Ruta Gemini directa: si body.model empieza con "gemini-" y no es imagen ──
+        if (!body.generateImage && typeof body.model === "string" && body.model.startsWith("gemini-")) {
+            const geminiModel = body.model;
+            const promptText = body.text || body.prompt || "";
+            const geminiContents = body.contents
+                ? body.contents
+                : [{ role: "user", parts: [{ text: promptText }] }];
+            const geminiPayload = { contents: geminiContents };
+            if (generationConfig) geminiPayload.generationConfig = generationConfig;
+            if (systemInstruction) geminiPayload.systemInstruction = systemInstruction;
+            const geminiRes = await fetch(
+                `https://generativelanguage.googleapis.com/v1beta/models/${geminiModel}:generateContent?key=${geminiKey}`,
+                { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(geminiPayload) }
+            );
+            if (!geminiRes.ok) {
+                const errData = await geminiRes.json().catch(() => ({}));
+                throw new Error("Gemini " + geminiModel + ": " + (errData.error?.message || geminiRes.status));
+            }
+            const geminiData = await geminiRes.json();
+            return res.status(200).json(geminiData);
+        }
+
         // Sufijo de dominio que se agrega a todo system prompt de presupuesto/cotización
         const DOMAIN_SUFFIX = `
 
