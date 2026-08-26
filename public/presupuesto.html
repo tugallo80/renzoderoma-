@@ -3796,6 +3796,12 @@ F3. MATERIALES POR PIEZAS COMPLEJAS — preguntar si no se especifica:
         // 4. sysPrompt + envío en batches de 5 ítems
         const _sysPrompt = `REGLA ABSOLUTA: Responde SOLO con un array JSON válido. Cero texto antes o después. Cero markdown.
 
+REGLA ANTI-MEZCLA — CRÍTICA CUANDO HAY MÚLTIPLES ÍTEMS:
+Cada ítem del prompt es 100% INDEPENDIENTE. Sus materiales, cantidades, mano de obra y precios son EXCLUSIVOS de ese ítem.
+NUNCA copies materiales ni cantidades de un ítem a otro, aunque sean similares.
+Si dos ítems son "adhesivado normal" y "adhesivado de alto tráfico": el primero lleva solo vinil estándar, el segundo lleva vinil estándar MÁS el vinil de alto tráfico encima — son APUs distintos.
+Tratá cada bloque ===INICIO ÍTEM N=== ... ===FIN ÍTEM N=== como un proyecto separado e independiente.
+
 LECTURA DE PLANOS / CAD / RENDERS 3D — OBLIGATORIO:
 Si hay imagen técnica o 3D con cotas:
 1. Lee TODAS las cotas exactamente como aparecen. "945,5" = 945.5 (coma = decimal europeo).
@@ -3886,6 +3892,7 @@ EJEMPLO SIN CAPÍTULOS (menos de 4 ítems):
                 const _batchParts = [..._ctxParts];
 
                 _batchRows.forEach(function(rd) {
+                    _batchText += '\n===INICIO ÍTEM ' + (rd.origIndex+1) + '===\n';
                     if (rd.modo === 'unico') {
                         _batchText += 'ÍTEM ' + (rd.origIndex+1) + ': ' + rd.name + ' (Cantidad: ' + rd.cant + '). [MODO ÍTEM ÚNICO — Generá EXACTAMENTE 1 objeto JSON en el array, sin capitulos, sin desgloses. Todo el APU va dentro de ese único ítem.]\n';
                     } else {
@@ -3903,6 +3910,7 @@ EJEMPLO SIN CAPÍTULOS (menos de 4 ítems):
                         _batchParts.push({ inlineData: { data: rd.compImage.split(',')[1], mimeType: 'image/jpeg' } });
                         _batchText += '-> FOTO ADJUNTA 1 PARA ÍTEM ' + (rd.origIndex+1) + '.\n';
                     }
+                    _batchText += '===FIN ÍTEM ' + (rd.origIndex+1) + '===\n';
                 });
 
                 _batchParts.unshift({ text: _batchText });
