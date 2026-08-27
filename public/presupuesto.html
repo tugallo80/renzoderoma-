@@ -2755,19 +2755,22 @@ Devolvé exactamente este formato (sin texto adicional):
                         if (_fUrl.startsWith('data:')) {
                             _b64 = await _compressB64(_fUrl, 1200, 0.7);
                         } else if (_fUrl.startsWith('http')) {
-                            // Fetch Firebase Storage URL → blob → base64 (ya comprimida al subir, no necesita _compressB64)
+                            // Fetch Firebase Storage URL → blob → data URL → compress & convert to JPEG
                             const _resp = await fetch(_fUrl);
                             if (!_resp.ok) { console.warn('regen img HTTP', _resp.status, _fUrl.substring(0,60)); continue; }
                             const _blob = await _resp.blob();
-                            _b64 = await new Promise((res, rej) => {
+                            const _rawB64 = await new Promise((res, rej) => {
                                 const fr = new FileReader();
                                 fr.onload = () => res(fr.result);
                                 fr.onerror = rej;
                                 fr.readAsDataURL(_blob);
                             });
+                            // Compress & convert to JPEG to reduce payload size
+                            _b64 = await _compressB64(_rawB64, 1200, 0.7);
                         }
                         if (_b64 && _b64.includes(',')) {
-                            _regenImgParts.push({ inlineData: { data: _b64.split(',')[1], mimeType: 'image/jpeg' } });
+                            const _mime = (_b64.match(/^data:([^;]+);/) || [])[1] || 'image/jpeg';
+                            _regenImgParts.push({ inlineData: { data: _b64.split(',')[1], mimeType: _mime } });
                             console.log('[RegenIA] img OK:', _fUrl.substring(0,60));
                         }
                     } catch(_fe) { console.warn('[RegenIA] img FAIL:', _fUrl ? _fUrl.substring(0,60) : '?', _fe.message); }
