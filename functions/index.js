@@ -404,7 +404,7 @@ exports.geminiProxy = onRequest(GEMINI_PROXY_OPTS, async (req, res) => {
             if (generationConfig) geminiPayload.generationConfig = generationConfig;
             if (systemInstruction) geminiPayload.systemInstruction = systemInstruction;
             const ctrl = new AbortController();
-            const timeoutId = setTimeout(() => ctrl.abort(), 50000);
+            const timeoutId = setTimeout(() => ctrl.abort(), 480000);
             let geminiRes;
             try {
                 geminiRes = await fetch(
