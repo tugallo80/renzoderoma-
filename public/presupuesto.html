@@ -2755,7 +2755,7 @@ Devolvé exactamente este formato (sin texto adicional):
                         if (_fUrl.startsWith('data:')) {
                             _b64 = await _compressB64(_fUrl, 1200, 0.7);
                         } else if (_fUrl.startsWith('http')) {
-                            // Fetch Firebase Storage URL → blob → data URL → compress
+                            // Fetch Firebase Storage URL → blob → data URL → compress & convert to JPEG
                             const _resp = await fetch(_fUrl);
                             if (!_resp.ok) { console.warn('regen img HTTP', _resp.status, _fUrl.substring(0,60)); continue; }
                             const _blob = await _resp.blob();
