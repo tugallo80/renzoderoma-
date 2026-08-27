@@ -2704,6 +2704,14 @@ Devolvé exactamente este formato (sin texto adicional):
                 }
             }
 
+            // Diagnóstico: mostrar cuántas imágenes se están enviando
+            console.log('[RegenIA] imágenes recolectadas:', _allItemImgs.length, '| convertidas para envío:', _regenImgParts.length);
+            console.log('[RegenIA] URLs:', _allItemImgs.map(u => u ? u.substring(0,60) : 'null'));
+            if (_regenImgParts.length < _allItemImgs.length) {
+                console.warn('[RegenIA] ATENCIÓN: se perdieron', _allItemImgs.length - _regenImgParts.length, 'imagen(es) en la conversión');
+            }
+            btn.innerHTML = `<i class="ph-bold ph-arrows-clockwise"></i> Generando... (${_regenImgParts.length} img)`;
+
             // Intercalar etiquetas con cada imagen para que el modelo procese cada una por separado
             const _regenParts = [];
             if (_regenImgParts.length > 0) {
