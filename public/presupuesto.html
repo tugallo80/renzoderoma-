@@ -78,7 +78,7 @@
         .btn-mini { font-size: 10px; padding: 6px; border: none; border-radius: 5px; margin-top: 4px; cursor: pointer; width: 100%; color: white; font-weight: 800; text-transform: uppercase; }
         .btn-blue { background-color: var(--blue) !important; }
         .btn-orange { background-color: var(--orange) !important; } 
-        .feat-area { width: 100%; height: 45px; background: transparent; border: 1px solid var(--border); border-radius: 6px; font-size: 11px; color: var(--text); resize: none; padding: 5px; font-family: inherit; outline:none;}
+        .feat-area { width: 100%; height: 45px; background: transparent; border: 1px solid var(--border); border-radius: 6px; font-size: 11px; color: var(--text); resize: vertical; min-height: 45px; padding: 5px; font-family: inherit; outline:none;}
         .item-foot { display: flex; justify-content: flex-end; align-items: center; gap: 15px; border-top: 1px dashed var(--border); padding-top: 8px; margin-top: 5px; }
         .icon-btn { font-size: 18px; cursor: pointer; color: var(--gray); transition: 0.2s; }
         .total-lbl { font-weight: 800; font-size: 14px; color: var(--text); margin-right: auto; }
@@ -837,7 +837,7 @@
         list.innerHTML = htmlBuffer; 
         calcGlobal(subtotal);
         if(sortableInstance) sortableInstance.destroy();
-        sortableInstance = Sortable.create(list, { handle: '.chap-handle, .item-handle', animation: 150, onEnd: evt => {
+        sortableInstance = Sortable.create(list, { handle: '.chap-handle, .item-handle', filter: 'textarea, input, select', preventOnFilter: true, animation: 150, onEnd: evt => {
             const movedItem = data[evt.oldIndex];
             if (movedItem && movedItem.type === 'chapter') {
                 // Move chapter + all its items as a block
@@ -2631,6 +2631,7 @@ ${_reglasTextoRegen}
 Instrucciones específicas: ${_cleanPrompt}
 
 PROCESO OBLIGATORIO ANTES DE GENERAR EL JSON:
+⓪ IMÁGENES — PASO PREVIO CRÍTICO: Revisá TODAS las imágenes adjuntas (no solo la primera). Por cada imagen, anotá mentalmente todos los valores numéricos etiquetados (ej: "0,75x4,46", "2×4,46 x2", "7×3,57"). Si una imagen tiene "x2" → esa pieza existe en 2 caras/lados → multiplicá por 2. Sumá las áreas de TODAS las imágenes para el total.
 ① PLANO CAD: Si hay imagen con cotas numéricas anotadas → leé TODAS las cotas visibles (son las ÚNICAS medidas válidas, NUNCA las inventes). Para cotas implícitas calculalas: ej. apertura = total − faja superior − faja inferior. Usá esos valores exactos en feat y en cálculos del APU.
 ② LEER: ¿Qué incluye ESTE ítem específicamente? Solo los componentes mencionados en nombre + prompt + imagen.
 ③ GEOMETRÍA: Calculá áreas, perímetros y ml según las dimensiones del plano. Cada cantidad del APU sale de un cálculo real.
@@ -3388,7 +3389,8 @@ PROCESO DE ESTIMACIÓN OBLIGATORIO — seguí estos pasos EN ORDEN
 Para cada ítem, antes de generar el JSON, ejecutá mentalmente este proceso:
 
 PASO 1 — LEER Y ENTENDER:
-  Analizá el nombre del ítem, el prompt del usuario y todas las imágenes adjuntas.
+  Analizá el nombre del ítem, el prompt del usuario y TODAS las imágenes adjuntas (no solo la primera).
+  Por cada imagen, extraé todos los valores numéricos etiquetados. Si una imagen indica "x2" → esa pieza existe en 2 caras → multiplicá por 2. Sumá áreas de TODAS las imágenes.
   Identificá: ¿Qué es el ítem? ¿Cuáles son sus dimensiones? ¿De qué materiales está hecho?
 
   ⚠️ REGLA CRÍTICA DE UNIDADES EN IMÁGENES:
@@ -5815,6 +5817,7 @@ ${elemsStr ? `Elementos del ítem: ${elemsStr}` : ''}
 ${dimStr   ? `Dimensiones: ${dimStr}` : ''}
 
 PROCESO OBLIGATORIO ANTES DE GENERAR EL JSON:
+⓪ IMÁGENES — PASO PREVIO CRÍTICO: Revisá TODAS las imágenes adjuntas (no solo la primera). Por cada imagen, anotá mentalmente todos los valores numéricos etiquetados. Si una imagen tiene "x2" → esa pieza existe en 2 caras/lados → multiplicá por 2. Sumá las áreas de TODAS las imágenes para el total.
 ① GEOMETRÍA: Calculá áreas y perímetros con las dimensiones indicadas. Cada cantidad del APU sale de un cálculo real.
 ② BASE DE DATOS: Para cada material/MO, buscá primero en el catálogo Rubik. Usá ese precio exacto.
 ③ APU: Solo materiales de ESTE ítem específico.
