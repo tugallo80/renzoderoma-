@@ -2568,7 +2568,10 @@
             const _puActual = parseFloat(data[idx]?.pu) || 0;
             const _puRef = _puActual > 0 ? `Precio anterior de referencia: ${_puActual.toFixed(2)} Bs/u (si tu cálculo difiere más del 30%, revisá las cantidades).` : '';
 
-            const sysPrompt = `REGLA ABSOLUTA: Responde SOLO con un array JSON válido de exactamente UN ítem. Sin texto antes ni después. Sin markdown. Sin comentarios dentro del JSON.
+            const sysPrompt = `⛔ PROHIBICIÓN ABSOLUTA — ESTIMACIÓN POR PROPORCIÓN:
+Si CUALQUIER imagen adjunta contiene valores numéricos etiquetados (ej: "4,46x4,34", "2,65×4,37", "3.50m"), USÁLOS EXACTAMENTE como medidas reales del ítem. ESTÁ TERMINANTEMENTE PROHIBIDO escribir "dimensiones estimadas por proporción" cuando hay medidas visibles. Buscá primero TODOS los valores numéricos en las imágenes antes de calcular nada. Si la imagen es una foto o render con dimensiones anotadas → esas dimensiones son EXACTAS. NUNCA escribas "estimado por proporción" ni "según proporción" cuando hay valores en la imagen.
+
+REGLA ABSOLUTA: Responde SOLO con un array JSON válido de exactamente UN ítem. Sin texto antes ni después. Sin markdown. Sin comentarios dentro del JSON.
 CAMPOS OBLIGATORIOS:
 - desc: string con nombre técnico del ítem
 - cant: número
@@ -3795,7 +3798,10 @@ F3. MATERIALES POR PIEZAS COMPLEJAS — preguntar si no se especifica:
         }
 
         // 4. sysPrompt + envío en batches de 5 ítems
-        const _sysPrompt = `REGLA ABSOLUTA: Responde SOLO con un array JSON válido. Cero texto antes o después. Cero markdown.
+        const _sysPrompt = `⛔ PROHIBICIÓN ABSOLUTA — ESTIMACIÓN POR PROPORCIÓN:
+Si CUALQUIER imagen adjunta contiene valores numéricos etiquetados (ej: "4,46x4,34", "2,65×4,37", "3.50m"), USÁLOS EXACTAMENTE como medidas reales del ítem. ESTÁ TERMINANTEMENTE PROHIBIDO escribir "dimensiones estimadas por proporción" cuando hay medidas visibles. Buscá primero TODOS los valores numéricos en las imágenes antes de calcular nada. Si la imagen es una foto o render con dimensiones anotadas → esas dimensiones son EXACTAS. NUNCA escribas "estimado por proporción" ni "según proporción" cuando hay valores en la imagen.
+
+REGLA ABSOLUTA: Responde SOLO con un array JSON válido. Cero texto antes o después. Cero markdown.
 
 REGLA ANTI-MEZCLA — CRÍTICA CUANDO HAY MÚLTIPLES ÍTEMS:
 Cada ítem del prompt es 100% INDEPENDIENTE. Sus materiales, cantidades, mano de obra y precios son EXCLUSIVOS de ese ítem.
@@ -5766,7 +5772,10 @@ INSTRUCCIONES:
             const _r3dCatMat = Object.values(dbMats || {}).map(m => `${m.n||m.desc}: ${m.p||m.pu} Bs/${m.u||m.und}`).join(', ');
             const _r3dCatMo  = Object.values(dbMo   || {}).map(m => `${m.n||m.desc}: ${m.p||m.pu} Bs`).join(', ');
 
-            const sysPrompt = `REGLA ABSOLUTA: Responde SOLO con un array JSON válido de exactamente UN ítem. Sin texto antes ni después. Sin markdown. Sin comentarios dentro del JSON.
+            const sysPrompt = `⛔ PROHIBICIÓN ABSOLUTA — ESTIMACIÓN POR PROPORCIÓN:
+Si CUALQUIER imagen adjunta contiene valores numéricos etiquetados (ej: "4,46x4,34", "2,65×4,37", "3.50m"), USÁLOS EXACTAMENTE como medidas reales del ítem. ESTÁ TERMINANTEMENTE PROHIBIDO escribir "dimensiones estimadas por proporción" cuando hay medidas visibles. Buscá primero TODOS los valores numéricos en las imágenes antes de calcular nada. Si la imagen es una foto o render con dimensiones anotadas → esas dimensiones son EXACTAS. NUNCA escribas "estimado por proporción" ni "según proporción" cuando hay valores en la imagen.
+
+REGLA ABSOLUTA: Responde SOLO con un array JSON válido de exactamente UN ítem. Sin texto antes ni después. Sin markdown. Sin comentarios dentro del JSON.
 CAMPOS OBLIGATORIOS:
 - desc: string con nombre técnico del ítem
 - cant: número
