@@ -2705,7 +2705,7 @@ Devolvé exactamente este formato (sin texto adicional):
             const resp = await fetch(_regenUrl, {
                 method: 'POST', headers,
                 body: JSON.stringify({
-                    model: 'gemini-2.5-pro',
+                    model: 'gemini-3.1-pro-preview',
                     systemInstruction: { parts: [{ text: sysPrompt }] },
                     contents: [{ role: 'user', parts: _regenParts }],
                     generationConfig: { maxOutputTokens: 8192, temperature: 0.1 },
@@ -3917,7 +3917,7 @@ EJEMPLO SIN CAPÍTULOS (menos de 4 ítems):
                 _batchParts.unshift({ text: _batchText });
 
                 const _reqBody = JSON.stringify({
-                    model: 'gemini-2.5-pro',
+                    model: 'gemini-3.1-pro-preview',
                     systemInstruction: { parts: [{ text: _sysPrompt }] },
                     contents: [{ role: 'user', parts: _batchParts }],
                     generationConfig: { maxOutputTokens: 16000, temperature: 0.1 },
@@ -5823,7 +5823,7 @@ Devolvé exactamente este formato (sin texto adicional):
             const resp = await fetch('/api/gemini', {
                 method: 'POST', headers,
                 body: JSON.stringify({
-                    model: 'gemini-2.5-pro',
+                    model: 'gemini-3.1-pro-preview',
                     systemInstruction: { parts: [{ text: sysPrompt }] },
                     contents: [{ role: 'user', parts: [{ text: userPrompt }] }],
                     generationConfig: { maxOutputTokens: 8192, temperature: 0.1 },
