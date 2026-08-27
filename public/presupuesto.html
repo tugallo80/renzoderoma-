@@ -837,7 +837,7 @@
         list.innerHTML = htmlBuffer; 
         calcGlobal(subtotal);
         if(sortableInstance) sortableInstance.destroy();
-        sortableInstance = Sortable.create(list, { handle: '.chap-handle, .item-handle', filter: 'textarea, input, select', preventOnFilter: true, animation: 150, onEnd: evt => {
+        sortableInstance = Sortable.create(list, { handle: '.chap-handle, .item-handle', filter: 'textarea, input, select', preventOnFilter: false, animation: 150, onEnd: evt => {
             const movedItem = data[evt.oldIndex];
             if (movedItem && movedItem.type === 'chapter') {
                 // Move chapter + all its items as a block
@@ -2678,12 +2678,18 @@ Devolvé exactamente este formato (sin texto adicional):
             if (_fotosToSend.length > 0) {
                 _regenFullPrompt += `\n\nIMÁGENES DEL ÍTEM ADJUNTAS (${_fotosToSend.length}): foto/s de referencia y planos CAD vinculados a este ítem. Si hay cotas numéricas anotadas, son las medidas exactas — usálas para calcular dimensiones y cantidades del APU.`;
                 for (const _fUrl of _fotosToSend) {
-                    if (_fUrl && _fUrl.startsWith('data:')) {
-                        try {
-                            const _fComp = await _compressB64(_fUrl, 1200, 0.7);
-                            _regenImgParts.push({ inlineData: { data: _fComp.split(',')[1], mimeType: 'image/jpeg' } });
-                        } catch(_fe) {}
-                    }
+                    if (!_fUrl) continue;
+                    try {
+                        let _b64;
+                        if (_fUrl.startsWith('data:')) {
+                            _b64 = await _compressB64(_fUrl, 1200, 0.7);
+                        } else if (_fUrl.startsWith('http')) {
+                            const _blob = await fetch(_fUrl).then(r => r.blob());
+                            _b64 = await new Promise((res, rej) => { const fr = new FileReader(); fr.onload = () => res(fr.result); fr.onerror = rej; fr.readAsDataURL(_blob); });
+                            _b64 = await _compressB64(_b64, 1200, 0.7);
+                        }
+                        if (_b64) _regenImgParts.push({ inlineData: { data: _b64.split(',')[1], mimeType: 'image/jpeg' } });
+                    } catch(_fe) { console.warn('regen img skip:', _fUrl, _fe); }
                 }
             }
 
