@@ -2704,7 +2704,17 @@ Devolvé exactamente este formato (sin texto adicional):
                 }
             }
 
-            const _regenParts = [{ text: _regenFullPrompt }, ..._regenImgParts];
+            // Intercalar etiquetas con cada imagen para que el modelo procese cada una por separado
+            const _regenParts = [];
+            if (_regenImgParts.length > 0) {
+                _regenParts.push({ text: `HAY ${_regenImgParts.length} IMAGEN(ES) ADJUNTA(S). Procesá CADA imagen de forma INDEPENDIENTE y extraé sus dimensiones numéricas antes de continuar:` });
+                _regenImgParts.forEach(function(_ip, _ii) {
+                    _regenParts.push({ text: `=== IMAGEN ${_ii + 1} DE ${_regenImgParts.length} === Extraé TODOS los valores numéricos visibles en esta imagen:` });
+                    _regenParts.push(_ip);
+                });
+                _regenParts.push({ text: `=== FIN DE IMÁGENES === Ahora usá las dimensiones de TODAS las imágenes anteriores para calcular el APU.` });
+            }
+            _regenParts.push({ text: _regenFullPrompt });
 
             const token = firebase.auth().currentUser ? await firebase.auth().currentUser.getIdToken() : null;
             const headers = { 'Content-Type': 'application/json' };
