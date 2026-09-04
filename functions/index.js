@@ -396,7 +396,7 @@ exports.geminiProxy = onRequest(GEMINI_PROXY_OPTS, async (req, res) => {
         // ── Ruta Gemini directa: si body.model empieza con "gemini-" y no es imagen ──
         if (!body.generateImage && typeof body.model === "string" && body.model.startsWith("gemini-")) {
             const primaryModel = body.model;
-            const fallbackModel = "gemini-3.7-flash";
+            const fallbackModel = "gemini-1.5-flash";
             const promptText = body.text || body.prompt || "";
             const geminiContents = body.contents
                 ? body.contents
