@@ -420,7 +420,6 @@ exports.geminiProxy = onRequest(GEMINI_PROXY_OPTS, async (req, res) => {
                 } finally { clearTimeout(tid); }
                 return r;
             };
-
             let geminiRes;
             const delays = [3000, 6000, 12000];
             for (let attempt = 0; attempt <= delays.length; attempt++) {
