@@ -395,7 +395,8 @@ exports.geminiProxy = onRequest(GEMINI_PROXY_OPTS, async (req, res) => {
 
         // ── Ruta Gemini directa: si body.model empieza con "gemini-" y no es imagen ──
         if (!body.generateImage && typeof body.model === "string" && body.model.startsWith("gemini-")) {
-            const geminiModel = body.model;
+            const primaryModel = body.model;
+            const fallbackModel = "gemini-2.5-flash";
             const promptText = body.text || body.prompt || "";
             const geminiContents = body.contents
                 ? body.contents
@@ -403,20 +404,41 @@ exports.geminiProxy = onRequest(GEMINI_PROXY_OPTS, async (req, res) => {
             const geminiPayload = { contents: geminiContents };
             if (generationConfig) geminiPayload.generationConfig = generationConfig;
             if (systemInstruction) geminiPayload.systemInstruction = systemInstruction;
-            const ctrl = new AbortController();
-            const timeoutId = setTimeout(() => ctrl.abort(), 480000);
+            const payloadStr = JSON.stringify(geminiPayload);
+
+            // Retry con backoff + fallback si el modelo primario está sobrecargado
+            const sleep = ms => new Promise(r => setTimeout(r, ms));
+            const tryGemini = async (model) => {
+                const ctrl = new AbortController();
+                const tid = setTimeout(() => ctrl.abort(), 480000);
+                let r;
+                try {
+                    r = await fetch(
+                        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${geminiKey}`,
+                        { method: "POST", headers: { "Content-Type": "application/json" }, body: payloadStr, signal: ctrl.signal }
+                    );
+                } finally { clearTimeout(tid); }
+                return r;
+            };
+
             let geminiRes;
-            try {
-                geminiRes = await fetch(
-                    `https://generativelanguage.googleapis.com/v1beta/models/${geminiModel}:generateContent?key=${geminiKey}`,
-                    { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(geminiPayload), signal: ctrl.signal }
-                );
-            } finally {
-                clearTimeout(timeoutId);
+            const delays = [3000, 6000, 12000];
+            for (let attempt = 0; attempt <= delays.length; attempt++) {
+                geminiRes = await tryGemini(primaryModel);
+                if (geminiRes.ok) break;
+                const isOverload = geminiRes.status === 503 || geminiRes.status === 429;
+                if (!isOverload || attempt === delays.length) break;
+                console.warn(`Gemini ${primaryModel} sobrecargado (${geminiRes.status}), reintento ${attempt + 1} en ${delays[attempt]}ms`);
+                await sleep(delays[attempt]);
+            }
+            // Si el modelo primario sigue fallando con sobrecarga, intentar fallback
+            if (!geminiRes.ok && (geminiRes.status === 503 || geminiRes.status === 429) && primaryModel !== fallbackModel) {
+                console.warn(`Gemini ${primaryModel} agotado, usando fallback ${fallbackModel}`);
+                geminiRes = await tryGemini(fallbackModel);
             }
             if (!geminiRes.ok) {
                 const errData = await geminiRes.json().catch(() => ({}));
-                throw new Error("Gemini " + geminiModel + ": " + (errData.error?.message || geminiRes.status));
+                throw new Error("Gemini " + primaryModel + ": " + (errData.error?.message || geminiRes.status));
             }
             const geminiData = await geminiRes.json();
             return res.status(200).json(geminiData);
