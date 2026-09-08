@@ -2830,10 +2830,13 @@ Devolvé exactamente este formato (sin texto adicional):
             });
             if(!resp.ok) throw new Error(`HTTP ${resp.status}`);
             const respData = await resp.json();
-            let raw = respData?.candidates?.[0]?.content?.parts?.[0]?.text || '';
-            raw = raw.replace(/```json|```/g, '').trim();
+            // Log para diagnóstico — muestra si el modelo devolvió error o texto plano
+            const _rawFull = respData?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+            console.log('[RegenIA] respuesta raw (primeros 300):', _rawFull.substring(0, 300));
+            if (!_rawFull && respData?.error) throw new Error(`Gemini error: ${respData.error.message || JSON.stringify(respData.error)}`);
+            let raw = _rawFull.replace(/```json|```/g, '').trim();
             const start = raw.indexOf('['), end = raw.lastIndexOf(']');
-            if(start === -1 || end === -1) throw new Error('Formato inválido — la IA no devolvió JSON');
+            if(start === -1 || end === -1) throw new Error('Formato inválido — respuesta: ' + raw.substring(0, 150));
             let items;
             try { items = JSON.parse(raw.slice(start, end+1)); }
             catch(e) {

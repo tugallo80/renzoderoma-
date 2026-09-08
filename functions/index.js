@@ -437,9 +437,12 @@ exports.geminiProxy = onRequest(GEMINI_PROXY_OPTS, async (req, res) => {
             }
             if (!geminiRes.ok) {
                 const errData = await geminiRes.json().catch(() => ({}));
-                throw new Error("Gemini " + primaryModel + ": " + (errData.error?.message || geminiRes.status));
+                const errMsg = errData.error?.message || geminiRes.status;
+                console.error(`Gemini ${primaryModel} final error ${geminiRes.status}:`, errMsg);
+                throw new Error("Gemini " + primaryModel + ": " + errMsg);
             }
             const geminiData = await geminiRes.json();
+            console.log(`Gemini ${primaryModel} OK, candidates:`, geminiData?.candidates?.length);
             return res.status(200).json(geminiData);
         }
 
