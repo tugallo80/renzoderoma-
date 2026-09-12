@@ -3872,7 +3872,9 @@ F3. MATERIALES POR PIEZAS COMPLEJAS — preguntar si no se especifica:
 
         // Helpers de parseo JSON compartidos entre batches
         function _extractBalancedArray(str) {
-            const start = str.indexOf('[');
+            // Buscar array de objetos JSON [{...}] — evita falsos positivos con listas de texto como [a, b]
+            let start = str.indexOf('[{');
+            if (start === -1) start = str.indexOf('['); // fallback al primer [
             if (start === -1) return null;
             let depth = 0, inStr = false, esc = false;
             for (let i = start; i < str.length; i++) {
@@ -3891,7 +3893,8 @@ F3. MATERIALES POR PIEZAS COMPLEJAS — preguntar si no se especifica:
         }
 
         function _repairTruncatedArray(str) {
-            const start = str.indexOf('[');
+            let start = str.indexOf('[{');
+            if (start === -1) start = str.indexOf('[');
             if (start === -1) return null;
             const completedItems = [];
             let i = start + 1, depth = 0, inStr = false, esc = false, itemStart = -1;
@@ -4108,7 +4111,10 @@ EJEMPLO SIN CAPÍTULOS (menos de 4 ítems):
                         .replace(/,(\s*[}\]])/g, '$1')
                         .replace(/([^\\])\\([^"\\\/bfnrtu])/g, '$1 $2');
                     let _extracted2 = _extractBalancedArray(_cleaned) || _repairTruncatedArray(_cleaned);
-                    if (!_extracted2) throw new Error('Lote ' + _batchNum + ': no se pudo extraer JSON válido. Intentá de nuevo.');
+                    if (!_extracted2) {
+                        console.error('[IA Budget] Batch ' + _batchNum + ' sin JSON. Raw completo:', _raw.substring(0, 800));
+                        throw new Error('Lote ' + _batchNum + ': ' + _raw.substring(0, 120));
+                    }
                     _batchItems = JSON.parse(_extracted2);
                 }
                 if (!Array.isArray(_batchItems)) throw new Error('Lote ' + _batchNum + ': la IA no devolvió un array válido.');
