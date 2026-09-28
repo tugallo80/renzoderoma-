@@ -6757,11 +6757,18 @@ Devolvé exactamente este formato (sin texto adicional):
 
     function _showMedPopup(cx, cy) {
         var popup=document.getElementById('pmed-label-popup');
-        var cvsr=_cvs.getBoundingClientRect();
-        var vx=cvsr.left+cx*(cvsr.width/_cvs.width), vy=cvsr.top+cy*(cvsr.height/_cvs.height)+16;
         var pw=220, ph=78;
-        vx=Math.min(Math.max(vx-pw/2,8),window.innerWidth-pw-8);
-        vy=Math.min(Math.max(vy,8),window.innerHeight-ph-8);
+        var vx, vy;
+        if (window.innerWidth<=600) {
+            vx=Math.max(8,(window.innerWidth-pw)/2);
+            vy=70;
+        } else {
+            var cvsr=_cvs.getBoundingClientRect();
+            vx=cvsr.left+cx*(cvsr.width/_cvs.width);
+            vy=cvsr.top+cy*(cvsr.height/_cvs.height)+16;
+            vx=Math.min(Math.max(vx-pw/2,8),window.innerWidth-pw-8);
+            vy=Math.min(Math.max(vy,8),window.innerHeight-ph-8);
+        }
         popup.style.left=vx+'px'; popup.style.top=vy+'px'; popup.style.display='block';
         document.getElementById('pmed-label-unit').textContent=_unit;
         var inp=document.getElementById('pmed-label-input'); inp.value='';
@@ -6794,11 +6801,18 @@ Devolvé exactamente este formato (sin texto adicional):
     }
     function _showNotePopup(cx, cy) {
         var popup=document.getElementById('pmed-note-popup');
-        var cvsr=_cvs.getBoundingClientRect();
-        var vx=cvsr.left+cx*(cvsr.width/_cvs.width), vy=cvsr.top+cy*(cvsr.height/_cvs.height)+12;
         var pw=250, ph=140;
-        vx=Math.min(Math.max(vx-pw/2,8),window.innerWidth-pw-8);
-        vy=Math.min(Math.max(vy,8),window.innerHeight-ph-8);
+        var vx, vy;
+        if (window.innerWidth<=600) {
+            vx=Math.max(8,(window.innerWidth-pw)/2);
+            vy=70;
+        } else {
+            var cvsr=_cvs.getBoundingClientRect();
+            vx=cvsr.left+cx*(cvsr.width/_cvs.width);
+            vy=cvsr.top+cy*(cvsr.height/_cvs.height)+12;
+            vx=Math.min(Math.max(vx-pw/2,8),window.innerWidth-pw-8);
+            vy=Math.min(Math.max(vy,8),window.innerHeight-ph-8);
+        }
         popup.style.left=vx+'px'; popup.style.top=vy+'px'; popup.style.display='block';
     }
     window.pmedConfirmarNota = function() {
