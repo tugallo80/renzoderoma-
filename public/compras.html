@@ -484,7 +484,7 @@
             if (workerId) await db.ref(`personal/${workerId}/solicitudes/${licId}/pagos/${pagoKey}`).remove();
         } catch(e) { alert('Error al eliminar: ' + e.message); }
         document.getElementById('global-loader').style.display = 'none';
-        renderContracts();
+        renderContratos();
     }
 
     function abrirModalReq(reqId) {
@@ -964,10 +964,11 @@
             let pagado = 0;
             let pagosHtml = '';
             if(lic.pagos) {
-                Object.values(lic.pagos).forEach(p => {
+                Object.entries(lic.pagos).forEach(([pagoKey, p]) => {
                     pagado += parseFloat(p.monto||0);
                     let docBtn = p.comprobante ? `<button class="btn-nav" style="padding:4px 8px; font-size:10px;" onclick="window.open('${p.comprobante}')"><i class="ph-bold ph-image"></i> Ver Doc</button>` : '';
-                    pagosHtml += `<div class="pay-row"><span class="p-date">${new Date(p.fecha).toLocaleDateString()} - ${p.nota || 'Abono'}</span><div style="display:flex; align-items:center; gap:10px;"><span class="p-amt">${fMoney(p.monto)} Bs</span>${docBtn}</div></div>`;
+                    let delBtn = `<button onclick="eliminarPago('${key}','${pagoKey}','${lic.worker_id||''}')" title="Eliminar pago" style="background:rgba(255,59,48,0.12);color:#ff3b30;border:none;border-radius:6px;padding:4px 8px;cursor:pointer;font-size:11px;font-weight:700;"><i class="ph-bold ph-trash"></i></button>`;
+                    pagosHtml += `<div class="pay-row"><span class="p-date">${new Date(p.fecha).toLocaleDateString()} - ${p.nota || 'Abono'}</span><div style="display:flex; align-items:center; gap:8px;"><span class="p-amt">${fMoney(p.monto)} Bs</span>${docBtn}${delBtn}</div></div>`;
                 });
             }
 
