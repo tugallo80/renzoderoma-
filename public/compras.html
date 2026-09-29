@@ -437,11 +437,12 @@
             let lic = currentLics[key]; if(lic.estado !== 'aprobado' && lic.estado !== 'terminado' && lic.estado !== 'liquidado' && lic.estado !== 'pagado') return; 
             let totalProp = parseFloat(lic.precio_final || lic.precio_propuesto || 0); let totalPagado = 0; let historyHtml = '';
             if(lic.pagos) {
-                const _pagosOrdenados = Object.values(lic.pagos).sort((a,b) => (a.fecha||'') > (b.fecha||'') ? 1 : -1);
-                _pagosOrdenados.forEach(p => {
+                const _pagosOrdenados = Object.entries(lic.pagos).sort((a,b) => (a[1].fecha||'') > (b[1].fecha||'') ? 1 : -1);
+                _pagosOrdenados.forEach(([pagoKey, p]) => {
                     totalPagado += parseFloat(p.monto||0);
-                    let receiptBtn = p.comprobante ? `<a href="${p.comprobante}" target="_blank" class="p-view"><i class="ph-bold ph-image"></i> Ver Doc</a>` : '-';
-                    historyHtml += `<div class="pay-row"><span class="p-date">${new Date(p.fecha+'T12:00:00').toLocaleDateString('es-BO')}</span><span>${p.nota||'Abono'}</span><span class="p-amt">${fMoney(p.monto)} Bs</span>${receiptBtn}</div>`;
+                    let receiptBtn = p.comprobante ? `<a href="${p.comprobante}" target="_blank" class="p-view"><i class="ph-bold ph-image"></i> Ver Doc</a>` : '';
+                    let delBtn = `<button onclick="eliminarPago('${key}','${pagoKey}','${lic.worker_id||''}')" title="Eliminar pago" style="background:rgba(255,59,48,0.12);color:#ff3b30;border:none;border-radius:6px;padding:4px 8px;cursor:pointer;font-size:11px;font-weight:700;flex-shrink:0;"><i class="ph-bold ph-trash"></i></button>`;
+                    historyHtml += `<div class="pay-row"><span class="p-date">${new Date(p.fecha+'T12:00:00').toLocaleDateString('es-BO')}</span><span>${p.nota||'Abono'}</span><span class="p-amt">${fMoney(p.monto)} Bs</span><div style="display:flex;gap:6px;align-items:center;">${receiptBtn}${delBtn}</div></div>`;
                 });
             }
             if ((lic.estado === 'pagado' || lic.estado === 'liquidado') && totalPagado === 0) { totalPagado = totalProp; }
@@ -472,6 +473,18 @@
         const newPayRef = db.ref(`proyectos/${cid}/${pid}/licitaciones/${targetLicId}/pagos`).push();
         await newPayRef.set(payload); await db.ref(`personal/${targetWorkerId}/solicitudes/${targetLicId}/pagos/${newPayRef.key}`).set(payload);
         document.getElementById('global-loader').style.display = 'none'; document.getElementById('mod-pago').style.display = 'none';
+    }
+
+    async function eliminarPago(licId, pagoKey, workerId) {
+        if (!confirm('¿Eliminar este pago del historial?')) return;
+        document.getElementById('loader-title').innerText = "Eliminando pago...";
+        document.getElementById('global-loader').style.display = 'flex';
+        try {
+            await db.ref(`proyectos/${cid}/${pid}/licitaciones/${licId}/pagos/${pagoKey}`).remove();
+            if (workerId) await db.ref(`personal/${workerId}/solicitudes/${licId}/pagos/${pagoKey}`).remove();
+        } catch(e) { alert('Error al eliminar: ' + e.message); }
+        document.getElementById('global-loader').style.display = 'none';
+        renderContracts();
     }
 
     function abrirModalReq(reqId) {
