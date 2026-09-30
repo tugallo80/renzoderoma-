@@ -2642,10 +2642,9 @@
 
             const sysPrompt = `Sos el estimador de costos APU de Rubik Bolivia. Respondé SOLO con un array JSON válido de exactamente UN ítem. Sin texto antes ni después. Sin markdown. Sin comentarios dentro del JSON.
 
-ESTRUCTURA OBLIGATORIA (en este orden exacto de campos):
-{"_components":["componente 1 visto en imagen","componente 2","..."],"desc":"string","cant":1,"und":"glb|m2|ml|pza","feat":"- Línea 1\\n- Línea 2\\n- Línea 3\\n- Línea 4","apu":{"mat":[{"d":"NOMBRE","u":"unidad","q":número,"p":número}],"mo":[{"d":"TIPO OPERARIO trabajo","u":"m2|jornal","q":número,"p":número}],"eq":[],"sub":[]},"util":50,"ind":10}
+ESTRUCTURA OBLIGATORIA:
+{"desc":"string","cant":1,"und":"glb|m2|ml|pza","feat":"- Línea 1\\n- Línea 2\\n- Línea 3\\n- Línea 4","apu":{"mat":[{"d":"NOMBRE","u":"unidad","q":número,"p":número}],"mo":[{"d":"TIPO OPERARIO trabajo","u":"m2|jornal","q":número,"p":número}],"eq":[],"sub":[]},"util":50,"ind":10}
 
-_components: lista TODOS los materiales/componentes visibles escritos en las imágenes (etiquetas, flechas, notas). CADA item en _components DEBE aparecer en el APU.
 feat: 3-4 líneas, puntual y técnico. Incluí dimensiones. PROHIBIDO: ml calculados, remaches, mermas, fórmulas, precios, texto largo o redundante.
 apu: usar campos exactos d,u,q,p (no "item","prec" ni otros).
 util=50, ind=10 siempre como enteros.
@@ -2685,10 +2684,9 @@ INSTRUCCIONES DEL USUARIO: ${_cleanPrompt}
 PROCESO DE CÁLCULO — SEGUÍ EN ORDEN ESTRICTO:
 ═══════════════════════════════════════════════════════════
 
-PASO 1 — LEER IMÁGENES Y DEFINIR ALCANCE:
-  Antes de calcular nada: leé TODAS las imágenes adjuntas y transcribí CADA texto, etiqueta, flecha o nota escrita que veas.
-  Completá "_components" con CADA material/componente que aparezca escrito — etiquetas, flechas, notas. NINGUNO puede faltar.
-  Ejemplos de lo que debés detectar: "Foam + Adhesivos", "5 Flejes de policarbonato 50cm×3.7cm", "letras sueltas acrílico negro 2mm", "MDF 10mm", etc.
+PASO 1 — DEFINIR ALCANCE:
+  Los componentes del plano están listados en "ETIQUETAS LEÍDAS DEL PLANO" (arriba).
+  TODOS son materiales reales — incluí CADA UNO en el APU, sin excepción.
   Si el usuario pidió SOLO revestimiento → NO agregar estructura nueva.
   Si el usuario pidió SOLO fabricación nueva → NO incluir materiales de revestimiento.
 
@@ -2755,7 +2753,7 @@ util=50, ind=10 siempre (enteros).`;
                     try {
                         let _b64;
                         if (_fUrl.startsWith('data:')) {
-                            _b64 = await _compressB64(_fUrl, 1800, 0.88);
+                            _b64 = await _compressB64(_fUrl, 1200, 0.7);
                         } else if (_fUrl.startsWith('http')) {
                             // Fetch Firebase Storage URL → blob → data URL → compress & convert to JPEG
                             const _resp = await fetch(_fUrl);
@@ -2767,8 +2765,7 @@ util=50, ind=10 siempre (enteros).`;
                                 fr.onerror = rej;
                                 fr.readAsDataURL(_blob);
                             });
-                            // Higher quality for legibility of small text in technical drawings
-                            _b64 = await _compressB64(_rawB64, 1800, 0.88);
+                            _b64 = await _compressB64(_rawB64, 1200, 0.7);
                         }
                         if (_b64 && _b64.includes(',')) {
                             const _mime = (_b64.match(/^data:([^;]+);/) || [])[1] || 'image/jpeg';
@@ -2802,24 +2799,84 @@ util=50, ind=10 siempre (enteros).`;
             const _regenUrl = '/api/gemini';
 
             // ══════════════════════════════════════════════════════
-            // LLAMADA ÚNICA — leer imágenes + generar APU en un solo paso
-            // El campo _components fuerza al modelo a enumerar TODOS
-            // los componentes visibles antes de calcular el APU.
+            // FASE 1 — OCR PURO: transcribir TODOS los textos visibles
+            // Tarea única y simple: encontrar y listar cada palabra.
+            // Sin interpretación, sin JSON, sin cálculos. Solo texto.
             // ══════════════════════════════════════════════════════
-            btn.innerHTML = `<i class="ph-bold ph-arrows-clockwise"></i> Generando APU con IA...`;
+            let _ocrBlock = '';
+            const _totalImgKB = _regenImgParts.reduce((s,p) => s + (p.inlineData?.data?.length || 0), 0) / 1024;
+            console.log('[RegenIA] total payload imágenes:', _totalImgKB.toFixed(0), 'KB', '| imágenes:', _regenImgParts.length);
+
+            if (_regenImgParts.length > 0) {
+                btn.innerHTML = `<i class="ph-bold ph-scan"></i> Leyendo etiquetas del plano...`;
+                const _ocrParts = [];
+                _regenImgParts.forEach(function(_ip, _ii) {
+                    _ocrParts.push({ text: `=== IMAGEN ${_ii + 1} ===` });
+                    _ocrParts.push(_ip);
+                });
+                _ocrParts.push({ text: `Encontrá y transcribí CADA texto escrito en estas imágenes.
+Escribí una lista numerada — nada más.
+Incluí TODO sin excepción: etiquetas de materiales, medidas con unidades, nombres de productos, cantidades, notas.
+
+Ejemplo de lo que esperamos:
+1. letras sueltas en acrílico negro 2mm
+2. 5 Flejes de policarbonato 50cm x 3.7cm
+3. Revestimiento de toda la cabecera Foam + Adhesivos
+4. 145 cm
+5. 51 cm
+6. 28 cm
+7. Acrílico Blanco 2mm + letras troqueladas en adhesivo negro
+8. OJOS 5.4cm x 1.7cm
+9. ROSTRO 8.9cm x 1.7cm
+10. ASTRA 22.8cm x 6.4cm
+
+Ahora listá TODO el texto visible en las imágenes:` });
+
+                try {
+                    const _reOcr = await fetch(_regenUrl, {
+                        method: 'POST', headers,
+                        body: JSON.stringify({
+                            model: 'gemini-2.5-flash',
+                            systemInstruction: { parts: [{ text: 'Sos un sistema OCR. Tu única tarea: encontrar y listar cada texto visible en las imágenes. Sin describir, sin interpretar — solo transcribir exactamente lo que está escrito.' }] },
+                            contents: [{ role: 'user', parts: _ocrParts }],
+                            generationConfig: { maxOutputTokens: 2000, temperature: 0.0 },
+                            advancedModel: true
+                        })
+                    });
+                    if (_reOcr.ok) {
+                        const _dOcr = await _reOcr.json();
+                        const _rawOcr = (_dOcr?.candidates?.[0]?.content?.parts?.[0]?.text || '').trim();
+                        console.log('[RegenIA OCR] textos detectados:\n', _rawOcr);
+                        if (_rawOcr) {
+                            _ocrBlock = `\n\n╔═══════════════════════════════════════════════════════════════╗
+║   ETIQUETAS LEÍDAS DEL PLANO — CADA UNA ES UN COMPONENTE REAL  ║
+╚═══════════════════════════════════════════════════════════════╝
+${_rawOcr}
+
+⚠️ REGLA ABSOLUTA: Cada material/componente de la lista anterior DEBE aparecer en mat[] del APU.
+   Si es una medida → usarla para calcular cantidades.
+   Si es un material (foam, policarbonato, acrílico, vinil, etc.) → incluirlo en mat[] con q y p calculados.
+   CERO excepciones — si está en la lista, va en el APU.`;
+                        }
+                    }
+                } catch(e) { console.warn('[RegenIA OCR] falló:', e.message); }
+            }
+
+            // ══════════════════════════════════════════════════════
+            // FASE 2 — GENERAR APU usando las etiquetas OCR como
+            // lista fija de componentes obligatorios
+            // ══════════════════════════════════════════════════════
+            btn.innerHTML = `<i class="ph-bold ph-arrows-clockwise"></i> Generando APU...`;
             const _regenParts = [];
             if (_regenImgParts.length > 0) {
-                _regenParts.push({ text: `IMÁGENES DEL ÍTEM (${_regenImgParts.length} adjuntas):
-INSTRUCCIÓN CRÍTICA: Antes de generar el JSON, leé TODOS los textos escritos en las imágenes.
-Cada etiqueta, flecha o nota = un componente que DEBE aparecer en "_components" y en el APU.
-NO omitas ningún texto visible. Leé TODO lo que esté escrito en el plano.` });
+                _regenParts.push({ text: `PLANOS ADJUNTOS (${_regenImgParts.length} imágenes) — usá las cotas numéricas para calcular dimensiones y cantidades:` });
                 _regenImgParts.forEach(function(_ip, _ii) {
-                    _regenParts.push({ text: `=== IMAGEN ${_ii + 1} — transcribí TODOS los textos y etiquetas visibles ===` });
+                    _regenParts.push({ text: `--- Imagen ${_ii + 1} ---` });
                     _regenParts.push(_ip);
                 });
-                _regenParts.push({ text: `=== FIN IMÁGENES — RECORDATORIO: "_components" debe listar TODOS los textos que viste escritos arriba ===` });
+                _regenParts.push({ text: `--- Fin imágenes ---` });
             }
-            _regenParts.push({ text: _regenFullPrompt });
+            _regenParts.push({ text: _regenFullPrompt + _ocrBlock });
 
             const resp = await fetch(_regenUrl, {
                 method: 'POST', headers,
