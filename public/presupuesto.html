@@ -2645,7 +2645,7 @@
 ESTRUCTURA OBLIGATORIA:
 {"desc":"string","cant":1,"und":"glb|m2|ml|pza","feat":"- Línea 1\\n- Línea 2\\n- Línea 3\\n- Línea 4","apu":{"mat":[{"d":"NOMBRE","u":"unidad","q":número,"p":número}],"mo":[{"d":"TIPO OPERARIO trabajo","u":"m2|jornal","q":número,"p":número}],"eq":[],"sub":[]},"util":50,"ind":10}
 
-feat: 4–8 líneas para el cliente. Incluí dimensiones del ítem. PROHIBIDO en feat: ml calculados, cantidades de remaches, mermas, fórmulas, precios.
+feat: 3-4 líneas, puntual y técnico. Incluí dimensiones. PROHIBIDO: ml calculados, remaches, mermas, fórmulas, precios, texto largo o redundante.
 apu: usar campos exactos d,u,q,p (no "item","prec" ni otros).
 util=50, ind=10 siempre como enteros.
 Múltiples piezas → calculá cada grupo por separado: "2×(1.45×0.51) + 2×(1.45×0.28) = 1.48 + 0.81 = 2.29 m²".
@@ -2712,10 +2712,10 @@ PASO 5 — VERIFICACIÓN:
   ¿Las cantidades son coherentes con las dimensiones? ¿El precio final es razonable para el mercado boliviano?
   Variación respecto a presupuesto manual experto: máximo ±2%.
 
-PASO 6 — feat PARA EL CLIENTE (4-8 líneas):
-  Describí el ítem para el cliente: materiales principales, acabado, dimensiones generales.
-  OBLIGATORIO: incluir las dimensiones totales del plano (ej: "1.45m × 0.51m × 0.28m").
-  PROHIBIDO en feat: ml de insumos, remaches, mermas, fórmulas, precios, cálculos intermedios.
+PASO 6 — feat PARA EL CLIENTE (3-4 líneas, puntual y técnico):
+  Máximo 4 líneas cortas. Formato: material principal + dimensión + acabado + extra relevante (si aplica).
+  OBLIGATORIO: dimensiones totales en la primera o segunda línea (ej: "1.45m × 0.51m × 0.28m").
+  PROHIBIDO: texto largo, repetición, ml de insumos, remaches, mermas, fórmulas, precios.
 
 PASO 7 — JSON FINAL:
   Devolvé SOLO este array (sin texto antes ni después, sin markdown):
@@ -3608,9 +3608,9 @@ PASO 5 — VERIFICAR CONSISTENCIA:
   Si el mismo ítem se cotizara 3 veces con el mismo proceso → el precio debería variar máximo 10%.
 
 PASO 6 — GENERAR feat PARA EL CLIENTE:
-  4 a 8 líneas describiendo QUÉ ES el ítem para el cliente:
-  materialidad principal, acabado, dimensiones generales, iluminación si aplica.
-  PROHIBIDO en feat: cantidades exactas de insumos, ml calculados, remaches, mermas, fórmulas.
+  3 a 4 líneas cortas y técnicas. Material principal + dimensiones + acabado + iluminación si aplica.
+  NADA más. Sin texto redundante. Sin explicaciones largas.
+  PROHIBIDO en feat: cantidades de insumos, ml calculados, remaches, mermas, fórmulas.
 
 PASO 7 — DEVOLVER JSON:
   Solo después de completar los pasos anteriores, generar el array JSON.
@@ -4017,10 +4017,10 @@ CAMPOS OBLIGATORIOS por ítem:
   PROHIBIDO: dos objetos con desc idéntico.
 - "cant": número — cantidad exacta indicada por el usuario
 - "und": string — unidad (glb, m2, ml, pza, etc.)
-- "feat": string — OBLIGATORIO, NUNCA vacío. Descripción orientada AL CLIENTE. Cada línea empieza con "- ". Mínimo 4 líneas, máximo 8 líneas.
-  ✅ Incluir: qué es el ítem, materiales principales (sin cantidades), acabado superficial, dimensiones totales exactas del plano, dimensión del hueco/apertura si aplica, profundidad si es estructura tipo cajón.
-  ❌ PROHIBIDO en feat: metros lineales de insumos, perímetros calculados, cantidad de remaches/barras/costillas, mermas, fórmulas, cálculos intermedios, precios. Todo eso va en el APU.
-  ✅ Ej correcto: "- Bastidor tubín 20×20mm, 3.00m × 2.00m\\n- Lona backlight impresa digitalmente\\n- Acabado pintura duco\\n- Neon flex RGB perimetral"
+- "feat": string — OBLIGATORIO, NUNCA vacío. 3 a 4 líneas cortas, puntual y técnico. Cada línea empieza con "- ".
+  ✅ Incluir: material principal + dimensiones totales + acabado + extra relevante (iluminación, apertura, etc.) si aplica.
+  ❌ PROHIBIDO: texto largo, repetición, ml de insumos, remaches, mermas, fórmulas, precios, cálculos. Todo eso va en el APU.
+  ✅ Ej correcto: "- Bastidor tubín 20×20mm — 3.00×2.00m\\n- Lona backlight impresa una cara\\n- Neon flex RGB perimetral\\n- Pintura duco anticorrosivo"
   ❌ Ej PROHIBIDO: "- Tubin: 39.4 ml\\n- Remaches: 180 pzas\\n- Área lona: 13.2m2 × 1.08 = 14.26m2"
 - "apu": objeto con mat, mo, eq, sub como arrays
   - mat: [{"d":"NOMBRE MATERIAL","u":"und","q":1,"p":0}]
@@ -5966,9 +5966,9 @@ CAMPOS OBLIGATORIOS:
 - desc: string con nombre técnico del ítem
 - cant: número
 - und: string (glb, m2, ml, pza, etc.)
-- feat: string con características orientadas AL CLIENTE. Cada línea empieza con "- " y separadas por \\n. OBLIGATORIO, mínimo 4 líneas, máximo 8 líneas.
-  ✅ feat incluye SOLO: qué es el ítem, materiales principales (sin cantidades exactas), acabado, dimensiones generales.
-  ❌ feat NUNCA incluye: metros lineales, perímetros calculados, cantidades de remaches/barras/costillas, mermas, fórmulas, cálculos intermedios, precios.
+- feat: string. 3-4 líneas cortas y técnicas. Cada línea empieza con "- " y separadas por \\n. OBLIGATORIO.
+  ✅ feat: material principal + dimensiones + acabado + detalle relevante (máx 4 líneas).
+  ❌ PROHIBIDO: ml de insumos, remaches, mermas, fórmulas, precios, texto largo o redundante.
 - apu: objeto con mat, mo, eq, sub como arrays de {d, u, q, p} donde p es el precio numérico
 - util: 50 (entero)
 - ind: 10 (entero)
@@ -6006,7 +6006,7 @@ PROCESO OBLIGATORIO ANTES DE GENERAR EL JSON:
 ② BASE DE DATOS: Para cada material/MO, buscá primero en el catálogo Rubik. Usá ese precio exacto.
 ③ APU: Solo materiales de ESTE ítem específico.
 ④ VERIFICACIÓN: ¿Las cantidades son coherentes con las dimensiones?
-⑤ feat: 4-8 líneas para el cliente. Incluí dimensiones totales. Sin cálculos internos ni cantidades de insumos.
+⑤ feat: 3-4 líneas, puntual y técnico. Incluí dimensiones totales. Sin cálculos, sin insumos, sin texto largo.
 ⑥ RECIÉN AHÍ: Generar el JSON.
 
 Devolvé exactamente este formato (sin texto adicional):
