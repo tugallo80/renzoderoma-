@@ -2814,11 +2814,18 @@ util=50, ind=10 siempre (enteros).`;
                     _ocrParts.push({ text: `=== IMAGEN ${_ii + 1} ===` });
                     _ocrParts.push(_ip);
                 });
-                _ocrParts.push({ text: `Encontrá y transcribí CADA texto escrito en estas imágenes.
-Escribí una lista numerada — nada más.
-Incluí TODO sin excepción: etiquetas de materiales, medidas con unidades, nombres de productos, cantidades, notas.
+                _ocrParts.push({ text: `TAREA OCR — planos técnicos de señalética. Transcribí ABSOLUTAMENTE CADA texto visible.
 
-Ejemplo de lo que esperamos:
+PRIORIDAD MÁXIMA — no omitir nunca:
+• Etiquetas de materiales con flecha/callout (ej: "Foam + Adhesivos", "Flejes de policarbonato", "letras acrílico negro")
+• Dimensiones y cotas (ej: "145 cm", "50cm x 3.7cm", "5.4cm × 1.7cm")
+• Nombres de componentes decorativos o logos (ej: "OJOS", "ROSTRO", "ASTRA")
+• Cantidades explícitas (ej: "5 Flejes", "2mm")
+• Cualquier texto en callouts, globos, flechas indicadoras o notas marginales
+
+FORMATO: lista numerada solamente. Sin texto extra antes ni después.
+
+Ejemplo del tipo de texto a capturar:
 1. letras sueltas en acrílico negro 2mm
 2. 5 Flejes de policarbonato 50cm x 3.7cm
 3. Revestimiento de toda la cabecera Foam + Adhesivos
@@ -2826,18 +2833,18 @@ Ejemplo de lo que esperamos:
 5. 51 cm
 6. 28 cm
 7. Acrílico Blanco 2mm + letras troqueladas en adhesivo negro
-8. OJOS 5.4cm x 1.7cm
-9. ROSTRO 8.9cm x 1.7cm
+8. OJOS 5.4cm x 1.7cm → 12.3cm
+9. ROSTRO 8.9cm x 1.7cm → 12.3cm
 10. ASTRA 22.8cm x 6.4cm
 
-Ahora listá TODO el texto visible en las imágenes:` });
+Lista COMPLETA de todo el texto visible en las imágenes:` });
 
                 try {
                     const _reOcr = await fetch(_regenUrl, {
                         method: 'POST', headers,
                         body: JSON.stringify({
                             model: 'gemini-2.5-pro',
-                            systemInstruction: { parts: [{ text: 'Sos un sistema OCR experto. Tu única tarea: encontrar y listar CADA texto visible en las imágenes. Sin describir, sin interpretar — solo transcribir exactamente lo que está escrito, incluyendo etiquetas pequeñas, flechas, notas marginales y medidas.' }] },
+                            systemInstruction: { parts: [{ text: 'Sos un sistema OCR experto en planos técnicos de señalética y publicidad. Tu única tarea: encontrar y listar CADA texto visible, priorizando etiquetas de materiales (foam, policarbonato, acrílico, flejes, adhesivos, vinil), cotas numéricas, nombres de componentes decorativos y anotaciones de diseño. Sin describir ni interpretar — solo transcribir exactamente lo que está escrito, incluyendo etiquetas pequeñas, flechas con callout, notas marginales y medidas con unidades.' }] },
                             contents: [{ role: 'user', parts: _ocrParts }],
                             generationConfig: { maxOutputTokens: 2000, temperature: 0.0 },
                             advancedModel: true
@@ -2848,15 +2855,16 @@ Ahora listá TODO el texto visible en las imágenes:` });
                         const _rawOcr = (_dOcr?.candidates?.[0]?.content?.parts?.[0]?.text || '').trim();
                         console.log('[RegenIA OCR] textos detectados:\n', _rawOcr);
                         if (_rawOcr) {
-                            _ocrBlock = `\n\n╔═══════════════════════════════════════════════════════════════╗
+                            _ocrBlock = `╔═══════════════════════════════════════════════════════════════╗
 ║   ETIQUETAS LEÍDAS DEL PLANO — CADA UNA ES UN COMPONENTE REAL  ║
 ╚═══════════════════════════════════════════════════════════════╝
 ${_rawOcr}
 
-⚠️ REGLA ABSOLUTA: Cada material/componente de la lista anterior DEBE aparecer en mat[] del APU.
-   Si es una medida → usarla para calcular cantidades.
-   Si es un material (foam, policarbonato, acrílico, vinil, etc.) → incluirlo en mat[] con q y p calculados.
-   CERO excepciones — si está en la lista, va en el APU.`;
+🔴 REGLA #0 — ANTES DE CALCULAR, MAPEÁ CADA LÍNEA DE ARRIBA A UN ÍTEM EN mat[]:
+   • Si es un material → mat[] con q calculada y p de mercado boliviano
+   • Si es una medida o cota → usarla para calcular q de otros materiales
+   • Si es un componente decorativo (letra, logo, pieza) → mat[] como pieza individual
+   CERO excepciones — si está en la lista, va en el APU. Omitir cualquier ítem = error grave.`;
                         }
                     }
                 } catch(e) { console.warn('[RegenIA OCR] falló:', e.message); }
@@ -2876,7 +2884,12 @@ ${_rawOcr}
                 });
                 _regenParts.push({ text: `--- Fin imágenes ---` });
             }
-            _regenParts.push({ text: _regenFullPrompt + _ocrBlock });
+            // Inyectar OCR block ANTES del prompt APU para que la referencia "(arriba)" sea correcta.
+            // El modelo lee la lista de materiales primero, antes de ver las instrucciones de PASO 1.
+            const _finalRegenText = _ocrBlock
+                ? _ocrBlock.trim() + '\n\n' + _regenFullPrompt
+                : _regenFullPrompt;
+            _regenParts.push({ text: _finalRegenText });
 
             const resp = await fetch(_regenUrl, {
                 method: 'POST', headers,
