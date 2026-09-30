@@ -2640,41 +2640,17 @@
             const _puActual = parseFloat(data[idx]?.pu) || 0;
             const _puRef = _puActual > 0 ? `Precio anterior de referencia: ${_puActual.toFixed(2)} Bs/u (si tu cálculo difiere más del 30%, revisá las cantidades).` : '';
 
-            const sysPrompt = `⛔ PROHIBICIÓN ABSOLUTA — ESTIMACIÓN POR PROPORCIÓN:
-Si CUALQUIER imagen adjunta contiene valores numéricos etiquetados (ej: "4,46x4,34", "2,65×4,37", "3.50m"), USÁLOS EXACTAMENTE como medidas reales del ítem. ESTÁ TERMINANTEMENTE PROHIBIDO escribir "dimensiones estimadas por proporción" cuando hay medidas visibles. Buscá primero TODOS los valores numéricos en las imágenes antes de calcular nada. Si la imagen es una foto o render con dimensiones anotadas → esas dimensiones son EXACTAS. NUNCA escribas "estimado por proporción" ni "según proporción" cuando hay valores en la imagen.
+            const sysPrompt = `Sos el estimador de costos APU de Rubik Bolivia. Respondé SOLO con un array JSON válido de exactamente UN ítem. Sin texto antes ni después. Sin markdown. Sin comentarios dentro del JSON.
 
-REGLA ABSOLUTA: Responde SOLO con un array JSON válido de exactamente UN ítem. Sin texto antes ni después. Sin markdown. Sin comentarios dentro del JSON.
-CAMPOS OBLIGATORIOS:
-- desc: string con nombre técnico del ítem
-- cant: número
-- und: string (glb, m2, ml, pza, etc.)
-- feat: string con características orientadas AL CLIENTE. Cada línea empieza con "- " y separadas por \\n. OBLIGATORIO, mínimo 4 líneas, máximo 8 líneas.
-  ✅ feat incluye SOLO: qué es el ítem, materiales principales (sin cantidades exactas), acabado, dimensiones generales, tipo de iluminación si lleva.
-  ❌ feat NUNCA incluye: metros lineales, perímetros calculados, cantidades de remaches/barras/costillas, mermas, fórmulas, cálculos intermedios, precios, ni ningún dato de producción.
-  EJEMPLO CORRECTO: "- Bastidor tubín 20×20mm, 6.00m × 2.20m\\n- Lona backlight impresa digitalmente\\n- Neon flex RGB perimetral\\n- Letras corpóreas \\"72H\\" en foam 3mm con neon en cantos\\n- Pedestal cilíndrico forrado en foam con adhesivo impreso"
-  EJEMPLO INCORRECTO (PROHIBIDO): "- Tubin total: 39.40 ml\\n- Remaches: 180 pzas\\n- Área lona: 13.20m2 × 1.08 = 14.26m2" ← esto es para el APU, no para el cliente.
-- apu: objeto con mat, mo, eq, sub como arrays de {d, u, q, p} donde p es el precio numérico
-- util: 50 (entero)
-- ind: 10 (entero)
-IMPORTANTE: En los objetos de apu usar EXACTAMENTE los campos d, u, q, p (no usar "item", "pz", "prec" ni otros nombres).
+ESTRUCTURA OBLIGATORIA:
+{"desc":"string","cant":1,"und":"glb|m2|ml|pza","feat":"- Línea 1\\n- Línea 2\\n- Línea 3\\n- Línea 4","apu":{"mat":[{"d":"NOMBRE","u":"unidad","q":número,"p":número}],"mo":[{"d":"TIPO OPERARIO trabajo","u":"m2|jornal","q":número,"p":número}],"eq":[],"sub":[]},"util":50,"ind":10}
+
+feat: 4–8 líneas para el cliente. Incluí dimensiones del ítem. PROHIBIDO en feat: ml calculados, cantidades de remaches, mermas, fórmulas, precios.
+apu: usar campos exactos d,u,q,p (no "item","prec" ni otros).
+util=50, ind=10 siempre como enteros.
+Múltiples piezas → calculá cada grupo por separado: "2×(1.45×0.51) + 2×(1.45×0.28) = 1.48 + 0.81 = 2.29 m²".
 ${_puRef}
-
-CÁLCULO DE ÁREAS — REGLA CRÍTICA:
-Cuando el usuario describe MÚLTIPLES PIEZAS con dimensiones, calculá CADA grupo por separado:
-  "2 piezas de 11m×1.2m y 2 de 9m×1.2m" → (2×11×1.2) + (2×9×1.2) = 26.4 + 21.6 = 48 m2
-NUNCA uses solo el ancho de una pieza cuando hay varias — multiplicá siempre por la cantidad de cada grupo.
-Mostrá el desglose en feat: "- Área: (2×11×1.2) + (2×9×1.2) = 48 m2 + 8% merma tensado = 51.8 m2"
-
-⚠️ IMÁGENES CAD/SKETCHUP — LECTURA DE DIMENSIONES:
-Las etiquetas numéricas en las imágenes CAD adjuntas son la fuente de verdad. Léélas con atención — pueden ser cotas en cm o metros.
-Si el usuario especifica la unidad (ej: "medidas en cm") → convertí a metros antes de calcular.
-Si no especifica → inferí por sentido: alturas típicas de muros son 2.4–3.2 m, locales 3–6 m. Si el valor directo no es coherente, probá ÷100.
-CALCULA CADA CARA Y SEGMENTO DE MURO POR SEPARADO. No sumes solo un lado si hay múltiples tramos.
-En feat: describí las dimensiones finales en metros de forma natural. Ej: "- Muro doble cara: 5.60m × 2.40m = 13.44 m²".
-NUNCA escribas en feat "dimensiones leídas de imagen" ni "imagen leída en cm" — eso no es información para el cliente.
-
-⚠️ COTIZACIONES DE PROVEEDOR ADJUNTAS:
-Si hay imágenes de cotizaciones o listas de precios adjuntas, extraé los precios exactos de ahí y usalos en el APU para esos materiales específicos (tienen prioridad sobre el catálogo Rubik).`;
+⚠️ COTIZACIÓN DE PROVEEDOR adjunta: extraé los precios exactos y usalos en el APU (prioridad sobre catálogo).`;
 
 
             // Obtener nombre del ítem desde el input oculto
@@ -2695,38 +2671,58 @@ Si hay imágenes de cotizaciones o listas de precios adjuntas, extraé los preci
             } catch(e) {}
 
             const userPrompt = `ERES EL ESTIMADOR DE COSTOS APU DE RUBIK BOLIVIA — empresa de señalética, bastidores, stands y publicidad física en Santa Cruz, Bolivia.
-BASE DE DATOS DE PRECIOS:
-  Materiales: ${catalogoMat || '(usá precios de mercado Santa Cruz)'}
-  Mano de obra: ${catalogoMo || '(usá tarifas de mercado Santa Cruz)'}
+
+BASE DE DATOS RUBIK:
+  Materiales: ${catalogoMat || '(usá precios promedio de mercado Santa Cruz — nunca mínimo ni máximo)'}
+  Mano de obra: ${catalogoMo || '(tarifas de mercado Santa Cruz)'}
 ${_reglasTextoRegen}
-Ítem a cotizar: ${_itemNombre}
-Instrucciones específicas: ${_cleanPrompt}
 
-PROCESO OBLIGATORIO ANTES DE GENERAR EL JSON:
-⓪ IMÁGENES — PASO PREVIO CRÍTICO: Revisá TODAS las imágenes adjuntas (no solo la primera). Por cada imagen, anotá mentalmente todos los valores numéricos etiquetados (ej: "0,75x4,46", "2×4,46 x2", "7×3,57"). Si una imagen tiene "x2" → esa pieza existe en 2 caras/lados → multiplicá por 2. Sumá las áreas de TODAS las imágenes para el total.
-① PLANO CAD: Si hay imagen con cotas numéricas anotadas → leé TODAS las cotas visibles (son las ÚNICAS medidas válidas, NUNCA las inventes). Para cotas implícitas calculalas: ej. apertura = total − faja superior − faja inferior. Usá esos valores exactos en feat y en cálculos del APU.
-② LEER: ¿Qué incluye ESTE ítem específicamente? Solo los componentes mencionados en nombre + prompt + imagen.
-③ GEOMETRÍA: Calculá áreas, perímetros y ml según las dimensiones del plano. Cada cantidad del APU sale de un cálculo real.
-④ BASE DE DATOS: Para cada material/MO, buscá primero en el catálogo Rubik. Usá ese precio exacto. Si no está, usá precio de mercado boliviano.
-⑤ APU: Solo materiales de ESTE ítem. Si el ítem es un bastidor → no meter foam de letras. Si es letras → no meter lona ni tubín de bastidor.
-⑥ VERIFICACIÓN: ¿Las cantidades son coherentes con las dimensiones del plano?
-⑦ feat: 4-8 líneas para el cliente. Incluí dimensiones totales exactas del plano. Sin cálculos, sin ml de insumos, sin remaches ni mermas.
-⑧ RECIÉN AHÍ: Generar el JSON.
+ÍTEM A COTIZAR: ${_itemNombre}
+INSTRUCCIONES DEL USUARIO: ${_cleanPrompt}
 
-No cambies el nombre del ítem — el desc lo pone el usuario.
+═══════════════════════════════════════════════════════════
+PROCESO DE CÁLCULO — SEGUÍ EN ORDEN ESTRICTO:
+═══════════════════════════════════════════════════════════
 
-REGLA MANO DE OBRA — CRÍTICA: Cada rubro MO lleva su tipo ESPECÍFICO: SOLDADOR, TENSADOR, INSTALADOR, PINTOR, CORTADOR, ARMADOR, CARPINTERO, MASILLADOR, etc. NUNCA usar "Mano de obra" genérico.
-REGLA UNIDADES MATERIAL — CRÍTICA: Si el catálogo da precio por "barra" (tubería 6ml, ángulo 6ml), "rollo", "pliego" o "lámina", la cantidad en el APU va en esa unidad. Calculá cuántas barras/rollos/pliegos/láminas necesita el ítem. Ej: si necesitás 12ml de tubín y la barra es 6ml → q=2 barras. Si el usuario dice "8 láminas de MDF" → q=8 láminas con precio por lámina. NUNCA poner q=área_total con precio por lámina.
-REGLA CÁLCULO OBLIGATORIO — PASO A PASO: Antes de asignar cualquier cantidad, calculá explícitamente:
-  1. Mediciones → geometría exacta (área m², perímetro ml, volumen m³)
-  2. Cantidad de material = medida ÷ rendimiento por unidad (ej: láminas MDF 1.22×2.44 = 2.98m² c/u)
-  3. Mano de obra = área o perímetro × rendimiento del oficio
-  4. Verificar: precio_total_APU ÷ util_factor ≈ PU final coherente con el mercado
-REGLA MDF ESPECÍFICA: Una lámina MDF estándar mide 1.22×2.44m = 2.98m². Si el usuario indica N láminas → area = N × 2.98m². Si indica dimensiones diferentes → calcular esa área. Masillado/sellado/lijado = jornal de MASILLADOR. Instalación = jornal de CARPINTERO/INSTALADOR.
-REGLA ADHESIVO IMPRESO: Si pide "adhesivo impreso" o "vinilo impreso" sobre superficie → calcular m² de superficie × precio por m² de impresión (incluir laminado).
+PASO 1 — DEFINIR ALCANCE:
+  ¿Qué incluye ESTE ítem? Solo los componentes mencionados en nombre + instrucciones + medidas del plano.
+  Lista los materiales/trabajos: [máx 8 ítems].
+  Si el usuario pidió SOLO revestimiento → NO agregar estructura nueva.
+  Si el usuario pidió SOLO fabricación nueva → NO incluir materiales de revestimiento.
 
-Devolvé exactamente este formato (sin texto adicional):
-[{"desc":"NOMBRE TÉCNICO","cant":1,"und":"glb","feat":"- Estructura tubín 20×20×0.8mm soldado\\n- Enchapado MDF 9mm en ambas caras (8 láminas 175×260cm = 36.4m²)\\n- Masillado, sellado y lijado de uniones\\n- Adhesivo impreso en ambas caras\\n- Paneles individuales modulares","apu":{"mat":[{"d":"TUBIN 20X20X0.8","u":"barra","q":5,"p":45},{"d":"LAMINA MDF 9mm 175x260","u":"lám","q":8,"p":320},{"d":"MASILLA INTERIOR","u":"kg","q":4,"p":18},{"d":"ADHESIVO VINILO IMPRESO","u":"m2","q":36,"p":65}],"mo":[{"d":"SOLDADOR estructura tubín","u":"jornal","q":2,"p":250},{"d":"CARPINTERO enchapado MDF","u":"jornal","q":3,"p":180},{"d":"MASILLADOR uniones","u":"jornal","q":1,"p":150},{"d":"ROTULISTA adhesivo impreso","u":"m2","q":36,"p":20}],"eq":[],"sub":[]},"util":50,"ind":10}]`;
+PASO 2 — CÁLCULO GEOMÉTRICO (con las medidas del plano adjuntas abajo):
+  Para CADA material de PASO 1, calculá la cantidad con fórmula explícita:
+    • Área rectangular: base(m) × alto(m) = X m²
+    • Ml de tubo/perfil: suma de segmentos
+    • Piezas: cantidad × dimensión unitaria
+    • Conversión a unidad de catálogo: X m² ÷ Y m²/lámina = Z láminas
+  REGLA MDF: 1 lámina = 1.22 × 2.44 = 2.98 m².
+  REGLA TUBIN: 1 barra = 5.8 ml. Barras = ceil(ml_total / 5.8).
+  REGLA ADHESIVO/VINILO IMPRESO: cantidad = m² de superficie a cubrir.
+
+PASO 3 — PRECIOS DE CATÁLOGO:
+  Para cada ítem de PASO 1 → buscar en catálogo Rubik → usar precio exacto y unidad del catálogo.
+  Si no está en catálogo → precio promedio de mercado boliviano (nunca mínimo ni máximo del rango).
+
+PASO 4 — MANO DE OBRA:
+  Cada rubro MO lleva tipo específico: SOLDADOR, TENSADOR, PINTOR, CORTADOR, CARPINTERO, MASILLADOR, ROTULISTA, INSTALADOR.
+  NUNCA "Mano de obra genérica".
+
+PASO 5 — VERIFICACIÓN:
+  ¿Las cantidades son coherentes con las dimensiones? ¿El precio final es razonable para el mercado boliviano?
+  Variación respecto a presupuesto manual experto: máximo ±2%.
+
+PASO 6 — feat PARA EL CLIENTE (4-8 líneas):
+  Describí el ítem para el cliente: materiales principales, acabado, dimensiones generales.
+  OBLIGATORIO: incluir las dimensiones totales del plano (ej: "1.45m × 0.51m × 0.28m").
+  PROHIBIDO en feat: ml de insumos, remaches, mermas, fórmulas, precios, cálculos intermedios.
+
+PASO 7 — JSON FINAL:
+  Devolvé SOLO este array (sin texto antes ni después, sin markdown):
+  [{"desc":"NOMBRE TÉCNICO","cant":1,"und":"glb","feat":"- Línea 1\\n- Línea 2","apu":{"mat":[{"d":"NOMBRE MAT","u":"unidad","q":X,"p":Y}],"mo":[{"d":"TIPO OPERARIO trabajo","u":"m2|jornal","q":X,"p":Y}],"eq":[],"sub":[]},"util":50,"ind":10}]
+
+No cambies el nombre del ítem (desc = nombre que puso el usuario).
+util=50, ind=10 siempre (enteros).`;
 
             // Enrich prompt and parts with per-item ctx context
             let _regenFullPrompt = userPrompt;
@@ -2798,25 +2794,89 @@ Devolvé exactamente este formato (sin texto adicional):
             if (_regenImgParts.length < _allItemImgs.length) {
                 console.warn('[RegenIA] ATENCIÓN: se perdieron', _allItemImgs.length - _regenImgParts.length, 'imagen(es) en la conversión');
             }
-            btn.innerHTML = `<i class="ph-bold ph-arrows-clockwise"></i> Generando... (${_regenImgParts.length} img)`;
-
-            // Intercalar etiquetas con cada imagen para que el modelo procese cada una por separado
-            const _regenParts = [];
-            if (_regenImgParts.length > 0) {
-                _regenParts.push({ text: `HAY ${_regenImgParts.length} IMAGEN(ES) ADJUNTA(S). Procesá CADA imagen de forma INDEPENDIENTE y extraé sus dimensiones numéricas antes de continuar:` });
-                _regenImgParts.forEach(function(_ip, _ii) {
-                    _regenParts.push({ text: `=== IMAGEN ${_ii + 1} DE ${_regenImgParts.length} === Extraé TODOS los valores numéricos visibles en esta imagen:` });
-                    _regenParts.push(_ip);
-                });
-                _regenParts.push({ text: `=== FIN DE IMÁGENES === Ahora usá las dimensiones de TODAS las imágenes anteriores para calcular el APU.` });
-            }
-            _regenParts.push({ text: _regenFullPrompt });
-
             const token = firebase.auth().currentUser ? await firebase.auth().currentUser.getIdToken() : null;
             const headers = { 'Content-Type': 'application/json' };
             if(token) headers['Authorization'] = 'Bearer ' + token;
-
             const _regenUrl = '/api/gemini';
+
+            // ══════════════════════════════════════════════════════
+            // FASE 1 — EXTRACCIÓN DE MEDIDAS Y MATERIALES DEL PLANO
+            // Solo si hay imágenes adjuntas. Llamada dedicada únicamente
+            // a leer las imágenes — sin calcular ni generar APU todavía.
+            // ══════════════════════════════════════════════════════
+            let _extractedCtx = '';
+            if (_regenImgParts.length > 0) {
+                btn.innerHTML = `<i class="ph-bold ph-scan"></i> Fase 1/2: leyendo planos... (${_regenImgParts.length} img)`;
+                const _extractParts = [];
+                _regenImgParts.forEach(function(_ip, _ii) {
+                    _extractParts.push({ text: `=== IMAGEN ${_ii + 1} ===` });
+                    _extractParts.push(_ip);
+                });
+                _extractParts.push({ text: `Ítem: "${_itemNombre}"
+
+Analizá TODAS las imágenes anteriores. Extraé ÚNICAMENTE lo que está escrito o dibujado en ellas — sin inventar nada.
+
+PASO A — DIMENSIONES: Por cada medida numérica visible (cota, etiqueta, acotación):
+  Anotá: qué parte mide, el valor exacto, y la unidad (cm / m / mm).
+  Si hay "×N" → indicá la cantidad de veces.
+  Si la unidad no está escrita → anotá el valor tal como aparece y marcá "unidad: ?" .
+
+PASO B — MATERIALES Y COMPONENTES: Listá TODOS los materiales/técnicas mencionados en textos, flechas o etiquetas de las imágenes.
+
+PASO C — CANTIDADES EXPLÍCITAS: Cualquier "N unidades", "×N" o conteo visible.
+
+Devolvé SOLO este JSON (sin texto antes ni después, sin markdown):
+{"dims":[{"parte":"nombre_parte","valor":"X.XX","unidad":"cm","mult":1}],"mats":["material 1","material 2"],"cnts":["5 flejes 50×3.7cm"],"notas":"observaciones relevantes del plano"}` });
+
+                try {
+                    const _re1 = await fetch(_regenUrl, {
+                        method: 'POST', headers,
+                        body: JSON.stringify({
+                            model: 'gemini-2.5-flash',
+                            systemInstruction: { parts: [{ text: 'Sos un técnico que extrae cotas y materiales de planos. Devolvé SOLO el JSON solicitado.' }] },
+                            contents: [{ role: 'user', parts: _extractParts }],
+                            generationConfig: { maxOutputTokens: 3000, temperature: 0.0 },
+                            advancedModel: true
+                        })
+                    });
+                    if (_re1.ok) {
+                        const _d1 = await _re1.json();
+                        const _raw1 = (_d1?.candidates?.[0]?.content?.parts?.[0]?.text || '').replace(/```json|```/g,'').trim();
+                        console.log('[RegenIA F1] extracción:', _raw1.substring(0, 500));
+                        const _js = _raw1.indexOf('{'), _je = _raw1.lastIndexOf('}');
+                        if (_js !== -1 && _je !== -1) {
+                            const _ex = JSON.parse(_raw1.slice(_js, _je+1));
+                            const _dimsLines = (_ex.dims || []).map(d =>
+                                `  • ${d.parte}: ${d.valor} ${d.unidad}${(d.mult && d.mult > 1) ? ' × '+d.mult : ''}`).join('\n');
+                            const _matsLine = (_ex.mats || []).join(' | ');
+                            const _cntsLine = (_ex.cnts || []).join(' | ');
+                            _extractedCtx = `
+
+╔═══════════════════════════════════════════════════════════════╗
+║   MEDIDAS EXACTAS LEÍDAS DEL PLANO — USAR SIN MODIFICAR       ║
+╚═══════════════════════════════════════════════════════════════╝
+DIMENSIONES:
+${_dimsLines || '  (no se encontraron cotas numéricas)'}
+
+MATERIALES VISIBLES EN PLANO: ${_matsLine || '(no indicados)'}
+CANTIDADES INDICADAS:         ${_cntsLine || '(no indicadas)'}
+NOTAS DEL PLANO:              ${_ex.notas || '-'}
+
+⚠️ OBLIGATORIO: Calculá TODAS las cantidades del APU a partir de estas medidas.
+   Si una dimensión no está en la lista → NO la inventés — usá el valor más cercano disponible.
+   Mostrá cada cálculo en feat: "- Área frontal: 1.45 × 0.51 = 0.74 m²"`;
+                        }
+                    }
+                } catch(e) { console.warn('[RegenIA F1] falló extracción:', e.message); }
+            }
+
+            // ══════════════════════════════════════════════════════
+            // FASE 2 — GENERAR APU con medidas ya extraídas
+            // Las imágenes NO se reenvían — el modelo trabaja solo
+            // con el texto de dimensiones de la Fase 1.
+            // ══════════════════════════════════════════════════════
+            btn.innerHTML = `<i class="ph-bold ph-arrows-clockwise"></i> Fase 2/2: calculando APU...`;
+            const _regenParts = [{ text: _regenFullPrompt + _extractedCtx }];
 
             const resp = await fetch(_regenUrl, {
                 method: 'POST', headers,
@@ -2824,7 +2884,7 @@ Devolvé exactamente este formato (sin texto adicional):
                     model: 'gemini-2.5-flash',
                     systemInstruction: { parts: [{ text: sysPrompt }] },
                     contents: [{ role: 'user', parts: _regenParts }],
-                    generationConfig: { maxOutputTokens: 16000, temperature: 0.1 },
+                    generationConfig: { maxOutputTokens: 16000, temperature: 0.05 },
                     advancedModel: true
                 })
             });
@@ -3918,10 +3978,13 @@ F3. MATERIALES POR PIEZAS COMPLEJAS — preguntar si no se especifica:
         }
 
         // 4. sysPrompt + envío en batches de 5 ítems
-        const _sysPrompt = `⛔ PROHIBICIÓN ABSOLUTA — ESTIMACIÓN POR PROPORCIÓN:
-Si CUALQUIER imagen adjunta contiene valores numéricos etiquetados (ej: "4,46x4,34", "2,65×4,37", "3.50m"), USÁLOS EXACTAMENTE como medidas reales del ítem. ESTÁ TERMINANTEMENTE PROHIBIDO escribir "dimensiones estimadas por proporción" cuando hay medidas visibles. Buscá primero TODOS los valores numéricos en las imágenes antes de calcular nada. Si la imagen es una foto o render con dimensiones anotadas → esas dimensiones son EXACTAS. NUNCA escribas "estimado por proporción" ni "según proporción" cuando hay valores en la imagen.
+        const _sysPrompt = `Sos el estimador APU de Rubik Bolivia. Respondé SOLO con un array JSON válido. Cero texto antes o después. Cero markdown.
 
-REGLA ABSOLUTA: Responde SOLO con un array JSON válido. Cero texto antes o después. Cero markdown.
+PRECISIÓN OBLIGATORIA (margen de error máximo ±2%):
+• Cada cantidad en el APU sale de un cálculo explícito con las dimensiones del ítem.
+• Dimensiones en plano/imagen → convertir a metros → calcular área/ml → convertir a unidad de catálogo.
+• NUNCA inventar dimensiones. Si no hay medidas en el plano → calculá desde las instrucciones del usuario.
+• Verificá que el precio final sea coherente con el mercado boliviano (comparar con ítems similares).
 
 REGLA ANTI-MEZCLA — CRÍTICA CUANDO HAY MÚLTIPLES ÍTEMS:
 Cada ítem del prompt es 100% INDEPENDIENTE. Sus materiales, cantidades, mano de obra y precios son EXCLUSIVOS de ese ítem.
