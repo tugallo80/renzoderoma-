@@ -3892,7 +3892,7 @@ F3. MATERIALES POR PIEZAS COMPLEJAS — preguntar si no se especifica:
 
         // 2. Recolectar datos de todas las filas (preparación antes de enviar)
         const _allRowData = [];
-        const _MAX_IMG_BYTES_ROW = 80000;
+        const _MAX_IMG_BYTES_ROW = 250000;
         for (let index = 0; index < rows.length; index++) {
             const row = rows[index];
             const name = row.querySelector('.ia-inp-name').value.trim();
@@ -3911,9 +3911,9 @@ F3. MATERIALES POR PIEZAS COMPLEJAS — preguntar si no se especifica:
                 const imgEl = rowImages[0];
                 const b64Full = imgEl.src;
                 if (b64Full && b64Full.startsWith('data:')) {
-                    let comp = await _compressB64(b64Full, 300, 0.35);
+                    let comp = await _compressB64(b64Full, 900, 0.65);
                     if (comp.split(',')[1].length > _MAX_IMG_BYTES_ROW) {
-                        comp = await _compressB64(b64Full, 220, 0.28);
+                        comp = await _compressB64(b64Full, 700, 0.55);
                     }
                     compImage = comp;
                 }
@@ -3928,7 +3928,7 @@ F3. MATERIALES POR PIEZAS COMPLEJAS — preguntar si no se especifica:
             const _ctxImg = currentIAImages[0];
             try {
                 const _ctxFull = 'data:' + _ctxImg.mimeType + ';base64,' + _ctxImg.data;
-                const _ctxComp = await _compressB64(_ctxFull, 250, 0.3);
+                const _ctxComp = await _compressB64(_ctxFull, 800, 0.6);
                 _ctxParts.push({ inlineData: { data: _ctxComp.split(',')[1], mimeType: 'image/jpeg' } });
             } catch(_ce) {
                 _ctxParts.push({ inlineData: { data: _ctxImg.data, mimeType: _ctxImg.mimeType } });
@@ -4006,7 +4006,10 @@ Si dos ítems son "adhesivado normal" y "adhesivado de alto tráfico": el primer
 Tratá cada bloque ===INICIO ÍTEM N=== ... ===FIN ÍTEM N=== como un proyecto separado e independiente.
 
 LECTURA DE PLANOS / CAD / RENDERS 3D — OBLIGATORIO:
-Si hay imagen técnica o 3D con cotas:
+Si hay imagen técnica o 3D:
+0. ANTES DE CALCULAR: Transcribí CADA texto, etiqueta, flecha y nota escrita en la imagen.
+   Cada texto = un componente o medida real. NINGUNO puede faltar en el APU.
+   Ejemplos: "Foam + Adhesivos", "5 Flejes de policarbonato 50cm×3.7cm", "letras acrílico negro 2mm", "145 cm".
 1. Lee TODAS las cotas exactamente como aparecen. "945,5" = 945.5 (coma = decimal europeo).
    PRIORIDAD DE FUENTES: Si el cliente anotó medidas explícitas en una imagen de contexto (ej: "Longitud total = 15,03m", "Total 14m"), esas son las medidas reales. Usálas directamente sin recalcular. Las medidas del cliente siempre ganan sobre el cálculo geométrico.
 2. UNIDAD: el prompt indica explícitamente la unidad (busca "UNIDADES CAD"). Aplicá esa conversión. Si dice cm → ×0.01 para metros; si dice mm → ÷1000; si dice m → ya son metros. Un bastidor real mide 0.3m–4m; verificá que tus resultados sean coherentes.
@@ -4111,7 +4114,7 @@ EJEMPLO SIN CAPÍTULOS (menos de 4 ítems):
                     }
                     if (rd.compImage) {
                         _batchParts.push({ inlineData: { data: rd.compImage.split(',')[1], mimeType: 'image/jpeg' } });
-                        _batchText += '-> FOTO ADJUNTA 1 PARA ÍTEM ' + (rd.origIndex+1) + '.\n';
+                        _batchText += '-> PLANO/FOTO PARA ÍTEM ' + (rd.origIndex+1) + ' (imagen adjunta a continuación):\n   OBLIGATORIO: Leé TODOS los textos escritos en esa imagen — etiquetas, flechas, notas, medidas, materiales. Cada texto = componente o medida que DEBE aparecer en el APU de este ítem. NO omitir ninguno.\n';
                     }
                     _batchText += '===FIN ÍTEM ' + (rd.origIndex+1) + '===\n';
                 });
