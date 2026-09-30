@@ -3593,9 +3593,9 @@ ${_rawOcr}
         let parts = [];
 
         // 1. CREAR EL CATÁLOGO DE LA BASE DE DATOS PARA ENVIARSELO A LA IA
-        // Limitar a 150 materiales y 80 MO para mantener payload bajo ~25KB
-        const _matEntries = Object.values(dbMats).slice(0, 150);
-        const _moEntries  = Object.values(dbMo).slice(0, 80);
+        // Limitar a 80 materiales y 50 MO para reducir tokens y evitar rate limits
+        const _matEntries = Object.values(dbMats).slice(0, 80);
+        const _moEntries  = Object.values(dbMo).slice(0, 50);
         console.log('[Budget] DB: mats=' + Object.values(dbMats).length + ' mo=' + Object.values(dbMo).length + ' (enviando ' + _matEntries.length + '/' + _moEntries.length + ')');
         let catalogoMat = _matEntries.map(m => `${m.n || m.desc}: ${m.p || m.pu} Bs/${m.u || m.und}`).join(", ");
         let catalogoMo  = _moEntries.map(m => `${m.n || m.desc}: ${m.p || m.pu} Bs/${m.u || m.und || 'und'}`).join(", ");
@@ -4153,11 +4153,10 @@ EJEMPLO SIN CAPÍTULOS (menos de 4 ítems):
                 _batchParts.unshift({ text: _batchText });
 
                 const _reqBody = JSON.stringify({
-                    model: 'gemini-2.5-flash',
+                    model: 'gemini-2.0-flash',
                     systemInstruction: { parts: [{ text: _sysPrompt }] },
                     contents: [{ role: 'user', parts: _batchParts }],
-                    generationConfig: { maxOutputTokens: 16000, temperature: 0.1 },
-                    advancedModel: true
+                    generationConfig: { maxOutputTokens: 8000, temperature: 0.1 },
                 });
 
                 const _payloadKB = Math.round(_reqBody.length / 1024);
