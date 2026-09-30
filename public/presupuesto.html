@@ -2640,9 +2640,13 @@
             const _puActual = parseFloat(data[idx]?.pu) || 0;
             const _puRef = _puActual > 0 ? `Precio anterior de referencia: ${_puActual.toFixed(2)} Bs/u (si tu cálculo difiere más del 30%, revisá las cantidades).` : '';
 
-            const sysPrompt = `Sos el estimador de costos APU de Rubik Bolivia. Respondé SOLO con un array JSON válido de exactamente UN ítem. Sin texto antes ni después. Sin markdown. Sin comentarios dentro del JSON.
+            const _multiImgCount = _regenExtraImgs ? _regenExtraImgs.length : 0;
+            const _multiNote = _multiImgCount > 1
+                ? `\n\nMÚLTIPLES IMÁGENES (${_multiImgCount}): Generá UN ítem por imagen en el array — ${_multiImgCount} imágenes = ${_multiImgCount} ítems. Imagen 1 → ítem 1, Imagen 2 → ítem 2, etc. Cada ítem es independiente con su propio APU calculado desde SU imagen específica.`
+                : '';
+            const sysPrompt = `Sos el estimador de costos APU de Rubik Bolivia. Respondé SOLO con un array JSON válido. Sin texto antes ni después. Sin markdown. Sin comentarios dentro del JSON.${_multiNote}
 
-ESTRUCTURA OBLIGATORIA:
+ESTRUCTURA POR ÍTEM:
 {"desc":"string","cant":1,"und":"glb|m2|ml|pza","feat":"- Línea 1\\n- Línea 2\\n- Línea 3\\n- Línea 4","apu":{"mat":[{"d":"NOMBRE","u":"unidad","q":número,"p":número}],"mo":[{"d":"TIPO OPERARIO trabajo","u":"m2|jornal","q":número,"p":número}],"eq":[],"sub":[]},"util":50,"ind":10}
 
 feat: 3-4 líneas, puntual y técnico. Incluí dimensiones. PROHIBIDO: ml calculados, remaches, mermas, fórmulas, precios, texto largo o redundante.
@@ -2687,6 +2691,7 @@ PROCESO DE CÁLCULO — SEGUÍ EN ORDEN ESTRICTO:
 PASO 1 — DEFINIR ALCANCE:
   Los componentes del plano están listados en "ETIQUETAS LEÍDAS DEL PLANO" (arriba).
   TODOS son materiales reales — incluí CADA UNO en el APU, sin excepción.
+  Si hay MÚLTIPLES IMÁGENES: generá UN ítem por imagen. Imagen 1 → ítem 1 (con su APU), Imagen 2 → ítem 2, etc.
   Si el usuario pidió SOLO revestimiento → NO agregar estructura nueva.
   Si el usuario pidió SOLO fabricación nueva → NO incluir materiales de revestimiento.
 
@@ -2922,23 +2927,41 @@ ${_rawOcr}
             }
             if(!Array.isArray(items) || items.length === 0) throw new Error('Array vacío');
 
-            const it = items[0];
-            const apuObj = ApuUtils.normalizeApu(it.apu, it);
-            const pu = ApuUtils.calcPuFromApu(apuObj);
-            const _feat = Array.isArray(it.feat) ? it.feat.join('\n') : (it.feat || '');
-            const _featCleanRegen = (_feat || '').replace(/\\n/g, '\n').trim();
-            const _featFinalRegen = _featCleanRegen || `- Ítem regenerado por IA\n- Verificar características manualmente`;
+            // Soporte multi-ítem: si el modelo devolvió N ítems (una por imagen),
+            // reemplazar el ítem actual con el primero e insertar el resto después.
+            function _buildRegenItem(it, fallbackDesc, fallbackUnd) {
+                const apuObj = ApuUtils.normalizeApu(it.apu, it);
+                const pu = ApuUtils.calcPuFromApu(apuObj);
+                const _feat = Array.isArray(it.feat) ? it.feat.join('\n') : (it.feat || '');
+                const _featClean = (_feat || '').replace(/\\n/g, '\n').trim() || '- Ítem regenerado por IA\n- Verificar manualmente';
+                return {
+                    desc: it.desc || it.nombre || fallbackDesc || 'Ítem',
+                    und:  it.und || fallbackUnd || 'glb',
+                    cant: it.cant || 1,
+                    feat: _featClean,
+                    pu:   Math.round(pu * 100) / 100,
+                    apu:  apuObj,
+                    iaPrompt: promptText
+                };
+            }
 
-            // Reemplazar el ítem — preservar desc original del usuario, solo actualizar apu/feat/pu
-            data[idx] = {
-                ...data[idx],
-                desc: data[idx].desc || it.desc || it.nombre || '',  // siempre prioridad al desc que ya tenía
-                und:  it.und || data[idx].und,
-                feat: _featFinalRegen,
-                pu:   Math.round(pu * 100) / 100,
-                apu:  apuObj,
-                iaPrompt: promptText
-            };
+            if (items.length === 1) {
+                // Un solo ítem: reemplazar en su lugar preservando desc original
+                const it = items[0];
+                const built = _buildRegenItem(it, data[idx].desc, data[idx].und);
+                data[idx] = { ...data[idx], ...built, desc: data[idx].desc || built.desc };
+            } else {
+                // Múltiples ítems: reemplazar el primero e insertar el resto después de idx
+                items.forEach(function(it, i) {
+                    const built = _buildRegenItem(it, it.desc || ('Ítem ' + (i+1)), 'glb');
+                    if (i === 0) {
+                        data[idx] = { ...data[idx], ...built };
+                    } else {
+                        data.splice(idx + i, 0, built);
+                    }
+                });
+                console.log('[RegenIA] Insertados', items.length, 'ítems desde posición', idx);
+            }
 
             saveDB(true);
             render();
