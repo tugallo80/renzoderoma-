@@ -321,7 +321,7 @@
             <div style="margin-top:4px; font-size:11px; color:var(--gray);">Podés adjuntar múltiples imágenes con las medidas del ítem.</div>
             <label style="display:flex; align-items:center; gap:8px; margin-top:10px; cursor:pointer; font-size:12px; color:var(--text);">
                 <input type="checkbox" id="regen-multi-item-check" style="width:16px; height:16px; accent-color:var(--purple); cursor:pointer;">
-                <span><b>Generar un ítem por imagen</b> <span style="color:var(--gray)">(una imagen = un ítem distinto en el presupuesto)</span></span>
+                <span><b>Generar múltiples ítems</b> <span style="color:var(--gray)">(un ítem por cada objeto/diseño distinto visible en las imágenes)</span></span>
             </label>
             <button id="btn-regen-ia-exec" onclick="ejecutarRegenIA()" style="width:100%; margin-top:12px; padding:13px; background:var(--purple); color:#fff; border:none; border-radius:10px; font-size:14px; font-weight:700; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:8px;">
                 <i class="ph-bold ph-arrows-clockwise"></i> Volver a Generar
@@ -2647,9 +2647,9 @@
             const _puRef = _puActual > 0 ? `Precio anterior de referencia: ${_puActual.toFixed(2)} Bs/u (si tu cálculo difiere más del 30%, revisá las cantidades).` : '';
 
             const _multiImgCount = _regenExtraImgs ? _regenExtraImgs.length : 0;
-            const _multiItemMode = _multiImgCount > 1 && document.getElementById('regen-multi-item-check')?.checked;
+            const _multiItemMode = document.getElementById('regen-multi-item-check')?.checked;
             const _multiNote = _multiItemMode
-                ? `\n\nMÚLTIPLES IMÁGENES (${_multiImgCount}): Generá UN ítem por imagen en el array — ${_multiImgCount} imágenes = ${_multiImgCount} ítems. Imagen 1 → ítem 1, Imagen 2 → ítem 2, etc. Cada ítem es independiente con su propio APU calculado desde SU imagen específica.`
+                ? `\n\nMODO MULTI-ÍTEM ACTIVO: El array debe tener UN objeto por cada exhibidor/producto/objeto DISTINTO que veas en TODAS las imágenes combinadas. Contá los elementos distintos en las imágenes — ese número es la cantidad de objetos en el array. Una imagen con 3 diseños distintos → 3 ítems. Cuatro imágenes con 3 diseños cada una → 12 ítems. No contés imágenes, contá OBJETOS DISTINTOS.`
                 : '';
             const sysPrompt = `Sos el estimador de costos APU de Rubik Bolivia. Respondé SOLO con un array JSON válido. Sin texto antes ni después. Sin markdown. Sin comentarios dentro del JSON.${_multiNote}
 
@@ -2697,7 +2697,7 @@ PROCESO DE CÁLCULO — SEGUÍ EN ORDEN ESTRICTO:
 
 PASO 1 — DEFINIR ALCANCE:
   Los componentes del plano están listados en "ETIQUETAS LEÍDAS DEL PLANO" (arriba).
-  TODOS son materiales reales — incluí CADA UNO en el APU, sin excepción.${_multiItemMode ? `\n  MODO MULTI-ÍTEM ACTIVO: generá UN ítem por imagen. Imagen 1 → ítem 1 (con su APU), Imagen 2 → ítem 2, etc.` : ''}
+  TODOS son materiales reales — incluí CADA UNO en el APU, sin excepción.${_multiItemMode ? `\n  MODO MULTI-ÍTEM ACTIVO: generá UN ítem por cada exhibidor/producto/objeto DISTINTO que veas en las imágenes. El número de ítems = número de diseños únicos (no número de imágenes). Si el usuario dice que hay N ítems por imagen, usá ese número.` : ''}
   Si el usuario pidió SOLO revestimiento → NO agregar estructura nueva.
   Si el usuario pidió SOLO fabricación nueva → NO incluir materiales de revestimiento.
 
