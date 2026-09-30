@@ -2871,12 +2871,25 @@ NOTAS DEL PLANO:              ${_ex.notas || '-'}
             }
 
             // ══════════════════════════════════════════════════════
-            // FASE 2 — GENERAR APU con medidas ya extraídas
-            // Las imágenes NO se reenvían — el modelo trabaja solo
-            // con el texto de dimensiones de la Fase 1.
+            // FASE 2 — GENERAR APU
+            // Se reenvían las imágenes para leer etiquetas/materiales.
+            // Las dimensiones ya vienen de Fase 1 (texto exacto).
             // ══════════════════════════════════════════════════════
-            btn.innerHTML = `<i class="ph-bold ph-arrows-clockwise"></i> Fase 2/2: calculando APU...`;
-            const _regenParts = [{ text: _regenFullPrompt + _extractedCtx }];
+            btn.innerHTML = `<i class="ph-bold ph-arrows-clockwise"></i> Fase 2/2: generando APU...`;
+            const _regenParts = [];
+            if (_regenImgParts.length > 0) {
+                _regenParts.push({ text: `IMÁGENES DEL ÍTEM (${_regenImgParts.length}):
+Las DIMENSIONES ya están extraídas en el texto — no las releas.
+AHORA: leé TODOS los textos, etiquetas y flechas de las imágenes.
+Cada texto visible = componente que debe estar en el APU.
+Ejemplos: "Foam + Adhesivos", "5 Flejes de policarbonato 50×3.7cm", "letras acrílico negro 2mm", "MDF 10-12mm", etc.` });
+                _regenImgParts.forEach(function(_ip, _ii) {
+                    _regenParts.push({ text: `=== IMAGEN ${_ii + 1} — leé TODOS los textos y etiquetas ===` });
+                    _regenParts.push(_ip);
+                });
+                _regenParts.push({ text: `=== FIN IMÁGENES — incluí en el APU TODOS los componentes que viste en las etiquetas ===` });
+            }
+            _regenParts.push({ text: _regenFullPrompt + _extractedCtx });
 
             const resp = await fetch(_regenUrl, {
                 method: 'POST', headers,
