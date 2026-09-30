@@ -2642,9 +2642,10 @@
 
             const sysPrompt = `Sos el estimador de costos APU de Rubik Bolivia. Respondé SOLO con un array JSON válido de exactamente UN ítem. Sin texto antes ni después. Sin markdown. Sin comentarios dentro del JSON.
 
-ESTRUCTURA OBLIGATORIA:
-{"desc":"string","cant":1,"und":"glb|m2|ml|pza","feat":"- Línea 1\\n- Línea 2\\n- Línea 3\\n- Línea 4","apu":{"mat":[{"d":"NOMBRE","u":"unidad","q":número,"p":número}],"mo":[{"d":"TIPO OPERARIO trabajo","u":"m2|jornal","q":número,"p":número}],"eq":[],"sub":[]},"util":50,"ind":10}
+ESTRUCTURA OBLIGATORIA (en este orden exacto de campos):
+{"_components":["componente 1 visto en imagen","componente 2","..."],"desc":"string","cant":1,"und":"glb|m2|ml|pza","feat":"- Línea 1\\n- Línea 2\\n- Línea 3\\n- Línea 4","apu":{"mat":[{"d":"NOMBRE","u":"unidad","q":número,"p":número}],"mo":[{"d":"TIPO OPERARIO trabajo","u":"m2|jornal","q":número,"p":número}],"eq":[],"sub":[]},"util":50,"ind":10}
 
+_components: lista TODOS los materiales/componentes visibles escritos en las imágenes (etiquetas, flechas, notas). CADA item en _components DEBE aparecer en el APU.
 feat: 3-4 líneas, puntual y técnico. Incluí dimensiones. PROHIBIDO: ml calculados, remaches, mermas, fórmulas, precios, texto largo o redundante.
 apu: usar campos exactos d,u,q,p (no "item","prec" ni otros).
 util=50, ind=10 siempre como enteros.
@@ -2684,9 +2685,10 @@ INSTRUCCIONES DEL USUARIO: ${_cleanPrompt}
 PROCESO DE CÁLCULO — SEGUÍ EN ORDEN ESTRICTO:
 ═══════════════════════════════════════════════════════════
 
-PASO 1 — DEFINIR ALCANCE:
-  ¿Qué incluye ESTE ítem? Solo los componentes mencionados en nombre + instrucciones + medidas del plano.
-  Lista los materiales/trabajos: [máx 8 ítems].
+PASO 1 — LEER IMÁGENES Y DEFINIR ALCANCE:
+  Antes de calcular nada: leé TODAS las imágenes adjuntas y transcribí CADA texto, etiqueta, flecha o nota escrita que veas.
+  Completá "_components" con CADA material/componente que aparezca escrito — etiquetas, flechas, notas. NINGUNO puede faltar.
+  Ejemplos de lo que debés detectar: "Foam + Adhesivos", "5 Flejes de policarbonato 50cm×3.7cm", "letras sueltas acrílico negro 2mm", "MDF 10mm", etc.
   Si el usuario pidió SOLO revestimiento → NO agregar estructura nueva.
   Si el usuario pidió SOLO fabricación nueva → NO incluir materiales de revestimiento.
 
@@ -2753,7 +2755,7 @@ util=50, ind=10 siempre (enteros).`;
                     try {
                         let _b64;
                         if (_fUrl.startsWith('data:')) {
-                            _b64 = await _compressB64(_fUrl, 1200, 0.7);
+                            _b64 = await _compressB64(_fUrl, 1800, 0.88);
                         } else if (_fUrl.startsWith('http')) {
                             // Fetch Firebase Storage URL → blob → data URL → compress & convert to JPEG
                             const _resp = await fetch(_fUrl);
@@ -2765,8 +2767,8 @@ util=50, ind=10 siempre (enteros).`;
                                 fr.onerror = rej;
                                 fr.readAsDataURL(_blob);
                             });
-                            // Compress & convert to JPEG to reduce payload size
-                            _b64 = await _compressB64(_rawB64, 1200, 0.7);
+                            // Higher quality for legibility of small text in technical drawings
+                            _b64 = await _compressB64(_rawB64, 1800, 0.88);
                         }
                         if (_b64 && _b64.includes(',')) {
                             const _mime = (_b64.match(/^data:([^;]+);/) || [])[1] || 'image/jpeg';
@@ -2800,96 +2802,24 @@ util=50, ind=10 siempre (enteros).`;
             const _regenUrl = '/api/gemini';
 
             // ══════════════════════════════════════════════════════
-            // FASE 1 — EXTRACCIÓN DE MEDIDAS Y MATERIALES DEL PLANO
-            // Solo si hay imágenes adjuntas. Llamada dedicada únicamente
-            // a leer las imágenes — sin calcular ni generar APU todavía.
+            // LLAMADA ÚNICA — leer imágenes + generar APU en un solo paso
+            // El campo _components fuerza al modelo a enumerar TODOS
+            // los componentes visibles antes de calcular el APU.
             // ══════════════════════════════════════════════════════
-            let _extractedCtx = '';
-            if (_regenImgParts.length > 0) {
-                btn.innerHTML = `<i class="ph-bold ph-scan"></i> Fase 1/2: leyendo planos... (${_regenImgParts.length} img)`;
-                const _extractParts = [];
-                _regenImgParts.forEach(function(_ip, _ii) {
-                    _extractParts.push({ text: `=== IMAGEN ${_ii + 1} ===` });
-                    _extractParts.push(_ip);
-                });
-                _extractParts.push({ text: `Ítem: "${_itemNombre}"
-
-Analizá TODAS las imágenes anteriores. Extraé ÚNICAMENTE lo que está escrito o dibujado en ellas — sin inventar nada.
-
-PASO A — DIMENSIONES: Por cada medida numérica visible (cota, etiqueta, acotación):
-  Anotá: qué parte mide, el valor exacto, y la unidad (cm / m / mm).
-  Si hay "×N" → indicá la cantidad de veces.
-  Si la unidad no está escrita → anotá el valor tal como aparece y marcá "unidad: ?" .
-
-PASO B — MATERIALES Y COMPONENTES: Listá TODOS los materiales/técnicas mencionados en textos, flechas o etiquetas de las imágenes.
-
-PASO C — CANTIDADES EXPLÍCITAS: Cualquier "N unidades", "×N" o conteo visible.
-
-Devolvé SOLO este JSON (sin texto antes ni después, sin markdown):
-{"dims":[{"parte":"nombre_parte","valor":"X.XX","unidad":"cm","mult":1}],"mats":["material 1","material 2"],"cnts":["5 flejes 50×3.7cm"],"notas":"observaciones relevantes del plano"}` });
-
-                try {
-                    const _re1 = await fetch(_regenUrl, {
-                        method: 'POST', headers,
-                        body: JSON.stringify({
-                            model: 'gemini-2.5-flash',
-                            systemInstruction: { parts: [{ text: 'Sos un técnico que extrae cotas y materiales de planos. Devolvé SOLO el JSON solicitado.' }] },
-                            contents: [{ role: 'user', parts: _extractParts }],
-                            generationConfig: { maxOutputTokens: 3000, temperature: 0.0 },
-                            advancedModel: true
-                        })
-                    });
-                    if (_re1.ok) {
-                        const _d1 = await _re1.json();
-                        const _raw1 = (_d1?.candidates?.[0]?.content?.parts?.[0]?.text || '').replace(/```json|```/g,'').trim();
-                        console.log('[RegenIA F1] extracción:', _raw1.substring(0, 500));
-                        const _js = _raw1.indexOf('{'), _je = _raw1.lastIndexOf('}');
-                        if (_js !== -1 && _je !== -1) {
-                            const _ex = JSON.parse(_raw1.slice(_js, _je+1));
-                            const _dimsLines = (_ex.dims || []).map(d =>
-                                `  • ${d.parte}: ${d.valor} ${d.unidad}${(d.mult && d.mult > 1) ? ' × '+d.mult : ''}`).join('\n');
-                            const _matsLine = (_ex.mats || []).join(' | ');
-                            const _cntsLine = (_ex.cnts || []).join(' | ');
-                            _extractedCtx = `
-
-╔═══════════════════════════════════════════════════════════════╗
-║   MEDIDAS EXACTAS LEÍDAS DEL PLANO — USAR SIN MODIFICAR       ║
-╚═══════════════════════════════════════════════════════════════╝
-DIMENSIONES:
-${_dimsLines || '  (no se encontraron cotas numéricas)'}
-
-MATERIALES VISIBLES EN PLANO: ${_matsLine || '(no indicados)'}
-CANTIDADES INDICADAS:         ${_cntsLine || '(no indicadas)'}
-NOTAS DEL PLANO:              ${_ex.notas || '-'}
-
-⚠️ OBLIGATORIO: Calculá TODAS las cantidades del APU a partir de estas medidas.
-   Si una dimensión no está en la lista → NO la inventés — usá el valor más cercano disponible.
-   Mostrá cada cálculo en feat: "- Área frontal: 1.45 × 0.51 = 0.74 m²"`;
-                        }
-                    }
-                } catch(e) { console.warn('[RegenIA F1] falló extracción:', e.message); }
-            }
-
-            // ══════════════════════════════════════════════════════
-            // FASE 2 — GENERAR APU
-            // Se reenvían las imágenes para leer etiquetas/materiales.
-            // Las dimensiones ya vienen de Fase 1 (texto exacto).
-            // ══════════════════════════════════════════════════════
-            btn.innerHTML = `<i class="ph-bold ph-arrows-clockwise"></i> Fase 2/2: generando APU...`;
+            btn.innerHTML = `<i class="ph-bold ph-arrows-clockwise"></i> Generando APU con IA...`;
             const _regenParts = [];
             if (_regenImgParts.length > 0) {
-                _regenParts.push({ text: `IMÁGENES DEL ÍTEM (${_regenImgParts.length}):
-Las DIMENSIONES ya están extraídas en el texto — no las releas.
-AHORA: leé TODOS los textos, etiquetas y flechas de las imágenes.
-Cada texto visible = componente que debe estar en el APU.
-Ejemplos: "Foam + Adhesivos", "5 Flejes de policarbonato 50×3.7cm", "letras acrílico negro 2mm", "MDF 10-12mm", etc.` });
+                _regenParts.push({ text: `IMÁGENES DEL ÍTEM (${_regenImgParts.length} adjuntas):
+INSTRUCCIÓN CRÍTICA: Antes de generar el JSON, leé TODOS los textos escritos en las imágenes.
+Cada etiqueta, flecha o nota = un componente que DEBE aparecer en "_components" y en el APU.
+NO omitas ningún texto visible. Leé TODO lo que esté escrito en el plano.` });
                 _regenImgParts.forEach(function(_ip, _ii) {
-                    _regenParts.push({ text: `=== IMAGEN ${_ii + 1} — leé TODOS los textos y etiquetas ===` });
+                    _regenParts.push({ text: `=== IMAGEN ${_ii + 1} — transcribí TODOS los textos y etiquetas visibles ===` });
                     _regenParts.push(_ip);
                 });
-                _regenParts.push({ text: `=== FIN IMÁGENES — incluí en el APU TODOS los componentes que viste en las etiquetas ===` });
+                _regenParts.push({ text: `=== FIN IMÁGENES — RECORDATORIO: "_components" debe listar TODOS los textos que viste escritos arriba ===` });
             }
-            _regenParts.push({ text: _regenFullPrompt + _extractedCtx });
+            _regenParts.push({ text: _regenFullPrompt });
 
             const resp = await fetch(_regenUrl, {
                 method: 'POST', headers,
