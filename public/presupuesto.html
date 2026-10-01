@@ -376,7 +376,7 @@
             <div style="padding:8px 14px; border-bottom:1px solid var(--border); display:flex; gap:6px; flex-wrap:wrap; flex-shrink:0; align-items:center;">
                 <button class="btn btn-dark" style="padding:5px 11px; font-size:12px; gap:5px;" onclick="_pdfSelAll()"><i class="ph-bold ph-check-square"></i> Todo</button>
                 <button class="btn btn-dark" style="padding:5px 11px; font-size:12px; gap:5px;" onclick="_pdfSelNone()"><i class="ph-bold ph-square"></i> Ninguna</button>
-                <span style="font-size:11px; color:var(--gray); margin-left:4px;"><i class="ph-bold ph-arrows-out-cardinal" style="vertical-align:-2px;"></i> Arrastrá una lámina sobre otra para agruparlas · Clic derecho o mantené presionado para desagrupar</span>
+                <span style="font-size:11px; color:var(--gray); margin-left:4px;"><i class="ph-bold ph-arrows-out-cardinal" style="vertical-align:-2px;"></i> <b style="color:var(--text);">Agrupar</b> (misma pieza, distintas vistas): arrastrá una pág. sobre otra · <b style="color:var(--text);">Varios ítems en 1 hoja</b>: usá el stepper +/−</span>
                 <span id="pdf-sel-info" style="margin-left:auto; font-size:12px; color:var(--gray); white-space:nowrap;"></span>
             </div>
             <!-- Menú contextual para desagrupar -->
@@ -3240,36 +3240,51 @@ ${_rawOcr}
 
         const src = _pdfLaminasState.find(function(x) { return x.pageNum === _pdfDragSrc; });
         const tgt = _pdfLaminasState.find(function(x) { return x.pageNum === targetPage; });
+        _pdfDragSrc = null;
         if (!src || !tgt) return;
 
-        // Asegurar que ambos estén seleccionados
+        // Bloquear si alguna página tiene más de 1 ítem — agrupar reduciría ítems incorrectamente
+        if (src.itemCount > 1 || tgt.itemCount > 1) {
+            _pdfFlashMsg('⚠️ No se puede agrupar: la Pág ' + (src.itemCount > 1 ? src.pageNum : tgt.pageNum) + ' tiene ' + Math.max(src.itemCount, tgt.itemCount) + ' ítems. Agrupá solo páginas que muestren la misma pieza desde distinto ángulo.');
+            return;
+        }
+
         src.selected = true;
         tgt.selected = true;
 
-        // Determinar grupo a usar: priorizar grupo existente del destino, luego origen, luego crear nuevo
         let grp;
-        if (tgt.group !== null) {
-            grp = tgt.group;
-        } else if (src.group !== null) {
-            grp = src.group;
-        } else {
+        if (tgt.group !== null) { grp = tgt.group; }
+        else if (src.group !== null) { grp = src.group; }
+        else {
             const used = new Set(_pdfLaminasState.map(function(s) { return s.group; }).filter(function(g) { return g !== null; }));
             grp = 0; while (used.has(grp)) grp++;
         }
 
-        // Si src tenía grupo distinto, mover todo ese grupo al nuevo grupo
         if (src.group !== null && src.group !== grp) {
             const oldGrp = src.group;
             _pdfLaminasState.forEach(function(s) { if (s.group === oldGrp) s.group = grp; });
         }
         src.group = grp;
         tgt.group = grp;
-        src.itemCount = 1;
-        tgt.itemCount = 1;
 
-        _pdfDragSrc = null;
         _renderPdfLaminasGrid();
         _updatePdfSelInfo();
+    }
+
+    function _pdfFlashMsg(msg) {
+        const grid = document.getElementById('pdf-laminas-grid');
+        if (!grid) return;
+        let flash = document.getElementById('pdf-flash-msg');
+        if (!flash) {
+            flash = document.createElement('div');
+            flash.id = 'pdf-flash-msg';
+            flash.style.cssText = 'grid-column:1/-1; padding:10px 14px; background:rgba(255,69,58,0.15); border:1px solid #ff453a; border-radius:8px; font-size:12px; color:#ff453a; text-align:center;';
+            grid.prepend(flash);
+        }
+        flash.textContent = msg;
+        flash.style.display = 'block';
+        clearTimeout(flash._timer);
+        flash._timer = setTimeout(function() { flash.style.display = 'none'; }, 4000);
     }
 
     // Menú contextual — clic derecho (PC) o long-press (móvil)
