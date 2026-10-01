@@ -3232,22 +3232,81 @@ ${_rawOcr}
         _pdfDragSrc = null;
     }
 
+    let _pdfPendingGroup = null; // { srcPage, tgtPage } esperando confirmación
+
     function _pdfDrop(e, targetPage) {
         e.preventDefault();
         e.currentTarget.style.transform = '';
         e.currentTarget.style.boxShadow = '';
         if (_pdfDragSrc === null || _pdfDragSrc === targetPage) return;
 
-        const src = _pdfLaminasState.find(function(x) { return x.pageNum === _pdfDragSrc; });
-        const tgt = _pdfLaminasState.find(function(x) { return x.pageNum === targetPage; });
+        const srcPage = _pdfDragSrc;
         _pdfDragSrc = null;
+
+        const src = _pdfLaminasState.find(function(x) { return x.pageNum === srcPage; });
+        const tgt = _pdfLaminasState.find(function(x) { return x.pageNum === targetPage; });
         if (!src || !tgt) return;
 
-        // Bloquear si alguna página tiene más de 1 ítem — agrupar reduciría ítems incorrectamente
+        // Si alguna tiene itemCount > 1, bloquear directamente
         if (src.itemCount > 1 || tgt.itemCount > 1) {
-            _pdfFlashMsg('⚠️ No se puede agrupar: la Pág ' + (src.itemCount > 1 ? src.pageNum : tgt.pageNum) + ' tiene ' + Math.max(src.itemCount, tgt.itemCount) + ' ítems. Agrupá solo páginas que muestren la misma pieza desde distinto ángulo.');
+            _pdfFlashConfirm(
+                '⚠️ La Pág ' + (src.itemCount > 1 ? src.pageNum : tgt.pageNum) + ' tiene ' + Math.max(src.itemCount, tgt.itemCount) + ' ítems — no se puede agrupar. Agrupá solo páginas que sean la misma pieza vista desde otro ángulo.',
+                null, null, true
+            );
             return;
         }
+
+        // Pedir confirmación antes de agrupar
+        _pdfPendingGroup = { srcPage: srcPage, tgtPage: targetPage };
+        _pdfFlashConfirm(
+            '¿Las páginas ' + srcPage + ' y ' + targetPage + ' muestran la <b>misma pieza</b> desde distintos ángulos? Se unirán como <b>1 solo ítem</b>.',
+            'Sí, agrupar como 1 ítem',
+            'No, son piezas distintas',
+            false
+        );
+    }
+
+    function _pdfFlashConfirm(html, btnOk, btnCancel, errorOnly) {
+        const grid = document.getElementById('pdf-laminas-grid');
+        if (!grid) return;
+        let flash = document.getElementById('pdf-flash-msg');
+        if (!flash) {
+            flash = document.createElement('div');
+            flash.id = 'pdf-flash-msg';
+            flash.style.cssText = 'grid-column:1/-1; border-radius:8px; font-size:12px; text-align:center; padding:10px 14px;';
+            grid.prepend(flash);
+        }
+        clearTimeout(flash._timer);
+        if (errorOnly) {
+            flash.style.background = 'rgba(255,69,58,0.15)';
+            flash.style.border = '1px solid #ff453a';
+            flash.style.color = '#ff453a';
+            flash.innerHTML = html;
+            flash.style.display = 'block';
+            flash._timer = setTimeout(function() { flash.style.display = 'none'; }, 5000);
+        } else {
+            flash.style.background = 'rgba(191,90,242,0.12)';
+            flash.style.border = '1px solid var(--purple)';
+            flash.style.color = 'var(--text)';
+            flash.innerHTML = html +
+                '<div style="display:flex; gap:8px; justify-content:center; margin-top:8px;">' +
+                '<button onclick="_pdfConfirmGroup(true)"  style="padding:5px 14px; border-radius:6px; border:none; background:var(--purple); color:#fff; cursor:pointer; font-size:12px;">' + btnOk + '</button>' +
+                '<button onclick="_pdfConfirmGroup(false)" style="padding:5px 14px; border-radius:6px; border:1px solid var(--border); background:var(--bg); color:var(--text); cursor:pointer; font-size:12px;">' + btnCancel + '</button>' +
+                '</div>';
+            flash.style.display = 'block';
+        }
+    }
+
+    function _pdfConfirmGroup(ok) {
+        const pending = _pdfPendingGroup;
+        _pdfPendingGroup = null;
+        const flash = document.getElementById('pdf-flash-msg');
+        if (flash) flash.style.display = 'none';
+        if (!ok || !pending) return;
+
+        const src = _pdfLaminasState.find(function(x) { return x.pageNum === pending.srcPage; });
+        const tgt = _pdfLaminasState.find(function(x) { return x.pageNum === pending.tgtPage; });
+        if (!src || !tgt) return;
 
         src.selected = true;
         tgt.selected = true;
@@ -3259,7 +3318,6 @@ ${_rawOcr}
             const used = new Set(_pdfLaminasState.map(function(s) { return s.group; }).filter(function(g) { return g !== null; }));
             grp = 0; while (used.has(grp)) grp++;
         }
-
         if (src.group !== null && src.group !== grp) {
             const oldGrp = src.group;
             _pdfLaminasState.forEach(function(s) { if (s.group === oldGrp) s.group = grp; });
@@ -3269,22 +3327,6 @@ ${_rawOcr}
 
         _renderPdfLaminasGrid();
         _updatePdfSelInfo();
-    }
-
-    function _pdfFlashMsg(msg) {
-        const grid = document.getElementById('pdf-laminas-grid');
-        if (!grid) return;
-        let flash = document.getElementById('pdf-flash-msg');
-        if (!flash) {
-            flash = document.createElement('div');
-            flash.id = 'pdf-flash-msg';
-            flash.style.cssText = 'grid-column:1/-1; padding:10px 14px; background:rgba(255,69,58,0.15); border:1px solid #ff453a; border-radius:8px; font-size:12px; color:#ff453a; text-align:center;';
-            grid.prepend(flash);
-        }
-        flash.textContent = msg;
-        flash.style.display = 'block';
-        clearTimeout(flash._timer);
-        flash._timer = setTimeout(function() { flash.style.display = 'none'; }, 4000);
     }
 
     // Menú contextual — clic derecho (PC) o long-press (móvil)
