@@ -3478,7 +3478,7 @@ ${_rawOcr}
                         const _c = document.createElement('canvas');
                         _c.width = _vp.width; _c.height = _vp.height;
                         await _pg.render({ canvasContext: _c.getContext('2d'), viewport: _vp }).promise;
-                        _pdfHQ[_pi] = await _compressB64(_c.toDataURL('image/jpeg', 0.85), 900, 0.65);
+                        _pdfHQ[_pi] = await _compressB64(_c.toDataURL('image/jpeg', 0.82), 700, 0.55);
                     } catch(_) {}
                 }
 
@@ -4637,6 +4637,15 @@ EJEMPLO SIN CAPÍTULOS (menos de 4 ítems):
                         try {
                             _allResultItems.push(...(await _enviarYParsearLote([_fila], 'Ítem "' + _fila.name + '"')));
                         } catch (_itemErr) {
+                            // 2do intento: imagen más comprimida
+                            if (_fila.compImage) {
+                                if (_pMsgEl) _pMsgEl.textContent = 'Reintentando "' + _fila.name + '" con imagen reducida...';
+                                try {
+                                    const _filaSmall = Object.assign({}, _fila, { compImage: await _compressB64(_fila.compImage, 450, 0.4) });
+                                    _allResultItems.push(...(await _enviarYParsearLote([_filaSmall], 'Ítem "' + _fila.name + '" (reducido)')));
+                                    continue;
+                                } catch (_e2) {}
+                            }
                             throw new Error('No se pudo generar el ítem "' + _fila.name + '" ni siquiera solo (' + _itemErr.message + '). Probá simplificar su descripción/foto y generá de nuevo — los demás ítems no se perdieron, siguen cargados en el formulario.');
                         }
                     }
