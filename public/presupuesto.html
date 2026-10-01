@@ -3486,11 +3486,13 @@ ${_rawOcr}
                 statusEl.textContent = '⏳ Extrayendo ítems según tu selección...';
                 const _instrLines = [];
                 const _parts = [];
+                const _multiItemPages = {};
                 _userSel.forEach(function(sg, idx) {
                     const _lbl = sg.pages.length > 1 ? 'LÁMINAS ' + sg.pages.join('+') + ' (agrupadas)' : 'LÁMINA ' + sg.pages[0];
                     const _hint = sg.pages.length > 1 ? '1 ítem (misma pieza, distintas vistas)'
-                                 : sg.itemCount > 1 ? 'exactamente ' + sg.itemCount + ' ítems distintos'
+                                 : sg.itemCount > 1 ? 'exactamente ' + sg.itemCount + ' ítems distintos — incluí "region":{x,y,w,h} (0.0–1.0 relativo) indicando qué zona de la lámina ocupa cada ítem'
                                  : '1 ítem';
+                    if (sg.pages.length === 1 && sg.itemCount > 1) _multiItemPages[sg.pages[0]] = true;
                     _instrLines.push((idx + 1) + '. ' + _lbl + ' → ' + _hint);
                     sg.pages.forEach(function(pg) {
                         _parts.push({ text: '[' + _lbl + ']' });
@@ -3499,7 +3501,7 @@ ${_rawOcr}
                 });
                 _parts.push({ text: 'Devolvé el array JSON con exactamente los ítems indicados arriba, en ese orden.' });
 
-                const _sysTxt = 'Extraé los ítems de cotización de estas láminas seleccionadas por el usuario.\n\nINSTRUCCIONES DEL USUARIO (respetá exactamente — no agregues ni quites ítems):\n' + _instrLines.join('\n') + '\n\nDevolvé SOLO un array JSON válido, sin texto antes ni después: [{"n":"nombre","q":1,"d":"descripción completa con materiales, medidas y acabado","pagina":N}]. "pagina" es el número de lámina principal de ese ítem.';
+                const _sysTxt = 'Extraé los ítems de cotización de estas láminas seleccionadas por el usuario.\n\nINSTRUCCIONES DEL USUARIO (respetá exactamente — no agregues ni quites ítems):\n' + _instrLines.join('\n') + '\n\nDevolvé SOLO un array JSON válido, sin texto antes ni después: [{"n":"nombre","q":1,"d":"descripción completa con materiales, medidas y acabado","pagina":N,"region":{"x":0,"y":0,"w":1,"h":1}}]. "pagina" es el número de lámina principal. "region" solo es obligatorio cuando la lámina tiene varios ítems: indicá con x,y,w,h (0.0–1.0 relativos al tamaño de la imagen) qué zona corresponde a ESE ítem.';
 
                 const _pdfToken = firebase.auth().currentUser ? await firebase.auth().currentUser.getIdToken() : null;
                 const _pdfHeaders = { 'Content-Type': 'application/json' };
@@ -3531,9 +3533,31 @@ ${_rawOcr}
                     let _rowsCreated = 0;
                     let _rowsWithImg = 0;
 
-                    _pdfItems.forEach(function(it, idx) {
+                    const _cropB64 = function(b64, region) {
+                        return new Promise(function(resolve) {
+                            const _img = new Image();
+                            _img.onload = function() {
+                                try {
+                                    const _cx = Math.max(0, Math.round(_img.width  * (region.x || 0)));
+                                    const _cy = Math.max(0, Math.round(_img.height * (region.y || 0)));
+                                    const _cw = Math.min(_img.width  - _cx, Math.round(_img.width  * (region.w || 1)));
+                                    const _ch = Math.min(_img.height - _cy, Math.round(_img.height * (region.h || 1)));
+                                    if (_cw < 20 || _ch < 20) { resolve(b64); return; }
+                                    const _cc = document.createElement('canvas');
+                                    _cc.width = _cw; _cc.height = _ch;
+                                    _cc.getContext('2d').drawImage(_img, _cx, _cy, _cw, _ch, 0, 0, _cw, _ch);
+                                    resolve(_cc.toDataURL('image/jpeg', 0.72));
+                                } catch(_) { resolve(b64); }
+                            };
+                            _img.onerror = function() { resolve(b64); };
+                            _img.src = b64;
+                        });
+                    };
+
+                    for (let idx = 0; idx < _pdfItems.length; idx++) {
+                        const it = _pdfItems[idx];
                         const nm = (it.n || it.name || it.nombre || '').trim();
-                        if (!nm) return;
+                        if (!nm) continue;
                         let row;
                         if (idx === 0 && _firstEmpty) { row = _firstEmpty; }
                         else {
@@ -3541,7 +3565,7 @@ ${_rawOcr}
                             const allRows = document.querySelectorAll('.ia-item-row');
                             row = allRows[allRows.length - 1];
                         }
-                        if (!row) return;
+                        if (!row) continue;
                         const nameInp = row.querySelector('.ia-inp-name');
                         const cantInp = row.querySelector('.ia-inp-cant');
                         const promptInp = row.querySelector('.ia-inp-prompt');
@@ -3549,9 +3573,13 @@ ${_rawOcr}
                         if (cantInp && it.q) cantInp.value = parseInt(it.q) || 1;
                         if (promptInp && it.d) promptInp.value = it.d;
 
-                        // Adjuntar imagen HQ: usar pagina de Gemini o primera página de la selección del usuario
+                        // Adjuntar imagen: recortar región si la página tiene varios ítems y Gemini devolvió region
                         const _pag = parseInt(it.pagina);
-                        const _imgSrc = _pdfHQ[_pag] || _pdfHQ[_allPages[Math.min(idx, _allPages.length - 1)]] || null;
+                        let _imgSrc = _pdfHQ[_pag] || _pdfHQ[_allPages[Math.min(idx, _allPages.length - 1)]] || null;
+                        if (_imgSrc && it.region && _multiItemPages[_pag] &&
+                            typeof it.region.x === 'number' && typeof it.region.w === 'number') {
+                            _imgSrc = await _cropB64(_imgSrc, it.region);
+                        }
                         if (_imgSrc) {
                             const imgContainer = row.querySelector('[id^="ia-img-container-"]');
                             if (imgContainer) {
@@ -3564,7 +3592,7 @@ ${_rawOcr}
                             }
                         }
                         _rowsCreated++;
-                    });
+                    }
 
                     currentIAPdfBase64 = null;
                     statusEl.textContent = '✅ PDF importado: ' + _rowsCreated + ' ítems cargados (con imagen: ' + _rowsWithImg + '). Revisá y ajustá, luego generá.';
