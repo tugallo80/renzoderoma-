@@ -4104,31 +4104,32 @@ EJEMPLO SIN CAPÍTULOS (menos de 4 ítems):
         const _headerText = textPrompt; // snapshot del prompt base (catálogo + bloques A-G + unidades)
 
         try {
-            const BATCH_SIZE = 5;
+            // Antes 5 — con varios ítems complejos en el mismo lote (mucho detalle de
+            // feat+apu cada uno) se agotaban los 8000 tokens de salida a mitad de
+            // camino, dejando un JSON truncado que ni _extractBalancedArray ni
+            // _repairTruncatedArray lograban recuperar. Con lotes más chicos cada
+            // ítem compite por el presupuesto de tokens con menos vecinos.
+            const BATCH_SIZE = 3;
             const _allResultItems = [];
             const _totalBatches = Math.max(1, Math.ceil(_allRowData.length / BATCH_SIZE));
 
-            for (let _bi = 0; _bi < _allRowData.length; _bi += BATCH_SIZE) {
-                const _batchRows  = _allRowData.slice(_bi, _bi + BATCH_SIZE);
-                const _batchNum   = Math.floor(_bi / BATCH_SIZE) + 1;
-
-                // Refrescar token en cada lote — evita 401 si el token expiró entre batches
+            // Hace UNA llamada a Gemini con las filas dadas y devuelve el array de
+            // ítems ya parseado (o tira si no se pudo) — separado del loop principal
+            // para poder reintentar un lote fallido fila-por-fila sin duplicar toda
+            // la lógica de fetch/parseo (ver el catch del loop, más abajo).
+            async function _enviarYParsearLote(_rowsLote, _labelLote) {
+                // Refrescar token en cada llamada — evita 401 si expiró entre lotes
                 const _freshToken = firebase.auth().currentUser
                     ? await firebase.auth().currentUser.getIdToken()
                     : null;
                 const _authHeaders = { 'Content-Type': 'application/json' };
                 if (_freshToken) _authHeaders['Authorization'] = 'Bearer ' + _freshToken;
 
-                const _pMsgEl = document.getElementById('ia-prog-msg');
-                if (_pMsgEl) _pMsgEl.textContent = _totalBatches > 1
-                    ? 'Generando lote ' + _batchNum + ' de ' + _totalBatches + ' (' + _batchRows.length + ' ítems)...'
-                    : 'Generando presupuesto...';
-
                 let _batchText = _headerText;
                 if (_ctxNote) _batchText += _ctxNote;
                 const _batchParts = [..._ctxParts];
 
-                _batchRows.forEach(function(rd) {
+                _rowsLote.forEach(function(rd) {
                     _batchText += '\n===INICIO ÍTEM ' + (rd.origIndex+1) + '===\n';
                     if (rd.modo === 'unico') {
                         _batchText += 'ÍTEM ' + (rd.origIndex+1) + ': ' + rd.name + ' (Cantidad: ' + rd.cant + '). [MODO ÍTEM ÚNICO — Generá EXACTAMENTE 1 objeto JSON en el array, sin capitulos, sin desgloses. Todo el APU va dentro de ese único ítem.]\n';
@@ -4160,16 +4161,16 @@ EJEMPLO SIN CAPÍTULOS (menos de 4 ítems):
                 });
 
                 const _payloadKB = Math.round(_reqBody.length / 1024);
-                console.log('[Budget] Batch ' + _batchNum + '/' + _totalBatches + ' payload:', _payloadKB, 'KB');
+                console.log('[Budget] ' + _labelLote + ' payload:', _payloadKB, 'KB');
                 if (_payloadKB > 18000) {
-                    throw new Error('Lote ' + _batchNum + ': adjunto demasiado grande (' + _payloadKB + ' KB). Reducí las imágenes.');
+                    throw new Error(_labelLote + ': adjunto demasiado grande (' + _payloadKB + ' KB). Reducí las imágenes.');
                 }
 
                 let _respData, _lastBudgetErr;
                 for (let _bAtt = 0; _bAtt < 3; _bAtt++) {
                     if (_bAtt > 0) {
                         const _pMsg2 = document.getElementById('ia-prog-msg');
-                        if (_pMsg2) _pMsg2.textContent = 'Lote ' + _batchNum + ': servidor ocupado, reintentando...';
+                        if (_pMsg2) _pMsg2.textContent = _labelLote + ': servidor ocupado, reintentando...';
                         await new Promise(r => setTimeout(r, 5000 * _bAtt));
                     }
                     let _workerResp;
@@ -4202,32 +4203,64 @@ EJEMPLO SIN CAPÍTULOS (menos de 4 ítems):
                     _raw = _respData;
                 }
                 _raw = _raw.replace(/```json|```/g, '').trim();
-                console.log('[IA Budget] Batch ' + _batchNum + ' raw (primeros 500):', _raw.substring(0, 500));
+                console.log('[IA Budget] ' + _labelLote + ' raw (primeros 500):', _raw.substring(0, 500));
 
                 let _batchItems;
                 let _extracted = _extractBalancedArray(_raw);
                 try {
                     if (!_extracted) {
                         _extracted = _repairTruncatedArray(_raw);
-                        if (_extracted) console.warn('[IA Budget] Batch ' + _batchNum + ': array truncado, recuperando objetos completos.');
+                        if (_extracted) console.warn('[IA Budget] ' + _labelLote + ': array truncado, recuperando objetos completos.');
                         else throw new Error('Sin array JSON balanceado');
                     }
                     _batchItems = JSON.parse(_extracted);
                 } catch(_parseErr) {
-                    console.warn('[IA Budget] Batch ' + _batchNum + ': parse error, limpiando:', _parseErr.message);
+                    console.warn('[IA Budget] ' + _labelLote + ': parse error, limpiando:', _parseErr.message);
                     let _cleaned = (_extracted || _raw)
                         .replace(/[\x00-\x1F\x7F]/g, ' ')
                         .replace(/,(\s*[}\]])/g, '$1')
                         .replace(/([^\\])\\([^"\\\/bfnrtu])/g, '$1 $2');
                     let _extracted2 = _extractBalancedArray(_cleaned) || _repairTruncatedArray(_cleaned);
                     if (!_extracted2) {
-                        console.error('[IA Budget] Batch ' + _batchNum + ' sin JSON. Raw completo:', _raw.substring(0, 800));
-                        throw new Error('Lote ' + _batchNum + ': ' + _raw.substring(0, 120));
+                        console.error('[IA Budget] ' + _labelLote + ' sin JSON. Raw completo:', _raw.substring(0, 800));
+                        throw new Error(_labelLote + ': ' + _raw.substring(0, 120));
                     }
                     _batchItems = JSON.parse(_extracted2);
                 }
-                if (!Array.isArray(_batchItems)) throw new Error('Lote ' + _batchNum + ': la IA no devolvió un array válido.');
-                _allResultItems.push(..._batchItems);
+                if (!Array.isArray(_batchItems)) throw new Error(_labelLote + ': la IA no devolvió un array válido.');
+                return _batchItems;
+            }
+
+            for (let _bi = 0; _bi < _allRowData.length; _bi += BATCH_SIZE) {
+                const _batchRows  = _allRowData.slice(_bi, _bi + BATCH_SIZE);
+                const _batchNum   = Math.floor(_bi / BATCH_SIZE) + 1;
+
+                const _pMsgEl = document.getElementById('ia-prog-msg');
+                if (_pMsgEl) _pMsgEl.textContent = _totalBatches > 1
+                    ? 'Generando lote ' + _batchNum + ' de ' + _totalBatches + ' (' + _batchRows.length + ' ítems)...'
+                    : 'Generando presupuesto...';
+
+                try {
+                    _allResultItems.push(...(await _enviarYParsearLote(_batchRows, 'Lote ' + _batchNum)));
+                } catch (_loteErr) {
+                    // Un lote con varios ítems que falló junto NO se descarta de una:
+                    // se reintenta ÍTEM POR ÍTEM, cada uno con los 8000 tokens enteros
+                    // para sí solo (en vez de repartidos entre 3) — mucho más margen
+                    // para el caso real que causaba esto: UN ítem particularmente
+                    // detallado agotando el presupuesto compartido y arruinando a los
+                    // demás ítems del lote (y, antes de este fix, a TODO lo generado
+                    // hasta ese momento, el reclamo real: "me costó una hora armarlo").
+                    if (_batchRows.length === 1) throw _loteErr; // ya era un ítem solo, no hay nada más chico que reintentar
+                    console.warn('[IA Budget] Lote ' + _batchNum + ' falló junto, reintentando ítem por ítem:', _loteErr.message);
+                    for (const _fila of _batchRows) {
+                        if (_pMsgEl) _pMsgEl.textContent = 'Reintentando "' + _fila.name + '" por separado...';
+                        try {
+                            _allResultItems.push(...(await _enviarYParsearLote([_fila], 'Ítem "' + _fila.name + '"')));
+                        } catch (_itemErr) {
+                            throw new Error('No se pudo generar el ítem "' + _fila.name + '" ni siquiera solo (' + _itemErr.message + '). Probá simplificar su descripción/foto y generá de nuevo — los demás ítems no se perdieron, siguen cargados en el formulario.');
+                        }
+                    }
+                }
             }
 
             let items = _allResultItems;
