@@ -363,6 +363,35 @@
         </div>
     </div>
 
+    <!-- Modal selector de láminas PDF -->
+    <div id="mod-pdf-laminas" class="modal" style="display:none;">
+        <div class="modal-box" style="max-width:920px; width:96vw; max-height:90vh; display:flex; flex-direction:column; padding:0; overflow:hidden;">
+            <div style="padding:15px 18px; border-bottom:1px solid var(--border); display:flex; align-items:center; justify-content:space-between; flex-shrink:0; gap:10px;">
+                <div>
+                    <h3 style="margin:0; font-size:16px;"><i class="ph-bold ph-file-pdf" style="color:var(--purple); margin-right:7px;"></i>Seleccioná las láminas a cotizar</h3>
+                    <p style="margin:4px 0 0; font-size:12px; color:var(--gray);">Marcá las páginas · ajustá cuántos ítems tiene cada lámina · agrupá páginas del mismo ítem</p>
+                </div>
+                <i class="ph-bold ph-x" style="font-size:20px; cursor:pointer; flex-shrink:0; padding:4px;" onclick="_closePdfLaminasModal(false)"></i>
+            </div>
+            <div style="padding:8px 14px; border-bottom:1px solid var(--border); display:flex; gap:6px; flex-wrap:wrap; flex-shrink:0; align-items:center;">
+                <button class="btn btn-dark" style="padding:5px 11px; font-size:12px; gap:5px;" onclick="_pdfSelAll()"><i class="ph-bold ph-check-square"></i> Todo</button>
+                <button class="btn btn-dark" style="padding:5px 11px; font-size:12px; gap:5px;" onclick="_pdfSelNone()"><i class="ph-bold ph-square"></i> Ninguna</button>
+                <div style="width:1px; height:18px; background:var(--border); margin:0 1px;"></div>
+                <button id="pdf-group-btn" class="btn btn-dark" style="padding:5px 11px; font-size:12px; gap:5px; opacity:0.4;" onclick="_pdfGroupSelected()"><i class="ph-bold ph-link"></i> Agrupar como 1 ítem</button>
+                <button id="pdf-ungroup-btn" class="btn btn-dark" style="padding:5px 11px; font-size:12px; gap:5px; opacity:0.4;" onclick="_pdfUngroupSelected()"><i class="ph-bold ph-link-break"></i> Desagrupar</button>
+                <span id="pdf-sel-info" style="margin-left:auto; font-size:12px; color:var(--gray); white-space:nowrap;"></span>
+            </div>
+            <div id="pdf-laminas-grid" style="overflow-y:auto; flex:1; padding:14px; display:grid; grid-template-columns:repeat(auto-fill,minmax(148px,1fr)); gap:10px;"></div>
+            <div style="padding:11px 18px; border-top:1px solid var(--border); display:flex; align-items:center; justify-content:space-between; flex-shrink:0; gap:10px; flex-wrap:wrap;">
+                <span id="pdf-confirm-info" style="font-size:12px; color:var(--gray);"></span>
+                <div style="display:flex; gap:8px;">
+                    <button class="btn btn-dark" style="padding:9px 16px;" onclick="_closePdfLaminasModal(false)">Cancelar</button>
+                    <button id="pdf-confirm-btn" class="btn" style="padding:9px 18px; background:var(--purple); gap:6px;" onclick="_closePdfLaminasModal(true)"><i class="ph-bold ph-check"></i> Confirmar y extraer ítems</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <div id="mod-apu" class="modal">
         <div class="modal-box" style="max-width:650px;">
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
@@ -3113,6 +3142,133 @@ ${_rawOcr}
         inp.value = '';
     };
 
+    // --- SELECTOR DE LÁMINAS PDF ---
+    let _pdfLaminasState = [];   // [{ pageNum, selected, group, itemCount }]
+    let _pdfLaminasImages = {};  // pageNum → base64 thumbnail (low-res for display)
+    let _pdfLaminasResolve = null;
+    const _PDF_GRP_COLORS = ['#0a84ff','#30d158','#ff9f0a','#bf5af2','#ff453a','#64d2ff','#ff375f','#ffd60a'];
+
+    function _openPdfLaminasModal(filename) {
+        document.getElementById('mod-pdf-laminas').style.display = 'flex';
+        _renderPdfLaminasGrid();
+        _updatePdfSelInfo();
+        return new Promise(resolve => { _pdfLaminasResolve = resolve; });
+    }
+
+    function _renderPdfLaminasGrid() {
+        const grid = document.getElementById('pdf-laminas-grid');
+        grid.innerHTML = '';
+        _pdfLaminasState.forEach(function(s) {
+            const gc = s.group !== null ? _PDF_GRP_COLORS[s.group % _PDF_GRP_COLORS.length] : null;
+            const border = s.selected ? (gc ? `2px solid ${gc}` : '2px solid var(--purple)') : '2px solid var(--border)';
+            const card = document.createElement('div');
+            card.dataset.page = s.pageNum;
+            card.style.cssText = `border:${border}; border-radius:10px; overflow:hidden; cursor:pointer; background:var(--bg2); user-select:none;`;
+            card.onclick = function(e) { if (!e.target.closest('.pdf-lam-ctrl')) _togglePdfPage(s.pageNum); };
+            const img = _pdfLaminasImages[s.pageNum];
+            card.innerHTML =
+                `<div style="position:relative; background:#0a0a0a;">` +
+                    (img ? `<img src="${img}" style="width:100%; display:block; opacity:${s.selected ? 1 : 0.3};">` : `<div style="height:110px; display:flex; align-items:center; justify-content:center; color:var(--gray); font-size:11px;">Sin preview</div>`) +
+                    (s.selected ? `<div style="position:absolute; top:5px; right:5px; width:18px; height:18px; background:${gc || 'var(--purple)'}; border-radius:50%; display:flex; align-items:center; justify-content:center;"><i class="ph-bold ph-check" style="font-size:10px; color:#fff;"></i></div>` : '') +
+                    (s.group !== null ? `<div style="position:absolute; top:5px; left:5px; background:${gc}; color:#fff; font-size:10px; font-weight:700; padding:1px 6px; border-radius:4px;">G${s.group + 1}</div>` : '') +
+                    `<div style="position:absolute; bottom:3px; left:5px; background:rgba(0,0,0,0.65); color:#fff; font-size:10px; padding:1px 6px; border-radius:3px;">Pág ${s.pageNum}</div>` +
+                `</div>` +
+                (s.selected
+                    ? `<div class="pdf-lam-ctrl" style="padding:5px 7px; display:flex; align-items:center; gap:4px; justify-content:center; border-top:1px solid var(--border);">` +
+                        `<span style="font-size:10px; color:var(--gray);">Ítems:</span>` +
+                        `<button onclick="_pdfChangeCount(${s.pageNum},-1)" style="width:19px; height:19px; border-radius:50%; border:1px solid var(--border); background:var(--bg); cursor:pointer; font-size:14px; line-height:1; display:flex; align-items:center; justify-content:center; color:var(--text); padding:0;">−</button>` +
+                        `<span style="font-size:13px; font-weight:700; min-width:14px; text-align:center;">${s.itemCount}</span>` +
+                        `<button onclick="_pdfChangeCount(${s.pageNum},1)" style="width:19px; height:19px; border-radius:50%; border:1px solid var(--border); background:var(--bg); cursor:pointer; font-size:14px; line-height:1; display:flex; align-items:center; justify-content:center; color:var(--text); padding:0;">+</button>` +
+                      `</div>`
+                    : `<div style="padding:3px 0; text-align:center; font-size:10px; color:var(--gray);">Excluida</div>`);
+            grid.appendChild(card);
+        });
+    }
+
+    function _togglePdfPage(pageNum) {
+        const s = _pdfLaminasState.find(function(x) { return x.pageNum === pageNum; });
+        if (!s) return;
+        s.selected = !s.selected;
+        if (!s.selected) s.group = null;
+        _renderPdfLaminasGrid();
+        _updatePdfSelInfo();
+    }
+
+    function _pdfChangeCount(pageNum, delta) {
+        const s = _pdfLaminasState.find(function(x) { return x.pageNum === pageNum; });
+        if (!s) return;
+        s.itemCount = Math.max(1, Math.min(20, s.itemCount + delta));
+        _renderPdfLaminasGrid();
+        _updatePdfSelInfo();
+    }
+
+    function _pdfSelAll() {
+        _pdfLaminasState.forEach(function(s) { s.selected = true; });
+        _renderPdfLaminasGrid(); _updatePdfSelInfo();
+    }
+
+    function _pdfSelNone() {
+        _pdfLaminasState.forEach(function(s) { s.selected = false; s.group = null; });
+        _renderPdfLaminasGrid(); _updatePdfSelInfo();
+    }
+
+    function _pdfGroupSelected() {
+        const sel = _pdfLaminasState.filter(function(s) { return s.selected; });
+        if (sel.length < 2) return;
+        const used = new Set(_pdfLaminasState.map(function(s) { return s.group; }).filter(function(g) { return g !== null; }));
+        let next = 0; while (used.has(next)) next++;
+        sel.forEach(function(s) { s.group = next; s.itemCount = 1; });
+        _renderPdfLaminasGrid(); _updatePdfSelInfo();
+    }
+
+    function _pdfUngroupSelected() {
+        _pdfLaminasState.filter(function(s) { return s.selected; }).forEach(function(s) { s.group = null; });
+        _renderPdfLaminasGrid(); _updatePdfSelInfo();
+    }
+
+    function _calcTotalPdfItems() {
+        const sel = _pdfLaminasState.filter(function(s) { return s.selected; });
+        const groups = new Set(sel.filter(function(s) { return s.group !== null; }).map(function(s) { return s.group; }));
+        const ungrouped = sel.filter(function(s) { return s.group === null; });
+        return groups.size + ungrouped.reduce(function(sum, s) { return sum + s.itemCount; }, 0);
+    }
+
+    function _updatePdfSelInfo() {
+        const sel = _pdfLaminasState.filter(function(s) { return s.selected; });
+        const total = _calcTotalPdfItems();
+        const info = document.getElementById('pdf-sel-info');
+        const confInfo = document.getElementById('pdf-confirm-info');
+        if (info) info.textContent = sel.length + ' de ' + _pdfLaminasState.length + ' láminas · ' + total + ' ítems a generar';
+        if (confInfo) confInfo.textContent = 'Se generarán ' + total + ' ítems en el presupuesto';
+        const gb = document.getElementById('pdf-group-btn');
+        const ub = document.getElementById('pdf-ungroup-btn');
+        if (gb) { const ok = sel.length >= 2; gb.style.opacity = ok ? '1' : '0.4'; gb.style.pointerEvents = ok ? 'auto' : 'none'; }
+        if (ub) { const ok = sel.some(function(s) { return s.group !== null; }); ub.style.opacity = ok ? '1' : '0.4'; ub.style.pointerEvents = ok ? 'auto' : 'none'; }
+    }
+
+    function _closePdfLaminasModal(confirm) {
+        document.getElementById('mod-pdf-laminas').style.display = 'none';
+        if (!_pdfLaminasResolve) return;
+        if (!confirm) { _pdfLaminasResolve(null); _pdfLaminasResolve = null; return; }
+        const sel = _pdfLaminasState.filter(function(s) { return s.selected; });
+        const groupMap = {};
+        const result = [];
+        sel.forEach(function(s) {
+            if (s.group !== null) {
+                if (!groupMap[s.group]) groupMap[s.group] = [];
+                groupMap[s.group].push(s.pageNum);
+            } else {
+                result.push({ pages: [s.pageNum], itemCount: s.itemCount });
+            }
+        });
+        Object.values(groupMap).forEach(function(pages) {
+            result.push({ pages: pages.sort(function(a,b){return a-b;}), itemCount: 1, isGroup: true });
+        });
+        result.sort(function(a,b){ return a.pages[0] - b.pages[0]; });
+        _pdfLaminasResolve(result);
+        _pdfLaminasResolve = null;
+    }
+
     // --- IMPORTAR DOCUMENTO (PDF / PPTX / XLSX) ---
     window.handleIADocUpload = async function(file) {
         if (!file) return;
@@ -3125,74 +3281,122 @@ ${_rawOcr}
         const ext = file.name.split('.').pop().toLowerCase();
         const sizeMB = (file.size / 1024 / 1024).toFixed(1);
 
-        // PDF — extraer ítems automáticamente + guardar como contexto
+        // PDF — mostrar selector de láminas, luego extraer con IA
         if (ext === 'pdf') {
-            statusEl.textContent = '⏳ Leyendo PDF...';
             if (file.size > 15 * 1024 * 1024) {
                 statusEl.textContent = '⚠️ PDF muy grande (' + sizeMB + ' MB), puede fallar. Intentá con uno más liviano.';
                 statusEl.style.color = '#ff9f0a';
                 return;
             }
+            if (!window.pdfjsLib) {
+                statusEl.textContent = '❌ pdf.js no disponible — recargá la página.';
+                statusEl.style.color = '#ff453a';
+                return;
+            }
             try {
-                const _pdfB64 = await new Promise((res, rej) => {
-                    const r = new FileReader();
-                    r.onload = e => res(e.target.result);
-                    r.onerror = rej;
-                    r.readAsDataURL(file);
-                });
-                currentIAPdfBase64 = _pdfB64;
                 labelEl.textContent = '📄 ' + file.name;
+                statusEl.textContent = '⏳ Cargando láminas del PDF...';
 
-                // Extraer ítems con IA
-                statusEl.textContent = '⏳ Extrayendo ítems del PDF...';
+                // Cargar PDF y renderizar miniaturas para el selector
+                const _pdfArrayBuf = await file.arrayBuffer();
+                const _pdfDoc = await pdfjsLib.getDocument({ data: _pdfArrayBuf }).promise;
+
+                _pdfLaminasImages = {};
+                _pdfLaminasState = [];
+                for (let _pi = 1; _pi <= _pdfDoc.numPages; _pi++) {
+                    try {
+                        const _pg = await _pdfDoc.getPage(_pi);
+                        const _vp = _pg.getViewport({ scale: 0.35 });
+                        const _c = document.createElement('canvas');
+                        _c.width = _vp.width; _c.height = _vp.height;
+                        await _pg.render({ canvasContext: _c.getContext('2d'), viewport: _vp }).promise;
+                        _pdfLaminasImages[_pi] = _c.toDataURL('image/jpeg', 0.65);
+                    } catch(_) { _pdfLaminasImages[_pi] = null; }
+                    _pdfLaminasState.push({ pageNum: _pi, selected: true, group: null, itemCount: 1 });
+                    statusEl.textContent = '⏳ Cargando láminas... ' + _pi + '/' + _pdfDoc.numPages;
+                }
+
+                // Abrir selector — esperar confirmación del usuario
+                statusEl.style.display = 'none';
+                const _userSel = await _openPdfLaminasModal(file.name);
+                statusEl.style.display = 'block';
                 statusEl.style.color = '#ffd60a';
+                statusEl.style.background = 'rgba(255,214,10,0.08)';
 
-                const _pdfToken = firebase.auth().currentUser
-                    ? await firebase.auth().currentUser.getIdToken() : null;
+                if (!_userSel || _userSel.length === 0) {
+                    statusEl.textContent = '— Importación cancelada.';
+                    statusEl.style.color = 'var(--gray)';
+                    return;
+                }
+
+                // Renderizar páginas seleccionadas en alta calidad para Gemini + adjuntar a filas
+                statusEl.textContent = '⏳ Preparando imágenes de láminas seleccionadas...';
+                const _pdfHQ = {};
+                const _allPages = [...new Set(_userSel.flatMap(function(g) { return g.pages; }))];
+                for (const _pi of _allPages) {
+                    try {
+                        const _pg = await _pdfDoc.getPage(_pi);
+                        const _vp = _pg.getViewport({ scale: 1.5 });
+                        const _c = document.createElement('canvas');
+                        _c.width = _vp.width; _c.height = _vp.height;
+                        await _pg.render({ canvasContext: _c.getContext('2d'), viewport: _vp }).promise;
+                        _pdfHQ[_pi] = await _compressB64(_c.toDataURL('image/jpeg', 0.85), 900, 0.65);
+                    } catch(_) {}
+                }
+
+                // Construir request Gemini con imágenes etiquetadas + instrucciones explícitas del usuario
+                statusEl.textContent = '⏳ Extrayendo ítems según tu selección...';
+                const _instrLines = [];
+                const _parts = [];
+                _userSel.forEach(function(sg, idx) {
+                    const _lbl = sg.pages.length > 1 ? 'LÁMINAS ' + sg.pages.join('+') + ' (agrupadas)' : 'LÁMINA ' + sg.pages[0];
+                    const _hint = sg.itemCount === 1 ? '1 ítem' : sg.itemCount + ' ítems distintos';
+                    _instrLines.push((idx + 1) + '. ' + _lbl + ' → ' + _hint);
+                    sg.pages.forEach(function(pg) {
+                        _parts.push({ text: '[' + _lbl + ']' });
+                        if (_pdfHQ[pg]) _parts.push({ inlineData: { data: _pdfHQ[pg].split(',')[1], mimeType: 'image/jpeg' } });
+                    });
+                });
+                _parts.push({ text: 'Devolvé el array JSON con exactamente los ítems indicados arriba, en ese orden.' });
+
+                const _sysTxt = 'Extraé los ítems de cotización de estas láminas seleccionadas por el usuario.\n\nINSTRUCCIONES DEL USUARIO (respetá exactamente — no agregues ni quites ítems):\n' + _instrLines.join('\n') + '\n\nDevolvé SOLO un array JSON válido, sin texto antes ni después: [{"n":"nombre","q":1,"d":"descripción completa con materiales, medidas y acabado","pagina":N}]. "pagina" es el número de lámina principal de ese ítem.';
+
+                const _pdfToken = firebase.auth().currentUser ? await firebase.auth().currentUser.getIdToken() : null;
                 const _pdfHeaders = { 'Content-Type': 'application/json' };
                 if (_pdfToken) _pdfHeaders['Authorization'] = 'Bearer ' + _pdfToken;
 
                 const _pdfReq = JSON.stringify({
-                    systemInstruction: { parts: [{ text: 'Extraé los PRODUCTOS/ítems DISTINTOS de este documento de cotización.\n\nREGLAS CRÍTICAS:\n1. IGNORÁ portadas, índices, páginas de contacto y páginas que solo listan nombres — esas NO son ítems.\n2. Si el mismo producto aparece en varias páginas (vista frontal, lateral, detalle, cotas, opciones de diseño del MISMO producto), eso es UN SOLO objeto en el array. NUNCA generes un ítem por cada vista o página.\n3. Antes de armar el array, contá cuántos productos REALMENTE distintos hay. Ese número es el tamaño del array, ni más ni menos.\n4. Cada ítem en una misma página (ejemplo: "1 unidad de exhibidor tipo A" y "5 unidades de exhibidor tipo B" en la misma hoja) SÍ son ítems distintos — uno por cada diseño diferente.\n\nDevolvé SOLO un array JSON válido, sin texto antes ni después: [{"n":"nombre del ítem","q":1,"d":"descripción completa combinando los datos de TODAS las páginas de ese ítem","pagina":1}]. q es la cantidad numérica. "pagina" es la ÚNICA página que mejor muestra el plano/dibujo con cotas de ESE ítem. Si el ítem no tiene página con plano propio, omití "pagina". NO dupliques.' }] },
-                    contents: [{ role: 'user', parts: [
-                        { inlineData: { data: _pdfB64.split(',')[1], mimeType: 'application/pdf' } },
-                        { text: 'Extraé los productos/ítems de cotización de este PDF como array JSON. Ignorá portadas e índices. Un producto con varias vistas/páginas = 1 entrada. Varios diseños distintos en la misma página = entradas separadas.' }
-                    ]}],
+                    model: 'gemini-2.5-flash',
+                    systemInstruction: { parts: [{ text: _sysTxt }] },
+                    contents: [{ role: 'user', parts: _parts }],
                     generationConfig: { maxOutputTokens: 8000, temperature: 0.0 },
-                    advancedModel: false
                 });
 
                 let _pdfRespData;
                 try {
-                    const _pdfResp = await _fetchInWorker(location.origin + '/api/gemini', { method: 'POST', headers: _pdfHeaders, body: _pdfReq }, 60000);
+                    const _pdfResp = await _fetchInWorker(location.origin + '/api/gemini', { method: 'POST', headers: _pdfHeaders, body: _pdfReq }, 90000);
                     if (_pdfResp.ok) _pdfRespData = JSON.parse(_pdfResp.text);
                 } catch(_pe) { _pdfRespData = null; }
 
-                // Mismo parseo robusto que generateIABudget (balanceado + reparación
-                // de array truncado) en vez del indexOf('[')/lastIndexOf(']') de
-                // antes — con 15 ítems y descripciones largas, un corte a mitad de
-                // camino perdía el último ítem en silencio (el reclamo real: "eran
-                // 15 items y leyó 14").
                 let _pdfItems = null;
                 if (_pdfRespData?.candidates?.[0]?.content?.parts?.[0]?.text) {
                     const _raw = _pdfRespData.candidates[0].content.parts[0].text.replace(/```json|```/g, '').trim();
-                    let _ext = _extractBalancedArray(_raw) || _repairTruncatedArray(_raw);
+                    const _ext = _extractBalancedArray(_raw) || _repairTruncatedArray(_raw);
                     if (_ext) { try { _pdfItems = JSON.parse(_ext); } catch(_) {} }
                 }
 
                 if (_pdfItems && Array.isArray(_pdfItems) && _pdfItems.length > 0) {
-                    // Poblar filas igual que el PPTX
                     const _existingRows = document.querySelectorAll('.ia-item-row');
-                    const _firstEmpty = Array.from(_existingRows).find(r => !r.querySelector('.ia-inp-name')?.value?.trim());
+                    const _firstEmpty = Array.from(_existingRows).find(function(r) { return !r.querySelector('.ia-inp-name')?.value?.trim(); });
                     let _rowsCreated = 0;
-                    const _rowsConPagina = []; // { row, pagina } — para la segunda pasada que adjunta la imagen
+                    let _rowsWithImg = 0;
+
                     _pdfItems.forEach(function(it, idx) {
                         const nm = (it.n || it.name || it.nombre || '').trim();
                         if (!nm) return;
                         let row;
-                        if (idx === 0 && _firstEmpty) {
-                            row = _firstEmpty;
-                        } else {
+                        if (idx === 0 && _firstEmpty) { row = _firstEmpty; }
+                        else {
                             window.addIARow();
                             const allRows = document.querySelectorAll('.ia-item-row');
                             row = allRows[allRows.length - 1];
@@ -3204,61 +3408,31 @@ ${_rawOcr}
                         if (nameInp) nameInp.value = nm.toUpperCase();
                         if (cantInp && it.q) cantInp.value = parseInt(it.q) || 1;
                         if (promptInp && it.d) promptInp.value = it.d;
+
+                        // Adjuntar imagen HQ: usar pagina de Gemini o primera página de la selección del usuario
                         const _pag = parseInt(it.pagina);
-                        if (Number.isInteger(_pag) && _pag > 0) _rowsConPagina.push({ row, pagina: _pag });
+                        const _imgSrc = _pdfHQ[_pag] || _pdfHQ[_allPages[Math.min(idx, _allPages.length - 1)]] || null;
+                        if (_imgSrc) {
+                            const imgContainer = row.querySelector('[id^="ia-img-container-"]');
+                            if (imgContainer) {
+                                const imgEl = document.createElement('img');
+                                imgEl.src = _imgSrc;
+                                imgEl.style.cssText = 'height:60px; border-radius:4px; border:1px solid #555; object-fit:cover;';
+                                imgEl.className = 'ia-row-image-data';
+                                imgContainer.appendChild(_makeIAImgWrap(imgEl));
+                                _rowsWithImg++;
+                            }
+                        }
                         _rowsCreated++;
                     });
 
-                    // Segunda pasada: renderizar con pdf.js la página que Gemini marcó
-                    // para cada ítem y adjuntarla a su fila como foto de referencia —
-                    // antes había que hacerlo a mano, fila por fila, por cada ítem
-                    // importado (el reclamo real: "tuve que revisar uno por uno... y
-                    // poner imagen al ítem"). Páginas repetidas se renderizan una sola
-                    // vez. Si pdf.js no está disponible o algo falla, se sigue de largo
-                    // sin foto en esa fila en vez de cortar el import entero.
-                    if (_rowsConPagina.length > 0 && window.pdfjsLib) {
-                        statusEl.textContent = '⏳ Extrayendo imagen de cada ítem (' + _rowsConPagina.length + ')...';
-                        try {
-                            const _pdfDoc = await pdfjsLib.getDocument({ data: await file.arrayBuffer() }).promise;
-                            const _paginasRenderizadas = {};
-                            for (const { row, pagina } of _rowsConPagina) {
-                                try {
-                                    if (pagina > _pdfDoc.numPages) continue;
-                                    if (!_paginasRenderizadas[pagina]) {
-                                        const _page = await _pdfDoc.getPage(pagina);
-                                        const _viewport = _page.getViewport({ scale: 1.5 });
-                                        const _canvas = document.createElement('canvas');
-                                        _canvas.width = _viewport.width;
-                                        _canvas.height = _viewport.height;
-                                        await _page.render({ canvasContext: _canvas.getContext('2d'), viewport: _viewport }).promise;
-                                        _paginasRenderizadas[pagina] = await _compressB64(_canvas.toDataURL('image/jpeg', 0.85), 900, 0.65);
-                                    }
-                                    const imgContainer = row.querySelector('[id^="ia-img-container-"]');
-                                    if (!imgContainer) continue;
-                                    const imgEl = document.createElement('img');
-                                    imgEl.src = _paginasRenderizadas[pagina];
-                                    imgEl.style.cssText = 'height:60px; border-radius:4px; border:1px solid #555; object-fit:cover;';
-                                    imgEl.className = 'ia-row-image-data';
-                                    imgContainer.appendChild(_makeIAImgWrap(imgEl));
-                                } catch(_pageErr) {
-                                    console.warn('[PDF import] No se pudo renderizar la página ' + pagina + ':', _pageErr.message);
-                                }
-                            }
-                        } catch(_docErr) {
-                            console.warn('[PDF import] No se pudieron extraer imágenes por ítem:', _docErr.message);
-                        }
-                    }
-
-                    // Ítems ya extraídos — no hace falta reenviar el PDF en cada batch de generación
                     currentIAPdfBase64 = null;
-                    statusEl.textContent = '✅ PDF importado: ' + _rowsCreated + ' ítems cargados (con imagen: ' + _rowsConPagina.length + '). Revisá y ajustá, luego generá.';
+                    statusEl.textContent = '✅ PDF importado: ' + _rowsCreated + ' ítems cargados (con imagen: ' + _rowsWithImg + '). Revisá y ajustá, luego generá.';
                     statusEl.style.color = '#30d158';
                     statusEl.style.background = 'rgba(48,209,88,0.08)';
                 } else {
-                    // Fallback: solo guardar como contexto
-                    statusEl.textContent = '✅ PDF cargado: ' + file.name + ' (' + sizeMB + ' MB) — se enviará como contexto a la IA.';
-                    statusEl.style.color = '#30d158';
-                    statusEl.style.background = 'rgba(48,209,88,0.08)';
+                    statusEl.textContent = '⚠️ No se pudieron extraer ítems. Revisá las láminas seleccionadas e intentá de nuevo.';
+                    statusEl.style.color = '#ff9f0a';
                 }
             } catch(_pdfErr) {
                 currentIAPdfBase64 = null;
