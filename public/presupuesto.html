@@ -3193,9 +3193,7 @@ ${_rawOcr}
                     ? `<div class="pdf-lam-ctrl" style="padding:5px 7px; display:flex; align-items:center; gap:4px; justify-content:center; border-top:1px solid var(--border);">` +
                         `<span style="font-size:10px; color:var(--gray);">Ítems:</span>` +
                         `<button onclick="_pdfChangeCount(${s.pageNum},-1)" style="width:19px; height:19px; border-radius:50%; border:1px solid var(--border); background:var(--bg); cursor:pointer; font-size:14px; line-height:1; display:flex; align-items:center; justify-content:center; color:var(--text); padding:0;">−</button>` +
-                        (s.itemCount === 1
-                          ? `<span style="font-size:11px; color:var(--gray); min-width:22px; text-align:center;">auto</span>`
-                          : `<span style="font-size:13px; font-weight:700; min-width:14px; text-align:center;">${s.itemCount}</span>`) +
+                        `<span style="font-size:13px; font-weight:700; min-width:14px; text-align:center;">${s.itemCount}</span>` +
                         `<button onclick="_pdfChangeCount(${s.pageNum},1)" style="width:19px; height:19px; border-radius:50%; border:1px solid var(--border); background:var(--bg); cursor:pointer; font-size:14px; line-height:1; display:flex; align-items:center; justify-content:center; color:var(--text); padding:0;">+</button>` +
                       `</div>`
                     : `<div style="padding:3px 0; text-align:center; font-size:10px; color:var(--gray);">Excluida</div>`);
@@ -3249,7 +3247,7 @@ ${_rawOcr}
 
         // Bloquear si alguna tiene count explícito > 1
         if (src.itemCount > 1 || tgt.itemCount > 1) {
-            _pdfFlashError('⚠️ La Pág ' + (src.itemCount > 1 ? src.pageNum : tgt.pageNum) + ' tiene ítems fijos — bajá el contador a "auto" antes de agrupar.');
+            _pdfFlashError('⚠️ La Pág ' + (src.itemCount > 1 ? src.pageNum : tgt.pageNum) + ' tiene varios ítems — bajá el contador a 1 antes de agrupar.');
             return;
         }
 
@@ -3383,11 +3381,8 @@ ${_rawOcr}
         const total = _calcTotalPdfItems();
         const info = document.getElementById('pdf-sel-info');
         const confInfo = document.getElementById('pdf-confirm-info');
-        const autoCount = _pdfLaminasState.filter(function(s) { return s.selected && s.group === null && s.itemCount === 1; }).length;
-        const fixedCount = total - autoCount;
-        const itemLabel = autoCount > 0 ? (fixedCount > 0 ? fixedCount + '+ ítems (+ auto en ' + autoCount + ' lám.)' : 'auto en ' + autoCount + ' lám.') : total + ' ítems';
-        if (info) info.textContent = sel.length + ' de ' + _pdfLaminasState.length + ' láminas · ' + itemLabel;
-        if (confInfo) confInfo.textContent = autoCount > 0 ? 'Gemini detectará todos los ítems por lámina' : 'Se generarán ' + total + ' ítems en el presupuesto';
+        if (info) info.textContent = sel.length + ' de ' + _pdfLaminasState.length + ' láminas · ' + total + ' ítems a generar';
+        if (confInfo) confInfo.textContent = 'Se generarán ' + total + ' ítems en el presupuesto';
     }
 
     function _closePdfLaminasModal(confirm) {
@@ -3496,7 +3491,7 @@ ${_rawOcr}
                     const _lbl = sg.pages.length > 1 ? 'LÁMINAS ' + sg.pages.join('+') + ' (agrupadas)' : 'LÁMINA ' + sg.pages[0];
                     const _hint = sg.pages.length > 1 ? '1 ítem (misma pieza, distintas vistas)'
                                  : sg.itemCount > 1 ? 'exactamente ' + sg.itemCount + ' ítems distintos'
-                                 : 'detectá TODOS los ítems/piezas distintos que veas (pueden ser 1 o varios)';
+                                 : '1 ítem';
                     _instrLines.push((idx + 1) + '. ' + _lbl + ' → ' + _hint);
                     sg.pages.forEach(function(pg) {
                         _parts.push({ text: '[' + _lbl + ']' });
