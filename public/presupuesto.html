@@ -376,10 +376,13 @@
             <div style="padding:8px 14px; border-bottom:1px solid var(--border); display:flex; gap:6px; flex-wrap:wrap; flex-shrink:0; align-items:center;">
                 <button class="btn btn-dark" style="padding:5px 11px; font-size:12px; gap:5px;" onclick="_pdfSelAll()"><i class="ph-bold ph-check-square"></i> Todo</button>
                 <button class="btn btn-dark" style="padding:5px 11px; font-size:12px; gap:5px;" onclick="_pdfSelNone()"><i class="ph-bold ph-square"></i> Ninguna</button>
-                <div style="width:1px; height:18px; background:var(--border); margin:0 1px;"></div>
-                <button id="pdf-group-btn" class="btn btn-dark" style="padding:5px 11px; font-size:12px; gap:5px; opacity:0.4;" onclick="_pdfGroupSelected()"><i class="ph-bold ph-link"></i> Agrupar como 1 ítem</button>
-                <button id="pdf-ungroup-btn" class="btn btn-dark" style="padding:5px 11px; font-size:12px; gap:5px; opacity:0.4;" onclick="_pdfUngroupSelected()"><i class="ph-bold ph-link-break"></i> Desagrupar</button>
+                <span style="font-size:11px; color:var(--gray); margin-left:4px;"><i class="ph-bold ph-arrows-out-cardinal" style="vertical-align:-2px;"></i> Arrastrá una lámina sobre otra para agruparlas · Clic derecho o mantené presionado para desagrupar</span>
                 <span id="pdf-sel-info" style="margin-left:auto; font-size:12px; color:var(--gray); white-space:nowrap;"></span>
+            </div>
+            <!-- Menú contextual para desagrupar -->
+            <div id="pdf-ctx-menu" style="display:none; position:fixed; z-index:9999; background:var(--card); border:1px solid var(--border); border-radius:10px; padding:6px; min-width:190px; box-shadow:0 6px 24px rgba(0,0,0,0.5);">
+                <div id="pdf-ctx-quitar" onclick="_pdfCtxDesagrupar()" style="padding:9px 14px; cursor:pointer; border-radius:7px; font-size:13px; display:flex; align-items:center; gap:8px;"><i class="ph-bold ph-link-break"></i> Quitar del grupo</div>
+                <div id="pdf-ctx-todo" onclick="_pdfCtxDesagruparTodo()" style="padding:9px 14px; cursor:pointer; border-radius:7px; font-size:13px; display:flex; align-items:center; gap:8px;"><i class="ph-bold ph-x-circle"></i> Desagrupar todo el grupo</div>
             </div>
             <div id="pdf-laminas-grid" style="overflow-y:auto; flex:1; padding:14px; display:grid; grid-template-columns:repeat(auto-fill,minmax(148px,1fr)); gap:10px;"></div>
             <div style="padding:11px 18px; border-top:1px solid var(--border); display:flex; align-items:center; justify-content:space-between; flex-shrink:0; gap:10px; flex-wrap:wrap;">
@@ -3146,6 +3149,9 @@ ${_rawOcr}
     let _pdfLaminasState = [];   // [{ pageNum, selected, group, itemCount }]
     let _pdfLaminasImages = {};  // pageNum → base64 thumbnail (low-res for display)
     let _pdfLaminasResolve = null;
+    let _pdfDragSrc = null;      // pageNum siendo arrastrado
+    let _pdfLongPressTimer = null;
+    let _pdfCtxPageNum = null;   // página con menú contextual abierto
     const _PDF_GRP_COLORS = ['#0a84ff','#30d158','#ff9f0a','#bf5af2','#ff453a','#64d2ff','#ff375f','#ffd60a'];
 
     function _openPdfLaminasModal(filename) {
@@ -3163,15 +3169,25 @@ ${_rawOcr}
             const border = s.selected ? (gc ? `2px solid ${gc}` : '2px solid var(--purple)') : '2px solid var(--border)';
             const card = document.createElement('div');
             card.dataset.page = s.pageNum;
-            card.style.cssText = `border:${border}; border-radius:10px; overflow:hidden; cursor:pointer; background:var(--bg2); user-select:none;`;
+            card.draggable = true;
+            card.style.cssText = `border:${border}; border-radius:10px; overflow:hidden; cursor:grab; background:var(--bg2); user-select:none; transition:transform 0.1s, box-shadow 0.1s;`;
             card.onclick = function(e) { if (!e.target.closest('.pdf-lam-ctrl')) _togglePdfPage(s.pageNum); };
+            card.ondragstart = function(e) { _pdfDragStart(e, s.pageNum); };
+            card.ondragover  = function(e) { _pdfDragOver(e, s.pageNum); };
+            card.ondragleave = function(e) { _pdfDragLeave(e, s.pageNum); };
+            card.ondrop      = function(e) { _pdfDrop(e, s.pageNum); };
+            card.ondragend   = function()  { _pdfDragEnd(); };
+            card.oncontextmenu = function(e) { _pdfContextMenu(e, s.pageNum); };
+            card.ontouchstart  = function(e) { _pdfTouchStart(e, s.pageNum); };
+            card.ontouchend    = function()  { _pdfTouchEnd(); };
+            card.ontouchmove   = function()  { _pdfTouchEnd(); }; // cancel on move
             const img = _pdfLaminasImages[s.pageNum];
             card.innerHTML =
                 `<div style="position:relative; background:#0a0a0a;">` +
-                    (img ? `<img src="${img}" style="width:100%; display:block; opacity:${s.selected ? 1 : 0.3};">` : `<div style="height:110px; display:flex; align-items:center; justify-content:center; color:var(--gray); font-size:11px;">Sin preview</div>`) +
-                    (s.selected ? `<div style="position:absolute; top:5px; right:5px; width:18px; height:18px; background:${gc || 'var(--purple)'}; border-radius:50%; display:flex; align-items:center; justify-content:center;"><i class="ph-bold ph-check" style="font-size:10px; color:#fff;"></i></div>` : '') +
-                    (s.group !== null ? `<div style="position:absolute; top:5px; left:5px; background:${gc}; color:#fff; font-size:10px; font-weight:700; padding:1px 6px; border-radius:4px;">G${s.group + 1}</div>` : '') +
-                    `<div style="position:absolute; bottom:3px; left:5px; background:rgba(0,0,0,0.65); color:#fff; font-size:10px; padding:1px 6px; border-radius:3px;">Pág ${s.pageNum}</div>` +
+                    (img ? `<img src="${img}" style="width:100%; display:block; opacity:${s.selected ? 1 : 0.3}; pointer-events:none;">` : `<div style="height:110px; display:flex; align-items:center; justify-content:center; color:var(--gray); font-size:11px;">Sin preview</div>`) +
+                    (s.selected ? `<div style="position:absolute; top:5px; right:5px; width:18px; height:18px; background:${gc || 'var(--purple)'}; border-radius:50%; display:flex; align-items:center; justify-content:center; pointer-events:none;"><i class="ph-bold ph-check" style="font-size:10px; color:#fff;"></i></div>` : '') +
+                    (s.group !== null ? `<div style="position:absolute; top:5px; left:5px; background:${gc}; color:#fff; font-size:10px; font-weight:700; padding:1px 6px; border-radius:4px; pointer-events:none;">G${s.group + 1}</div>` : '') +
+                    `<div style="position:absolute; bottom:3px; left:5px; background:rgba(0,0,0,0.65); color:#fff; font-size:10px; padding:1px 6px; border-radius:3px; pointer-events:none;">Pág ${s.pageNum}</div>` +
                 `</div>` +
                 (s.selected
                     ? `<div class="pdf-lam-ctrl" style="padding:5px 7px; display:flex; align-items:center; gap:4px; justify-content:center; border-top:1px solid var(--border);">` +
@@ -3184,6 +3200,131 @@ ${_rawOcr}
             grid.appendChild(card);
         });
     }
+
+    // Drag & drop — agrupar páginas arrastrando una sobre otra
+    function _pdfDragStart(e, pageNum) {
+        _pdfDragSrc = pageNum;
+        e.dataTransfer.effectAllowed = 'move';
+        e.currentTarget.style.opacity = '0.5';
+        _hidePdfCtxMenu();
+    }
+
+    function _pdfDragOver(e, pageNum) {
+        e.preventDefault();
+        if (_pdfDragSrc === pageNum) return;
+        e.dataTransfer.dropEffect = 'move';
+        e.currentTarget.style.transform = 'scale(1.04)';
+        e.currentTarget.style.boxShadow = '0 0 0 3px #bf5af2';
+    }
+
+    function _pdfDragLeave(e, pageNum) {
+        if (e.relatedTarget && e.currentTarget.contains(e.relatedTarget)) return;
+        e.currentTarget.style.transform = '';
+        e.currentTarget.style.boxShadow = '';
+    }
+
+    function _pdfDragEnd() {
+        document.querySelectorAll('#pdf-laminas-grid > div').forEach(function(c) {
+            c.style.opacity = '';
+            c.style.transform = '';
+            c.style.boxShadow = '';
+        });
+        _pdfDragSrc = null;
+    }
+
+    function _pdfDrop(e, targetPage) {
+        e.preventDefault();
+        e.currentTarget.style.transform = '';
+        e.currentTarget.style.boxShadow = '';
+        if (_pdfDragSrc === null || _pdfDragSrc === targetPage) return;
+
+        const src = _pdfLaminasState.find(function(x) { return x.pageNum === _pdfDragSrc; });
+        const tgt = _pdfLaminasState.find(function(x) { return x.pageNum === targetPage; });
+        if (!src || !tgt) return;
+
+        // Asegurar que ambos estén seleccionados
+        src.selected = true;
+        tgt.selected = true;
+
+        // Determinar grupo a usar: priorizar grupo existente del destino, luego origen, luego crear nuevo
+        let grp;
+        if (tgt.group !== null) {
+            grp = tgt.group;
+        } else if (src.group !== null) {
+            grp = src.group;
+        } else {
+            const used = new Set(_pdfLaminasState.map(function(s) { return s.group; }).filter(function(g) { return g !== null; }));
+            grp = 0; while (used.has(grp)) grp++;
+        }
+
+        // Si src tenía grupo distinto, mover todo ese grupo al nuevo grupo
+        if (src.group !== null && src.group !== grp) {
+            const oldGrp = src.group;
+            _pdfLaminasState.forEach(function(s) { if (s.group === oldGrp) s.group = grp; });
+        }
+        src.group = grp;
+        tgt.group = grp;
+        src.itemCount = 1;
+        tgt.itemCount = 1;
+
+        _pdfDragSrc = null;
+        _renderPdfLaminasGrid();
+        _updatePdfSelInfo();
+    }
+
+    // Menú contextual — clic derecho (PC) o long-press (móvil)
+    function _pdfContextMenu(e, pageNum) {
+        e.preventDefault();
+        const s = _pdfLaminasState.find(function(x) { return x.pageNum === pageNum; });
+        if (!s || s.group === null) return; // solo mostrar si está en un grupo
+        _pdfCtxPageNum = pageNum;
+        const menu = document.getElementById('pdf-ctx-menu');
+        menu.style.display = 'block';
+        menu.style.left = Math.min(e.clientX, window.innerWidth - 200) + 'px';
+        menu.style.top  = Math.min(e.clientY, window.innerHeight - 100) + 'px';
+    }
+
+    function _hidePdfCtxMenu() {
+        document.getElementById('pdf-ctx-menu').style.display = 'none';
+        _pdfCtxPageNum = null;
+    }
+
+    function _pdfCtxDesagrupar() {
+        if (_pdfCtxPageNum === null) return;
+        const s = _pdfLaminasState.find(function(x) { return x.pageNum === _pdfCtxPageNum; });
+        if (s) s.group = null;
+        _hidePdfCtxMenu();
+        _renderPdfLaminasGrid(); _updatePdfSelInfo();
+    }
+
+    function _pdfCtxDesagruparTodo() {
+        if (_pdfCtxPageNum === null) return;
+        const s = _pdfLaminasState.find(function(x) { return x.pageNum === _pdfCtxPageNum; });
+        if (!s || s.group === null) { _hidePdfCtxMenu(); return; }
+        const grp = s.group;
+        _pdfLaminasState.forEach(function(x) { if (x.group === grp) x.group = null; });
+        _hidePdfCtxMenu();
+        _renderPdfLaminasGrid(); _updatePdfSelInfo();
+    }
+
+    // Long-press táctil
+    function _pdfTouchStart(e, pageNum) {
+        _pdfLongPressTimer = setTimeout(function() {
+            _pdfLongPressTimer = null;
+            const t = e.touches[0];
+            _pdfContextMenu({ preventDefault: function(){}, clientX: t.clientX, clientY: t.clientY }, pageNum);
+        }, 600);
+    }
+
+    function _pdfTouchEnd() {
+        if (_pdfLongPressTimer) { clearTimeout(_pdfLongPressTimer); _pdfLongPressTimer = null; }
+    }
+
+    // Cerrar menú contextual al hacer clic fuera
+    document.addEventListener('click', function(e) {
+        const menu = document.getElementById('pdf-ctx-menu');
+        if (menu && !menu.contains(e.target)) _hidePdfCtxMenu();
+    });
 
     function _togglePdfPage(pageNum) {
         const s = _pdfLaminasState.find(function(x) { return x.pageNum === pageNum; });
@@ -3212,20 +3353,6 @@ ${_rawOcr}
         _renderPdfLaminasGrid(); _updatePdfSelInfo();
     }
 
-    function _pdfGroupSelected() {
-        const sel = _pdfLaminasState.filter(function(s) { return s.selected; });
-        if (sel.length < 2) return;
-        const used = new Set(_pdfLaminasState.map(function(s) { return s.group; }).filter(function(g) { return g !== null; }));
-        let next = 0; while (used.has(next)) next++;
-        sel.forEach(function(s) { s.group = next; s.itemCount = 1; });
-        _renderPdfLaminasGrid(); _updatePdfSelInfo();
-    }
-
-    function _pdfUngroupSelected() {
-        _pdfLaminasState.filter(function(s) { return s.selected; }).forEach(function(s) { s.group = null; });
-        _renderPdfLaminasGrid(); _updatePdfSelInfo();
-    }
-
     function _calcTotalPdfItems() {
         const sel = _pdfLaminasState.filter(function(s) { return s.selected; });
         const groups = new Set(sel.filter(function(s) { return s.group !== null; }).map(function(s) { return s.group; }));
@@ -3240,10 +3367,6 @@ ${_rawOcr}
         const confInfo = document.getElementById('pdf-confirm-info');
         if (info) info.textContent = sel.length + ' de ' + _pdfLaminasState.length + ' láminas · ' + total + ' ítems a generar';
         if (confInfo) confInfo.textContent = 'Se generarán ' + total + ' ítems en el presupuesto';
-        const gb = document.getElementById('pdf-group-btn');
-        const ub = document.getElementById('pdf-ungroup-btn');
-        if (gb) { const ok = sel.length >= 2; gb.style.opacity = ok ? '1' : '0.4'; gb.style.pointerEvents = ok ? 'auto' : 'none'; }
-        if (ub) { const ok = sel.some(function(s) { return s.group !== null; }); ub.style.opacity = ok ? '1' : '0.4'; ub.style.pointerEvents = ok ? 'auto' : 'none'; }
     }
 
     function _closePdfLaminasModal(confirm) {
