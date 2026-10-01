@@ -3189,10 +3189,10 @@ ${_rawOcr}
                     (s.group !== null ? `<div style="position:absolute; top:5px; left:5px; background:${gc}; color:#fff; font-size:10px; font-weight:700; padding:1px 6px; border-radius:4px; pointer-events:none;">G${s.group + 1}</div>` : '') +
                     `<div style="position:absolute; bottom:3px; left:5px; background:rgba(0,0,0,0.65); color:#fff; font-size:10px; padding:1px 6px; border-radius:3px; pointer-events:none;">Pág ${s.pageNum}</div>` +
                     (s.selected && s.group === null
-                        ? `<div class="pdf-lam-ctrl" style="position:absolute; bottom:6px; right:5px; display:flex; align-items:center; gap:3px; background:rgba(0,0,0,0.82); border-radius:20px; padding:3px 5px; backdrop-filter:blur(4px);">` +
-                            `<button onclick="_pdfChangeCount(${s.pageNum},-1)" style="width:26px; height:26px; border-radius:50%; border:none; background:rgba(255,255,255,0.15); cursor:pointer; font-size:18px; line-height:1; display:flex; align-items:center; justify-content:center; color:#fff; padding:0; flex-shrink:0;">−</button>` +
-                            `<span style="font-size:13px; font-weight:700; min-width:16px; text-align:center; color:#fff;">${s.itemCount}</span>` +
-                            `<button onclick="_pdfChangeCount(${s.pageNum},1)" style="width:26px; height:26px; border-radius:50%; border:none; background:rgba(255,255,255,0.15); cursor:pointer; font-size:18px; line-height:1; display:flex; align-items:center; justify-content:center; color:#fff; padding:0; flex-shrink:0;">+</button>` +
+                        ? `<div class="pdf-lam-ctrl" style="position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); display:flex; align-items:center; gap:2px; background:rgba(0,0,0,0.82); border-radius:14px; padding:2px 4px; backdrop-filter:blur(4px); opacity:0.5;">` +
+                            `<button onclick="_pdfChangeCount(${s.pageNum},-1)" style="width:18px; height:18px; border-radius:50%; border:none; background:rgba(255,255,255,0.15); cursor:pointer; font-size:13px; line-height:1; display:flex; align-items:center; justify-content:center; color:#fff; padding:0; flex-shrink:0;">−</button>` +
+                            `<span style="font-size:9px; font-weight:700; min-width:11px; text-align:center; color:#fff;">${s.itemCount}</span>` +
+                            `<button onclick="_pdfChangeCount(${s.pageNum},1)" style="width:18px; height:18px; border-radius:50%; border:none; background:rgba(255,255,255,0.15); cursor:pointer; font-size:13px; line-height:1; display:flex; align-items:center; justify-content:center; color:#fff; padding:0; flex-shrink:0;">+</button>` +
                           `</div>`
                         : '') +
                 `</div>`;
