@@ -3193,7 +3193,9 @@ ${_rawOcr}
                     ? `<div class="pdf-lam-ctrl" style="padding:5px 7px; display:flex; align-items:center; gap:4px; justify-content:center; border-top:1px solid var(--border);">` +
                         `<span style="font-size:10px; color:var(--gray);">Ítems:</span>` +
                         `<button onclick="_pdfChangeCount(${s.pageNum},-1)" style="width:19px; height:19px; border-radius:50%; border:1px solid var(--border); background:var(--bg); cursor:pointer; font-size:14px; line-height:1; display:flex; align-items:center; justify-content:center; color:var(--text); padding:0;">−</button>` +
-                        `<span style="font-size:13px; font-weight:700; min-width:14px; text-align:center;">${s.itemCount}</span>` +
+                        (s.itemCount === 1
+                          ? `<span style="font-size:11px; color:var(--gray); min-width:22px; text-align:center;">auto</span>`
+                          : `<span style="font-size:13px; font-weight:700; min-width:14px; text-align:center;">${s.itemCount}</span>`) +
                         `<button onclick="_pdfChangeCount(${s.pageNum},1)" style="width:19px; height:19px; border-radius:50%; border:1px solid var(--border); background:var(--bg); cursor:pointer; font-size:14px; line-height:1; display:flex; align-items:center; justify-content:center; color:var(--text); padding:0;">+</button>` +
                       `</div>`
                     : `<div style="padding:3px 0; text-align:center; font-size:10px; color:var(--gray);">Excluida</div>`);
@@ -3232,8 +3234,6 @@ ${_rawOcr}
         _pdfDragSrc = null;
     }
 
-    let _pdfPendingGroup = null; // { srcPage, tgtPage } esperando confirmación
-
     function _pdfDrop(e, targetPage) {
         e.preventDefault();
         e.currentTarget.style.transform = '';
@@ -3247,66 +3247,11 @@ ${_rawOcr}
         const tgt = _pdfLaminasState.find(function(x) { return x.pageNum === targetPage; });
         if (!src || !tgt) return;
 
-        // Si alguna tiene itemCount > 1, bloquear directamente
+        // Bloquear si alguna tiene count explícito > 1
         if (src.itemCount > 1 || tgt.itemCount > 1) {
-            _pdfFlashConfirm(
-                '⚠️ La Pág ' + (src.itemCount > 1 ? src.pageNum : tgt.pageNum) + ' tiene ' + Math.max(src.itemCount, tgt.itemCount) + ' ítems — no se puede agrupar. Agrupá solo páginas que sean la misma pieza vista desde otro ángulo.',
-                null, null, true
-            );
+            _pdfFlashError('⚠️ La Pág ' + (src.itemCount > 1 ? src.pageNum : tgt.pageNum) + ' tiene ítems fijos — bajá el contador a "auto" antes de agrupar.');
             return;
         }
-
-        // Pedir confirmación antes de agrupar
-        _pdfPendingGroup = { srcPage: srcPage, tgtPage: targetPage };
-        _pdfFlashConfirm(
-            '¿Las páginas ' + srcPage + ' y ' + targetPage + ' muestran la <b>misma pieza</b> desde distintos ángulos? Se unirán como <b>1 solo ítem</b>.',
-            'Sí, agrupar como 1 ítem',
-            'No, son piezas distintas',
-            false
-        );
-    }
-
-    function _pdfFlashConfirm(html, btnOk, btnCancel, errorOnly) {
-        const grid = document.getElementById('pdf-laminas-grid');
-        if (!grid) return;
-        let flash = document.getElementById('pdf-flash-msg');
-        if (!flash) {
-            flash = document.createElement('div');
-            flash.id = 'pdf-flash-msg';
-            flash.style.cssText = 'grid-column:1/-1; border-radius:8px; font-size:12px; text-align:center; padding:10px 14px;';
-            grid.prepend(flash);
-        }
-        clearTimeout(flash._timer);
-        if (errorOnly) {
-            flash.style.background = 'rgba(255,69,58,0.15)';
-            flash.style.border = '1px solid #ff453a';
-            flash.style.color = '#ff453a';
-            flash.innerHTML = html;
-            flash.style.display = 'block';
-            flash._timer = setTimeout(function() { flash.style.display = 'none'; }, 5000);
-        } else {
-            flash.style.background = 'rgba(191,90,242,0.12)';
-            flash.style.border = '1px solid var(--purple)';
-            flash.style.color = 'var(--text)';
-            flash.innerHTML = html +
-                '<div style="display:flex; gap:8px; justify-content:center; margin-top:8px;">' +
-                '<button onclick="_pdfConfirmGroup(true)"  style="padding:5px 14px; border-radius:6px; border:none; background:var(--purple); color:#fff; cursor:pointer; font-size:12px;">' + btnOk + '</button>' +
-                '<button onclick="_pdfConfirmGroup(false)" style="padding:5px 14px; border-radius:6px; border:1px solid var(--border); background:var(--bg); color:var(--text); cursor:pointer; font-size:12px;">' + btnCancel + '</button>' +
-                '</div>';
-            flash.style.display = 'block';
-        }
-    }
-
-    function _pdfConfirmGroup(ok) {
-        const pending = _pdfPendingGroup;
-        _pdfPendingGroup = null;
-        const flash = document.getElementById('pdf-flash-msg');
-        if (flash) flash.style.display = 'none';
-        if (!ok || !pending) return;
-
-        const src = _pdfLaminasState.find(function(x) { return x.pageNum === pending.srcPage; });
-        const tgt = _pdfLaminasState.find(function(x) { return x.pageNum === pending.tgtPage; });
-        if (!src || !tgt) return;
 
         src.selected = true;
         tgt.selected = true;
@@ -3327,6 +3272,22 @@ ${_rawOcr}
 
         _renderPdfLaminasGrid();
         _updatePdfSelInfo();
+    }
+
+    function _pdfFlashError(msg) {
+        const grid = document.getElementById('pdf-laminas-grid');
+        if (!grid) return;
+        let flash = document.getElementById('pdf-flash-msg');
+        if (!flash) {
+            flash = document.createElement('div');
+            flash.id = 'pdf-flash-msg';
+            flash.style.cssText = 'grid-column:1/-1; border-radius:8px; font-size:12px; text-align:center; padding:10px 14px; background:rgba(255,69,58,0.15); border:1px solid #ff453a; color:#ff453a;';
+            grid.prepend(flash);
+        }
+        flash.textContent = msg;
+        flash.style.display = 'block';
+        clearTimeout(flash._timer);
+        flash._timer = setTimeout(function() { flash.style.display = 'none'; }, 4000);
     }
 
     // Menú contextual — clic derecho (PC) o long-press (móvil)
@@ -3422,8 +3383,11 @@ ${_rawOcr}
         const total = _calcTotalPdfItems();
         const info = document.getElementById('pdf-sel-info');
         const confInfo = document.getElementById('pdf-confirm-info');
-        if (info) info.textContent = sel.length + ' de ' + _pdfLaminasState.length + ' láminas · ' + total + ' ítems a generar';
-        if (confInfo) confInfo.textContent = 'Se generarán ' + total + ' ítems en el presupuesto';
+        const autoCount = _pdfLaminasState.filter(function(s) { return s.selected && s.group === null && s.itemCount === 1; }).length;
+        const fixedCount = total - autoCount;
+        const itemLabel = autoCount > 0 ? (fixedCount > 0 ? fixedCount + '+ ítems (+ auto en ' + autoCount + ' lám.)' : 'auto en ' + autoCount + ' lám.') : total + ' ítems';
+        if (info) info.textContent = sel.length + ' de ' + _pdfLaminasState.length + ' láminas · ' + itemLabel;
+        if (confInfo) confInfo.textContent = autoCount > 0 ? 'Gemini detectará todos los ítems por lámina' : 'Se generarán ' + total + ' ítems en el presupuesto';
     }
 
     function _closePdfLaminasModal(confirm) {
@@ -3530,7 +3494,9 @@ ${_rawOcr}
                 const _parts = [];
                 _userSel.forEach(function(sg, idx) {
                     const _lbl = sg.pages.length > 1 ? 'LÁMINAS ' + sg.pages.join('+') + ' (agrupadas)' : 'LÁMINA ' + sg.pages[0];
-                    const _hint = sg.itemCount === 1 ? '1 ítem' : sg.itemCount + ' ítems distintos';
+                    const _hint = sg.pages.length > 1 ? '1 ítem (misma pieza, distintas vistas)'
+                                 : sg.itemCount > 1 ? 'exactamente ' + sg.itemCount + ' ítems distintos'
+                                 : 'detectá TODOS los ítems/piezas distintos que veas (pueden ser 1 o varios)';
                     _instrLines.push((idx + 1) + '. ' + _lbl + ' → ' + _hint);
                     sg.pages.forEach(function(pg) {
                         _parts.push({ text: '[' + _lbl + ']' });
