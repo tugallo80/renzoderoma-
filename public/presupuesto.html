@@ -4220,7 +4220,7 @@ EJEMPLO SIN CAPÍTULOS (menos de 4 ítems):
                 _batchParts.unshift({ text: _batchText });
 
                 const _reqBody = JSON.stringify({
-                    model: 'gemini-3.8-flash',
+                    model: 'gemini-2.5-flash',
                     systemInstruction: { parts: [{ text: _sysPrompt }] },
                     contents: [{ role: 'user', parts: _batchParts }],
                     generationConfig: { maxOutputTokens: 8000, temperature: 0.1 },
