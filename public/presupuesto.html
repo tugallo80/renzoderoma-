@@ -10,7 +10,17 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-    
+    <!-- pdf.js: renderiza páginas del PDF importado a imagen, para adjuntarle
+         a cada ítem extraído la captura de su propia página (ver
+         handleIADocUpload) — jsPDF de arriba es para GENERAR PDFs de salida,
+         no sirve para leer/renderizar uno de entrada. -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.7.570/pdf.min.js"></script>
+    <script>
+        if (window.pdfjsLib) {
+            window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.7.570/pdf.worker.min.js';
+        }
+    </script>
+
     <script src="https://www.gstatic.com/firebasejs/9.1.3/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.1.3/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.1.3/firebase-database-compat.js"></script>
@@ -1868,7 +1878,61 @@
             img.src = dataUrl;
         });
     }
-    
+
+    // Helpers de parseo JSON de respuestas de Gemini — compartidos entre
+    // generateIABudget (batches de presupuesto) y handleIADocUpload
+    // (extracción de ítems del PDF importado). Antes vivían adentro de
+    // generateIABudget nada más; se mueven acá para poder usarlos también
+    // en la extracción de PDF, que antes solo hacía un indexOf('[')/
+    // lastIndexOf(']') ingenuo — si la respuesta de Gemini venía truncada o
+    // con basura al final, eso fallaba en silencio (catch vacío) y se
+    // perdían ítems sin ningún aviso.
+    function _extractBalancedArray(str) {
+        // Buscar array de objetos JSON [{...}] — evita falsos positivos con listas de texto como [a, b]
+        let start = str.indexOf('[{');
+        if (start === -1) start = str.indexOf('['); // fallback al primer [
+        if (start === -1) return null;
+        let depth = 0, inStr = false, esc = false;
+        for (let i = start; i < str.length; i++) {
+            const ch = str[i];
+            if (esc) { esc = false; continue; }
+            if (ch === '\\' && inStr) { esc = true; continue; }
+            if (ch === '"') { inStr = !inStr; continue; }
+            if (inStr) continue;
+            if (ch === '[' || ch === '{') depth++;
+            else if (ch === ']' || ch === '}') {
+                depth--;
+                if (depth === 0) return str.slice(start, i + 1);
+            }
+        }
+        return null;
+    }
+
+    function _repairTruncatedArray(str) {
+        let start = str.indexOf('[{');
+        if (start === -1) start = str.indexOf('[');
+        if (start === -1) return null;
+        const completedItems = [];
+        let i = start + 1, depth = 0, inStr = false, esc = false, itemStart = -1;
+        while (i < str.length) {
+            const ch = str[i];
+            if (esc) { esc = false; i++; continue; }
+            if (ch === '\\' && inStr) { esc = true; i++; continue; }
+            if (ch === '"') { inStr = !inStr; i++; continue; }
+            if (inStr) { i++; continue; }
+            if (ch === '{') { if (depth === 0) itemStart = i; depth++; }
+            else if (ch === '}') {
+                depth--;
+                if (depth === 0 && itemStart !== -1) {
+                    completedItems.push(str.slice(itemStart, i + 1));
+                    itemStart = -1;
+                }
+            }
+            i++;
+        }
+        return completedItems.length > 0 ? '[' + completedItems.join(',') + ']' : null;
+    }
+
     function exportExcel() {
         if (typeof XLSX === 'undefined') { alert('Librería Excel no cargó. Recargá la página e intentá de nuevo.'); return; }
 
@@ -3089,12 +3153,12 @@ ${_rawOcr}
                 if (_pdfToken) _pdfHeaders['Authorization'] = 'Bearer ' + _pdfToken;
 
                 const _pdfReq = JSON.stringify({
-                    systemInstruction: { parts: [{ text: 'Extrae todos los ítems de este documento. Devolvé SOLO un array JSON válido, sin texto antes ni después: [{"n":"nombre del ítem","q":1,"d":"descripción completa con materiales, dimensiones y acabado"}]. q es la cantidad numérica.' }] },
+                    systemInstruction: { parts: [{ text: 'Extrae todos los ítems de este documento. Devolvé SOLO un array JSON válido, sin texto antes ni después: [{"n":"nombre del ítem","q":1,"d":"descripción completa con materiales, dimensiones y acabado","pagina":1}]. q es la cantidad numérica. "pagina" es el número de página (empezando en 1) donde está el plano/dibujo/ficha de ESE ítem específico — si el ítem no tiene una página con imagen/plano propia, omití el campo "pagina". NO omitas ningún ítem del documento, incluso si hay muchos.' }] },
                     contents: [{ role: 'user', parts: [
                         { inlineData: { data: _pdfB64.split(',')[1], mimeType: 'application/pdf' } },
-                        { text: 'Extraé todos los ítems de este PDF como array JSON.' }
+                        { text: 'Extraé TODOS los ítems de este PDF como array JSON, sin saltearte ninguno.' }
                     ]}],
-                    generationConfig: { maxOutputTokens: 4000, temperature: 0.1 },
+                    generationConfig: { maxOutputTokens: 8000, temperature: 0.1 },
                     advancedModel: false
                 });
 
@@ -3104,14 +3168,16 @@ ${_rawOcr}
                     if (_pdfResp.ok) _pdfRespData = JSON.parse(_pdfResp.text);
                 } catch(_pe) { _pdfRespData = null; }
 
+                // Mismo parseo robusto que generateIABudget (balanceado + reparación
+                // de array truncado) en vez del indexOf('[')/lastIndexOf(']') de
+                // antes — con 15 ítems y descripciones largas, un corte a mitad de
+                // camino perdía el último ítem en silencio (el reclamo real: "eran
+                // 15 items y leyó 14").
                 let _pdfItems = null;
                 if (_pdfRespData?.candidates?.[0]?.content?.parts?.[0]?.text) {
                     const _raw = _pdfRespData.candidates[0].content.parts[0].text.replace(/```json|```/g, '').trim();
-                    const _start = _raw.indexOf('[');
-                    const _end = _raw.lastIndexOf(']');
-                    if (_start !== -1 && _end !== -1) {
-                        try { _pdfItems = JSON.parse(_raw.slice(_start, _end + 1)); } catch(_) {}
-                    }
+                    let _ext = _extractBalancedArray(_raw) || _repairTruncatedArray(_raw);
+                    if (_ext) { try { _pdfItems = JSON.parse(_ext); } catch(_) {} }
                 }
 
                 if (_pdfItems && Array.isArray(_pdfItems) && _pdfItems.length > 0) {
@@ -3119,6 +3185,7 @@ ${_rawOcr}
                     const _existingRows = document.querySelectorAll('.ia-item-row');
                     const _firstEmpty = Array.from(_existingRows).find(r => !r.querySelector('.ia-inp-name')?.value?.trim());
                     let _rowsCreated = 0;
+                    const _rowsConPagina = []; // { row, pagina } — para la segunda pasada que adjunta la imagen
                     _pdfItems.forEach(function(it, idx) {
                         const nm = (it.n || it.name || it.nombre || '').trim();
                         if (!nm) return;
@@ -3137,11 +3204,54 @@ ${_rawOcr}
                         if (nameInp) nameInp.value = nm.toUpperCase();
                         if (cantInp && it.q) cantInp.value = parseInt(it.q) || 1;
                         if (promptInp && it.d) promptInp.value = it.d;
+                        const _pag = parseInt(it.pagina);
+                        if (Number.isInteger(_pag) && _pag > 0) _rowsConPagina.push({ row, pagina: _pag });
                         _rowsCreated++;
                     });
+
+                    // Segunda pasada: renderizar con pdf.js la página que Gemini marcó
+                    // para cada ítem y adjuntarla a su fila como foto de referencia —
+                    // antes había que hacerlo a mano, fila por fila, por cada ítem
+                    // importado (el reclamo real: "tuve que revisar uno por uno... y
+                    // poner imagen al ítem"). Páginas repetidas se renderizan una sola
+                    // vez. Si pdf.js no está disponible o algo falla, se sigue de largo
+                    // sin foto en esa fila en vez de cortar el import entero.
+                    if (_rowsConPagina.length > 0 && window.pdfjsLib) {
+                        statusEl.textContent = '⏳ Extrayendo imagen de cada ítem (' + _rowsConPagina.length + ')...';
+                        try {
+                            const _pdfDoc = await pdfjsLib.getDocument({ data: await file.arrayBuffer() }).promise;
+                            const _paginasRenderizadas = {};
+                            for (const { row, pagina } of _rowsConPagina) {
+                                try {
+                                    if (pagina > _pdfDoc.numPages) continue;
+                                    if (!_paginasRenderizadas[pagina]) {
+                                        const _page = await _pdfDoc.getPage(pagina);
+                                        const _viewport = _page.getViewport({ scale: 1.5 });
+                                        const _canvas = document.createElement('canvas');
+                                        _canvas.width = _viewport.width;
+                                        _canvas.height = _viewport.height;
+                                        await _page.render({ canvasContext: _canvas.getContext('2d'), viewport: _viewport }).promise;
+                                        _paginasRenderizadas[pagina] = await _compressB64(_canvas.toDataURL('image/jpeg', 0.85), 900, 0.65);
+                                    }
+                                    const imgContainer = row.querySelector('[id^="ia-img-container-"]');
+                                    if (!imgContainer) continue;
+                                    const imgEl = document.createElement('img');
+                                    imgEl.src = _paginasRenderizadas[pagina];
+                                    imgEl.style.cssText = 'height:60px; border-radius:4px; border:1px solid #555; object-fit:cover;';
+                                    imgEl.className = 'ia-row-image-data';
+                                    imgContainer.appendChild(_makeIAImgWrap(imgEl));
+                                } catch(_pageErr) {
+                                    console.warn('[PDF import] No se pudo renderizar la página ' + pagina + ':', _pageErr.message);
+                                }
+                            }
+                        } catch(_docErr) {
+                            console.warn('[PDF import] No se pudieron extraer imágenes por ítem:', _docErr.message);
+                        }
+                    }
+
                     // Ítems ya extraídos — no hace falta reenviar el PDF en cada batch de generación
                     currentIAPdfBase64 = null;
-                    statusEl.textContent = '✅ PDF importado: ' + _rowsCreated + ' ítems cargados. Revisá y ajustá, luego generá.';
+                    statusEl.textContent = '✅ PDF importado: ' + _rowsCreated + ' ítems cargados (con imagen: ' + _rowsConPagina.length + '). Revisá y ajustá, luego generá.';
                     statusEl.style.color = '#30d158';
                     statusEl.style.background = 'rgba(48,209,88,0.08)';
                 } else {
@@ -3974,52 +4084,8 @@ F3. MATERIALES POR PIEZAS COMPLEJAS — preguntar si no se especifica:
             _ctxNote += '\nDOCUMENTO EXCEL ADJUNTO — contenido de las celdas (usá esto como contexto de ítems o dimensiones):\n' + window._iaExcelContext + '\n';
         }
 
-        // Helpers de parseo JSON compartidos entre batches
-        function _extractBalancedArray(str) {
-            // Buscar array de objetos JSON [{...}] — evita falsos positivos con listas de texto como [a, b]
-            let start = str.indexOf('[{');
-            if (start === -1) start = str.indexOf('['); // fallback al primer [
-            if (start === -1) return null;
-            let depth = 0, inStr = false, esc = false;
-            for (let i = start; i < str.length; i++) {
-                const ch = str[i];
-                if (esc) { esc = false; continue; }
-                if (ch === '\\' && inStr) { esc = true; continue; }
-                if (ch === '"') { inStr = !inStr; continue; }
-                if (inStr) continue;
-                if (ch === '[' || ch === '{') depth++;
-                else if (ch === ']' || ch === '}') {
-                    depth--;
-                    if (depth === 0) return str.slice(start, i + 1);
-                }
-            }
-            return null;
-        }
-
-        function _repairTruncatedArray(str) {
-            let start = str.indexOf('[{');
-            if (start === -1) start = str.indexOf('[');
-            if (start === -1) return null;
-            const completedItems = [];
-            let i = start + 1, depth = 0, inStr = false, esc = false, itemStart = -1;
-            while (i < str.length) {
-                const ch = str[i];
-                if (esc) { esc = false; i++; continue; }
-                if (ch === '\\' && inStr) { esc = true; i++; continue; }
-                if (ch === '"') { inStr = !inStr; i++; continue; }
-                if (inStr) { i++; continue; }
-                if (ch === '{') { if (depth === 0) itemStart = i; depth++; }
-                else if (ch === '}') {
-                    depth--;
-                    if (depth === 0 && itemStart !== -1) {
-                        completedItems.push(str.slice(itemStart, i + 1));
-                        itemStart = -1;
-                    }
-                }
-                i++;
-            }
-            return completedItems.length > 0 ? '[' + completedItems.join(',') + ']' : null;
-        }
+        // _extractBalancedArray/_repairTruncatedArray ahora viven arriba,
+        // junto a _compressB64 — compartidos con handleIADocUpload.
 
         // 4. sysPrompt + envío en batches de 5 ítems
         const _sysPrompt = `Sos el estimador APU de Rubik Bolivia. Respondé SOLO con un array JSON válido. Cero texto antes o después. Cero markdown.
