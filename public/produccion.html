@@ -607,6 +607,7 @@
     if(!cid || !pid) window.location.href="index.html";
 
     let allItems = []; let targetItemIdx = null; let currentUploadTarget = null;
+    let _prodClip = null; // { type:'mat'|'mo', rows:[], fromIdx:N, fromName:'' }
     let currentTab = 'items'; let currentFilter = 'all';
     let workerOptions = []; 
 
@@ -1206,6 +1207,55 @@
         _rerenderProdApuMo(idx);
     };
 
+    window._prodCopiarSeccion = function(fromIdx, type) {
+        _initProdApu(fromIdx);
+        const rows = JSON.parse(JSON.stringify(allItems[fromIdx].prod_apu[type] || []));
+        if (!rows.length) { alert('No hay filas para copiar.'); return; }
+        _prodClip = { type, rows, fromIdx, fromName: allItems[fromIdx].desc || ('Ítem ' + (fromIdx+1)) };
+        // Mostrar botones Pegar en todos los demás ítems abiertos
+        _prodRefreshPasteButtons();
+        const label = type === 'mat' ? 'materiales' : 'trabajos de MO';
+        const toast = document.createElement('div');
+        toast.style.cssText = 'position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#1c1c1e;color:#fff;padding:10px 18px;border-radius:10px;font-size:13px;z-index:9999;border:1px solid #333;box-shadow:0 4px 20px rgba(0,0,0,0.4);';
+        toast.innerHTML = '<i class="ph-bold ph-clipboard" style="color:var(--green);margin-right:6px;"></i>' + rows.length + ' ' + label + ' copiados — buscá "Pegar" en el ítem destino';
+        document.body.appendChild(toast);
+        setTimeout(function() { toast.remove(); }, 3500);
+    };
+
+    window._prodPegarSeccion = function(toIdx, type) {
+        if (!_prodClip || _prodClip.type !== type) return;
+        if (toIdx === _prodClip.fromIdx) { alert('Es el mismo ítem.'); return; }
+        _initProdApu(toIdx);
+        _prodClip.rows.forEach(function(row) {
+            const copy = JSON.parse(JSON.stringify(row));
+            copy.measures = copy.measures || [];
+            allItems[toIdx].prod_apu[type].push(copy);
+        });
+        _saveProdApu(toIdx);
+        if (type === 'mat') _rerenderProdApu(toIdx);
+        else _rerenderProdApuMo(toIdx);
+        const label = type === 'mat' ? 'materiales' : 'trabajos de MO';
+        const cnt = _prodClip.rows.length;
+        _prodClip = null;
+        _prodRefreshPasteButtons();
+        const toast = document.createElement('div');
+        toast.style.cssText = 'position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#1c3a26;color:#30d158;padding:10px 18px;border-radius:10px;font-size:13px;z-index:9999;border:1px solid rgba(48,209,88,0.4);box-shadow:0 4px 20px rgba(0,0,0,0.4);';
+        toast.innerHTML = '<i class="ph-bold ph-check-circle" style="margin-right:6px;"></i>' + cnt + ' ' + label + ' pegados.';
+        document.body.appendChild(toast);
+        setTimeout(function() { toast.remove(); }, 2500);
+    };
+
+    function _prodRefreshPasteButtons() {
+        document.querySelectorAll('[id^="prod-apu-mat-paste-"],[id^="prod-apu-mo-paste-"]').forEach(function(btn) {
+            const m = btn.id.match(/prod-apu-(mat|mo)-paste-(\d+)/);
+            if (!m) return;
+            const t = m[1], i = parseInt(m[2]);
+            const show = _prodClip && _prodClip.type === t && _prodClip.fromIdx !== i;
+            btn.style.display = show ? 'inline-flex' : 'none';
+            if (show) btn.title = 'Pegar ' + _prodClip.rows.length + ' filas de "' + _prodClip.fromName + '"';
+        });
+    }
+
     function _calcProdApuCosto(idx) {
         const pa = (allItems[idx]||{}).prod_apu;
         if (!pa) return { mat:0, imp:0, mo:0, total:0 };
@@ -1709,7 +1759,11 @@
 
             <div class="prod-apu-header">
                 <span>🔩 Materiales</span>
-                <span id="prod-apu-mat-total-${idx}" style="color:var(--blue); font-size:12px;">${fMoney(cost.mat)} Bs</span>
+                <div style="display:flex;align-items:center;gap:6px;">
+                    <span id="prod-apu-mat-total-${idx}" style="color:var(--blue); font-size:12px;">${fMoney(cost.mat)} Bs</span>
+                    <button class="prod-apu-btn-corte admin-only" style="font-size:10px;padding:3px 7px;" onclick="_prodCopiarSeccion(${idx},'mat')" title="Copiar todos los materiales al portapapeles"><i class="ph-bold ph-copy"></i> Copiar</button>
+                    <button id="prod-apu-mat-paste-${idx}" class="prod-apu-btn-corte admin-only" style="font-size:10px;padding:3px 7px;display:none;background:rgba(48,209,88,0.12);color:var(--green);border-color:rgba(48,209,88,0.4);" onclick="_prodPegarSeccion(${idx},'mat')" title="Pegar materiales copiados"><i class="ph-bold ph-clipboard"></i> Pegar</button>
+                </div>
             </div>
             <div id="prod-apu-mat-rows-${idx}">${matNormalRows}</div>
             <button class="prod-apu-add admin-only" onclick="prodApuAddMat(${idx})">
@@ -1727,7 +1781,11 @@
 
             <div class="prod-apu-header" style="margin-top:16px;">
                 <span>👷 Mano de obra</span>
-                <span id="prod-apu-mo-total-${idx}" style="color:var(--orange); font-size:12px;">${fMoney(cost.mo)} Bs</span>
+                <div style="display:flex;align-items:center;gap:6px;">
+                    <span id="prod-apu-mo-total-${idx}" style="color:var(--orange); font-size:12px;">${fMoney(cost.mo)} Bs</span>
+                    <button class="prod-apu-btn-corte admin-only" style="font-size:10px;padding:3px 7px;" onclick="_prodCopiarSeccion(${idx},'mo')" title="Copiar toda la mano de obra al portapapeles"><i class="ph-bold ph-copy"></i> Copiar</button>
+                    <button id="prod-apu-mo-paste-${idx}" class="prod-apu-btn-corte admin-only" style="font-size:10px;padding:3px 7px;display:none;background:rgba(48,209,88,0.12);color:var(--green);border-color:rgba(48,209,88,0.4);" onclick="_prodPegarSeccion(${idx},'mo')" title="Pegar mano de obra copiada"><i class="ph-bold ph-clipboard"></i> Pegar</button>
+                </div>
             </div>
             <div id="prod-apu-mo-rows-${idx}">${moRows}</div>
             <button class="prod-apu-add admin-only" onclick="prodApuAddMo(${idx})">
