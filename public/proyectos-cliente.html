@@ -952,8 +952,7 @@
             const token = await user.getIdToken(false);
             const body = JSON.stringify({ generateImage: true, prompt: 'Portada de proyecto publicitario de diseño de stands: ' + prompt });
             const headers = { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token };
-            // Imagen es request pesado — ir directo al Cloud Function para evitar timeout del rewrite
-            const CF_URL = 'https://us-central1-rubik-bolivia.cloudfunctions.net/geminiProxy';
+            const CF_URL = location.origin + '/api/gemini';
             let lastErr, data;
             for (let attempt = 0; attempt < 3; attempt++) {
                 if (attempt > 0) await new Promise(r => setTimeout(r, 2000 * attempt));
