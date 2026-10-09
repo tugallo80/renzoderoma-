@@ -119,6 +119,7 @@ def ask_ai(task, screenshot_b64, history, id_token):
     ]
 
     payload = {
+        "model": "gemini-2.5-flash",
         "systemInstruction": {"parts": [{"text": SYSTEM_PROMPT}]},
         "contents": [{"role": "user", "parts": user_content}],
         "generationConfig": {"maxOutputTokens": 512, "temperature": 0.1}
