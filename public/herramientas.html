@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Herramientas — Rubik Bolivia</title>
+<link rel="stylesheet" href="https://unpkg.com/@phosphor-icons/web@2.1.1/src/bold/style.css">
+<style>
+  :root {
+    --bg: #f2f2f7;
+    --card: #fff;
+    --text: #1c1c1e;
+    --sub: #6e6e73;
+    --accent: #5856d6;
+    --accent2: #34c759;
+    --border: #e5e5ea;
+    --radius: 16px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #1c1c1e;
+      --card: #2c2c2e;
+      --text: #f2f2f7;
+      --sub: #aeaeb2;
+      --border: #3a3a3c;
+    }
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+
+  .topbar {
+    background: var(--card);
+    border-bottom: 1px solid var(--border);
+    padding: 14px 20px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .topbar a { color: var(--sub); text-decoration: none; font-size: 15px; display: flex; align-items: center; gap: 6px; }
+  .topbar a:hover { color: var(--text); }
+  .topbar h1 { font-size: 17px; font-weight: 700; flex: 1; text-align: center; }
+
+  .container { max-width: 700px; margin: 0 auto; padding: 28px 16px; }
+
+  .section-label {
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    color: var(--sub);
+    text-transform: uppercase;
+    margin-bottom: 12px;
+    margin-top: 28px;
+  }
+
+  .tool-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 20px;
+    display: flex;
+    gap: 16px;
+    align-items: flex-start;
+  }
+  .tool-icon {
+    width: 52px; height: 52px;
+    border-radius: 12px;
+    background: linear-gradient(135deg, #5856d6, #bf5af2);
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+    font-size: 26px; color: #fff;
+  }
+  .tool-body { flex: 1; }
+  .tool-name { font-size: 17px; font-weight: 700; margin-bottom: 4px; }
+  .tool-desc { font-size: 14px; color: var(--sub); line-height: 1.5; margin-bottom: 14px; }
+
+  .badges { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
+  .badge {
+    font-size: 11px; font-weight: 600;
+    padding: 3px 9px; border-radius: 20px;
+    background: rgba(88,86,214,0.12); color: var(--accent);
+  }
+  .badge.green { background: rgba(52,199,89,0.12); color: #34c759; }
+
+  .download-btns { display: flex; flex-wrap: wrap; gap: 8px; }
+  .btn-dl {
+    display: inline-flex; align-items: center; gap: 7px;
+    padding: 9px 16px; border-radius: 10px; border: none; cursor: pointer;
+    font-size: 14px; font-weight: 600; text-decoration: none;
+    transition: opacity .15s;
+  }
+  .btn-dl:hover { opacity: 0.82; }
+  .btn-dl.primary { background: var(--accent); color: #fff; }
+  .btn-dl.secondary { background: var(--border); color: var(--text); }
+
+  .steps {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 18px 20px;
+    margin-top: 16px;
+  }
+  .steps h3 { font-size: 14px; font-weight: 700; margin-bottom: 12px; color: var(--sub); }
+  .step { display: flex; gap: 12px; margin-bottom: 10px; align-items: flex-start; }
+  .step-num {
+    width: 22px; height: 22px; border-radius: 50%;
+    background: var(--accent); color: #fff;
+    font-size: 11px; font-weight: 800;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0; margin-top: 1px;
+  }
+  .step-text { font-size: 14px; line-height: 1.5; color: var(--text); }
+  .step-text code {
+    background: rgba(88,86,214,0.1); color: var(--accent);
+    padding: 1px 6px; border-radius: 5px; font-family: 'Courier New', monospace; font-size: 13px;
+  }
+  .step-text .note { font-size: 12px; color: var(--sub); display: block; margin-top: 2px; }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <a href="index.html"><i class="ph-bold ph-arrow-left"></i> Inicio</a>
+  <h1>Herramientas</h1>
+</div>
+
+<div class="container">
+
+  <div class="section-label">Automatización de escritorio</div>
+
+  <div class="tool-card">
+    <div class="tool-icon"><i class="ph-bold ph-robot"></i></div>
+    <div class="tool-body">
+      <div class="tool-name">Rubik Agent</div>
+      <div class="tool-desc">
+        Agente IA que controla el mouse y teclado de tu PC. Ejecuta tareas en Vectorworks,
+        navegadores y cualquier programa de Windows usando lenguaje natural.
+      </div>
+      <div class="badges">
+        <span class="badge">Windows</span>
+        <span class="badge">Python 3.x</span>
+        <span class="badge green">Gratis para usuarios Rubik</span>
+      </div>
+      <div class="download-btns">
+        <a class="btn-dl primary" href="downloads/rubik-agent/agent.py" download>
+          <i class="ph-bold ph-download-simple"></i> agent.py
+        </a>
+        <a class="btn-dl secondary" href="downloads/rubik-agent/requirements.txt" download>
+          <i class="ph-bold ph-file-text"></i> requirements.txt
+        </a>
+        <a class="btn-dl secondary" href="downloads/rubik-agent/INSTALAR.md" download>
+          <i class="ph-bold ph-book-open"></i> Instrucciones
+        </a>
+      </div>
+    </div>
+  </div>
+
+  <div class="steps">
+    <h3>Instalación rápida</h3>
+    <div class="step">
+      <div class="step-num">1</div>
+      <div class="step-text">
+        Instalá Python si no lo tenés: <strong>python.org/downloads</strong>
+        <span class="note">Marcá "Add Python to PATH" al instalar.</span>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">2</div>
+      <div class="step-text">
+        Descargá los dos archivos de arriba y ponelos en la misma carpeta.
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">3</div>
+      <div class="step-text">
+        Abrí CMD en esa carpeta y ejecutá: <code>pip install -r requirements.txt</code>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">4</div>
+      <div class="step-text">
+        Ejecutá el agente: <code>python agent.py</code>
+        <span class="note">Se abre una ventana flotante. Ingresá tu email y contraseña de rubikbolivia.com y listo.</span>
+      </div>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>
