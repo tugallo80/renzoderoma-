@@ -106,42 +106,71 @@ def capture_screen(region=None):
 
 # ── Llamada al proxy ───────────────────────────────────────────────────────────
 
-def ask_ai(task, screenshot_b64, history, id_token):
+def _compress_b64(b64, max_w, quality):
+    """Recomprime una imagen base64 JPEG a menor resolución/calidad."""
+    data = base64.b64decode(b64)
+    img = Image.open(io.BytesIO(data))
+    if img.width > max_w:
+        ratio = max_w / img.width
+        img = img.resize((max_w, int(img.height * ratio)), Image.LANCZOS)
+    buf = io.BytesIO()
+    img.save(buf, format="JPEG", quality=quality)
+    return base64.b64encode(buf.getvalue()).decode()
+
+
+def ask_ai(task, screenshot_b64, history, id_token, retries=3):
+    """Llama al proxy con reintento y reducción de imagen en caso de error."""
     history_text = ""
     if history:
         history_text = "\n\nHISTORIAL DE ACCIONES ANTERIORES:\n" + "\n".join(
             f"- {h}" for h in history[-8:]
         )
 
-    user_content = [
-        {"text": f"TAREA: {task}{history_text}\n\nEsta es la captura actual de la pantalla. Decidí la próxima acción:"},
-        {"inlineData": {"mimeType": "image/jpeg", "data": screenshot_b64}}
-    ]
+    # Intentar con imagen progresivamente más pequeña si hay errores
+    img_variants = [screenshot_b64]
+    for _ in range(retries - 1):
+        img_variants.append(_compress_b64(img_variants[-1], 800, 55))
 
-    payload = {
-        "model": "gemini-2.5-flash",
-        "systemInstruction": {"parts": [{"text": SYSTEM_PROMPT}]},
-        "contents": [{"role": "user", "parts": user_content}],
-        "generationConfig": {"maxOutputTokens": 512, "temperature": 0.1}
-    }
+    last_err = None
+    for attempt, img in enumerate(img_variants):
+        user_content = [
+            {"text": f"TAREA: {task}{history_text}\n\nEsta es la captura actual de la pantalla. Decidí la próxima acción:"},
+            {"inlineData": {"mimeType": "image/jpeg", "data": img}}
+        ]
+        payload = {
+            "model": "gemini-2.5-flash",
+            "systemInstruction": {"parts": [{"text": SYSTEM_PROMPT}]},
+            "contents": [{"role": "user", "parts": user_content}],
+            "generationConfig": {"maxOutputTokens": 512, "temperature": 0.1}
+        }
+        try:
+            if attempt > 0:
+                time.sleep(2 * attempt)
+            resp = requests.post(
+                PROXY_URL,
+                json=payload,
+                headers={
+                    "Content-Type": "application/json",
+                    "Authorization": f"Bearer {id_token}"
+                },
+                timeout=120
+            )
+            resp.raise_for_status()
+            raw_text = resp.text.strip()
+            if not raw_text:
+                raise ValueError(f"Respuesta vacía del servidor (intento {attempt + 1})")
+            data = resp.json()
+            raw = data["candidates"][0]["content"]["parts"][0]["text"].strip()
+            if raw.startswith("```"):
+                raw = raw.split("```")[1]
+                if raw.startswith("json"):
+                    raw = raw[4:]
+            return json.loads(raw.strip())
+        except Exception as e:
+            last_err = e
+            continue
 
-    resp = requests.post(
-        PROXY_URL,
-        json=payload,
-        headers={
-            "Content-Type": "application/json",
-            "Authorization": f"Bearer {id_token}"
-        },
-        timeout=90
-    )
-    resp.raise_for_status()
-    data = resp.json()
-    raw = data["candidates"][0]["content"]["parts"][0]["text"].strip()
-    if raw.startswith("```"):
-        raw = raw.split("```")[1]
-        if raw.startswith("json"):
-            raw = raw[4:]
-    return json.loads(raw.strip())
+    raise last_err
 
 # ── Ejecutor de acciones ───────────────────────────────────────────────────────
 
@@ -205,11 +234,8 @@ def run_agent(task, id_token, log, on_done):
 
         try:
             action = ask_ai(task, ss, history, id_token)
-        except json.JSONDecodeError as e:
-            log(f"❌ Respuesta inválida de IA: {e}\n")
-            break
         except Exception as e:
-            log(f"❌ Error de API: {e}\n")
+            log(f"❌ Error de API (todos los intentos fallaron): {e}\n")
             break
 
         a_type   = action.get("action", "?")
