@@ -10,22 +10,17 @@ Abrí CMD en esta carpeta y ejecutá:
 pip install -r requirements.txt
 ```
 
-## 3. Conseguir API Key de Gemini (gratis)
-1. Ir a https://aistudio.google.com/
-2. Crear o iniciar sesión con cuenta Google
-3. Click en "Get API Key" → "Create API Key"
-4. Copiar la key (empieza con "AIza...")
-
-## 4. Ejecutar
+## 3. Ejecutar
 ```
 python agent.py
 ```
 
 ## Uso
-1. Pegá tu API Key en el campo de arriba
-2. Escribí la tarea en castellano (ej: "En Vectorworks, creá un rectángulo de 3x2m")
-3. Click en ▶ Ejecutar
-4. El agente toma el control del mouse y ejecuta paso a paso
+1. Ingresá tu **email y contraseña de rubikbolivia.com**
+2. Click en **Conectar** — se autentica con tu cuenta (no necesitás API key)
+3. Escribí la tarea en castellano
+4. Click en ▶ Ejecutar
+5. El agente toma el control del mouse y ejecuta paso a paso
 
 ## Teclas de control
 - **F9** — Detener de emergencia
@@ -39,8 +34,8 @@ python agent.py
 - "Buscá en Google 'precio tubin 20x20 Bolivia' y copiá el primer precio que aparezca"
 
 ## ¿Cómo funciona?
-Cada paso:
-1. Captura la pantalla
-2. La manda a Gemini Vision con la tarea
-3. Gemini decide la próxima acción (click, escribir, hotkey, scroll)
-4. El agente ejecuta y repite hasta terminar (máx 40 pasos)
+1. Se autentica con tu cuenta de rubikbolivia.com via Firebase
+2. Cada paso captura la pantalla
+3. La manda al servidor de IA de rubikbolivia.com con la tarea
+4. La IA decide la próxima acción (click, escribir, hotkey, scroll)
+5. El agente ejecuta y repite hasta terminar (máx 40 pasos)
