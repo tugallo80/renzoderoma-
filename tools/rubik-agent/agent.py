@@ -1,6 +1,6 @@
 """
 Rubik Agent — Agente de computer use para Vectorworks + cotización
-Controla mouse y teclado guiado por Gemini Vision.
+Controla mouse y teclado guiado por IA (via rubikbolivia.com).
 
 Requisitos:
     pip install pyautogui pillow requests
@@ -30,9 +30,9 @@ except ImportError:
 
 # ── Configuración ──────────────────────────────────────────────────────────────
 
-GEMINI_API_KEY = ""   # Completar con tu API key de https://aistudio.google.com/
-GEMINI_MODEL   = "gemini-2.5-flash"
-GEMINI_URL     = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent?key={{key}}"
+FIREBASE_API_KEY = "AIzaSyDXYlofy31cDP14xVAVxWo_7TqXdSgsIjA"
+FIREBASE_AUTH_URL = f"https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key={FIREBASE_API_KEY}"
+PROXY_URL = "https://rubikbolivia.com/api/gemini"
 
 SYSTEM_PROMPT = """Sos un agente de automatización que controla la computadora del usuario.
 Tu objetivo es completar la tarea indicada usando el mouse y teclado.
@@ -71,14 +71,31 @@ _running = False
 _pause_event = threading.Event()
 _pause_event.set()
 _log_callback = None
-_api_key = ""
+_id_token = ""
+_token_expiry = 0  # timestamp unix
+
+# ── Autenticación Firebase ────────────────────────────────────────────────────
+
+def firebase_login(email, password):
+    """Autenticarse con Firebase y obtener ID token. Devuelve (token, expires_in)."""
+    resp = requests.post(FIREBASE_AUTH_URL, json={
+        "email": email,
+        "password": password,
+        "returnSecureToken": True
+    }, timeout=15)
+    resp.raise_for_status()
+    data = resp.json()
+    if "error" in data:
+        raise Exception(data["error"].get("message", "Error de autenticación"))
+    token = data["idToken"]
+    expires_in = int(data.get("expiresIn", 3600))
+    return token, expires_in
 
 # ── Captura de pantalla ────────────────────────────────────────────────────────
 
 def capture_screen(region=None):
     """Captura pantalla completa o región (x,y,w,h) y devuelve base64 JPEG."""
     img = ImageGrab.grab(bbox=region)
-    # Reducir para no exceder límites de API
     max_w = 1280
     if img.width > max_w:
         ratio = max_w / img.width
@@ -87,9 +104,9 @@ def capture_screen(region=None):
     img.save(buf, format="JPEG", quality=70)
     return base64.b64encode(buf.getvalue()).decode()
 
-# ── Llamada a Gemini ───────────────────────────────────────────────────────────
+# ── Llamada al proxy ───────────────────────────────────────────────────────────
 
-def ask_gemini(task, screenshot_b64, history, api_key):
+def ask_ai(task, screenshot_b64, history, id_token):
     history_text = ""
     if history:
         history_text = "\n\nHISTORIAL DE ACCIONES ANTERIORES:\n" + "\n".join(
@@ -107,12 +124,18 @@ def ask_gemini(task, screenshot_b64, history, api_key):
         "generationConfig": {"maxOutputTokens": 512, "temperature": 0.1}
     }
 
-    url = GEMINI_URL.format(key=api_key)
-    resp = requests.post(url, json=payload, timeout=60)
+    resp = requests.post(
+        PROXY_URL,
+        json=payload,
+        headers={
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {id_token}"
+        },
+        timeout=90
+    )
     resp.raise_for_status()
     data = resp.json()
     raw = data["candidates"][0]["content"]["parts"][0]["text"].strip()
-    # Limpiar markdown si viene con ```json
     if raw.startswith("```"):
         raw = raw.split("```")[1]
         if raw.startswith("json"):
@@ -150,13 +173,13 @@ def execute_action(action_obj):
         else:
             pyautogui.scroll(clicks)
     elif a == "screenshot":
-        pass  # solo toma nueva captura sin acción física
+        pass
     elif a in ("done", "fail"):
         pass
 
 # ── Loop principal del agente ──────────────────────────────────────────────────
 
-def run_agent(task, api_key, log, on_done):
+def run_agent(task, id_token, log, on_done):
     global _running
     _running = True
     history = []
@@ -169,20 +192,18 @@ def run_agent(task, api_key, log, on_done):
             log("⏹ Agente detenido.\n")
             break
 
-        _pause_event.wait()  # espera si está pausado
+        _pause_event.wait()
 
         log(f"── Paso {step + 1} ──────────────────────────")
 
-        # Capturar pantalla
         try:
             ss = capture_screen()
         except Exception as e:
             log(f"❌ Error capturando pantalla: {e}\n")
             break
 
-        # Consultar AI
         try:
-            action = ask_gemini(task, ss, history, api_key)
+            action = ask_ai(task, ss, history, id_token)
         except json.JSONDecodeError as e:
             log(f"❌ Respuesta inválida de IA: {e}\n")
             break
@@ -215,14 +236,13 @@ def run_agent(task, api_key, log, on_done):
             log(f"\n❌ El agente no pudo completar la tarea.\n")
             break
 
-        # Ejecutar acción física
         try:
             execute_action(action)
         except Exception as e:
             log(f"❌ Error ejecutando acción: {e}\n")
             break
 
-        time.sleep(0.5)  # esperar que la pantalla se actualice
+        time.sleep(0.5)
 
     else:
         log(f"\n⚠ Límite de {max_steps} pasos alcanzado.\n")
@@ -235,17 +255,32 @@ def run_agent(task, api_key, log, on_done):
 class RubikAgentUI:
     def __init__(self, root):
         self.root = root
+        self._id_token = ""
         root.title("Rubik Agent 🤖")
-        root.geometry("520x640")
+        root.geometry("520x680")
         root.resizable(True, True)
         root.attributes("-topmost", True)
 
-        # API Key
-        frm_key = tk.Frame(root, padx=10, pady=6)
-        frm_key.pack(fill=tk.X)
-        tk.Label(frm_key, text="API Key Gemini:", font=("Arial", 10)).pack(side=tk.LEFT)
-        self.key_var = tk.StringVar()
-        tk.Entry(frm_key, textvariable=self.key_var, show="•", width=38).pack(side=tk.LEFT, padx=6)
+        # Login
+        frm_login = tk.LabelFrame(root, text="Cuenta rubikbolivia.com", padx=10, pady=6)
+        frm_login.pack(fill=tk.X, padx=10, pady=(8, 0))
+
+        tk.Label(frm_login, text="Email:", font=("Arial", 10), width=8, anchor=tk.W).grid(row=0, column=0, sticky=tk.W)
+        self.email_var = tk.StringVar()
+        tk.Entry(frm_login, textvariable=self.email_var, width=30).grid(row=0, column=1, sticky=tk.EW, padx=4)
+
+        tk.Label(frm_login, text="Contraseña:", font=("Arial", 10), width=8, anchor=tk.W).grid(row=1, column=0, sticky=tk.W, pady=2)
+        self.pass_var = tk.StringVar()
+        tk.Entry(frm_login, textvariable=self.pass_var, show="•", width=30).grid(row=1, column=1, sticky=tk.EW, padx=4)
+
+        frm_login.columnconfigure(1, weight=1)
+
+        self.btn_login = tk.Button(frm_login, text="Conectar", bg="#34c759", fg="white",
+                                   font=("Arial", 10, "bold"), command=self.do_login, padx=12)
+        self.btn_login.grid(row=2, column=0, columnspan=2, pady=(6, 2))
+
+        self.lbl_status = tk.Label(frm_login, text="⬤ Sin conectar", fg="#888", font=("Arial", 9))
+        self.lbl_status.grid(row=3, column=0, columnspan=2)
 
         # Tarea
         frm_task = tk.Frame(root, padx=10, pady=4)
@@ -260,7 +295,8 @@ class RubikAgentUI:
         frm_btns = tk.Frame(root, padx=10, pady=6)
         frm_btns.pack(fill=tk.X)
         self.btn_start = tk.Button(frm_btns, text="▶ Ejecutar", bg="#5856d6", fg="white",
-                                   font=("Arial", 11, "bold"), command=self.start_agent, padx=16)
+                                   font=("Arial", 11, "bold"), command=self.start_agent,
+                                   padx=16, state=tk.DISABLED)
         self.btn_start.pack(side=tk.LEFT, padx=4)
         self.btn_pause = tk.Button(frm_btns, text="⏸ Pausar", command=self.toggle_pause,
                                    font=("Arial", 10), state=tk.DISABLED, padx=10)
@@ -280,10 +316,7 @@ class RubikAgentUI:
                                                    bg="#1c1c1e", fg="#e8e8e8", insertbackground="white")
         self.log_area.pack(fill=tk.BOTH, expand=True, padx=10, pady=(0, 10))
 
-        # Bind F9 como stop de emergencia
         root.bind("<F9>", lambda e: self.stop_agent())
-
-        # Iniciar con pausa no activa
         _pause_event.set()
 
     def log(self, msg):
@@ -292,14 +325,42 @@ class RubikAgentUI:
             self.log_area.see(tk.END)
         self.root.after(0, _do)
 
+    def do_login(self):
+        email = self.email_var.get().strip()
+        password = self.pass_var.get()
+        if not email or not password:
+            self.lbl_status.config(text="⬤ Ingresá email y contraseña", fg="#ff453a")
+            return
+        self.btn_login.config(state=tk.DISABLED, text="Conectando…")
+        self.lbl_status.config(text="⬤ Autenticando…", fg="#ff9f0a")
+
+        def _do_login():
+            try:
+                token, _ = firebase_login(email, password)
+                self._id_token = token
+                self.root.after(0, lambda: self._on_login_ok(email))
+            except Exception as e:
+                self.root.after(0, lambda: self._on_login_err(str(e)))
+
+        threading.Thread(target=_do_login, daemon=True).start()
+
+    def _on_login_ok(self, email):
+        self.lbl_status.config(text=f"⬤ Conectado: {email}", fg="#34c759")
+        self.btn_login.config(text="Reconectar", state=tk.NORMAL)
+        self.btn_start.config(state=tk.NORMAL)
+        self.log(f"✅ Autenticado como {email}\n")
+
+    def _on_login_err(self, msg):
+        self.lbl_status.config(text=f"⬤ Error: {msg}", fg="#ff453a")
+        self.btn_login.config(text="Conectar", state=tk.NORMAL)
+        self.log(f"❌ Error de login: {msg}\n")
+
     def start_agent(self):
         global _running
         if _running:
             return
-        api_key = self.key_var.get().strip()
-        if not api_key:
-            self.log("❌ Ingresá tu API Key de Gemini primero.\n"
-                     "   Conseguila gratis en: https://aistudio.google.com/\n")
+        if not self._id_token:
+            self.log("❌ Conectate primero con tu cuenta de rubikbolivia.com.\n")
             return
         task = self.task_text.get("1.0", tk.END).strip()
         if not task:
@@ -314,7 +375,7 @@ class RubikAgentUI:
 
         threading.Thread(
             target=run_agent,
-            args=(task, api_key, self.log, self.on_agent_done),
+            args=(task, self._id_token, self.log, self.on_agent_done),
             daemon=True
         ).start()
 
@@ -332,11 +393,11 @@ class RubikAgentUI:
         global _running
         _running = False
         _pause_event.set()
-        self.log("🛑 Detención solicitada...\n")
+        self.log("🛑 Detención solicitada…\n")
 
     def on_agent_done(self):
         def _do():
-            self.btn_start.config(state=tk.NORMAL)
+            self.btn_start.config(state=tk.NORMAL if self._id_token else tk.DISABLED)
             self.btn_pause.config(state=tk.DISABLED, text="⏸ Pausar")
             self.btn_stop.config(state=tk.DISABLED)
             self.progress.stop()
