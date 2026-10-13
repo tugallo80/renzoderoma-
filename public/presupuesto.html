@@ -4565,7 +4565,7 @@ EJEMPLO SIN CAPÍTULOS (menos de 4 ítems):
                     model: 'gemini-2.5-flash',
                     systemInstruction: { parts: [{ text: _sysPrompt }] },
                     contents: [{ role: 'user', parts: _batchParts }],
-                    generationConfig: { maxOutputTokens: 8000, temperature: 0.1 },
+                    generationConfig: { maxOutputTokens: 16000, temperature: 0.1 },
                 });
 
                 const _payloadKB = Math.round(_reqBody.length / 1024);
