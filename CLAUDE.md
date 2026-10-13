@@ -8,6 +8,10 @@
 
 3. El deploy solo ocurre cuando se mergea a `main` via la GitHub Action "Deploy to Firebase on merge". Nunca queda código pendiente de deploy.
 
+## Idioma
+
+Responder siempre en **español** — en el chat, mensajes de commit y descripciones de PR.
+
 ## Proyecto
 
 - Firebase Hosting + Cloud Functions Gen 2 (us-central1)
