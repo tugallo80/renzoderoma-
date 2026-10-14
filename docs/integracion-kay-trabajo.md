@@ -4,7 +4,7 @@ Nexo para que **Kay** (asistente personal, repo `tugallo80/desarrollo-personal`,
 `desarrollo-personal-a831d`) pueda consultar y, más adelante, operar sobre la **app de trabajo** (Rubik OS,
 repo `tugallo80/renzoderoma-`, proyecto `rubik-bolivia`). Este documento está igual en los dos repos.
 
-Estado (2026-10-14): conexión funcionando con una sola acción de prueba, de solo lectura:
+Estado (2026-10-14): conexión desplegada con una sola acción de prueba, de solo lectura:
 `listar_proyectos_activos` ("Kay, ¿qué proyectos tengo activos?").
 
 ## Principios
@@ -74,11 +74,17 @@ detalle queda en los logs de `kayApi`, no se le devuelve a Kay).
 
 | Acción | Solo lectura | Params | Resultado |
 |---|---|---|---|
-| `listar_proyectos_activos` | sí | — | `{ total, proyectos: [{ cliente, nombre, estado, fecha, tipo }] }` |
+| `listar_proyectos_activos` | sí | — | `{ total, proyectos: [{ cliente, nombre, estado, fecha, tipo }], terminados: { entregado, cancelado }, clientesLeidos }` |
 
-`listar_proyectos_activos`: recorre `/proyectos/$cid/$pid` de todos los clientes y devuelve los que tienen
-`estado` `planificacion` o `produccion` (o sin estado: la app los muestra como "Planificación"). Los
-`entregado` quedan afuera. Lee con la REST API y `?shallow=true` para traer solo los campos simples del
+`listar_proyectos_activos`: recorre `/proyectos/$cid/$pid` de todos los clientes y devuelve los que **no** están
+`entregado` ni `cancelado`. El ciclo de vida completo de un proyecto es `requerimiento` → `cotizacion` →
+`propuesta_enviada` → `negociando` → `contrato_firmado` → `planificacion` → `produccion` → `entregado` (o
+`cancelado`), repartido entre `cliente-view.html`, `interno/dashboard.html`, `index.html` y
+`proyectos-cliente.html`; sin estado cuenta como `planificacion`. (La primera versión solo contaba
+`planificacion`/`produccion` — el selector de `proyectos-cliente.html` — y Kay respondía "no tenés proyectos
+activos".) `terminados` y `clientesLeidos` sirven para diagnosticar un "0 activos": Kay los menciona en ese caso.
+Por voz, más de 12 activos se resumen por estado + los 12 más recientes. Nombre del cliente: `empresa` o
+`nombre`, como el hub. Lee con la REST API y `?shallow=true` para traer solo los campos simples del
 proyecto (nombre, estado, fecha) y no bajarse presupuesto, APU, gantt, etc. del mismo nodo. Del cliente lee
 solo `/clientes/$cid/nombre`. Ordenado por fecha, más nuevo primero.
 

@@ -74,38 +74,50 @@ async function mapConLimite(items, limite, fn) {
 
 // ── Acciones ──────────────────────────────────────────────────────────────────
 
-// Activo = todo lo que no está entregado. Los proyectos sin estado se muestran
-// como "Planificación" en proyectos-cliente.html, así que cuentan como activos.
-const ESTADOS_ACTIVOS = new Set(["planificacion", "produccion"]);
+// Ciclo de vida de un proyecto (cliente-view.html, interno/dashboard.html,
+// index.html): requerimiento → cotizacion → propuesta_enviada → negociando →
+// contrato_firmado → planificacion → produccion → entregado (o cancelado).
+// Activo = todo lo que no terminó. Sin estado se muestra como "Planificación".
+const ESTADOS_TERMINADOS = new Set(["entregado", "cancelado"]);
 
 async function listarProyectosActivos() {
     const cids = Object.keys(await leerShallow("proyectos"));
     const porCliente = await mapConLimite(cids, 8, async (cid) => {
-        // Solo el nombre: el nodo del cliente puede traer el logo embebido.
-        const [nombreCliente, pidsObj] = await Promise.all([
+        // Solo el nombre (empresa o nombre, como el hub): el nodo del cliente
+        // puede traer el logo embebido.
+        const [empresa, nombreCliente, pidsObj] = await Promise.all([
+            leerRest(`clientes/${cid}/empresa`, false).catch(() => null),
             leerRest(`clientes/${cid}/nombre`, false).catch(() => null),
             leerShallow(`proyectos/${cid}`),
         ]);
         const pids = Object.keys(pidsObj).filter((pid) => pidsObj[pid] === true);
         const proyectos = await mapConLimite(pids, 8, (pid) => leerShallow(`proyectos/${cid}/${pid}`));
+        const cliente = [empresa, nombreCliente].find((n) => typeof n === "string" && n) || "Sin cliente";
         return proyectos
-            .filter((p) => typeof p.nombre === "string" && p.nombre && ESTADOS_ACTIVOS.has(p.estado || "planificacion"))
+            .filter((p) => typeof p.nombre === "string" && p.nombre)
             .map((p) => ({
-                cliente: typeof nombreCliente === "string" && nombreCliente ? nombreCliente : "Sin cliente",
+                cliente,
                 nombre: p.nombre,
                 estado: p.estado || "planificacion",
                 fecha: typeof p.fecha_creacion === "string" ? p.fecha_creacion.slice(0, 10) : null,
                 tipo: p.tipo || null,
             }));
     });
-    const proyectos = porCliente.flat().sort((a, b) => (b.fecha || "").localeCompare(a.fecha || ""));
-    return { total: proyectos.length, proyectos };
+    const todos = porCliente.flat();
+    const proyectos = todos
+        .filter((p) => !ESTADOS_TERMINADOS.has(p.estado))
+        .sort((a, b) => (b.fecha || "").localeCompare(a.fecha || ""));
+    // Conteo de los que quedaron afuera: si Kay dice "0 activos", esto muestra
+    // si es que de verdad están todos terminados o si no se leyó nada.
+    const terminados = {};
+    for (const p of todos) if (ESTADOS_TERMINADOS.has(p.estado)) terminados[p.estado] = (terminados[p.estado] || 0) + 1;
+    return { total: proyectos.length, proyectos, terminados, clientesLeidos: cids.length };
 }
 
 const ACCIONES = {
     listar_proyectos_activos: {
         soloLectura: true,
-        descripcion: "Proyectos en planificación o en producción, de todos los clientes.",
+        descripcion: "Proyectos que no están entregados ni cancelados, de todos los clientes.",
         ejecutar: listarProyectosActivos,
     },
 };
