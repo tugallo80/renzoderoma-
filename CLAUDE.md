@@ -12,6 +12,12 @@
 
 Responder siempre en **español** — en el chat, mensajes de commit y descripciones de PR.
 
+## Integración con Kay
+
+`functions/kay-api.js` (`kayApi`) es la API que usa Kay (asistente personal, repo `tugallo80/desarrollo-personal`).
+Solo la invoca la cuenta de servicio de Kay (IAM + verificación en código). Para sumar una función: entrada nueva en
+`ACCIONES`. Detalle en `docs/integracion-kay-trabajo.md`.
+
 ## Proyecto
 
 - Firebase Hosting + Cloud Functions Gen 2 (us-central1)
