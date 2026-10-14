@@ -32,6 +32,9 @@ exports.mailInbox   = mail.mailInbox;
 exports.mailMessage = mail.mailMessage;
 exports.mailSend    = mail.mailSend;
 
+// ── API de Kay (nexo con la app personal, ver docs/integracion-kay-trabajo.md) ─
+exports.kayApi = require("./kay-api").kayApi;
+
 // Secrets gestionados por Firebase Secret Manager
 const GEMINI_API_KEY        = defineSecret("GEMINI_API_KEY");
 const ANTHROPIC_API_KEY     = defineSecret("ANTHROPIC_API_KEY");

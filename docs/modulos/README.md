@@ -28,6 +28,8 @@
 | `/api/gemini-live-key` | `geminiLiveKey` | Devuelve API key de Gemini Live para WebSocket directo |
 | `/api/mail/*` | `mailFolders/Inbox/Message/Send` | IMAP/SMTP Zoho (dominio propio) |
 
+Fuera de `/api/`: `kayApi` (URL directa `us-central1-rubik-bolivia.cloudfunctions.net/kayApi`) — API para Kay, el asistente personal; solo la puede invocar la cuenta de servicio de Kay. Ver [`../integracion-kay-trabajo.md`](../integracion-kay-trabajo.md).
+
 **Deploy:** GitHub Action `firebase-hosting-merge.yml` dispara `firebase deploy` al mergear a `main`. Solo se despliega mergeando a `main` — nunca con `firebase deploy` directo.
 
 **Estructura de datos en Realtime Database (paths raíz):**
