@@ -165,6 +165,7 @@
             <button class="tab-btn" onclick="switchMainTab('sueldos', this)"><i class="ph-bold ph-users-three"></i> Planillas</button>
             <button class="tab-btn" onclick="switchMainTab('ingresos', this)"><i class="ph-bold ph-trend-up"></i> Ingresos</button>
             <button class="tab-btn" onclick="switchMainTab('impuestos', this)"><i class="ph-bold ph-bank"></i> Impuestos</button>
+            <button class="tab-btn" onclick="switchMainTab('clientes', this)"><i class="ph-bold ph-receipt"></i> Clientes</button>
         </div>
     </div>
 
@@ -576,6 +577,42 @@
         </div>
         <h3 style="font-size:14px; margin-bottom:10px; font-weight:900;">Libro de Compras (RCV)</h3>
         <div id="list-facturas-compras"></div>
+    </div>
+
+    <!-- ═══════════════ PANEL CLIENTES (Estado de Cuenta) ═══════════════ -->
+    <div id="panel-clientes" class="panel-section">
+        <div class="generic-card" style="margin-bottom:12px; display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+            <div style="flex:1; min-width:180px;">
+                <div style="font-size:11px; font-weight:800; color:var(--gray); text-transform:uppercase; margin-bottom:6px;"><i class="ph-bold ph-receipt"></i> Estado de Cuenta por Cliente</div>
+                <div style="font-size:12px; color:var(--gray);">Saldos por cobrar, anticipos y pagos recibidos por proyecto.</div>
+            </div>
+            <button class="btn-action btn-outline" style="width:auto; height:40px;" onclick="cargarEstadoCuenta()"><i class="ph-bold ph-arrows-clockwise"></i> Actualizar</button>
+        </div>
+        <div id="ec-loading" style="text-align:center; color:var(--gray); padding:30px; display:none;"><i class="ph-bold ph-spinner" style="animation:spin 1s linear infinite;"></i> Cargando...</div>
+        <div id="ec-list"></div>
+    </div>
+
+    <!-- Modal registrar pago de cliente -->
+    <div id="mod-pago-cliente" class="modal">
+        <div class="modal-box" style="max-width:420px;">
+            <i class="ph-bold ph-x" style="position:absolute;top:20px;right:20px;font-size:20px;cursor:pointer;" onclick="document.getElementById('mod-pago-cliente').style.display='none'"></i>
+            <h3 style="margin-top:0; color:var(--green);"><i class="ph-bold ph-hand-coins"></i> Registrar Pago del Cliente</h3>
+            <div style="font-size:12px; color:var(--gray); margin-bottom:14px;" id="ec-modal-subtitle"></div>
+            <input type="hidden" id="ec-modal-cid">
+            <input type="hidden" id="ec-modal-pid">
+            <label class="inp-lbl">Concepto</label>
+            <input type="text" id="ec-modal-concepto" class="inp-std" placeholder="Ej: 50% anticipo, pago final, abono cuota 2..." style="margin-bottom:12px;">
+            <div style="display:flex; gap:10px; margin-bottom:12px;">
+                <div style="flex:1;"><label class="inp-lbl">Monto (Bs)</label><input type="number" step="any" id="ec-modal-monto" class="inp-std" placeholder="0.00"></div>
+                <div style="flex:1;"><label class="inp-lbl">Fecha</label><input type="date" id="ec-modal-fecha" class="inp-std"></div>
+            </div>
+            <label class="inp-lbl">Comprobante (opcional)</label>
+            <div style="border:2px dashed var(--border); border-radius:10px; padding:12px; text-align:center; cursor:pointer; margin-bottom:14px;" onclick="document.getElementById('ec-comprobante-upload').click()">
+                <div id="ec-comp-label" style="font-size:12px; color:var(--gray);"><i class="ph-bold ph-image"></i> Adjuntar foto de comprobante</div>
+            </div>
+            <input type="file" id="ec-comprobante-upload" accept="image/*,application/pdf" style="display:none" onchange="onEcComprobanteChange(this)">
+            <button class="btn-action" style="background:var(--green); color:#fff;" onclick="guardarPagoCliente()"><i class="ph-bold ph-check"></i> Guardar Pago</button>
+        </div>
     </div>
 
     <div id="mod-depositos" class="modal">
@@ -3780,12 +3817,287 @@
     </script>
 <script src="/paste-image.js"></script>
 
+<script>
+// ═══════════════════════════════════════════════════════
+//  ESTADO DE CUENTA POR CLIENTE
+// ═══════════════════════════════════════════════════════
+(function() {
+    const fM = n => parseFloat(n||0).toLocaleString('es-BO',{minimumFractionDigits:2,maximumFractionDigits:2});
+
+    // Cargar cuando se activa el tab
+    const _origSwitch = window.switchMainTab;
+    window.switchMainTab = function(tabId, btn) {
+        _origSwitch(tabId, btn);
+        if (tabId === 'clientes') cargarEstadoCuenta();
+    };
+
+    window.cargarEstadoCuenta = async function() {
+        const loading = document.getElementById('ec-loading');
+        const list    = document.getElementById('ec-list');
+        loading.style.display = 'block';
+        list.innerHTML = '';
+
+        try {
+            const [snapClientes, snapProyectos] = await Promise.all([
+                db.ref('clientes').once('value'),
+                db.ref('proyectos').once('value'),
+            ]);
+            const clientes   = snapClientes.val()  || {};
+            const proyectosR = snapProyectos.val() || {};
+
+            // Consolidar por cliente
+            const resumen = [];
+            Object.entries(proyectosR).forEach(([cid, proysPorCliente]) => {
+                if (!proysPorCliente || typeof proysPorCliente !== 'object') return;
+                const clienteData = clientes[cid] || {};
+                const nombre = clienteData.nombre || clienteData.name || cid;
+
+                let totalContrato = 0, totalPagado = 0;
+                const proyectos = [];
+
+                Object.entries(proysPorCliente).forEach(([pid, p]) => {
+                    if (!p || typeof p !== 'object') return;
+                    const contrato = parseFloat(p.monto_cierre || p.presupuesto_total || 0);
+                    let pagado = 0;
+                    const pagosArr = [];
+                    if (p.pagos) Object.entries(p.pagos).forEach(([key, pg]) => {
+                        const m = parseFloat(pg.monto || 0);
+                        pagado += m;
+                        pagosArr.push({ key, monto: m, fecha: pg.fecha||'', concepto: pg.concepto||pg.nota||'Pago', comprobante: pg.comprobante||null });
+                    });
+                    if (contrato === 0 && pagado === 0) return; // proyecto sin datos financieros
+                    totalContrato += contrato;
+                    totalPagado   += pagado;
+                    proyectos.push({ pid, nombre: p.nombre||pid, estado: p.estado||'', contrato, pagado, saldo: contrato - pagado, pagosArr });
+                });
+
+                if (proyectos.length === 0) return;
+                resumen.push({ cid, nombre, totalContrato, totalPagado, saldo: totalContrato - totalPagado, proyectos });
+            });
+
+            // Ordenar por saldo descendente
+            resumen.sort((a,b) => b.saldo - a.saldo);
+
+            loading.style.display = 'none';
+            if (resumen.length === 0) {
+                list.innerHTML = '<div style="text-align:center;color:var(--gray);padding:40px;">No hay proyectos con datos financieros registrados.</div>';
+                return;
+            }
+            list.innerHTML = resumen.map(c => renderClienteCard(c)).join('');
+        } catch(e) {
+            loading.style.display = 'none';
+            list.innerHTML = `<div style="color:var(--red);padding:20px;">Error al cargar: ${e.message}</div>`;
+        }
+    };
+
+    function renderClienteCard(c) {
+        const sc = c.saldo > 0 ? 'var(--orange)' : 'var(--green)';
+        const proyRows = c.proyectos.map(p => {
+            const ps = p.saldo > 0 ? 'var(--orange)' : 'var(--green)';
+            const pagosHTML = p.pagosArr.length
+                ? p.pagosArr.map(pg => `<div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;border-bottom:1px dashed var(--border);font-size:11px;">
+                    <span style="color:var(--gray);">${pg.fecha} · ${pg.concepto}</span>
+                    <span style="color:var(--green);font-weight:800;">+${fM(pg.monto)} Bs${pg.comprobante?` <a href="${pg.comprobante}" target="_blank" style="color:var(--blue);">📎</a>`:''}</span>
+                </div>`).join('')
+                : '<div style="font-size:11px;color:var(--gray);padding:4px 0;">Sin pagos registrados</div>';
+            return `<div style="background:var(--bg);border-radius:10px;padding:12px 14px;margin-bottom:8px;">
+                <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px;">
+                    <div>
+                        <div style="font-size:13px;font-weight:800;">${p.nombre}</div>
+                        ${p.estado?`<div style="font-size:10px;color:var(--gray);text-transform:uppercase;">${p.estado}</div>`:''}
+                    </div>
+                    <button onclick="abrirModalPagoCliente('${c.cid}','${p.pid}',${JSON.stringify(p.nombre)},${JSON.stringify(c.nombre)})"
+                        style="background:rgba(52,199,89,0.15);border:none;color:var(--green);border-radius:8px;padding:6px 12px;font-size:11px;font-weight:800;cursor:pointer;">
+                        <i class="ph-bold ph-plus"></i> Registrar pago
+                    </button>
+                </div>
+                <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:8px;">
+                    <div style="text-align:center;background:var(--card);border-radius:8px;padding:6px;">
+                        <div style="font-size:10px;color:var(--gray);">Contrato</div>
+                        <div style="font-size:13px;font-weight:900;color:var(--blue);">${fM(p.contrato)}</div>
+                    </div>
+                    <div style="text-align:center;background:var(--card);border-radius:8px;padding:6px;">
+                        <div style="font-size:10px;color:var(--gray);">Cobrado</div>
+                        <div style="font-size:13px;font-weight:900;color:var(--green);">${fM(p.pagado)}</div>
+                    </div>
+                    <div style="text-align:center;background:var(--card);border-radius:8px;padding:6px;">
+                        <div style="font-size:10px;color:var(--gray);">Saldo</div>
+                        <div style="font-size:13px;font-weight:900;color:${ps};">${fM(p.saldo)}</div>
+                    </div>
+                </div>
+                <div>${pagosHTML}</div>
+            </div>`;
+        }).join('');
+
+        return `<div class="generic-card" style="margin-bottom:12px;">
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px;flex-wrap:wrap;gap:8px;">
+                <div>
+                    <div style="font-size:16px;font-weight:900;">${c.nombre}</div>
+                    <div style="font-size:11px;color:var(--gray);">${c.proyectos.length} proyecto${c.proyectos.length!==1?'s':''}</div>
+                </div>
+                <div style="display:flex;gap:8px;align-items:center;">
+                    <div style="text-align:right;">
+                        <div style="font-size:10px;color:var(--gray);">SALDO TOTAL</div>
+                        <div style="font-size:20px;font-weight:900;color:${sc};">${fM(c.saldo)} Bs</div>
+                    </div>
+                    <button onclick="exportarPDFCliente('${c.cid}',${JSON.stringify(c)})"
+                        style="background:var(--accent);color:#fff;border:none;border-radius:10px;padding:10px 14px;font-size:13px;cursor:pointer;font-weight:800;">
+                        <i class="ph-bold ph-file-pdf"></i>
+                    </button>
+                </div>
+            </div>
+            <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px;">
+                <div style="background:rgba(0,122,255,0.08);border-radius:10px;padding:10px;text-align:center;">
+                    <div style="font-size:10px;color:var(--gray);font-weight:700;">TOTAL CONTRATADO</div>
+                    <div style="font-size:15px;font-weight:900;color:var(--blue);">${fM(c.totalContrato)} Bs</div>
+                </div>
+                <div style="background:rgba(52,199,89,0.08);border-radius:10px;padding:10px;text-align:center;">
+                    <div style="font-size:10px;color:var(--gray);font-weight:700;">TOTAL COBRADO</div>
+                    <div style="font-size:15px;font-weight:900;color:var(--green);">${fM(c.totalPagado)} Bs</div>
+                </div>
+                <div style="background:rgba(255,149,0,0.08);border-radius:10px;padding:10px;text-align:center;">
+                    <div style="font-size:10px;color:var(--gray);font-weight:700;">POR COBRAR</div>
+                    <div style="font-size:15px;font-weight:900;color:${sc};">${fM(c.saldo)} Bs</div>
+                </div>
+            </div>
+            <div>${proyRows}</div>
+        </div>`;
+    }
+
+    // ── Modal registrar pago ──────────────────────────────────────────────────
+    window.abrirModalPagoCliente = function(cid, pid, proyNombre, clienteNombre) {
+        document.getElementById('ec-modal-cid').value     = cid;
+        document.getElementById('ec-modal-pid').value     = pid;
+        document.getElementById('ec-modal-subtitle').textContent = clienteNombre + ' · ' + proyNombre;
+        document.getElementById('ec-modal-concepto').value = '';
+        document.getElementById('ec-modal-monto').value    = '';
+        document.getElementById('ec-modal-fecha').valueAsDate = new Date();
+        document.getElementById('ec-comp-label').innerHTML = '<i class="ph-bold ph-image"></i> Adjuntar foto de comprobante';
+        window._ecCompFile = null;
+        document.getElementById('mod-pago-cliente').style.display = 'flex';
+    };
+
+    window.onEcComprobanteChange = function(input) {
+        if (!input.files[0]) return;
+        window._ecCompFile = input.files[0];
+        document.getElementById('ec-comp-label').innerHTML = '<i class="ph-bold ph-check"></i> ' + input.files[0].name;
+    };
+
+    window.guardarPagoCliente = async function() {
+        const cid      = document.getElementById('ec-modal-cid').value;
+        const pid      = document.getElementById('ec-modal-pid').value;
+        const concepto = document.getElementById('ec-modal-concepto').value.trim();
+        const monto    = parseFloat(document.getElementById('ec-modal-monto').value);
+        const fecha    = document.getElementById('ec-modal-fecha').value;
+        if (!concepto) { alert('Ingresá el concepto del pago.'); return; }
+        if (!monto || monto <= 0) { alert('Ingresá un monto válido.'); return; }
+        if (!fecha) { alert('Ingresá la fecha.'); return; }
+
+        let comprobanteURL = null;
+        if (window._ecCompFile) {
+            try {
+                const ref = firebase.storage().ref(`cobros_cliente/${cid}/${pid}/${Date.now()}_${window._ecCompFile.name}`);
+                await ref.put(window._ecCompFile);
+                comprobanteURL = await ref.getDownloadURL();
+            } catch(e) { console.warn('No se pudo subir comprobante:', e.message); }
+        }
+
+        const payload = { concepto, monto, fecha, comprobante: comprobanteURL, ts: Date.now() };
+        await db.ref(`proyectos/${cid}/${pid}/pagos`).push(payload);
+
+        document.getElementById('mod-pago-cliente').style.display = 'none';
+        cargarEstadoCuenta();
+    };
+
+    // ── PDF Estado de Cuenta ──────────────────────────────────────────────────
+    window.exportarPDFCliente = function(cid, clienteData) {
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+        const fM2 = n => parseFloat(n||0).toLocaleString('es-BO',{minimumFractionDigits:2,maximumFractionDigits:2});
+        const hoy = new Date().toLocaleDateString('es-BO',{day:'2-digit',month:'long',year:'numeric'});
+
+        // Encabezado
+        doc.setFillColor(88,86,214);
+        doc.rect(0, 0, 210, 28, 'F');
+        doc.setTextColor(255,255,255);
+        doc.setFont('helvetica','bold');
+        doc.setFontSize(16);
+        doc.text('RUBIK BOLIVIA', 14, 12);
+        doc.setFontSize(10);
+        doc.text('Estado de Cuenta del Cliente', 14, 19);
+        doc.text(hoy, 196, 19, {align:'right'});
+        doc.setTextColor(0,0,0);
+
+        let y = 36;
+        doc.setFont('helvetica','bold');
+        doc.setFontSize(14);
+        doc.text(clienteData.nombre, 14, y); y += 6;
+        doc.setFont('helvetica','normal');
+        doc.setFontSize(9);
+        doc.setTextColor(120,120,120);
+        doc.text(`${clienteData.proyectos.length} proyecto${clienteData.proyectos.length!==1?'s':''} · Total contratado: ${fM2(clienteData.totalContrato)} Bs`, 14, y); y += 10;
+        doc.setTextColor(0,0,0);
+
+        // Tabla resumen de proyectos
+        const rows = clienteData.proyectos.map(p => [
+            p.nombre,
+            fM2(p.contrato) + ' Bs',
+            fM2(p.pagado)   + ' Bs',
+            { content: fM2(p.saldo) + ' Bs', styles: { textColor: p.saldo > 0 ? [255,149,0] : [52,199,89], fontStyle: 'bold' } },
+        ]);
+        rows.push([
+            { content: 'TOTAL', colSpan: 1, styles: { fontStyle:'bold' } },
+            { content: fM2(clienteData.totalContrato) + ' Bs', styles: { fontStyle:'bold', textColor:[0,122,255] } },
+            { content: fM2(clienteData.totalPagado)   + ' Bs', styles: { fontStyle:'bold', textColor:[52,199,89] } },
+            { content: fM2(clienteData.saldo)          + ' Bs', styles: { fontStyle:'bold', textColor: clienteData.saldo > 0 ? [255,149,0] : [52,199,89] } },
+        ]);
+
+        doc.autoTable({
+            startY: y,
+            head: [['Proyecto','Contrato','Cobrado','Saldo']],
+            body: rows,
+            styles: { fontSize: 9, cellPadding: 3 },
+            headStyles: { fillColor:[88,86,214], textColor:255, fontStyle:'bold' },
+            alternateRowStyles: { fillColor:[245,245,250] },
+            margin: { left:14, right:14 },
+        });
+        y = doc.lastAutoTable.finalY + 12;
+
+        // Detalle de pagos por proyecto
+        clienteData.proyectos.forEach(p => {
+            if (p.pagosArr.length === 0) return;
+            if (y > 250) { doc.addPage(); y = 20; }
+            doc.setFont('helvetica','bold');
+            doc.setFontSize(10);
+            doc.text(p.nombre + ' — Detalle de pagos recibidos', 14, y); y += 5;
+            doc.autoTable({
+                startY: y,
+                head: [['Fecha','Concepto','Monto']],
+                body: p.pagosArr.map(pg => [pg.fecha, pg.concepto, fM2(pg.monto) + ' Bs']),
+                styles: { fontSize: 8, cellPadding: 2 },
+                headStyles: { fillColor:[200,200,220], textColor:[50,50,50], fontStyle:'bold' },
+                margin: { left:14, right:14 },
+            });
+            y = doc.lastAutoTable.finalY + 8;
+        });
+
+        // Pie
+        doc.setFontSize(8);
+        doc.setTextColor(150,150,150);
+        doc.text('Rubik Bolivia · rubikbolivia.com · Generado el ' + hoy, 105, 287, {align:'center'});
+
+        doc.save(`EstadoCuenta_${clienteData.nombre.replace(/\s+/g,'_')}_${new Date().toISOString().slice(0,10)}.pdf`);
+    };
+})();
+</script>
+
 <div id="mobile-action-bar">
     <button class="m-act-btn active" data-tab="buzon" onclick="switchMainTab('buzon',null)"><i class="ph-bold ph-tray"></i><span>Licitar</span></button>
     <button class="m-act-btn" data-tab="cancheos" onclick="switchMainTab('cancheos',null)"><i class="ph-bold ph-wallet"></i><span>Cancheos</span></button>
     <button class="m-act-btn" data-tab="sueldos" onclick="switchMainTab('sueldos',null)"><i class="ph-bold ph-users-three"></i><span>Planillas</span></button>
     <button class="m-act-btn" data-tab="ingresos" onclick="switchMainTab('ingresos',null)"><i class="ph-bold ph-trend-up"></i><span>Ingresos</span></button>
     <button class="m-act-btn" data-tab="impuestos" onclick="switchMainTab('impuestos',null)"><i class="ph-bold ph-bank"></i><span>Impuest.</span></button>
+    <button class="m-act-btn" data-tab="clientes" onclick="switchMainTab('clientes',null)"><i class="ph-bold ph-receipt"></i><span>Clientes</span></button>
 </div>
 </body>
 </html>
