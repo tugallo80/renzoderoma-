@@ -151,6 +151,7 @@
                 <option value="planificacion">⚪ Planificación</option>
                 <option value="produccion">🔵 En Producción</option>
                 <option value="entregado">🟢 Entregado</option>
+                <option value="cerrado">✅ Cerrado / Pagado</option>
             </select>
             <label class="inp-lbl">Fecha del Proyecto</label>
             <input type="month" id="inp-fecha" class="inp-std">
@@ -465,6 +466,7 @@
                 let statusIcon = '⚪'; let iconColor = 'var(--gray)';
                 if(p.estado === 'produccion') { statusIcon = '🔵'; iconColor = 'var(--blue)'; }
                 if(p.estado === 'entregado') { statusIcon = '🟢'; iconColor = 'var(--green)'; }
+                if(p.estado === 'cerrado')   { statusIcon = '✅'; iconColor = 'var(--green)'; }
                 const imgUrl = typeof p.img === 'string' && p.img ? p.img : null;
                 const imgSrc = imgUrl ? `<img src="${imgUrl}" loading="lazy">` : `<i class="ph-bold ph-folder" style="color:var(--gray);"></i>`;
                 const displayNombre = typeof p.nombre === 'string' && p.nombre ? p.nombre : 'Sin nombre';
