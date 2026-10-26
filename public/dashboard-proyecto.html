@@ -484,7 +484,7 @@
     }
 
     function cerrarProyecto() {
-        if(!confirm("¿Marcar este proyecto como Cerrado / Pagado?\n\nEl proyecto quedará liquidado y ya no aparecerá como pendiente de cobro en Tesorería.")) return;
+        if(!confirm("¿Cerrar este proyecto como Pagado / Liquidado?\n\nEsto declara que el proyecto está completamente cobrado.\nEl saldo quedará en 0 en Tesorería independientemente de los pagos registrados.\n\nAsegurate de haber registrado todos los pagos antes de cerrar.")) return;
         db.ref(`proyectos/${cid}/${pid}/estado`).set('cerrado').then(() => {
             document.getElementById('btn-cerrar-proyecto').style.display = 'none';
             alert("Proyecto cerrado correctamente.");
