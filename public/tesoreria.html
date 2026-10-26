@@ -3924,12 +3924,18 @@
         });
         const selSaldo = selContrato - selPagado;
         const selCount = [...checks].filter(ch => ch.checked).length;
+        // Botón pequeño en header
         const pdfBtn = document.getElementById('ec-pdf-btn-' + cid);
         if (pdfBtn) {
             pdfBtn.innerHTML = `<i class="ph-bold ph-file-pdf"></i> PDF${selCount > 0 ? ' ('+selCount+')' : ''}`;
             pdfBtn.disabled = selCount === 0;
             pdfBtn.style.opacity = selCount === 0 ? '0.4' : '1';
         }
+        // Botón grande en cuerpo
+        const lbl2 = document.getElementById('ec-pdf-lbl2-' + cid);
+        const btn2 = document.getElementById('ec-pdf-btn2-' + cid);
+        if (lbl2) lbl2.textContent = `Generar PDF (${selCount} proyecto${selCount!==1?'s':''}) · Saldo: ${fM(selSaldo)} Bs`;
+        if (btn2) { btn2.disabled = selCount === 0; btn2.style.opacity = selCount === 0 ? '0.4' : '1'; }
     };
 
     function renderClienteCard(c) {
@@ -4026,9 +4032,15 @@
                         <div style="font-size:14px;font-weight:900;color:${sc};">${fM(c.saldo)}</div>
                     </div>
                 </div>
+                <!-- Botón PDF grande — arriba de la lista -->
+                <button id="ec-pdf-btn2-${c.cid}" onclick="exportarPDFSeleccion('${c.cid}')"
+                    style="width:100%;padding:14px;background:var(--accent);color:#fff;border:none;border-radius:12px;font-size:14px;font-weight:800;cursor:pointer;margin-bottom:12px;display:flex;align-items:center;justify-content:center;gap:8px;">
+                    <i class="ph-bold ph-file-pdf" style="font-size:18px;"></i>
+                    <span id="ec-pdf-lbl2-${c.cid}">Generar PDF (${c.proyectos.filter(p=>!p.cerrado).length} proyectos) · Saldo: ${fM(c.saldo)} Bs</span>
+                </button>
                 <!-- Lista de proyectos con checkboxes -->
                 <div style="font-size:10px;font-weight:800;color:var(--gray);text-transform:uppercase;margin-bottom:8px;">
-                    Seleccioná los proyectos a incluir en el PDF
+                    Marcá los proyectos a incluir en el PDF:
                 </div>
                 ${proyRows}
             </div>
