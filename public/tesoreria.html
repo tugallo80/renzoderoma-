@@ -3923,12 +3923,12 @@
             if (p) { selContrato += p.contrato; selPagado += p.pagado; }
         });
         const selSaldo = selContrato - selPagado;
-        const sc = selSaldo > 0 ? 'var(--orange)' : 'var(--green)';
         const selCount = [...checks].filter(ch => ch.checked).length;
         const pdfBtn = document.getElementById('ec-pdf-btn-' + cid);
         if (pdfBtn) {
-            pdfBtn.innerHTML = `<i class="ph-bold ph-file-pdf"></i> Generar PDF (${selCount} proyecto${selCount!==1?'s':''}) · Saldo: ${fM(selSaldo)} Bs`;
+            pdfBtn.innerHTML = `<i class="ph-bold ph-file-pdf"></i> PDF${selCount > 0 ? ' ('+selCount+')' : ''}`;
             pdfBtn.disabled = selCount === 0;
+            pdfBtn.style.opacity = selCount === 0 ? '0.4' : '1';
         }
     };
 
@@ -3991,17 +3991,21 @@
 
         return `<div class="generic-card" style="margin-bottom:10px;padding:0;overflow:hidden;">
             <!-- Header del acordeón — siempre visible -->
-            <div onclick="toggleClienteCard('${c.cid}')" style="display:flex;justify-content:space-between;align-items:center;padding:14px 16px;cursor:pointer;gap:12px;">
-                <div style="flex:1;min-width:0;">
+            <div style="display:flex;justify-content:space-between;align-items:center;padding:14px 16px;gap:12px;">
+                <div onclick="toggleClienteCard('${c.cid}')" style="flex:1;min-width:0;cursor:pointer;">
                     <div style="font-size:15px;font-weight:900;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${c.nombre}</div>
                     <div style="font-size:11px;color:var(--gray);">${c.proyectos.filter(p=>!p.cerrado).length} activo${c.proyectos.filter(p=>!p.cerrado).length!==1?'s':''}${c.proyectos.some(p=>p.cerrado)?' · '+c.proyectos.filter(p=>p.cerrado).length+' cerrado'+( c.proyectos.filter(p=>p.cerrado).length!==1?'s':''):''}</div>
                 </div>
-                <div style="display:flex;align-items:center;gap:10px;flex-shrink:0;">
-                    <div style="text-align:right;">
+                <div style="display:flex;align-items:center;gap:8px;flex-shrink:0;">
+                    <button id="ec-pdf-btn-${c.cid}" onclick="exportarPDFSeleccion('${c.cid}')"
+                        style="padding:8px 12px;background:var(--accent);color:#fff;border:none;border-radius:10px;font-size:12px;font-weight:800;cursor:pointer;white-space:nowrap;">
+                        <i class="ph-bold ph-file-pdf"></i> PDF
+                    </button>
+                    <div onclick="toggleClienteCard('${c.cid}')" style="cursor:pointer;text-align:right;">
                         <div style="font-size:9px;color:var(--gray);font-weight:700;text-transform:uppercase;">${c.saldo <= 0 && c.proyectos.some(p=>p.cerrado) ? 'Al día' : 'Por cobrar'}</div>
                         <div style="font-size:18px;font-weight:900;color:${sc};">${c.saldo <= 0 && c.proyectos.some(p=>p.cerrado) ? '✓' : fM(c.saldo)+' Bs'}</div>
                     </div>
-                    <i id="ec-arrow-${c.cid}" class="ph-bold ph-caret-down" style="font-size:18px;color:var(--gray);transition:transform .2s;"></i>
+                    <i id="ec-arrow-${c.cid}" onclick="toggleClienteCard('${c.cid}')" class="ph-bold ph-caret-down" style="font-size:18px;color:var(--gray);transition:transform .2s;cursor:pointer;"></i>
                 </div>
             </div>
 
@@ -4027,11 +4031,6 @@
                     Seleccioná los proyectos a incluir en el PDF
                 </div>
                 ${proyRows}
-                <!-- Botón PDF de selección -->
-                <button id="ec-pdf-btn-${c.cid}" onclick="exportarPDFSeleccion('${c.cid}')"
-                    style="width:100%;padding:12px;background:var(--accent);color:#fff;border:none;border-radius:12px;font-size:13px;font-weight:800;cursor:pointer;margin-top:4px;">
-                    <i class="ph-bold ph-file-pdf"></i> Generar PDF (${c.proyectos.length} proyecto${c.proyectos.length!==1?'s':''}) · Saldo: ${fM(c.saldo)} Bs
-                </button>
             </div>
         </div>`;
     }
