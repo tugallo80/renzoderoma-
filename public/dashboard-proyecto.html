@@ -173,6 +173,9 @@
                         <i class="ph-bold ph-envelope"></i> Enviar al cliente
                     </button>
                 </div>
+                <button id="btn-cerrar-proyecto" onclick="cerrarProyecto()" style="width:100%;margin-top:10px;padding:12px;background:rgba(52,199,89,0.12);color:var(--green);border:1.5px solid var(--green);border-radius:12px;font-size:13px;font-weight:800;cursor:pointer;display:none;">
+                    <i class="ph-bold ph-check-circle"></i> Cerrar Proyecto (Pagado / Liquidado)
+                </button>
             </div>
         </div>
     </div>
@@ -337,6 +340,13 @@
             document.getElementById('btn-vis-proy').title = vis ? 'Ocultar para cliente' : 'Hacer visible para cliente';
         });
 
+        // Botón Cerrar Proyecto: visible solo en estado 'entregado'
+        db.ref(`proyectos/${cid}/${pid}/estado`).once('value', snap => {
+            const est = snap.val() || '';
+            const btnCerrar = document.getElementById('btn-cerrar-proyecto');
+            if (btnCerrar) btnCerrar.style.display = est === 'entregado' ? 'block' : 'none';
+        });
+
         // Badge req asistido
         db.ref(`requerimientos_asistidos/${cid}/${pid}`).once('value', snap => {
             if (!snap.exists()) return;
@@ -471,6 +481,14 @@
         db.ref(`proyectos/${cid}/${pid}/factura_url`).set(url); 
         db.ref(`proyectos/${cid}/${pid}/estado`).set('entregado'); 
         alert("Factura enviada al portal del cliente.");
+    }
+
+    function cerrarProyecto() {
+        if(!confirm("¿Marcar este proyecto como Cerrado / Pagado?\n\nEl proyecto quedará liquidado y ya no aparecerá como pendiente de cobro en Tesorería.")) return;
+        db.ref(`proyectos/${cid}/${pid}/estado`).set('cerrado').then(() => {
+            document.getElementById('btn-cerrar-proyecto').style.display = 'none';
+            alert("Proyecto cerrado correctamente.");
+        });
     }
 
     function registrarPagoCliente() {

@@ -3825,6 +3825,7 @@
     const fM = n => parseFloat(n||0).toLocaleString('es-BO',{minimumFractionDigits:2,maximumFractionDigits:2});
     // Proyectos en etapa de propuesta/cotización: no tienen contrato confirmado
     const ESTADOS_COTIZACION = new Set(['cotizacion','cotización','propuesta','borrador']);
+    const ESTADOS_CERRADO    = new Set(['cerrado','pagado','liquidado']);
     // Mapa cid → datos completos para PDF (evita JSON en onclick)
     const _ecData = new Map();
 
@@ -3872,13 +3873,17 @@
                         pagosArr.push({ key, monto: m, fecha: pg.fecha||'', concepto: pg.concepto||pg.nota||'Pago', comprobante: pg.comprobante||null });
                     });
                     if (contrato === 0 && pagado === 0) return;
+                    const esCerrado = ESTADOS_CERRADO.has((p.estado||'').toLowerCase());
                     totalContrato += contrato;
                     totalPagado   += pagado;
-                    proyectos.push({ pid, nombre: p.nombre||pid, estado: p.estado||'', contrato, pagado, saldo: contrato - pagado, pagosArr });
+                    // Proyectos cerrados no suman al "por cobrar"
+                    proyectos.push({ pid, nombre: p.nombre||pid, estado: p.estado||'', contrato, pagado, saldo: esCerrado ? 0 : contrato - pagado, cerrado: esCerrado, pagosArr });
                 });
 
                 if (proyectos.length === 0) return;
-                const c = { cid, nombre, totalContrato, totalPagado, saldo: totalContrato - totalPagado, proyectos };
+                // saldo del cliente = suma solo de proyectos no cerrados
+                const saldoCliente = proyectos.reduce((acc, p) => acc + p.saldo, 0);
+                const c = { cid, nombre, totalContrato, totalPagado, saldo: saldoCliente, proyectos };
                 _ecData.set(cid, c);
                 resumen.push(c);
             });
@@ -3932,7 +3937,9 @@
         const proyRows = c.proyectos.map(p => {
             const ps = p.saldo > 0 ? 'var(--orange)' : 'var(--green)';
             const etiquetaEstado = p.estado
-                ? `<span style="font-size:9px;background:rgba(0,0,0,0.07);border-radius:5px;padding:1px 6px;color:var(--gray);text-transform:uppercase;margin-left:6px;">${p.estado}</span>`
+                ? p.cerrado
+                    ? `<span style="font-size:9px;background:rgba(52,199,89,0.15);border-radius:5px;padding:1px 6px;color:var(--green);font-weight:800;margin-left:6px;">✓ Cerrado</span>`
+                    : `<span style="font-size:9px;background:rgba(0,0,0,0.07);border-radius:5px;padding:1px 6px;color:var(--gray);text-transform:uppercase;margin-left:6px;">${p.estado}</span>`
                 : '';
             const pagosHTML = p.pagosArr.length
                 ? p.pagosArr.map(pg => `<div style="display:flex;justify-content:space-between;align-items:center;padding:3px 0;border-bottom:1px dashed var(--border);font-size:11px;">
@@ -3941,18 +3948,23 @@
                 </div>`).join('')
                 : `<div style="font-size:11px;color:var(--gray);padding:3px 0;">Sin pagos registrados</div>`;
 
-            return `<div style="background:var(--bg);border-radius:10px;padding:12px 14px;margin-bottom:8px;">
-                <div style="display:flex;align-items:flex-start;gap:10px;margin-bottom:8px;">
-                    <input type="checkbox" class="ec-proy-check" data-cid="${c.cid}" data-pid="${p.pid}"
+            const checkboxOrIcon = p.cerrado
+                ? `<i class="ph-bold ph-check-circle" style="font-size:20px;color:var(--green);flex-shrink:0;margin-top:2px;"></i>`
+                : `<input type="checkbox" class="ec-proy-check" data-cid="${c.cid}" data-pid="${p.pid}"
                         style="width:18px;height:18px;margin-top:2px;accent-color:var(--accent);cursor:pointer;flex-shrink:0;"
-                        checked onchange="actualizarTotalSeleccion('${c.cid}')">
+                        checked onchange="actualizarTotalSeleccion('${c.cid}')">`;
+            const pagoBtn = p.cerrado ? '' :
+                `<button onclick="abrirModalPagoCliente('${c.cid}','${p.pid}',${JSON.stringify(p.nombre)},${JSON.stringify(c.nombre)})"
+                    style="background:rgba(52,199,89,0.15);border:none;color:var(--green);border-radius:8px;padding:5px 10px;font-size:11px;font-weight:800;cursor:pointer;flex-shrink:0;">
+                    <i class="ph-bold ph-plus"></i> Pago
+                </button>`;
+            return `<div style="background:var(--bg);border-radius:10px;padding:12px 14px;margin-bottom:8px;${p.cerrado?'opacity:0.75;':''}">
+                <div style="display:flex;align-items:flex-start;gap:10px;margin-bottom:8px;">
+                    ${checkboxOrIcon}
                     <div style="flex:1;">
                         <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:4px;">
                             <div style="font-size:13px;font-weight:800;">${p.nombre}${etiquetaEstado}</div>
-                            <button onclick="abrirModalPagoCliente('${c.cid}','${p.pid}',${JSON.stringify(p.nombre)},${JSON.stringify(c.nombre)})"
-                                style="background:rgba(52,199,89,0.15);border:none;color:var(--green);border-radius:8px;padding:5px 10px;font-size:11px;font-weight:800;cursor:pointer;flex-shrink:0;">
-                                <i class="ph-bold ph-plus"></i> Pago
-                            </button>
+                            ${pagoBtn}
                         </div>
                         <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:5px;margin-top:8px;">
                             <div style="text-align:center;background:var(--card);border-radius:7px;padding:5px;">
@@ -3981,12 +3993,12 @@
             <div onclick="toggleClienteCard('${c.cid}')" style="display:flex;justify-content:space-between;align-items:center;padding:14px 16px;cursor:pointer;gap:12px;">
                 <div style="flex:1;min-width:0;">
                     <div style="font-size:15px;font-weight:900;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${c.nombre}</div>
-                    <div style="font-size:11px;color:var(--gray);">${c.proyectos.length} proyecto${c.proyectos.length!==1?'s':''} activos</div>
+                    <div style="font-size:11px;color:var(--gray);">${c.proyectos.filter(p=>!p.cerrado).length} activo${c.proyectos.filter(p=>!p.cerrado).length!==1?'s':''}${c.proyectos.some(p=>p.cerrado)?' · '+c.proyectos.filter(p=>p.cerrado).length+' cerrado'+( c.proyectos.filter(p=>p.cerrado).length!==1?'s':''):''}</div>
                 </div>
                 <div style="display:flex;align-items:center;gap:10px;flex-shrink:0;">
                     <div style="text-align:right;">
-                        <div style="font-size:9px;color:var(--gray);font-weight:700;text-transform:uppercase;">Por cobrar</div>
-                        <div style="font-size:18px;font-weight:900;color:${sc};">${fM(c.saldo)} Bs</div>
+                        <div style="font-size:9px;color:var(--gray);font-weight:700;text-transform:uppercase;">${c.saldo <= 0 && c.proyectos.some(p=>p.cerrado) ? 'Al día' : 'Por cobrar'}</div>
+                        <div style="font-size:18px;font-weight:900;color:${sc};">${c.saldo <= 0 && c.proyectos.some(p=>p.cerrado) ? '✓' : fM(c.saldo)+' Bs'}</div>
                     </div>
                     <i id="ec-arrow-${c.cid}" class="ph-bold ph-caret-down" style="font-size:18px;color:var(--gray);transition:transform .2s;"></i>
                 </div>
