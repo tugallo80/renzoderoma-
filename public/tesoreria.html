@@ -3823,8 +3823,12 @@
 // ═══════════════════════════════════════════════════════
 (function() {
     const fM = n => parseFloat(n||0).toLocaleString('es-BO',{minimumFractionDigits:2,maximumFractionDigits:2});
+    // Proyectos en etapa de propuesta/cotización: no tienen contrato confirmado
+    const ESTADOS_COTIZACION = new Set(['cotizacion','cotización','propuesta','borrador']);
+    // Mapa cid → datos completos para PDF (evita JSON en onclick)
+    const _ecData = new Map();
 
-    // Cargar cuando se activa el tab
+    // Hook switchMainTab
     const _origSwitch = window.switchMainTab;
     window.switchMainTab = function(tabId, btn) {
         _origSwitch(tabId, btn);
@@ -3836,6 +3840,7 @@
         const list    = document.getElementById('ec-list');
         loading.style.display = 'block';
         list.innerHTML = '';
+        _ecData.clear();
 
         try {
             const [snapClientes, snapProyectos] = await Promise.all([
@@ -3845,7 +3850,6 @@
             const clientes   = snapClientes.val()  || {};
             const proyectosR = snapProyectos.val() || {};
 
-            // Consolidar por cliente
             const resumen = [];
             Object.entries(proyectosR).forEach(([cid, proysPorCliente]) => {
                 if (!proysPorCliente || typeof proysPorCliente !== 'object') return;
@@ -3857,6 +3861,8 @@
 
                 Object.entries(proysPorCliente).forEach(([pid, p]) => {
                     if (!p || typeof p !== 'object') return;
+                    // Excluir proyectos en cotización/propuesta
+                    if (ESTADOS_COTIZACION.has((p.estado||'').toLowerCase())) return;
                     const contrato = parseFloat(p.monto_cierre || p.presupuesto_total || 0);
                     let pagado = 0;
                     const pagosArr = [];
@@ -3865,22 +3871,23 @@
                         pagado += m;
                         pagosArr.push({ key, monto: m, fecha: pg.fecha||'', concepto: pg.concepto||pg.nota||'Pago', comprobante: pg.comprobante||null });
                     });
-                    if (contrato === 0 && pagado === 0) return; // proyecto sin datos financieros
+                    if (contrato === 0 && pagado === 0) return;
                     totalContrato += contrato;
                     totalPagado   += pagado;
                     proyectos.push({ pid, nombre: p.nombre||pid, estado: p.estado||'', contrato, pagado, saldo: contrato - pagado, pagosArr });
                 });
 
                 if (proyectos.length === 0) return;
-                resumen.push({ cid, nombre, totalContrato, totalPagado, saldo: totalContrato - totalPagado, proyectos });
+                const c = { cid, nombre, totalContrato, totalPagado, saldo: totalContrato - totalPagado, proyectos };
+                _ecData.set(cid, c);
+                resumen.push(c);
             });
 
-            // Ordenar por saldo descendente
             resumen.sort((a,b) => b.saldo - a.saldo);
-
             loading.style.display = 'none';
+
             if (resumen.length === 0) {
-                list.innerHTML = '<div style="text-align:center;color:var(--gray);padding:40px;">No hay proyectos con datos financieros registrados.</div>';
+                list.innerHTML = '<div style="text-align:center;color:var(--gray);padding:40px;">No hay proyectos activos con datos financieros.</div>';
                 return;
             }
             list.innerHTML = resumen.map(c => renderClienteCard(c)).join('');
@@ -3890,77 +3897,129 @@
         }
     };
 
+    // ── Acordeón ─────────────────────────────────────────────────────────────
+    window.toggleClienteCard = function(cid) {
+        const body  = document.getElementById('ec-body-' + cid);
+        const arrow = document.getElementById('ec-arrow-' + cid);
+        const open  = body.style.display !== 'none';
+        body.style.display  = open ? 'none'  : 'block';
+        arrow.style.transform = open ? '' : 'rotate(180deg)';
+    };
+
+    window.actualizarTotalSeleccion = function(cid) {
+        const c = _ecData.get(cid);
+        if (!c) return;
+        const checks = document.querySelectorAll(`.ec-proy-check[data-cid="${cid}"]`);
+        let selContrato = 0, selPagado = 0;
+        checks.forEach(ch => {
+            if (!ch.checked) return;
+            const p = c.proyectos.find(x => x.pid === ch.dataset.pid);
+            if (p) { selContrato += p.contrato; selPagado += p.pagado; }
+        });
+        const selSaldo = selContrato - selPagado;
+        const sc = selSaldo > 0 ? 'var(--orange)' : 'var(--green)';
+        const selCount = [...checks].filter(ch => ch.checked).length;
+        const pdfBtn = document.getElementById('ec-pdf-btn-' + cid);
+        if (pdfBtn) {
+            pdfBtn.innerHTML = `<i class="ph-bold ph-file-pdf"></i> Generar PDF (${selCount} proyecto${selCount!==1?'s':''}) · Saldo: ${fM(selSaldo)} Bs`;
+            pdfBtn.disabled = selCount === 0;
+        }
+    };
+
     function renderClienteCard(c) {
         const sc = c.saldo > 0 ? 'var(--orange)' : 'var(--green)';
+
         const proyRows = c.proyectos.map(p => {
             const ps = p.saldo > 0 ? 'var(--orange)' : 'var(--green)';
+            const etiquetaEstado = p.estado
+                ? `<span style="font-size:9px;background:rgba(0,0,0,0.07);border-radius:5px;padding:1px 6px;color:var(--gray);text-transform:uppercase;margin-left:6px;">${p.estado}</span>`
+                : '';
             const pagosHTML = p.pagosArr.length
-                ? p.pagosArr.map(pg => `<div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;border-bottom:1px dashed var(--border);font-size:11px;">
+                ? p.pagosArr.map(pg => `<div style="display:flex;justify-content:space-between;align-items:center;padding:3px 0;border-bottom:1px dashed var(--border);font-size:11px;">
                     <span style="color:var(--gray);">${pg.fecha} · ${pg.concepto}</span>
                     <span style="color:var(--green);font-weight:800;">+${fM(pg.monto)} Bs${pg.comprobante?` <a href="${pg.comprobante}" target="_blank" style="color:var(--blue);">📎</a>`:''}</span>
                 </div>`).join('')
-                : '<div style="font-size:11px;color:var(--gray);padding:4px 0;">Sin pagos registrados</div>';
+                : `<div style="font-size:11px;color:var(--gray);padding:3px 0;">Sin pagos registrados</div>`;
+
             return `<div style="background:var(--bg);border-radius:10px;padding:12px 14px;margin-bottom:8px;">
-                <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px;">
-                    <div>
-                        <div style="font-size:13px;font-weight:800;">${p.nombre}</div>
-                        ${p.estado?`<div style="font-size:10px;color:var(--gray);text-transform:uppercase;">${p.estado}</div>`:''}
+                <div style="display:flex;align-items:flex-start;gap:10px;margin-bottom:8px;">
+                    <input type="checkbox" class="ec-proy-check" data-cid="${c.cid}" data-pid="${p.pid}"
+                        style="width:18px;height:18px;margin-top:2px;accent-color:var(--accent);cursor:pointer;flex-shrink:0;"
+                        checked onchange="actualizarTotalSeleccion('${c.cid}')">
+                    <div style="flex:1;">
+                        <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:4px;">
+                            <div style="font-size:13px;font-weight:800;">${p.nombre}${etiquetaEstado}</div>
+                            <button onclick="abrirModalPagoCliente('${c.cid}','${p.pid}',${JSON.stringify(p.nombre)},${JSON.stringify(c.nombre)})"
+                                style="background:rgba(52,199,89,0.15);border:none;color:var(--green);border-radius:8px;padding:5px 10px;font-size:11px;font-weight:800;cursor:pointer;flex-shrink:0;">
+                                <i class="ph-bold ph-plus"></i> Pago
+                            </button>
+                        </div>
+                        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:5px;margin-top:8px;">
+                            <div style="text-align:center;background:var(--card);border-radius:7px;padding:5px;">
+                                <div style="font-size:9px;color:var(--gray);">Contrato</div>
+                                <div style="font-size:12px;font-weight:900;color:var(--blue);">${fM(p.contrato)}</div>
+                            </div>
+                            <div style="text-align:center;background:var(--card);border-radius:7px;padding:5px;">
+                                <div style="font-size:9px;color:var(--gray);">Cobrado</div>
+                                <div style="font-size:12px;font-weight:900;color:var(--green);">${fM(p.pagado)}</div>
+                            </div>
+                            <div style="text-align:center;background:var(--card);border-radius:7px;padding:5px;">
+                                <div style="font-size:9px;color:var(--gray);">Saldo</div>
+                                <div style="font-size:12px;font-weight:900;color:${ps};">${fM(p.saldo)}</div>
+                            </div>
+                        </div>
+                        <div style="margin-top:8px;">${pagosHTML}</div>
                     </div>
-                    <button onclick="abrirModalPagoCliente('${c.cid}','${p.pid}',${JSON.stringify(p.nombre)},${JSON.stringify(c.nombre)})"
-                        style="background:rgba(52,199,89,0.15);border:none;color:var(--green);border-radius:8px;padding:6px 12px;font-size:11px;font-weight:800;cursor:pointer;">
-                        <i class="ph-bold ph-plus"></i> Registrar pago
-                    </button>
                 </div>
-                <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:8px;">
-                    <div style="text-align:center;background:var(--card);border-radius:8px;padding:6px;">
-                        <div style="font-size:10px;color:var(--gray);">Contrato</div>
-                        <div style="font-size:13px;font-weight:900;color:var(--blue);">${fM(p.contrato)}</div>
-                    </div>
-                    <div style="text-align:center;background:var(--card);border-radius:8px;padding:6px;">
-                        <div style="font-size:10px;color:var(--gray);">Cobrado</div>
-                        <div style="font-size:13px;font-weight:900;color:var(--green);">${fM(p.pagado)}</div>
-                    </div>
-                    <div style="text-align:center;background:var(--card);border-radius:8px;padding:6px;">
-                        <div style="font-size:10px;color:var(--gray);">Saldo</div>
-                        <div style="font-size:13px;font-weight:900;color:${ps};">${fM(p.saldo)}</div>
-                    </div>
-                </div>
-                <div>${pagosHTML}</div>
             </div>`;
         }).join('');
 
-        return `<div class="generic-card" style="margin-bottom:12px;">
-            <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px;flex-wrap:wrap;gap:8px;">
-                <div>
-                    <div style="font-size:16px;font-weight:900;">${c.nombre}</div>
-                    <div style="font-size:11px;color:var(--gray);">${c.proyectos.length} proyecto${c.proyectos.length!==1?'s':''}</div>
+        const selSaldo0 = c.saldo > 0 ? 'var(--orange)' : 'var(--green)';
+
+        return `<div class="generic-card" style="margin-bottom:10px;padding:0;overflow:hidden;">
+            <!-- Header del acordeón — siempre visible -->
+            <div onclick="toggleClienteCard('${c.cid}')" style="display:flex;justify-content:space-between;align-items:center;padding:14px 16px;cursor:pointer;gap:12px;">
+                <div style="flex:1;min-width:0;">
+                    <div style="font-size:15px;font-weight:900;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${c.nombre}</div>
+                    <div style="font-size:11px;color:var(--gray);">${c.proyectos.length} proyecto${c.proyectos.length!==1?'s':''} activos</div>
                 </div>
-                <div style="display:flex;gap:8px;align-items:center;">
+                <div style="display:flex;align-items:center;gap:10px;flex-shrink:0;">
                     <div style="text-align:right;">
-                        <div style="font-size:10px;color:var(--gray);">SALDO TOTAL</div>
-                        <div style="font-size:20px;font-weight:900;color:${sc};">${fM(c.saldo)} Bs</div>
+                        <div style="font-size:9px;color:var(--gray);font-weight:700;text-transform:uppercase;">Por cobrar</div>
+                        <div style="font-size:18px;font-weight:900;color:${sc};">${fM(c.saldo)} Bs</div>
                     </div>
-                    <button onclick="exportarPDFCliente('${c.cid}',${JSON.stringify(c)})"
-                        style="background:var(--accent);color:#fff;border:none;border-radius:10px;padding:10px 14px;font-size:13px;cursor:pointer;font-weight:800;">
-                        <i class="ph-bold ph-file-pdf"></i>
-                    </button>
+                    <i id="ec-arrow-${c.cid}" class="ph-bold ph-caret-down" style="font-size:18px;color:var(--gray);transition:transform .2s;"></i>
                 </div>
             </div>
-            <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px;">
-                <div style="background:rgba(0,122,255,0.08);border-radius:10px;padding:10px;text-align:center;">
-                    <div style="font-size:10px;color:var(--gray);font-weight:700;">TOTAL CONTRATADO</div>
-                    <div style="font-size:15px;font-weight:900;color:var(--blue);">${fM(c.totalContrato)} Bs</div>
+
+            <!-- Cuerpo: oculto por defecto -->
+            <div id="ec-body-${c.cid}" style="display:none;padding:0 14px 14px;">
+                <!-- Resumen 3 tiles -->
+                <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px;">
+                    <div style="background:rgba(0,122,255,0.08);border-radius:10px;padding:10px;text-align:center;">
+                        <div style="font-size:9px;color:var(--gray);font-weight:700;text-transform:uppercase;">Contratado</div>
+                        <div style="font-size:14px;font-weight:900;color:var(--blue);">${fM(c.totalContrato)}</div>
+                    </div>
+                    <div style="background:rgba(52,199,89,0.08);border-radius:10px;padding:10px;text-align:center;">
+                        <div style="font-size:9px;color:var(--gray);font-weight:700;text-transform:uppercase;">Cobrado</div>
+                        <div style="font-size:14px;font-weight:900;color:var(--green);">${fM(c.totalPagado)}</div>
+                    </div>
+                    <div style="background:rgba(255,149,0,0.08);border-radius:10px;padding:10px;text-align:center;">
+                        <div style="font-size:9px;color:var(--gray);font-weight:700;text-transform:uppercase;">Saldo</div>
+                        <div style="font-size:14px;font-weight:900;color:${sc};">${fM(c.saldo)}</div>
+                    </div>
                 </div>
-                <div style="background:rgba(52,199,89,0.08);border-radius:10px;padding:10px;text-align:center;">
-                    <div style="font-size:10px;color:var(--gray);font-weight:700;">TOTAL COBRADO</div>
-                    <div style="font-size:15px;font-weight:900;color:var(--green);">${fM(c.totalPagado)} Bs</div>
+                <!-- Lista de proyectos con checkboxes -->
+                <div style="font-size:10px;font-weight:800;color:var(--gray);text-transform:uppercase;margin-bottom:8px;">
+                    Seleccioná los proyectos a incluir en el PDF
                 </div>
-                <div style="background:rgba(255,149,0,0.08);border-radius:10px;padding:10px;text-align:center;">
-                    <div style="font-size:10px;color:var(--gray);font-weight:700;">POR COBRAR</div>
-                    <div style="font-size:15px;font-weight:900;color:${sc};">${fM(c.saldo)} Bs</div>
-                </div>
+                ${proyRows}
+                <!-- Botón PDF de selección -->
+                <button id="ec-pdf-btn-${c.cid}" onclick="exportarPDFSeleccion('${c.cid}')"
+                    style="width:100%;padding:12px;background:var(--accent);color:#fff;border:none;border-radius:12px;font-size:13px;font-weight:800;cursor:pointer;margin-top:4px;">
+                    <i class="ph-bold ph-file-pdf"></i> Generar PDF (${c.proyectos.length} proyecto${c.proyectos.length!==1?'s':''}) · Saldo: ${fM(c.saldo)} Bs
+                </button>
             </div>
-            <div>${proyRows}</div>
         </div>`;
     }
 
@@ -4004,13 +4063,23 @@
 
         const payload = { concepto, monto, fecha, comprobante: comprobanteURL, ts: Date.now() };
         await db.ref(`proyectos/${cid}/${pid}/pagos`).push(payload);
-
         document.getElementById('mod-pago-cliente').style.display = 'none';
         cargarEstadoCuenta();
     };
 
-    // ── PDF Estado de Cuenta ──────────────────────────────────────────────────
-    window.exportarPDFCliente = function(cid, clienteData) {
+    // ── PDF con proyectos seleccionados ───────────────────────────────────────
+    window.exportarPDFSeleccion = function(cid) {
+        const c = _ecData.get(cid);
+        if (!c) return;
+        const checks = document.querySelectorAll(`.ec-proy-check[data-cid="${cid}"]:checked`);
+        const pids   = new Set([...checks].map(ch => ch.dataset.pid));
+        const proysSel = c.proyectos.filter(p => pids.has(p.pid));
+        if (proysSel.length === 0) { alert('Seleccioná al menos un proyecto.'); return; }
+
+        const totalContrato = proysSel.reduce((s,p) => s + p.contrato, 0);
+        const totalPagado   = proysSel.reduce((s,p) => s + p.pagado,   0);
+        const totalSaldo    = totalContrato - totalPagado;
+
         const { jsPDF } = window.jspdf;
         const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
         const fM2 = n => parseFloat(n||0).toLocaleString('es-BO',{minimumFractionDigits:2,maximumFractionDigits:2});
@@ -4031,27 +4100,26 @@
         let y = 36;
         doc.setFont('helvetica','bold');
         doc.setFontSize(14);
-        doc.text(clienteData.nombre, 14, y); y += 6;
+        doc.text(c.nombre, 14, y); y += 6;
         doc.setFont('helvetica','normal');
         doc.setFontSize(9);
         doc.setTextColor(120,120,120);
-        doc.text(`${clienteData.proyectos.length} proyecto${clienteData.proyectos.length!==1?'s':''} · Total contratado: ${fM2(clienteData.totalContrato)} Bs`, 14, y); y += 10;
+        doc.text(`${proysSel.length} proyecto${proysSel.length!==1?'s':''} · Total contratado: ${fM2(totalContrato)} Bs`, 14, y); y += 10;
         doc.setTextColor(0,0,0);
 
-        // Tabla resumen de proyectos
-        const rows = clienteData.proyectos.map(p => [
+        // Tabla resumen
+        const rows = proysSel.map(p => [
             p.nombre,
             fM2(p.contrato) + ' Bs',
             fM2(p.pagado)   + ' Bs',
-            { content: fM2(p.saldo) + ' Bs', styles: { textColor: p.saldo > 0 ? [255,149,0] : [52,199,89], fontStyle: 'bold' } },
+            { content: fM2(p.saldo) + ' Bs', styles: { textColor: p.saldo > 0 ? [255,149,0] : [52,199,89], fontStyle:'bold' } },
         ]);
         rows.push([
-            { content: 'TOTAL', colSpan: 1, styles: { fontStyle:'bold' } },
-            { content: fM2(clienteData.totalContrato) + ' Bs', styles: { fontStyle:'bold', textColor:[0,122,255] } },
-            { content: fM2(clienteData.totalPagado)   + ' Bs', styles: { fontStyle:'bold', textColor:[52,199,89] } },
-            { content: fM2(clienteData.saldo)          + ' Bs', styles: { fontStyle:'bold', textColor: clienteData.saldo > 0 ? [255,149,0] : [52,199,89] } },
+            { content: 'TOTAL', styles: { fontStyle:'bold' } },
+            { content: fM2(totalContrato) + ' Bs', styles: { fontStyle:'bold', textColor:[0,122,255] } },
+            { content: fM2(totalPagado)   + ' Bs', styles: { fontStyle:'bold', textColor:[52,199,89] } },
+            { content: fM2(totalSaldo)    + ' Bs', styles: { fontStyle:'bold', textColor: totalSaldo > 0 ? [255,149,0] : [52,199,89] } },
         ]);
-
         doc.autoTable({
             startY: y,
             head: [['Proyecto','Contrato','Cobrado','Saldo']],
@@ -4064,12 +4132,12 @@
         y = doc.lastAutoTable.finalY + 12;
 
         // Detalle de pagos por proyecto
-        clienteData.proyectos.forEach(p => {
+        proysSel.forEach(p => {
             if (p.pagosArr.length === 0) return;
             if (y > 250) { doc.addPage(); y = 20; }
             doc.setFont('helvetica','bold');
             doc.setFontSize(10);
-            doc.text(p.nombre + ' — Detalle de pagos recibidos', 14, y); y += 5;
+            doc.text(p.nombre + ' — Pagos recibidos', 14, y); y += 5;
             doc.autoTable({
                 startY: y,
                 head: [['Fecha','Concepto','Monto']],
@@ -4081,12 +4149,10 @@
             y = doc.lastAutoTable.finalY + 8;
         });
 
-        // Pie
         doc.setFontSize(8);
         doc.setTextColor(150,150,150);
         doc.text('Rubik Bolivia · rubikbolivia.com · Generado el ' + hoy, 105, 287, {align:'center'});
-
-        doc.save(`EstadoCuenta_${clienteData.nombre.replace(/\s+/g,'_')}_${new Date().toISOString().slice(0,10)}.pdf`);
+        doc.save(`EstadoCuenta_${c.nombre.replace(/\s+/g,'_')}_${new Date().toISOString().slice(0,10)}.pdf`);
     };
 })();
 </script>
