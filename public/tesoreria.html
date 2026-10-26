@@ -3824,7 +3824,8 @@
 (function() {
     const fM = n => parseFloat(n||0).toLocaleString('es-BO',{minimumFractionDigits:2,maximumFractionDigits:2});
     // Proyectos en etapa de propuesta/cotización: no tienen contrato confirmado
-    const ESTADOS_COTIZACION = new Set(['cotizacion','cotización','propuesta','borrador']);
+    // Estados pre-contrato: excluir de Tesorería (sin contrato confirmado ni en producción)
+    const ESTADOS_COTIZACION = new Set(['cotizacion','cotización','propuesta','borrador','planificacion','planificación']);
     const ESTADOS_CERRADO    = new Set(['cerrado','pagado','liquidado']);
     // Mapa cid → datos completos para PDF (evita JSON en onclick)
     const _ecData = new Map();
