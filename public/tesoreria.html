@@ -4004,7 +4004,7 @@
                 </div>
                 <div style="display:flex;align-items:center;gap:8px;flex-shrink:0;">
                     <button id="ec-pdf-btn-${c.cid}" onclick="exportarPDFSeleccion('${c.cid}')"
-                        style="padding:8px 12px;background:var(--accent);color:#fff;border:none;border-radius:10px;font-size:12px;font-weight:800;cursor:pointer;white-space:nowrap;">
+                        style="padding:8px 12px;background:#5856d6;color:#fff;border:none;border-radius:10px;font-size:12px;font-weight:800;cursor:pointer;white-space:nowrap;">
                         <i class="ph-bold ph-file-pdf"></i> PDF
                     </button>
                     <div onclick="toggleClienteCard('${c.cid}')" style="cursor:pointer;text-align:right;">
@@ -4034,7 +4034,7 @@
                 </div>
                 <!-- Botón PDF grande — arriba de la lista -->
                 <button id="ec-pdf-btn2-${c.cid}" onclick="exportarPDFSeleccion('${c.cid}')"
-                    style="width:100%;padding:14px;background:var(--accent);color:#fff;border:none;border-radius:12px;font-size:14px;font-weight:800;cursor:pointer;margin-bottom:12px;display:flex;align-items:center;justify-content:center;gap:8px;">
+                    style="width:100%;padding:14px;background:#5856d6;color:#fff;border:none;border-radius:12px;font-size:14px;font-weight:800;cursor:pointer;margin-bottom:12px;display:flex;align-items:center;justify-content:center;gap:8px;">
                     <i class="ph-bold ph-file-pdf" style="font-size:18px;"></i>
                     <span id="ec-pdf-lbl2-${c.cid}">Generar PDF (${c.proyectos.filter(p=>!p.cerrado).length} proyectos) · Saldo: ${fM(c.saldo)} Bs</span>
                 </button>
