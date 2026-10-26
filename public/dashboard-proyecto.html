@@ -140,7 +140,8 @@
         <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; margin-bottom: 20px;">
             <div>
                 <div style="font-size:12px; font-weight:700; color:var(--gray); margin-bottom:8px;">Fijar Monto de Cierre Manual:</div>
-                <div class="flex-row"><input type="number" step="any" id="inp-cierre" class="inp-std" style="margin:0;" placeholder="Monto Bs..."><button class="btn-action" style="margin:0; width:120px;" onclick="fijarCierre()">Fijar</button></div>
+                <div class="flex-row"><input type="number" step="any" id="inp-cierre" class="inp-std" style="margin:0;" placeholder="Monto Bs..."><button class="btn-action" style="margin:0; width:120px;" onclick="fijarCierre()">Fijar</button><button id="btn-limpiar-cierre" class="btn-action" style="margin:0;width:40px;background:var(--bg);color:var(--red);border:1px solid var(--border);display:none;" title="Eliminar monto fijo y volver al presupuesto" onclick="limpiarCierre()"><i class="ph-bold ph-x"></i></button></div>
+                <div id="txt-cierre-activo" style="display:none;font-size:11px;color:var(--orange);margin-top:4px;"><i class="ph-bold ph-warning"></i> Monto fijo activo — desvinculado del presupuesto</div>
 
                 <div style="font-size:12px; font-weight:700; color:var(--gray); margin-bottom:8px; margin-top:20px;">Facturas Emitidas al Cliente:</div>
                 <div class="flex-row" style="gap:6px;">
@@ -405,7 +406,11 @@
             }
             let fac = snaps[6].val();
             if(fac) document.getElementById('inp-factura').value = fac;
-            if(montoCierre) document.getElementById('inp-cierre').value = parseFloat(montoCierre).toFixed(2);
+            if(montoCierre) {
+                document.getElementById('inp-cierre').value = parseFloat(montoCierre).toFixed(2);
+                document.getElementById('btn-limpiar-cierre').style.display = 'inline-flex';
+                document.getElementById('txt-cierre-activo').style.display = 'block';
+            }
             escucharPagosAdmin();
             escucharFacturasEmitidas();
         });
@@ -481,6 +486,16 @@
         db.ref(`proyectos/${cid}/${pid}/factura_url`).set(url); 
         db.ref(`proyectos/${cid}/${pid}/estado`).set('entregado'); 
         alert("Factura enviada al portal del cliente.");
+    }
+
+    function limpiarCierre() {
+        if(!confirm("¿Eliminar el monto de cierre fijo?\n\nEl proyecto volverá a usar el total del presupuesto como referencia.")) return;
+        db.ref(`proyectos/${cid}/${pid}/monto_cierre`).remove().then(() => {
+            document.getElementById('inp-cierre').value = '';
+            document.getElementById('btn-limpiar-cierre').style.display = 'none';
+            document.getElementById('txt-cierre-activo').style.display = 'none';
+            location.reload();
+        });
     }
 
     function cerrarProyecto() {
