@@ -30,3 +30,4 @@ HTML/CSS/JS puro con Firebase Realtime DB y Storage. Librerías: JSZip, Sortable
 - En proyectos con más de ~200 ítems el re-render puede ser lento.
 - El historial de versiones del presupuesto no está implementado.
 - La integración de Render 3D está como botón pero la funcionalidad depende de un servicio externo.
+- La generación APU por lotes (Gemini) tiene `maxOutputTokens: 16000`; ítems muy complejos con muchos materiales/MO pueden seguir truncando si el JSON supera ese límite.

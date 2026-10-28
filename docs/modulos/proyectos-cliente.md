@@ -11,7 +11,8 @@ HTML/CSS/JS con Firebase Realtime DB, Storage y Auth. Usa Phosphor Icons. Los pr
 
 ## Estructura de datos en Firebase
 - `/proyectos/$cid/` — todos los proyectos del cliente
-- `/proyectos/$cid/$pid/` — datos del proyecto: nombre, status, fecha, visible_cliente, foto (URL Storage)
+- `/proyectos/$cid/$pid/` — datos del proyecto: nombre, estado, fecha, visible_cliente, foto (URL Storage)
+- `/proyectos/$cid/$pid/estado` — `cotizacion` / `planificacion` / `produccion` / `entregado` / `cerrado`
 - `/clientes/$cid/juego_moneda_jugado`, etc. — limpiados desde aquí con "Limpiar Intentos"
 
 ## Archivos principales
@@ -19,12 +20,20 @@ HTML/CSS/JS con Firebase Realtime DB, Storage y Auth. Usa Phosphor Icons. Los pr
 - `/js/firecache.js`
 - `/js/auth-guard.js`
 
+## Estados y sus íconos en la grilla
+- Sin estado / `planificacion` → ⚪ gris
+- `produccion` → 🔵 azul
+- `entregado` → 🟢 verde
+- `cerrado` → ✅ verde (agregado oct 2026)
+
 ## Decisiones tomadas
 - Al crear un proyecto en "Modo Agencia" se abre `agencia.html` en lugar de `presupuesto.html` para el formato de cotización de agencia.
 - El filtro por mes usa chips scrolleables horizontalmente basados en la fecha del proyecto.
 - La duplicación de proyectos crea una copia completa del nodo Firebase (incluyendo presupuesto) con un nuevo `pid`.
 - El botón "Ver como Cliente" abre `cliente-view.html` en una nueva pestaña para previsualizar el portal.
+- El estado se cambia desde el modal "Editar Proyecto" (acceso por long-press o menú contextual).
 
 ## Problemas conocidos y pendientes
 - El editor de imagen inline (canvas) es básico: solo rotación y brillo.
 - No hay búsqueda de proyectos dentro de la carpeta del cliente.
+- `cotizacion` no aparece en el selector de "Editar Proyecto" (solo se asigna al crear); si se quiere revertir un proyecto a cotización hay que hacerlo desde la DB directamente.
