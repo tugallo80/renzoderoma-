@@ -38,17 +38,28 @@ https://shell.cloud.google.com/?project=rubik-bolivia
 RESPALDO=$(gsutil ls -r 'gs://rubik-bolivia-default-rtdb-backups/**' | grep -E '\.json(\.gz)?$' | grep -vi rules | sort | tail -1); echo "Respaldo: $RESPALDO"
 ```
 
-2. Copiarlo, verificarlo y borrar la copia local (tiene datos sensibles):
-
-```bash
-mkdir -p ~/verif-respaldo && cd ~/verif-respaldo && gsutil cp "$RESPALDO" . && curl -fsSL -o verificar-respaldo.js https://raw.githubusercontent.com/tugallo80/renzoderoma-/main/tools/verificar-respaldo.js && node verificar-respaldo.js "$(basename "$RESPALDO")"; cd ~ && rm -rf ~/verif-respaldo
-```
+2. Copiarlo, verificarlo y borrar la copia local (tiene datos sensibles). El repo va a ser privado, así que
+   Cloud Shell no puede bajar el script de GitHub: **pedirle a Claude el bloque con `tools/verificar-respaldo.js`
+   incluido** (versión actual de `main`). El bloque termina con `rm -rf` de la copia.
 
 Debe terminar con ✅. Anotar el conteo de "proyectos con pagos_cliente" como referencia para la migración.
 
 Acepta `.json` y `.json.gz`. Muestra solo estructura y conteos (clientes, proyectos, cuántos tienen
 `pagos`/`pagos_cliente`/`presupuesto`…), nunca valores. Sale con error si el archivo está roto o faltan nodos
 principales.
+
+## Antecedente: export publicado en el sitio (hasta mayo 2026)
+
+- Archivo: `/backups/rubik-bolivia-default-rtdb-export.json`, export completo de la base del **29 abr 2026**.
+- Estuvo publicado en versiones de Hosting desde [primera fecha: pendiente] hasta la del **10 may 2026**.
+  Se publicaba porque se desplegaba `public/` entero desde la PC; el fix del 16 may lo sacó de `public/`.
+- Verificado el 2 nov 2026: las 3 URLs (rubikbolivia.com, web.app, firebaseapp.com) dan 404. Nunca estuvo en git.
+- Contenido: solo datos del negocio (clientes, proyectos, pagos, personal, caja chica, WhatsApp, etc.).
+  Sin claves de Google, tokens de Meta, contraseñas ni `config_ia` → no hubo credenciales para rotar.
+- No se puede saber si alguien lo descargó (Hosting no guardaba registros de acceso).
+- Pendiente: limitar la retención de versiones de Hosting para borrar las versiones que lo contenían.
+- PIN de clientes (`pin_hash`, SHA-256 sin sal) se tratan como expuestos → ver "Antes de la salida a la venta"
+  en `docs/plan-sesiones.md`.
 
 ## Restaurar si una migración sale mal
 

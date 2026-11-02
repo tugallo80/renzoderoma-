@@ -1,0 +1,13 @@
+{
+  "name": "probar-reglas",
+  "private": true,
+  "description": "Prueba database.rules.json en el emulador: solo /acceso/hub puede leer/escribir",
+  "scripts": {
+    "test": "firebase emulators:exec --only database --project demo-rubik \"node prueba.mjs\""
+  },
+  "devDependencies": {
+    "@firebase/rules-unit-testing": "^4.0.1",
+    "firebase": "^11.10.0",
+    "firebase-tools": "15.34.2"
+  }
+}
