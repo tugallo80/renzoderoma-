@@ -53,6 +53,33 @@ El problema no es Gemini — es que opera en vacío:
 
 ---
 
+### Sesión 0 — Protección antes de tocar datos
+**Objetivo**: poder deshacer cualquier error antes de migrar datos (Sesión A) o tocar permisos.
+
+**Prioridad 1 — Respaldos** (ver `docs/respaldos.md`)
+- [x] Respaldos automáticos diarios activos (bucket `rubik-bolivia-default-rtdb-backups`)
+- [x] Respaldo manual completo (2 nov 2026) + copia JSON en la PC
+- [x] Procedimiento de restauración documentado
+- [x] Script `tools/verificar-respaldo.js`
+- [ ] Correr el verificador sobre el respaldo real
+
+**Prioridad 2 — Seguridad**
+- [ ] Buscar claves de API expuestas en el código del navegador (ej. Gemini) y moverlas al servidor
+- [ ] Revisar que `database.rules.json` proteja pagos, planillas, clientes y proyectos
+
+**Prioridad 3 — Permisos**
+- [ ] Permisos mínimos para la cuenta `claude-code` en `rubik-bolivia` (sin admin de IAM ni lectura de pagos)
+- [ ] Script de Cloud Shell para revisarlo antes de correrlo
+
+**Prioridad 4 — Despliegue**
+- [ ] Revisar el despliegue actual (hoy: GitHub Action al mergear a `main`)
+- [ ] Optimizar minutos: no correr si solo cambian docs, desplegar solo lo que cambió, cachés, límite de tiempo
+- [ ] Verificar que lo que se publicaría sea igual a lo que está en rubikbolivia.com
+
+**Nota**: lo que dependa de GitHub Actions se prepara pero no se prueba hasta el 1 de noviembre (minutos agotados).
+
+---
+
 ### Sesión A — Infraestructura base (deuda técnica)
 **Objetivo**: dejar la app sin bugs estructurales antes de construir encima.
 
