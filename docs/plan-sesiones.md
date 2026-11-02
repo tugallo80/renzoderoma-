@@ -61,7 +61,7 @@ El problema no es Gemini — es que opera en vacío:
 - [x] Respaldo manual completo (2 nov 2026) + copia JSON en la PC
 - [x] Procedimiento de restauración documentado
 - [x] Script `tools/verificar-respaldo.js`
-- [ ] Correr el verificador sobre el respaldo real
+- [ ] Verificar que el respaldo se pueda leer → se hace justo antes de la migración de la Sesión A (Cloud Shell, ver `docs/respaldos.md`)
 
 **Prioridad 2 — Seguridad**
 - [ ] Buscar claves de API expuestas en el código del navegador (ej. Gemini) y moverlas al servidor
@@ -83,6 +83,7 @@ El problema no es Gemini — es que opera en vacío:
 ### Sesión A — Infraestructura base (deuda técnica)
 **Objetivo**: dejar la app sin bugs estructurales antes de construir encima.
 
+- [ ] **Antes de migrar:** respaldo manual + verificación en Cloud Shell (`docs/respaldos.md`)
 - [ ] Migrar nodo `pagos_cliente/` → `pagos/` en proyectos existentes (script de migración en Cloud Functions o directo en DB)
 - [ ] Cambiar `localStorage` para `cid`/`pid` por URL hash params (`#cid=X&pid=Y`) en todos los módulos — resuelve el bug de múltiples pestañas y permite links compartibles
 - [ ] Crear `public/css/variables.css` con todos los tokens de color (`--accent`, `--blue`, `--green`, etc.) e incluirlo en todos los HTML

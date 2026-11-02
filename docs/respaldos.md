@@ -7,7 +7,8 @@ Base: `rubik-bolivia-default-rtdb` (proyecto `rubik-bolivia`). Los respaldos con
 
 - Respaldos automáticos diarios: **activos**, bucket `rubik-bolivia-default-rtdb-backups`.
 - Respaldo manual completo: 2 nov 2026, en el mismo bucket + copia JSON en la PC.
-- Pendiente: correr `tools/verificar-respaldo.js` sobre la copia de la PC.
+- El respaldo del 2 nov figura como **Completa** en la consola.
+- **Verificación de lectura: se hace justo antes de la migración de la Sesión A** (bloque de Cloud Shell abajo).
 - No cubierto: archivos de Storage (fotos, PDFs, diseños).
 
 ## Ver / configurar respaldos automáticos
@@ -26,11 +27,24 @@ https://console.firebase.google.com/project/rubik-bolivia/database/rubik-bolivia
 
 **Antes de cualquier migración de datos** (ej. `pagos_cliente/` → `pagos/`): respaldo manual justo antes.
 
-## Verificar que se pueda leer
+## Verificar que se pueda leer (justo antes de migrar)
+
+Se corre en **Cloud Shell** (no hace falta el repo ni Node en la PC):
+https://shell.cloud.google.com/?project=rubik-bolivia
+
+1. Elegir el respaldo más reciente del bucket (el script muestra cuál toma):
 
 ```bash
-node tools/verificar-respaldo.js respaldo-rubik-AAAA-MM-DD.json
+RESPALDO=$(gsutil ls -r 'gs://rubik-bolivia-default-rtdb-backups/**' | grep -E '\.json(\.gz)?$' | grep -vi rules | sort | tail -1); echo "Respaldo: $RESPALDO"
 ```
+
+2. Copiarlo, verificarlo y borrar la copia local (tiene datos sensibles):
+
+```bash
+mkdir -p ~/verif-respaldo && cd ~/verif-respaldo && gsutil cp "$RESPALDO" . && curl -fsSL -o verificar-respaldo.js https://raw.githubusercontent.com/tugallo80/renzoderoma-/main/tools/verificar-respaldo.js && node verificar-respaldo.js "$(basename "$RESPALDO")"; cd ~ && rm -rf ~/verif-respaldo
+```
+
+Debe terminar con ✅. Anotar el conteo de "proyectos con pagos_cliente" como referencia para la migración.
 
 Acepta `.json` y `.json.gz`. Muestra solo estructura y conteos (clientes, proyectos, cuántos tienen
 `pagos`/`pagos_cliente`/`presupuesto`…), nunca valores. Sale con error si el archivo está roto o faltan nodos
