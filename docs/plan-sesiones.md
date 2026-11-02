@@ -70,6 +70,7 @@ El problema no es Gemini — es que opera en vacío:
 - [ ] Reglas: toda la base solo para la lista blanca `/acceso/hub/{uid}` (pruebas en `tools/probar-reglas`)
 - [ ] Functions: IA, TTS, Gemini Live y correo solo para la lista blanca (`functions/acceso.js`)
 - [ ] Desactivar el login anónimo y el registro abierto con email en Firebase Auth
+- [ ] Borrar la cuenta de prueba `test@rubikbolivia.com` (sin uso desde mayo 2026) y los 35 usuarios anónimos
 - [ ] Limitar la retención de versiones de Hosting (borra las versiones con el export)
 - [ ] `/api/imagen` (`proxyImagen`) es un proxy abierto sin login: restringir
 

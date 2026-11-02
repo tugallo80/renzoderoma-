@@ -51,7 +51,7 @@ principales.
 ## Antecedente: export publicado en el sitio (hasta mayo 2026)
 
 - Archivo: `/backups/rubik-bolivia-default-rtdb-export.json`, export completo de la base del **29 abr 2026**.
-- Estuvo publicado en versiones de Hosting desde [primera fecha: pendiente] hasta la del **10 may 2026**.
+- Estuvo publicado en versiones de Hosting del **29 abr 2026 al 10 may 2026**, siempre el mismo archivo (misma huella).
   Se publicaba porque se desplegaba `public/` entero desde la PC; el fix del 16 may lo sacó de `public/`.
 - Verificado el 2 nov 2026: las 3 URLs (rubikbolivia.com, web.app, firebaseapp.com) dan 404. Nunca estuvo en git.
 - Contenido: solo datos del negocio (clientes, proyectos, pagos, personal, caja chica, WhatsApp, etc.).
