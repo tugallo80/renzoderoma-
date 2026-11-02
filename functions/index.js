@@ -24,6 +24,7 @@ const { defineSecret } = require("firebase-functions/params");
 const admin = require("firebase-admin");
 
 admin.initializeApp();
+const { esHub } = require("./acceso");
 
 // ── Mail module (Zoho IMAP/SMTP) ──────────────────────────────────────────────
 const mail = require("./mail");
@@ -70,7 +71,12 @@ async function requireAuth(req, res) {
     }
     const idToken = header.substring("Bearer ".length).trim();
     try {
-        return await admin.auth().verifyIdToken(idToken);
+        const decoded = await admin.auth().verifyIdToken(idToken);
+        if (!(await esHub(decoded.uid))) {
+            res.status(403).json({ error: "Usuario sin acceso" });
+            return null;
+        }
+        return decoded;
     } catch (e) {
         console.warn("Token rechazado:", e.message);
         res.status(401).json({ error: "ID token inválido o expirado" });

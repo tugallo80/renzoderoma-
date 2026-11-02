@@ -12,7 +12,7 @@
 **Proyecto Firebase:** `rubik-bolivia`  
 - Realtime Database: `https://rubik-bolivia-default-rtdb.firebaseio.com`  
 - Storage: `rubik-bolivia.firebasestorage.app`  
-- Auth: Firebase Auth con email/password (usuarios internos) + anónimo (clientes)
+- Auth: Firebase Auth con email/password. Acceso a datos y a `/api/*` solo para la lista blanca `/acceso/hub/{uid}` (`database.rules.json`, `functions/acceso.js`). Las apps con login anónimo (clientes, trabajadores, contratistas, agencia) están cerradas hasta la salida a la venta.
 
 **API key web (pública):** `AIzaSyDXYlofy31cDP14xVAVxWo_7TqXdSgsIjA`
 

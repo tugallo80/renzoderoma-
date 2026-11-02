@@ -64,8 +64,15 @@ El problema no es Gemini — es que opera en vacío:
 - [ ] Verificar que el respaldo se pueda leer → se hace justo antes de la migración de la Sesión A (Cloud Shell, ver `docs/respaldos.md`)
 
 **Prioridad 2 — Seguridad**
-- [ ] Buscar claves de API expuestas en el código del navegador (ej. Gemini) y moverlas al servidor
-- [ ] Revisar que `database.rules.json` proteja pagos, planillas, clientes y proyectos
+- [x] Revisar el export que estuvo publicado en `public/backups/` (ver `docs/respaldos.md`, "Antecedente")
+- [x] Confirmar que la clave de Gemini y el token de Meta no están en el historial de git
+- [ ] Confirmar en consola que la clave vieja de Gemini y el token viejo de Meta están revocados
+- [ ] Reglas: toda la base solo para la lista blanca `/acceso/hub/{uid}` (pruebas en `tools/probar-reglas`)
+- [ ] Functions: IA, TTS, Gemini Live y correo solo para la lista blanca (`functions/acceso.js`)
+- [ ] Desactivar el login anónimo y el registro abierto con email en Firebase Auth
+- [ ] Borrar la cuenta de prueba `test@rubikbolivia.com` (sin uso desde mayo 2026) y los 35 usuarios anónimos
+- [ ] Limitar la retención de versiones de Hosting (borra las versiones con el export)
+- [ ] `/api/imagen` (`proxyImagen`) es un proxy abierto sin login: restringir
 
 **Prioridad 3 — Permisos**
 - [ ] Permisos mínimos para la cuenta `claude-code` en `rubik-bolivia` (sin admin de IAM ni lectura de pagos)
@@ -77,6 +84,15 @@ El problema no es Gemini — es que opera en vacío:
 - [ ] Verificar que lo que se publicaría sea igual a lo que está en rubikbolivia.com
 
 **Nota**: lo que dependa de GitHub Actions se prepara pero no se prueba hasta el 1 de noviembre (minutos agotados).
+El repo pasa a privado junto con la optimización de la Prioridad 4 (en privado, Actions descuenta minutos).
+
+**Antes de la salida a la venta** (hoy la app la usa solo el dueño):
+- [ ] Reabrir con permisos mínimos las apps cerradas en la Sesión 0: cliente-view (y juegos), app-trabajador,
+      contratista, supervisor de obra, proveedor gráfico/agencia. Su código sigue en `public/`; solo se les cerró
+      el acceso a los datos. Cada una necesita su propio permiso acotado (ej. claim por cliente), no `auth != null`.
+- [ ] PIN de clientes: resetear todos y guardarlos con hash seguro del lado del servidor (el `pin_hash` actual es
+      SHA-256 sin sal y estuvo en el export publicado hasta mayo 2026).
+- [ ] Volver a habilitar el login anónimo solo si alguna de esas apps lo necesita.
 
 ---
 

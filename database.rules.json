@@ -4,141 +4,24 @@
     // ══════════════════════════════════════════════════════════════
     //  RUBIK OS — Firebase Realtime Database Security Rules
     //  Principio: denegación por defecto. Solo se permite lo explícito.
+    //
+    //  Acceso "hub": solo los uid listados en /acceso/hub/{uid} = true.
+    //  Esa lista se edita únicamente desde la consola de Firebase
+    //  (las reglas no permiten escribirla desde la app).
+    //
+    //  Las apps de clientes, trabajadores, contratistas, supervisores y
+    //  agencia (login anónimo) quedan SIN acceso a datos hasta la salida
+    //  a la venta. Ver docs/plan-sesiones.md (Sesión 0, Prioridad 2).
     // ══════════════════════════════════════════════════════════════
 
-    // ─── PROYECTOS ─────────────────────────────────────────────────
-    // Hub: lectura/escritura total con auth.
-    // Socios (link de agencia): acceso público a /$cid/$pid/agencia — la seguridad
-    // está garantizada por el UUID del cid+pid (imposible de adivinar).
-    "proyectos": {
-      ".read":  "auth != null",
-      ".write": "auth != null",
-      "$cid": {
-        ".read":  "auth != null",
-        ".write": "auth != null",
-        "$pid": {
-          ".read":  "auth != null",
-          ".write": "auth != null",
-          "agencia": {
-            ".read":  true,
-            ".write": true
-          }
-        }
-      }
-    },
-
-    // ─── PERFIL DE CLIENTES ────────────────────────────────────────
-    // Hub: lectura/escritura total (necesita leer /clientes completo para el directorio).
-    // Cliente: solo lee su propio perfil (para nombre, logo, cover).
-    // pin_hash: NADIE puede leerlo desde el cliente (solo hub).
-    "clientes": {
-      ".read":  "auth != null",
-      ".write": "auth != null && auth.token.email != null",
-      "$cid": {
-        ".read":  "auth != null",
-        ".write": "auth != null && auth.token.email != null",
-        "pin_hash": {
-          ".read":  "auth != null",
-          ".write": "auth != null && auth.token.email != null"
-        }
-      }
-    },
-
-    // ─── NOTIFICACIONES ───────────────────────────────────────────
-    "notificaciones": {
+    // ─── LISTA BLANCA ─────────────────────────────────────────────
+    // Cada usuario hub puede leer solo su propia entrada. Nadie escribe.
+    "acceso": {
       "hub": {
-        // Solo hub puede leer/marcar. Cliente puede ESCRIBIR (para enviar notifs al hub).
-        ".read":  "auth != null && auth.token.email != null",
-        ".write": "auth != null"
-      },
-      "clientes": {
-        "$cid": {
-          // Cliente anónimo no tiene custom claim cid → permitir a cualquier auth.
-          // El cid viaja en la URL (?cid=...) y es suficiente para seguridad básica.
-          ".read":  "auth != null",
-          ".write": "auth != null"
+        "$uid": {
+          ".read":  "auth != null && auth.uid === $uid",
+          ".write": false
         }
-      }
-    },
-
-    // ─── FEED DE ACTIVIDAD ─────────────────────────────────────────
-    // Solo hub lee. Cliente puede escribir (para registrar acciones).
-    "feed_actividad": {
-      ".read":  "auth != null && auth.token.email != null",
-      ".write": "auth != null"
-    },
-
-    // ─── BASE DE DATOS INTERNA (materiales, MO, etc.) ─────────────
-    // Solo hub escribe. Cliente puede leer para el cotizador IA.
-    "base_datos": {
-      ".read":  "auth != null",
-      ".write": "auth != null && auth.token.email != null"
-    },
-
-    // ─── PERSONAL ─────────────────────────────────────────────────
-    // Hub: puede leer/escribir todo el árbol.
-    // Trabajador (anónimo): solo puede leer/escribir su propio nodo ($wid).
-    "personal": {
-      ".read":  "auth != null",
-      ".write": "auth != null",
-      "$wid": {
-        ".read":  "auth != null",
-        ".write": "auth != null"
-      }
-    },
-
-    // ─── CONFIG IA (prompts personalizados) ───────────────────────
-    "config_ia": {
-      ".read":  "auth != null",
-      ".write": "auth != null && auth.token.email != null"
-    },
-
-    // ─── WHATSAPP ─────────────────────────────────────────────────
-    "whatsapp_historial": {
-      ".read":  "auth != null && auth.token.email != null",
-      ".write": "auth != null && auth.token.email != null"
-    },
-    "whatsapp_clientes": {
-      ".read":  "auth != null && auth.token.email != null",
-      ".write": "auth != null && auth.token.email != null"
-    },
-
-    // ─── GANTT (subtareas, config) ────────────────────────────────
-    // Mismo acceso que proyectos: hub total, cliente solo su cid.
-    "gantt": {
-      "$cid": {
-        ".read":  "auth != null && (auth.token.email != null || auth.token.cid === $cid)",
-        ".write": "auth != null && (auth.token.email != null || auth.token.cid === $cid)"
-      }
-    },
-
-    // ─── REQUERIMIENTOS ASISTIDOS ──────────────────────────────────────
-    // Hub: lectura/escritura total en todo el nodo.
-    // Cliente anónimo: puede leer/escribir su propio cid (para completar medidas).
-    // Nota: cliente anónimo no tiene custom claim cid → se permite a cualquier auth.
-    "requerimientos_asistidos": {
-      ".read":  "auth != null && auth.token.email != null",
-      ".write": "auth != null && auth.token.email != null",
-      "$cid": {
-        ".read":  "auth != null",
-        ".write": "auth != null"
-      }
-    },
-
-    // ─── CAJA CHICA ───────────────────────────────────────────────
-    // Pagos y movimientos de caja por proyecto. Solo hub.
-    "caja_chica": {
-      ".read":  "auth != null && auth.token.email != null",
-      ".write": "auth != null && auth.token.email != null"
-    },
-
-    // ─── SUPERVISORES ─────────────────────────────────────────────
-    // Depósitos y gastos registrados por supervisores desde la app.
-    // Cualquier usuario autenticado puede leer/escribir su propio nodo (wid).
-    "supervisores": {
-      "$wid": {
-        ".read":  "auth != null",
-        ".write": "auth != null"
       }
     },
 
@@ -147,14 +30,16 @@
     // Solo hub puede escribir.
     "portafolio": {
       ".read":  true,
-      ".write": "auth != null && auth.token.email != null"
+      ".write": "auth != null && root.child('acceso').child('hub').child(auth.uid).val() === true"
     },
 
-    // ─── DENEGACIÓN POR DEFECTO ────────────────────────────────────
-    // Cualquier ruta no listada arriba: solo hub.
+    // ─── TODO LO DEMÁS: SOLO HUB ──────────────────────────────────
+    // proyectos (pagos, compras, licitaciones), clientes, personal,
+    // supervisores, caja_chica, ingresos, cobros, base_datos, config_ia,
+    // notificaciones, whatsapp_*, gantt, etc.
     "$other": {
-      ".read":  "auth != null && auth.token.email != null",
-      ".write": "auth != null && auth.token.email != null"
+      ".read":  "auth != null && root.child('acceso').child('hub').child(auth.uid).val() === true",
+      ".write": "auth != null && root.child('acceso').child('hub').child(auth.uid).val() === true"
     }
   }
 }

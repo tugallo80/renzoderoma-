@@ -9,6 +9,7 @@ const admin = require("firebase-admin");
 const { ImapFlow } = require("imapflow");
 const nodemailer = require("nodemailer");
 const { simpleParser } = require("mailparser");
+const { esHub } = require("./acceso");
 
 const ZOHO_MAIL_PASSWORD = defineSecret("ZOHO_MAIL_PASSWORD");
 
@@ -69,7 +70,12 @@ async function requireAuth(req, res) {
     }
     const idToken = header.substring("Bearer ".length).trim();
     try {
-        return await admin.auth().verifyIdToken(idToken);
+        const decoded = await admin.auth().verifyIdToken(idToken);
+        if (!(await esHub(decoded.uid))) {
+            res.status(403).json({ error: "Usuario sin acceso" });
+            return null;
+        }
+        return decoded;
     } catch (e) {
         console.warn("Token rechazado:", e.message);
         res.status(401).json({ error: "ID token inválido o expirado" });
