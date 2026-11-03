@@ -57,7 +57,7 @@ principales.
 - Contenido: solo datos del negocio (clientes, proyectos, pagos, personal, caja chica, WhatsApp, etc.).
   Sin claves de Google, tokens de Meta, contraseñas ni `config_ia` → no hubo credenciales para rotar.
 - No se puede saber si alguien lo descargó (Hosting no guardaba registros de acceso).
-- Pendiente: limitar la retención de versiones de Hosting para borrar las versiones que lo contenían.
+- Retención de versiones de Hosting limitada a 20 (nov 2026): las versiones que lo contenían se borran.
 - PIN de clientes (`pin_hash`, SHA-256 sin sal) se tratan como expuestos → ver "Antes de la salida a la venta"
   en `docs/plan-sesiones.md`.
 

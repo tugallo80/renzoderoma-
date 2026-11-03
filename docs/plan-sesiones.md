@@ -67,11 +67,11 @@ El problema no es Gemini — es que opera en vacío:
 - [x] Revisar el export que estuvo publicado en `public/backups/` (ver `docs/respaldos.md`, "Antecedente")
 - [x] Confirmar que la clave de Gemini y el token de Meta no están en el historial de git
 - [ ] Confirmar en consola que la clave vieja de Gemini y el token viejo de Meta están revocados
-- [ ] Reglas: toda la base solo para la lista blanca `/acceso/hub/{uid}` (pruebas en `tools/probar-reglas`)
-- [ ] Functions: IA, TTS, Gemini Live y correo solo para la lista blanca (`functions/acceso.js`)
-- [ ] Desactivar el login anónimo y el registro abierto con email en Firebase Auth
-- [ ] Borrar la cuenta de prueba `test@rubikbolivia.com` (sin uso desde mayo 2026) y los 35 usuarios anónimos
-- [ ] Limitar la retención de versiones de Hosting (borra las versiones con el export)
+- [x] Reglas: toda la base solo para la lista blanca `/acceso/hub/{uid}` (pruebas en `tools/probar-reglas`) — PR #256, probado en PC y teléfono el 2 nov 2026
+- [x] Functions: IA, TTS, Gemini Live y correo solo para la lista blanca (`functions/acceso.js`) — PR #256
+- [x] Desactivar el login anónimo y el registro abierto con email en Firebase Auth (paso D1–D2, nov 2026)
+- [x] Borrar la cuenta de prueba `test@rubikbolivia.com` y los 35 usuarios anónimos (paso D3): queda solo la cuenta del dueño
+- [x] Limitar la retención de versiones de Hosting a 20 (paso D4): se borran las versiones con el export
 - [ ] `/api/imagen` (`proxyImagen`) es un proxy abierto sin login: restringir
 
 **Prioridad 3 — Permisos**
