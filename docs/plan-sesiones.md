@@ -71,8 +71,7 @@ D3 borrados `test@rubikbolivia.com` y 35 usuarios anónimos (queda solo la cuent
 D4 retención de versiones de Hosting limitada a 20.
 
 **Pendientes para la próxima sesión**
-1. Prioridad 3: permisos mínimos de la cuenta `claude-code` en el proyecto `rubik-bolivia`, con script de Cloud Shell
-   para revisar antes de correr (sin admin de IAM ni lectura de datos de pagos).
+1. Prioridad 3: hecha (roles aplicados y script en `tools/`); queda la prueba con la llave (ver Prioridad 3).
 2. Prioridad 4: optimizar minutos de GitHub Actions y **después** pasar el repo a privado.
 3. `/api/imagen` (`proxyImagen`): proxy abierto sin login → restringir.
 4. Confirmar en consola que la clave vieja de Gemini y el token viejo de Meta están revocados.
@@ -97,8 +96,11 @@ D4 retención de versiones de Hosting limitada a 20.
 - [ ] `/api/imagen` (`proxyImagen`) es un proxy abierto sin login: restringir
 
 **Prioridad 3 — Permisos**
-- [ ] Permisos mínimos para la cuenta `claude-code` en `rubik-bolivia` (sin admin de IAM ni lectura de pagos)
-- [ ] Script de Cloud Shell para revisarlo antes de correrlo
+- [x] Permisos mínimos para la cuenta `claude-code` en `rubik-bolivia` (sin admin de IAM ni lectura de pagos): aplicados 5 roles de solo lectura
+      (`logging.viewer`, `cloudfunctions.viewer`, `run.viewer`, `firebasehosting.viewer`, `serviceusage.serviceUsageConsumer`), nov 2026
+- [x] Script de Cloud Shell para revisarlo antes de correrlo: `tools/permisos-claude-code.sh [revisar|aplicar|quitar]`
+- [ ] Prueba con la llave (`tools/probar-permisos-claude-code.sh`, esperado: 4 PERMITIDO y 5 DENEGADO): **pendiente**, la bloquea el control de
+      credenciales de la sesión. Mientras tanto se verifica con `bash permisos-claude-code.sh revisar` en Cloud Shell (lista los roles).
 
 **Prioridad 4 — Despliegue**
 - [x] Revisar el despliegue actual: automático con GitHub Action `firebase-hosting-merge.yml` al mergear a `main`
