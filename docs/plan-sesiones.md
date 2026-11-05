@@ -56,6 +56,28 @@ El problema no es Gemini — es que opera en vacío:
 ### Sesión 0 — Protección antes de tocar datos
 **Objetivo**: poder deshacer cualquier error antes de migrar datos (Sesión A) o tocar permisos.
 
+**Estado al cierre (5 nov 2026)**
+
+| Prioridad | Estado |
+|---|---|
+| 1 — Respaldos | ✅ Hecha. Solo falta verificar el respaldo justo antes de la migración de la Sesión A |
+| 2 — Seguridad | ✅ Pasos B, C y D hechos y probados. Quedan: revocación Gemini/Meta y `/api/imagen` |
+| 3 — Permisos | ⏳ Pendiente |
+| 4 — Despliegue | ⏳ Pendiente (revisado: hoy es automático al mergear a `main`) |
+
+Paso D de la Prioridad 2 (consola de Firebase, hecho por el dueño y verificado):
+D1 login anónimo desactivado · D2 registro abierto con email desactivado ·
+D3 borrados `test@rubikbolivia.com` y 35 usuarios anónimos (queda solo la cuenta del dueño) ·
+D4 retención de versiones de Hosting limitada a 20.
+
+**Pendientes para la próxima sesión**
+1. Prioridad 3: permisos mínimos de la cuenta `claude-code` en el proyecto `rubik-bolivia`, con script de Cloud Shell
+   para revisar antes de correr (sin admin de IAM ni lectura de datos de pagos).
+2. Prioridad 4: optimizar minutos de GitHub Actions y **después** pasar el repo a privado.
+3. `/api/imagen` (`proxyImagen`): proxy abierto sin login → restringir.
+4. Confirmar en consola que la clave vieja de Gemini y el token viejo de Meta están revocados.
+5. Antes de la salida a la venta: reabrir con permisos mínimos las apps de clientes y trabajadores (ver abajo).
+
 **Prioridad 1 — Respaldos** (ver `docs/respaldos.md`)
 - [x] Respaldos automáticos diarios activos (bucket `rubik-bolivia-default-rtdb-backups`)
 - [x] Respaldo manual completo (2 nov 2026) + copia JSON en la PC
@@ -79,12 +101,13 @@ El problema no es Gemini — es que opera en vacío:
 - [ ] Script de Cloud Shell para revisarlo antes de correrlo
 
 **Prioridad 4 — Despliegue**
-- [ ] Revisar el despliegue actual (hoy: GitHub Action al mergear a `main`)
-- [ ] Optimizar minutos: no correr si solo cambian docs, desplegar solo lo que cambió, cachés, límite de tiempo
+- [x] Revisar el despliegue actual: automático con GitHub Action `firebase-hosting-merge.yml` al mergear a `main`
+      (hosting + reglas siempre; functions si cambia `functions/`) + vista previa en cada PR
+- [ ] Optimizar minutos: no correr si solo cambian docs, desplegar solo lo que cambió, cachés, límite de tiempo,
+      quitar la vista previa de PR (estimado hoy ~70–200 min/mes → ~40–60)
+- [ ] Después de optimizar: pasar el repo a privado (hoy es público y Actions no descuenta minutos)
 - [ ] Verificar que lo que se publicaría sea igual a lo que está en rubikbolivia.com
 
-**Nota**: lo que dependa de GitHub Actions se prepara pero no se prueba hasta el 1 de noviembre (minutos agotados).
-El repo pasa a privado junto con la optimización de la Prioridad 4 (en privado, Actions descuenta minutos).
 
 **Antes de la salida a la venta** (hoy la app la usa solo el dueño):
 - [ ] Reabrir con permisos mínimos las apps cerradas en la Sesión 0: cliente-view (y juegos), app-trabajador,
