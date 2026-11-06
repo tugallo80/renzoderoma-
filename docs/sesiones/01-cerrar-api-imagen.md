@@ -2,6 +2,10 @@
 
 Pendiente de la Prioridad 2 (Seguridad) de la Sesión 0. Ver `docs/plan-sesiones.md`.
 
+**Estado (6 nov 2026):** cambio implementado y desplegado. Se aceptan los buckets
+`rubik-bolivia.firebasestorage.app` y `rubik-bolivia.appspot.com` (por si hay comprobantes viejos) y solo
+JPEG, PNG, GIF y WebP. Falta la prueba 3 (PDF real) que hace el dueño.
+
 ## Qué es hoy
 
 - Function `proxyImagen` en `functions/index.js` (sección "PROXY IMÁGENES"), expuesta en

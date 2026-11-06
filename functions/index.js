@@ -1144,22 +1144,42 @@ exports.ttsProxy = onRequest({
 // ─────────────────────────────────────────────────────────
 // PROXY IMÁGENES (Firebase Storage → PDF sin CORS)
 // ─────────────────────────────────────────────────────────
+// Solo baja archivos de nuestro Storage, para la lista blanca y solo imágenes.
+const IMAGEN_BUCKETS = ["rubik-bolivia.firebasestorage.app", "rubik-bolivia.appspot.com"];
+const IMAGEN_MAX_BYTES = 10 * 1024 * 1024;
+
+function esUrlDeNuestroStorage(texto) {
+    let u;
+    try { u = new URL(texto); } catch (e) { return false; }
+    if (u.protocol !== "https:" || u.host !== "firebasestorage.googleapis.com") return false;
+    return IMAGEN_BUCKETS.some(b => u.pathname.startsWith(`/v0/b/${b}/o/`));
+}
+
 exports.proxyImagen = onRequest(
     { region: "us-central1", memory: "256MiB", timeoutSeconds: 30, invoker: "public" },
     async (req, res) => {
-        const url = req.query.url;
-        if (!url) return res.status(400).send("Falta parámetro url");
+        res.set("X-Content-Type-Options", "nosniff");
+        if (req.method !== "GET") return res.status(405).send("Método no permitido");
+        const usuario = await requireAuth(req, res);
+        if (!usuario) return;
+        const url = String(req.query.url || "");
+        if (!esUrlDeNuestroStorage(url)) return res.status(400).send("URL no permitida");
         try {
-            const response = await fetch(url);
-            if (!response.ok) return res.status(response.status).send("Error al obtener imagen");
-            const contentType = response.headers.get("content-type") || "image/jpeg";
+            const response = await fetch(url, { redirect: "error" });
+            if (!response.ok) return res.status(502).send("Error al obtener imagen");
+            const contentType = (response.headers.get("content-type") || "").split(";")[0].trim().toLowerCase();
+            if (!/^image\/(jpeg|png|gif|webp)$/.test(contentType)) return res.status(415).send("No es una imagen");
+            if (Number(response.headers.get("content-length") || 0) > IMAGEN_MAX_BYTES) {
+                return res.status(413).send("Imagen demasiado grande");
+            }
             const buffer = Buffer.from(await response.arrayBuffer());
-            res.set("Access-Control-Allow-Origin", "*");
-            res.set("Cache-Control", "public, max-age=3600");
+            if (buffer.length > IMAGEN_MAX_BYTES) return res.status(413).send("Imagen demasiado grande");
+            res.set("Cache-Control", "private, max-age=3600");
             res.set("Content-Type", contentType);
             res.send(buffer);
-        } catch(e) {
-            res.status(500).send("Error: " + e.message);
+        } catch (e) {
+            console.error("proxyImagen error:", e.message);
+            res.status(500).send("Error al obtener imagen");
         }
     }
 );
