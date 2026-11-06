@@ -2574,7 +2574,7 @@
 
             async function urlToBase64(url) {
                 try {
-                    const res = await fetch('/api/imagen?url=' + encodeURIComponent(url));
+                    const res = await fetch('/api/imagen?url=' + encodeURIComponent(url), { headers: { Authorization: `Bearer ${await _getHubToken()}` } });
                     if (!res.ok) return null;
                     const blob = await res.blob();
                     return await new Promise((resolve, reject) => { const fr = new FileReader(); fr.onload = () => resolve(fr.result); fr.onerror = reject; fr.readAsDataURL(blob); });

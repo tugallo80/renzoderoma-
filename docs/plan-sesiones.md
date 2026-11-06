@@ -73,7 +73,7 @@ D4 retención de versiones de Hosting limitada a 20.
 **Pendientes para la próxima sesión**
 1. Prioridad 3: hecha (roles aplicados y script en `tools/`); queda la prueba con la llave (ver Prioridad 3).
 2. Prioridad 4: optimizar minutos de GitHub Actions y **después** pasar el repo a privado.
-3. `/api/imagen` (`proxyImagen`): proxy abierto sin login → restringir.
+3. `/api/imagen`: cerrado en código; falta probar el PDF de Auditoría Impositiva con fotos en la app.
 4. Confirmar en consola que la clave vieja de Gemini y el token viejo de Meta están revocados.
 5. Antes de la salida a la venta: reabrir con permisos mínimos las apps de clientes y trabajadores (ver abajo).
 
@@ -93,7 +93,8 @@ D4 retención de versiones de Hosting limitada a 20.
 - [x] Desactivar el login anónimo y el registro abierto con email en Firebase Auth (paso D1–D2, nov 2026)
 - [x] Borrar la cuenta de prueba `test@rubikbolivia.com` y los 35 usuarios anónimos (paso D3): queda solo la cuenta del dueño
 - [x] Limitar la retención de versiones de Hosting a 20 (paso D4): se borran las versiones con el export
-- [ ] `/api/imagen` (`proxyImagen`) es un proxy abierto sin login: restringir
+- [x] `/api/imagen` (`proxyImagen`): solo lista blanca, solo imágenes de nuestro Storage (`docs/sesiones/01-cerrar-api-imagen.md`).
+      Falta la prueba del dueño en la app (PDF de Auditoría Impositiva con fotos)
 
 **Prioridad 3 — Permisos**
 - [x] Permisos mínimos para la cuenta `claude-code` en `rubik-bolivia` (sin admin de IAM ni lectura de pagos): aplicados 5 roles de solo lectura
