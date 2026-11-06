@@ -169,6 +169,9 @@ D4 retención de versiones de Hosting limitada a 20.
 ---
 
 ### Sesión D — IA con contexto de empresa (el cambio más importante)
+> **Nov 2026:** se replantea en `docs/sesiones/02-cotizacion.md`. Con modelo de Blender, las cantidades salen
+> del modelo y de la base, no de la IA. La IA queda para fotos y referencias del cliente (estimado marcado).
+
 **Objetivo**: reescribir el motor de cotización para que la IA actúe como experto en Rubik Bolivia.
 
 **El prompt actual**: descripción/imagen → Gemini → APU genérico
