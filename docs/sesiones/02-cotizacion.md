@@ -42,19 +42,31 @@ Cuando un ítem de **B** se aprueba y se diseña en Blender, se **re-cotiza por 
 
 ---
 
-## Cómo llegan los datos de Blender (propuesta)
+## La línea Vectorworks → Blender → app
 
-**Paso 1 — Archivo (simple, sin riesgo).**
-1. Un **add-on de Blender** (Python, botón "Exportar a Rubik") recorre los objetos del modelo y genera un
-   archivo `.json`.
-2. En `presupuesto.html`, botón **"Importar de Blender"**: elegís el archivo y se crean o actualizan los ítems
-   con sus medidas y materiales.
+Así trabaja el dueño: **diseña en Vectorworks**, exporta a Blender, y en Blender trabaja **Claude conectado
+por MCP**. No es necesario saber usar Blender: Claude corre los scripts adentro.
 
-No toca permisos, ni la nube, ni claves. Lo podés usar desde el primer día.
+```
+Vectorworks ──(exportar)──▶ Blender ──(script en el repo, lo corre Claude por MCP)──▶ rubik.json ──▶ app
+ diseño, clases,              geometría +                  lee piezas, medidas y            "Importar de
+ materiales                   nombres de VW                material de cada objeto           Blender"
+```
 
-**Paso 2 — Directo (después, cuando el paso 1 funcione bien).**
-El add-on manda el modelo directo a la app, sin pasar por un archivo. Necesita un login desde Blender.
-Se diseña con la misma seguridad de la Sesión 0: lista blanca y una Function propia.
+- **El script vive en este repo** (`tools/blender/exportar_rubik.py`), versionado como el resto. Claude lo
+  ejecuta en Blender por MCP, así que no hace falta instalar un add-on a mano.
+- **Lo que manda es Vectorworks:** el material de cada pieza sale de la **clase** o del **material** de VW, que
+  llega a Blender como nombre del objeto o del material. Una tabla `/base_datos/equivalencias_vw/`
+  traduce ese nombre a la clave del catálogo (ej. clase `MDF-18-Blanco` → `MDF_18_BLANCO`). Se carga
+  una sola vez y después se reusa.
+- **Si algo no tiene equivalencia**, el ítem queda en rojo en la app y se vincula una sola vez desde ahí.
+
+**Paso 1 — Archivo (simple, sin riesgo).** El script genera `rubik.json` y en `presupuesto.html`, el botón
+**"Importar de Blender"** crea o actualiza los ítems con sus medidas. No toca permisos, nube ni claves.
+
+**Paso 2 — Directo (después, cuando el paso 1 funcione bien).** El script manda los datos directo a la app.
+Necesita un login desde Blender, y se diseña con la misma seguridad de la Sesión 0: lista blanca y una
+Function propia.
 
 ### Qué exporta Blender por cada objeto (borrador)
 
@@ -66,7 +78,8 @@ Se diseña con la misma seguridad de la Sesión 0: lista blanca y una Function p
     {
       "item": "Mostrador recepción",          // colección de Blender = ítem del presupuesto
       "pieza": "Tapa superior",               // nombre del objeto
-      "material": "MDF_18_BLANCO",            // propiedad rubik_material → clave en /base_datos/materiales
+      "origen_vw": "MDF-18-Blanco",           // clase/material de Vectorworks tal como llegó a Blender
+      "material": "MDF_18_BLANCO",            // clave en /base_datos/materiales (vía equivalencias_vw)
       "cant": 1,
       "largo": 1.80, "ancho": 0.60, "espesor": 0.018,
       "area_m2": 1.08,                        // área de caras visibles (para pintura/laminado)
@@ -77,9 +90,10 @@ Se diseña con la misma seguridad de la Sesión 0: lista blanca y una Function p
 }
 ```
 
-- **Colección de Blender = ítem del presupuesto.** Los objetos de adentro son sus piezas.
-- **Material:** cada objeto lleva una propiedad `rubik_material` con la clave del catálogo. Si falta o no
-  existe en la base, el ítem queda en **rojo** ("material sin vincular") y no se inventa un precio.
+- **Ítem del presupuesto:** se arma por capa, grupo o símbolo de Vectorworks (lo que llegue a Blender
+  como colección o padre). Lo definimos con un modelo real.
+- **Material:** sale de la clase o material de VW, vía `equivalencias_vw`. Si no tiene equivalencia, el
+  ítem queda en **rojo** ("material sin vincular") y no se inventa un precio.
 - **Piezas** → van a `items/$idx/measures` de `computo.html`. Así siguen funcionando el plano de corte y
   el cálculo por planchas o barras.
 
@@ -113,23 +127,25 @@ Sin esos datos, el Camino A puede traer cantidades exactas, pero no precios comp
 
 ## Decisiones que tomamos al arrancar la sesión
 
-1. **Versión de Blender** que usás y si ya tenés materiales con nombre fijo (ej. "MDF 18 blanco").
-2. **¿Cómo organizás un modelo?** ¿Una colección por mueble o ítem? ¿Usás modificadores (array, mirror,
-   solidify)? El add-on tiene que leer el resultado final, con los modificadores aplicados.
+1. **Cómo exportás de Vectorworks a Blender:** ¿qué formato (FBX, OBJ, glTF, IFC)? Con IFC llegan también
+   las clases y los registros de VW. Con FBX/OBJ llegan sobre todo nombres.
+2. **Cómo organizás en Vectorworks:** ¿usás clases por material (ej. "MDF 18 blanco")? ¿Capas o grupos por
+   mueble? Esa organización es la que el script va a leer.
 3. **Qué medís de cada pieza para cotizar:** ¿plancha (corte), m² de acabado, ml de canto, kg de metal?
 4. **Mano de obra:** ¿sale de rendimientos por operación (m²/día) o se sigue cargando a mano por ítem?
 5. **Camino B:** ¿lo usa solo el equipo interno o también va a responder al cliente por WhatsApp?
-6. **Prioridad:** ¿arrancamos por el Camino A (Blender) o primero por el B (remodelar la IA actual)?
+6. **Qué MCP de Blender usás con Claude** (para que el script corra igual en tu PC).
 
-**Traé para la sesión:** un modelo `.blend` real de un trabajo ya cotizado, y el presupuesto final que
-se cobró por ese trabajo. Con eso probamos que el Camino A llega a un número parecido.
+**Traé para la sesión (desde tu PC):** un trabajo real ya cotizado, exportado a Blender como lo hacés siempre
+(el `.blend`, y si podés el archivo de Vectorworks), y el presupuesto final que se cobró. Con eso probamos que
+el Camino A llega a un número parecido.
 
 ---
 
 ## Orden de trabajo propuesto
 
-- [ ] **2.1** Definir el formato del JSON con un modelo real (las decisiones 1–3)
-- [ ] **2.2** Add-on de Blender "Exportar a Rubik" (archivo `.json`)
+- [ ] **2.1** Con un modelo real: ver qué llega de Vectorworks a Blender y definir el JSON (las decisiones 1–3)
+- [ ] **2.2** Script `tools/blender/exportar_rubik.py` (lo corre Claude por MCP) + tabla `equivalencias_vw`
 - [ ] **2.3** "Importar de Blender" en `presupuesto.html` → ítems + `measures`, con materiales vinculados o en rojo
 - [ ] **2.4** Cálculo medidas → APU con datos de la base (origen `blender`)
 - [ ] **2.5** Remodelar "Presupuesto IA" como Camino B: sin precios, con confianza y marcado "Estimado IA"
