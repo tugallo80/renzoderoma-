@@ -3224,6 +3224,20 @@
 
     function fMoneyCT(n) { return parseFloat(n||0).toLocaleString('es-BO',{minimumFractionDigits:2,maximumFractionDigits:2}); }
 
+    // Nombres de clientes (/clientes/{cid}/nombre), para no mostrar el código interno del cliente
+    let _ctNombresClientes = {};
+    let _ctNombresCargados = false;
+    function _ctCargarNombresClientes() {
+        if (_ctNombresCargados) return;
+        _ctNombresCargados = true;
+        db.ref('clientes').once('value').then(snap => {
+            const cl = snap.val() || {};
+            Object.entries(cl).forEach(([cid, c]) => { if (c && (c.nombre || c.name)) _ctNombresClientes[cid] = c.nombre || c.name; });
+            const sel = document.getElementById('ct-cliente-sel');
+            if (sel && sel.value) cargarProyectosCT();   // refresca la lista si ya hay un proveedor elegido
+        }).catch(e => { _ctNombresCargados = false; console.warn('No se pudieron cargar los nombres de clientes:', e); });
+    }
+
     // Build map of all external workers across all projects
     function _ctBuildWorkerMap() {
         const wm = {}; // { workerName: [{cid, pid, pid_nombre, client_nombre, licId, lic}] }
@@ -3231,7 +3245,9 @@
             if (!clientData || typeof clientData !== 'object') return;
             Object.entries(clientData).forEach(([pid, proy]) => {
                 if (!proy || !proy.licitaciones) return;
-                const clientName = Object.values(clientData).map(p => p && p.nombre_cliente ? p.nombre_cliente : '').filter(Boolean)[0] || cid;
+                // Nombre del cliente: el guardado en algún proyecto o el de /clientes/{cid}. Nunca el código interno.
+                const clientName = Object.values(clientData).map(p => p && p.nombre_cliente ? p.nombre_cliente : '').filter(Boolean)[0]
+                    || _ctNombresClientes[cid] || '';
                 Object.entries(proy.licitaciones).forEach(([licId, lic]) => {
                     if (!lic || lic.is_supervision || lic.is_internal_assignment) return;
                     const name = lic.worker_name || lic.nombre_trabajador || lic.trabajador_nombre || lic.worker_id || null;
@@ -3245,6 +3261,7 @@
     }
 
     function initContratistasSection() {
+        _ctCargarNombresClientes();
         const sel = document.getElementById('ct-cliente-sel');
         if (!sel) return;
         while (sel.options.length > 1) sel.remove(1);
