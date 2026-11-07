@@ -3475,6 +3475,36 @@
     }
 
     // Helper: fetch image as base64 (tries fetch first, falls back to Image proxy)
+    // Tipos de tarea que traen foto propia (arte o corte de material); el resto usa la foto del ítem
+    const _CT_TIPOS_CON_FOTO_PROPIA = new Set(['art', 'llm_art', 'llm_mat']);
+    const _ctNorm = s => String(s || '').trim().toLowerCase().replace(/\s+/g, ' ');
+
+    // Ítem del presupuesto de una tarea de licitación. Verifica por descripción que originIdx siga
+    // apuntando al mismo ítem; si no, lo busca por descripción. Si no lo encuentra, devuelve null (no adivina).
+    function _ctItemDeTarea(budgetItems, t) {
+        if (!t || !budgetItems) return null;
+        const desc = _ctNorm(t.originType === 'main' ? t.task_name : (t.parent_desc || t.parentDesc));
+        const porIdx = t.originIdx !== undefined ? budgetItems[t.originIdx] : null;
+        if (porIdx && (!desc || _ctNorm(porIdx.desc) === desc)) return porIdx;
+        if (!desc) return null;
+        return Object.values(budgetItems).find(it => it && it.type !== 'chapter' && _ctNorm(it.desc) === desc) || null;
+    }
+
+    // Foto principal actual de un ítem (la puede cambiar Producción)
+    function _ctFotoDeItem(it) {
+        if (!it) return null;
+        if (it.img) return it.img;
+        const ops = it.op_images ? Object.values(it.op_images).filter(u => typeof u === 'string' && u) : [];
+        return ops[0] || null;
+    }
+
+    async function _ctImgConDims(url) {
+        const b64 = await _ctFetchB64(url);
+        if (!b64 || !b64.startsWith('data:image')) return null;
+        const [w, h] = await new Promise(res => { const im = new Image(); im.onload = () => res([im.naturalWidth || 1, im.naturalHeight || 1]); im.onerror = () => res([1, 1]); im.src = b64; });
+        return { b64, w, h };
+    }
+
     async function _ctFetchB64(url) {
         if (!url) return null;
         try {
@@ -3615,6 +3645,10 @@
             const budgetItems = (proyectosData[cid] && proyectosData[cid][pid] &&
                 proyectosData[cid][pid].presupuesto && proyectosData[cid][pid].presupuesto.items) || {};
 
+            // originIdx es la posición del ítem al adjudicar; si el presupuesto se reordenó o se
+            // insertaron ítems, apunta a otro. Se verifica por descripción antes de usarlo.
+            function itemDeTarea(t) { return _ctItemDeTarea(budgetItems, t); }
+
             function getMedida(t) {
                 const fmMed = (b,h) => `${parseFloat(b).toFixed(2)}×${parseFloat(h).toFixed(2)}`;
                 let medida = '';
@@ -3630,7 +3664,7 @@
                 }
                 // 2. MO: mo_partes with unit conversion
                 if (!medida && t.originType==='mo' && t.originIdx!==undefined && t.originApuidx!==undefined) {
-                    const itMo = budgetItems[t.originIdx];
+                    const itMo = itemDeTarea(t);
                     if (itMo && itMo.prod_apu && itMo.prod_apu.mo) {
                         const moArr = Array.isArray(itMo.prod_apu.mo) ? itMo.prod_apu.mo : Object.values(itMo.prod_apu.mo);
                         const moEntry = moArr[parseInt(t.originApuidx)];
@@ -3654,7 +3688,7 @@
                 }
                 // 3. Fallback: prod_apu.mat (impressions / mat tasks)
                 if (!medida && t.originIdx!==undefined) {
-                    const itItem = budgetItems[t.originIdx];
+                    const itItem = itemDeTarea(t);
                     if (itItem && itItem.prod_apu && itItem.prod_apu.mat) {
                         const matArr = Array.isArray(itItem.prod_apu.mat) ? itItem.prod_apu.mat : Object.values(itItem.prod_apu.mat);
                         const idx2use = t.originMatidx!==undefined ? parseInt(t.originMatidx) : null;
@@ -3712,33 +3746,32 @@
                 });
 
                 const bodyData = [];
+                const rowImgs = [];   // rowImgs[índice de fila] = { b64, w, h }
+                const _cacheImg = {};
+                const cargarImg = async url => {
+                    if (!url) return null;
+                    if (!(url in _cacheImg)) _cacheImg[url] = await _ctImgConDims(url);
+                    return _cacheImg[url];
+                };
                 for (const gk of groupOrder) {
                     const grp = groups[gk];
-                    bodyData.push([{ content: grp.parentDesc.toUpperCase(), colSpan: 6, styles:{fillColor:[230,240,255],fontStyle:'bold',fontSize:8,textColor:[0,80,180]} }]);
+                    // Foto del ítem: la actual del presupuesto/producción; si no hay, la guardada al adjudicar
+                    const it = itemDeTarea(grp.tasks[0]);
+                    const fotoItem = _ctFotoDeItem(it) || grp.tasks.map(t => t.img || t.imgRef).find(Boolean) || null;
+                    bodyData.push([
+                        { content: grp.parentDesc.toUpperCase(), colSpan: 5, styles:{fillColor:[230,240,255],fontStyle:'bold',fontSize:8,textColor:[0,80,180]} },
+                        { content: '', styles:{fillColor:[230,240,255]} }
+                    ]);
+                    rowImgs[bodyData.length - 1] = await cargarImg(fotoItem);
                     for (const t of grp.tasks) {
                         const cantF = parseFloat(t.cant || 1);
                         const pu = parseFloat(t.pu || t.precio || 0);
                         const subtotal = parseFloat(t.subtotal || (cantF * pu));
                         const medida = getMedida(t);
                         bodyData.push([t.task_name || t.desc || '', medida, cantF.toFixed(2), fMoneyCT(pu)+' Bs', fMoneyCT(subtotal)+' Bs', '']);
-                    }
-                }
-
-                // Load task images async before drawing
-                for (const gk of groupOrder) {
-                    for (const t of groups[gk].tasks) {
-                        const imgSrc = t.img || t.imgRef || null;
-                        if (imgSrc) {
-                            const b64 = await _ctFetchB64(imgSrc);
-                            bodyData.forEach(row => {
-                                if (Array.isArray(row) && row.length === 6 && row[5] === '') {
-                                    const tn = t.task_name || t.desc || '';
-                                    if (row[0] && typeof row[0] === 'string' && row[0].startsWith(tn.substring(0,10))) {
-                                        row[5] = b64 || '';
-                                    }
-                                }
-                            });
-                        }
+                        // Foto propia solo para artes y cortes de material, y si no repite la del ítem
+                        const propia = _CT_TIPOS_CON_FOTO_PROPIA.has(t.originType) ? (t.corte_url || t.img || t.imgRef || null) : null;
+                        if (propia && propia !== fotoItem) rowImgs[bodyData.length - 1] = await cargarImg(propia);
                     }
                 }
 
@@ -3750,8 +3783,17 @@
                     headStyles:{fillColor:[0,0,0],halign:'center',fontSize:8},
                     styles:{fontSize:7,valign:'middle',overflow:'linebreak'},
                     columnStyles:{0:{cellWidth:52},1:{cellWidth:28},2:{cellWidth:12,halign:'center'},3:{cellWidth:26,halign:'right'},4:{cellWidth:26,halign:'right'},5:{cellWidth:22,halign:'center'}},
-                    didParseCell: d => { if(d.column.index===5 && d.cell.section==='body' && Array.isArray(d.row.raw)) { d.cell.text=''; d.cell.styles.minCellHeight=22; } },
-                    didDrawCell: d => { if(d.column.index===5 && d.cell.section==='body' && Array.isArray(d.row.raw)) { const img=d.row.raw[5]; if(img && typeof img==='string' && img.startsWith('data:image')) { const mime=img.startsWith('data:image/png')?'PNG':'JPEG'; doc.addImage(img,mime,d.cell.x+2,d.cell.y+2,18,16); } } }
+                    didParseCell: d => { if (d.section === 'body' && rowImgs[d.row.index]) d.cell.styles.minCellHeight = 22; },
+                    didDrawCell: d => {
+                        if (d.section !== 'body' || d.column.index !== 5) return;
+                        const im = rowImgs[d.row.index];
+                        if (!im) return;
+                        const maxW = 18, maxH = 18;
+                        const k = Math.min(maxW / im.w, maxH / im.h);
+                        const w = im.w * k, h = im.h * k;
+                        const mime = im.b64.startsWith('data:image/png') ? 'PNG' : 'JPEG';
+                        try { doc.addImage(im.b64, mime, d.cell.x + (d.cell.width - w) / 2, d.cell.y + (d.cell.height - h) / 2, w, h); } catch(e) {}
+                    }
                 });
                 y = doc.lastAutoTable.finalY + 8;
 
