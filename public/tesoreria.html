@@ -874,7 +874,31 @@
     }
     db.ref('ingresos').on('value', snap => { ingresosData = snap.val() || {}; calcularBalancesGlobales(); renderIngresos(); });
     db.ref('compras_facturadas').on('value', snap => { comprasFacturadasData = snap.val() || {}; renderImpuestos(); });
-    cargarTesoreraData();
+    cargarTesoreraData().then(_escucharProyectosEnVivo);
+
+    // Proyectos en vivo: los pagos cargados en Compras (u otra pestaña) entran sin recargar la página,
+    // y los PDFs (balance, planillas, contratistas) salen con los datos al día.
+    // Se escucha por cliente (child_*), para no re-dibujar todo con cada cambio.
+    let _rerenderTimer = null;
+    function _reRenderTesoreria() {
+        clearTimeout(_rerenderTimer);
+        _rerenderTimer = setTimeout(() => {
+            try {
+                calcularBalancesGlobales();
+                renderBuzonYContratos();
+                renderPlanillas();
+                renderPlanillasSupervisores();
+                renderIngresos();
+            } catch(e) { console.warn('Re-render tesorería:', e); }
+        }, 400);
+    }
+    function _escucharProyectosEnVivo() {
+        const ref = db.ref('proyectos');
+        const poner = snap => { proyectosData[snap.key] = snap.val(); _reRenderTesoreria(); };
+        ref.on('child_added', poner);
+        ref.on('child_changed', poner);
+        ref.on('child_removed', snap => { delete proyectosData[snap.key]; _reRenderTesoreria(); });
+    }
 
     function calcularBalancesGlobales() {
         let totalIngresos = 0; let totalEgresos = 0;
