@@ -500,9 +500,11 @@
         let sel = document.getElementById('req-lic-select');
         if(isDescuento) {
             sel.style.display = 'block'; sel.innerHTML = ''; let count = 0;
-            Object.keys(currentLics).forEach(k => {
-                if(currentLics[k].worker_id === targetReqWorker && (currentLics[k].estado === 'aprobado' || currentLics[k].estado === 'terminado')) {
-                    sel.innerHTML += `<option value="${k}">Contrato: ${fMoney(currentLics[k].precio_propuesto)} Bs</option>`; count++;
+            // window.currentLics: la carga el módulo de abajo (el `let currentLics` de este script queda vacío)
+            const lics = window.currentLics || {};
+            Object.keys(lics).forEach(k => {
+                if(lics[k] && lics[k].worker_id === targetReqWorker && (lics[k].estado === 'aprobado' || lics[k].estado === 'terminado')) {
+                    sel.innerHTML += `<option value="${k}">Contrato: ${fMoney(lics[k].precio_propuesto)} Bs</option>`; count++;
                 }
             });
             if(count === 0) { sel.innerHTML = '<option value="">El trabajador no tiene contratos activos.</option>'; }
@@ -918,8 +920,9 @@
     
     document.getElementById('h-pro').innerText = window.pName;
 
-    db.ref(`proyectos/${cid}/${pid}`).once('value', snap => {
-        if(!snap.exists()) return;
+    // En vivo: al registrar o borrar un pago (aquí o en otra pestaña) se actualiza sin recargar
+    db.ref(`proyectos/${cid}/${pid}`).on('value', snap => {
+        if(!snap.exists()) { document.getElementById('global-loader').style.display = 'none'; return; }
         const data = snap.val();
         window.budgetItems = data.presupuesto?.items || {};
         window.currentLics = data.licitaciones || {};
