@@ -1,6 +1,6 @@
 # Sesiones de trabajo — índice y orden para retomar
 
-Última actualización: 10 nov 2026. Plan general y visión: `docs/plan-sesiones.md`.
+Última actualización: 10 nov 2026 (Sesión 2, pasos 2.1–2.2). Plan general y visión: `docs/plan-sesiones.md`.
 Cada sesión o subsesión tiene su ficha en esta carpeta.
 
 ---
@@ -24,7 +24,7 @@ llave, y reabrir las apps antes de la salida a la venta (ver `docs/plan-sesiones
 | Ficha | Tema | Estado |
 |---|---|---|
 | `01-cerrar-api-imagen.md` | Cerrar `/api/imagen` (proxy abierto) | ✅ Cerrada |
-| `02-cotizacion.md` | Cotización: Vectorworks → Blender → app; IA solo para fotos y referencias | 📝 Planificada · esperando el modelo real |
+| `02-cotizacion.md` | Cotización: Vectorworks → Blender → app; IA solo para fotos y referencias | 🟡 2.2 hecho (script `tools/blender/` probado) · 2.1 formato cerrado, falta validar con el modelo real |
 | `03-fotos-pdf-rendicion.md` | Fotos repetidas o faltantes en el PDF de rendición de contratistas | ✅ Cerrada |
 | *(sin ficha)* PR #266 | Código del cliente en vez de su nombre (Consolidado de Contratistas) | ✅ Cerrada |
 | *(sin ficha)* PR #267 | Pagos a trabajadores que no aparecían sin recargar (Compras / Tesorería) | ✅ Cerrada |
@@ -34,7 +34,9 @@ llave, y reabrir las apps antes de la salida a la venta (ver `docs/plan-sesiones
 
 ## 3. Orden propuesto de las próximas sesiones
 
-**Próxima sesión → Sesión 2, pasos 2.1–2.2** (traer lo que dice la sección 4).
+**Próxima sesión → cerrar el 2.1 con un trabajo real** (correr `inventario()` y `exportar()` sobre el modelo;
+traer lo que dice la sección 4). El script del 2.2 ya está hecho y probado (`tools/blender/LEEME.md`).
+Después sigue la Sesión A.
 
 ```
  Sesión 2 · pasos 2.1–2.2   ── Vectorworks → Blender: ver qué datos llegan y armar el script

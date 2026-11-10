@@ -108,7 +108,7 @@ Lo escribe `tools/blender/exportar_rubik.py` (cómo se usa: `tools/blender/LEEME
   "archivo": "stand-feria-2026.blend",
   "generado": "2026-11-10T19:00:00+00:00",
   "unidad": "m",
-  "items": ["Mostrador recepción", "Repisa"], // en el orden en que aparecen
+  "items": ["Mostrador recepción", "Repisa", "SIM Banqueta"], // en el orden en que aparecen
   "piezas": [
     {
       "item": "Mostrador recepción",
@@ -118,13 +118,13 @@ Lo escribe `tools/blender/exportar_rubik.py` (cómo se usa: `tools/blender/LEEME
       "cant": 1,                              // piezas iguales (ítem, nombre, material, medidas al mm) se suman
       "largo": 1.764, "ancho": 0.982, "espesor": 0.009,   // caja más ajustada, aunque la pieza esté girada
       "tipo": "plancha",                      // "plancha" si espesor ≤ 6 cm, si no "volumen"
-      "area_m2": 3.514,                       // todas las caras (pintura, laminado)
+      "area_m2": 3.5139,                      // todas las caras (pintura, laminado)
       "area_cara_m2": 1.7322,                 // solo planchas: una cara
       "perimetro_ml": 5.492,                  // solo planchas: tope para canto
-      "volumen_m3": 0.015591,                 // null si la malla está abierta
+      "volumen_m3": 0.01559,                  // null si la malla está abierta
       "acabados": [
         { "origen_vw": "Canto PVC Blanco", "material": "CANTO_PVC_BLANCO", "area_m2": 0.0494 },
-        { "origen_vw": null, "material": "LACA_BLANCA", "area_m2": 3.514, "desde": "equivalencia" }
+        { "origen_vw": null, "material": "LACA_BLANCA", "area_m2": 3.5139, "desde": "equivalencia" }
       ],
       "revisar": false,                       // true si el material o algún acabado no tiene equivalencia
       "motivos": [],                          // por qué revisar, o avisos (ej. "malla abierta")
@@ -235,7 +235,8 @@ La subsesión trabajó sin el modelo real ni las respuestas del dueño, así que
 ellas: lee todas las formas posibles y anota de dónde sacó cada dato (`fuente`).
 
 1. **Formato de exportación:** el script sirve para FBX, OBJ, glTF e IFC. Si llegan las clases de VW como
-   propiedad del objeto (IFC o FBX con datos), las usa; si no, usa el nombre del material.
+   propiedad del objeto (IFC o FBX con datos), las usa y el material con más superficie se toma como
+   textura del cuerpo (no como acabado); si no hay clase, usa el nombre del material con más superficie.
 2. **Ítem del presupuesto:** símbolo → grupo (padre) → capa/colección, con la propiedad `rubik_item` para
    forzarlo. Se ajusta con el modelo real.
 3. **Qué se mide:** todo lo que sirve para cotizar sin decidir todavía la unidad de compra (eso es Sesión B):
@@ -247,7 +248,8 @@ ellas: lee todas las formas posibles y anota de dónde sacó cada dato (`fuente`
 5. **Modificadores y símbolos:** se lee el depsgraph evaluado (modificadores aplicados, instancias
    resueltas) sin cambiar el archivo. Los objetos ocultos no se cuentan.
 6. **Pruebas:** `tools/blender/probar_exportar.py` arma una escena por código y verifica medidas, pieza
-   girada, Solidify, piezas repetidas, símbolo, pieza sin material y objeto oculto.
+   girada, Solidify, piezas repetidas, símbolo, pieza sin material y objeto oculto. **Pasó completa con
+   el módulo `bpy` 5.3.0 de PyPI** en la sesión de Claude (Linux). El ejemplo de arriba es su salida real.
 
 **Preguntas que siguen abiertas para el dueño** (decisiones 1, 2, 3 y 6 de arriba): formato de exportación,
 cómo organiza en VW (clases por material, capas o grupos por mueble), qué mide para cotizar y qué MCP de

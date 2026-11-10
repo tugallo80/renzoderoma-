@@ -288,7 +288,7 @@ def agrupar_piezas(piezas):
         k = (
             p["item"], p["pieza"], p["origen_vw"],
             round(p["largo"] / t), round(p["ancho"] / t), round(p["espesor"] / t),
-            tuple(sorted(a["origen_vw"] for a in p["acabados"])),
+            tuple(sorted(str(a["origen_vw"] or a["material"]) for a in p["acabados"])),
         )
         if k in grupos:
             g = grupos[k]
@@ -440,8 +440,10 @@ def pieza_desde_objeto(obj_eval, matriz, instanciador, escena, escala_unidad, eq
 
     # origen_vw: la clase de VW si vino como propiedad; si no, el material con más área.
     if clase:
+        # El material con más superficie es el del cuerpo de la pieza (textura de render de VW):
+        # no es un acabado aparte. Los demás sí.
         origen, fuente_origen = clase, "clase"
-        secundarios = mats_ordenados
+        secundarios = mats_ordenados[1:]
     elif mats_ordenados:
         origen, fuente_origen = normalizar_nombre(mats_ordenados[0]), "material"
         secundarios = mats_ordenados[1:]
@@ -512,20 +514,20 @@ def leer_escena(equivalencias=None, incluir_ocultos=False):
     escala_unidad = escena.unit_settings.scale_length or 1.0
     eq = cargar_equivalencias(equivalencias)
 
+    tipos = {"MESH", "CURVE", "SURFACE", "META", "FONT"}
+    # Ocultos en la vista o en el render: no se cotizan (el depsgraph ya no trae los ocultos en la vista).
+    salteados = sorted(
+        o.name for o in escena.objects
+        if o.type in tipos and (not o.visible_get() or o.hide_render)
+    )
     piezas = []
-    salteados = []
     for inst in depsgraph.object_instances:
         obj = inst.object
-        if obj.type not in {"MESH", "CURVE", "SURFACE", "META", "FONT"}:
+        if obj.type not in tipos:
             continue
         original = obj.original
-        if not incluir_ocultos and not inst.is_instance:
-            try:
-                if original.hide_get() or original.hide_render:
-                    salteados.append(original.name)
-                    continue
-            except Exception:
-                pass
+        if not incluir_ocultos and not inst.is_instance and original.name in salteados:
+            continue
         instanciador = inst.parent.original if inst.is_instance and inst.parent else None
         matriz = inst.matrix_world.copy()
         p = pieza_desde_objeto(obj, matriz, instanciador, escena, escala_unidad, eq)
