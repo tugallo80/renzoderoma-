@@ -1,0 +1,13 @@
+{
+  "MDF-18-Blanco": "MDF_18_BLANCO",
+  "MDF-9-Laca": {
+    "vw": "MDF-9-Laca",
+    "material": "MDF_9",
+    "acabados": [
+      "LACA_BLANCA"
+    ]
+  },
+  "Canto PVC Blanco": "CANTO_PVC_BLANCO",
+  "Melamina-25-Roble": "MELAMINA_25_ROBLE",
+  "Vidrio-6": "VIDRIO_6"
+}

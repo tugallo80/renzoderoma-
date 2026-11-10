@@ -166,8 +166,9 @@ en todos los trabajos.
   selector del catálogo; al elegir, se guarda acá y la próxima importación ya sale vinculada.
 - **El script lee lo mismo:** `exportar(equivalencias=...)` acepta este nodo exportado de Firebase tal cual
   (objetos con `vw` y `material`) o un JSON simple `{"MDF-18-Blanco": "MDF_18_BLANCO"}`.
-- **Reglas (cuando se implemente):** lectura para el equipo con sesión; escritura solo para quien hoy puede
-  editar `/base_datos/materiales`. Validar que `material` exista en el catálogo.
+- **Reglas:** quedan las actuales (todo `/base_datos` es solo para la lista blanca del hub), que es quien hoy
+  edita `/base_datos/materiales`. La app solo deja elegir materiales que existen en el catálogo.
+- **Ya está en la app (paso 2.3):** la escribe "Importar 3D" al vincular (`vw`, `material`, `tipo`, `actualizado`, `por`).
 
 ### Cómo se pasa de medidas a precio (sin IA)
 
@@ -218,7 +219,7 @@ el Camino A llega a un número parecido.
 
 - [~] **2.1** Formato `rubik/1` cerrado (ver arriba) y `inventario()` listo para ver qué llega de VW. **Falta validarlo con un modelo real** y las respuestas 1–3 y 6
 - [x] **2.2** Script `tools/blender/exportar_rubik.py` + prueba `probar_exportar.py` + `LEEME.md` + diseño de `equivalencias_vw` (10 nov 2026)
-- [ ] **2.3** "Importar de Blender" en `presupuesto.html` → ítems + `measures`, con materiales vinculados o en rojo
+- [x] **2.3** "Importar 3D" en `presupuesto.html`: lee `.glb`/`.gltf`/`.fbx` en el navegador (o el `rubik.json`) → ítems + `measures` + APU de materiales, con materiales vinculados o en rojo (10 nov 2026)
 - [ ] **2.4** Cálculo medidas → APU con datos de la base (origen `blender`)
 - [ ] **2.5** Remodelar "Presupuesto IA" como Camino B: sin precios, con confianza y marcado "Estimado IA"
 - [ ] **2.6** Prueba con el trabajo real: comparar el Camino A con lo que se cobró
@@ -255,3 +256,45 @@ ellas: lee todas las formas posibles y anota de dónde sacó cada dato (`fuente`
 cómo organiza en VW (clases por material, capas o grupos por mueble), qué mide para cotizar y qué MCP de
 Blender usa. Y traer un trabajo real ya cotizado (`.blend` + lo que se cobró). Con eso se corre
 `inventario()` y `exportar()` sobre el modelo y se cierra el 2.1.
+
+---
+
+## Decisiones tomadas en el paso 2.3 (10 nov 2026)
+
+El dueño quiere subir **el 3D que manda el cliente** desde el celular o la PC, sin Blender. Por eso el paso 2.3
+no es solo "importar el rubik.json": la app **lee el modelo directamente**.
+
+1. **Botón "Importar 3D"** en `presupuesto.html` (barra de arriba en PC; botón "3D" abajo en el celular).
+   Acepta `.glb`, `.gltf` (+ su `.bin`), `.fbx` y el `rubik.json` del script de Blender (si viene, se usa ese).
+2. **Se lee en el navegador** con three.js **0.170.0** (import map a jsdelivr, versión fija, se descarga recién al
+   tocar el botón). **El archivo no se sube**: se procesa en memoria; las texturas ni se piden.
+3. **Misma lógica que el script de Blender**, en `public/js/lector-3d.js` (sin DOM, probado en Node):
+   ítem = `rubik_item` → grupo (padre más alto) → **"Sin agrupar"**; origen_vw = clase de VW → material con más
+   superficie; caja orientada, áreas, volumen; piezas iguales se suman. Prueba: `tools/lector-3d/` compara GLB y FBX
+   con `exportar_rubik.py` para la misma escena (generada con `bpy`): **303 OK**.
+4. **Unidades:** glTF = metros; FBX = `UnitScaleFactor`; si el modelo mide más de 200 en esa unidad se sugiere una
+   más chica. La pantalla muestra el tamaño total en metros y deja cambiar mm / cm / m.
+5. **Archivos "planos"** (sin grupos ni nombres): todo cae en "Sin agrupar" y se reparte en la revisión.
+   Si todo cuelga de un único contenedor que agrega el exportador, se baja un nivel.
+6. **Revisión antes de guardar**, pensada para el celular: ítem → piezas (medidas en mm, cantidad, material).
+   Se puede renombrar un ítem (con el mismo nombre que otro, se juntan), mover piezas a otro ítem o a uno nuevo,
+   y descartar piezas o ítems. Personas, plantas, cámaras, etc. vienen **destildadas** ("¿entorno?").
+7. **Materiales sin vincular** arriba, en rojo, una vez por nombre de VW: se elige del catálogo y se guarda en
+   `/base_datos/equivalencias_vw/{clave}`. Una pieza **sin ningún material** se vincula solo para ese archivo.
+8. **Al confirmar:** los ítems van **al final** (opcional: en un capítulo nuevo "3D · archivo", también al final).
+   Cada ítem lleva `id` (push id), `origen: "3d"`, `measures` en el formato de `computo.html` (`c, l, a, h, p, desc`;
+   `h` = espesor), `measures_modo` y `import3d` (archivo, fecha, unidad, piezas, filas a revisar).
+   Duplicar o copiar un ítem le da un `id` nuevo.
+9. **APU de materiales sin inventar nada** (una fila por material y por acabado, `origen: "3d"`):
+   - unidad m² → una cara de cada plancha (sin desperdicio); ml → suma de largos; m³ → volumen; und/pza → piezas.
+   - otra unidad (plancha, kg, lt…) → `q = 0`, marcada "falta el rendimiento", con las piezas de ese material en la
+     fila: el botón de CÓMPUTO de la fila abre en **Planchas** con el plano de corte y calcula la cantidad.
+   - canto en ml → `q = 0`, marcado con el perímetro total (qué lados llevan canto se decide al cotizar).
+   - sin precio en la base → `p = 0` y marcada. Sin vincular → fila en rojo.
+   - Las marcas se ven en rojo en el APU y como "3D ⚠n" en el ítem; se van al cargar la cantidad o el precio.
+   - Mano de obra vacía (manual, como hoy). El cálculo con rendimientos y desperdicio es el **2.4** (Sesión B).
+10. **Seguridad:** sin claves ni Functions nuevas; las reglas actuales ya limitan `/base_datos` a la lista blanca.
+
+**Para el 2.6 / modelo real:** lo que vea la subsesión del archivo real del cliente (si trae nombres de material,
+grupos por mueble y en qué unidad) puede ajustar los nombres de entorno a descartar, el contenedor único o la
+unidad por defecto. Todo eso está en `lector-3d.js` y tiene prueba.

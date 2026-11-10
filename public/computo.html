@@ -206,15 +206,25 @@
                     targetName = sub.d;
                     document.getElementById('item-title').innerText = sub.d;
                     if(sub.measures) measures = sub.measures;
+                    restaurarModo(sub.measures_modo);
                 } else {
                     targetName = itemData.desc;
                     document.getElementById('item-title').innerText = itemData.desc;
                     if(itemData.measures) measures = itemData.measures;
+                    restaurarModo(itemData.measures_modo);
                 }
                 document.getElementById('bot-target').innerText = targetName;
                 renderMeasures();
             });
         };
+
+        // Modo guardado con las piezas (ej. "plancha" en lo que viene de Importar 3D): se abre en ese modo sin borrarlas
+        function restaurarModo(m) {
+            if(!m || m === mode) return;
+            const btn = Array.from(document.querySelectorAll('.tab-btn')).find(b => (b.getAttribute('onclick')||'').includes(`'${m}'`));
+            if(!btn) return;
+            const guardadas = measures; setMode(m, btn); measures = guardadas;
+        }
 
         function setMode(m, btn) {
             mode = m; document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active')); btn.classList.add('active');
@@ -417,9 +427,14 @@
 
             if(apuType && apuIdx !== null) { 
                 itemData.apu[apuType][apuIdx].measures = cleanMeasures; 
+                itemData.apu[apuType][apuIdx].measures_modo = mode; 
+                // Fila importada de 3D: con la cantidad calculada acá, deja de faltar el rendimiento
+                const fila3d = itemData.apu[apuType][apuIdx];
+                if (fila3d.revisar) { const resto = String(fila3d.revisar).split(' · ').filter(x => !/rendimiento|definir|caras|volumen/.test(x)).join(' · '); if (resto) fila3d.revisar = resto; else delete fila3d.revisar; }
                 itemData.apu[apuType][apuIdx].q = finalTotalVal; 
             } else { 
                 itemData.measures = cleanMeasures; 
+                itemData.measures_modo = mode; 
                 itemData.cant = finalTotalVal; 
             }
 

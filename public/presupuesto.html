@@ -4,6 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Presupuesto Maestro Rubik</title>
+    <!-- three.js para "Importar 3D": versión fija, se descarga recién al usar el botón -->
+    <script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"}}</script>
     <script src="https://unpkg.com/@phosphor-icons/web" defer></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.0/Sortable.min.js"></script>
@@ -40,6 +42,8 @@
     <script src="/js/firecache.js?v=7"></script>
     <script src="/js/auth-guard.js?v=3"></script>
     <script src="/js/apu-utils.js?v=1"></script>
+    <script src="/js/lector-3d.js?v=1"></script>
+    <script src="/js/importar-3d.js?v=1" defer></script>
     <script src="/js/viewmode.js?v=1"></script>
 
     <style>
@@ -275,6 +279,7 @@
         <button class="btn btn-sec" id="btn-copy-mode" style="color:var(--green);border-color:var(--green);" onclick="toggleCopyMode()"><i class="ph-bold ph-copy"></i> Copiar ítems</button>
         <button class="btn btn-sec" style="color:var(--purple); border-color:var(--purple);" onclick="abrirModalIABudget()"><i class="ph-bold ph-magic-wand"></i> Presupuesto IA</button>
         <button class="btn btn-sec" style="color:var(--blue); border-color:var(--blue);" onclick="abrirModalRender3D()"><i class="ph-bold ph-cube"></i> Render</button>
+        <button class="btn btn-sec" style="color:var(--green); border-color:var(--green);" onclick="abrirImportar3D()"><i class="ph-bold ph-cube-transparent"></i> Importar 3D</button>
     </div>
 
     <div id="copy-sel-bar" style="display:none;background:var(--green);color:white;padding:10px 14px;border-radius:12px;margin-bottom:10px;align-items:center;justify-content:space-between;gap:10px;">
@@ -889,7 +894,7 @@
                     <button class="btn-mini" style="background:#af52de; flex:1; padding:4px;" onclick="pasteComputo(${i}, null, null)" title="Pegar Cómputo">PEGAR</button>
                 </div>
 
-                </div><div class="val-box"><span class="lbl">P.UNIT</span><input id="pu-${i}" class="inp-num" type="number" step="any" value="${visualPu}" oninput="upd(${i}, 'pu', this.value)"><button class="btn-mini btn-orange" onclick="openApu(${i})">APU</button></div><div class="val-box"><span class="lbl">CARACTERÍSTICAS</span><textarea id="feat-${i}" class="feat-area" onchange="upd(${i}, 'feat', this.value)">${item.feat || ''}</textarea></div></div><div class="item-foot"><div class="total-lbl" id="tot-lbl-${i}" style="${activo ? '' : 'text-decoration:line-through; color:var(--gray);'}">TOTAL: ${fMoney(sub)}</div><i class="ph-bold ${eyeIcon} icon-btn" style="color:${eyeColor}" onclick="toggleActivo(${i})" title="${activo ? 'Desactivar ítem' : 'Activar ítem'}"></i><i class="ph-bold ph-image-square icon-btn" style="color:${iconColor}" onclick="openPhotoOpt(${i})"></i><i class="ph-bold ph-cube icon-btn" style="color:var(--blue)" onclick="abrirRenderItem(${i})" title="Render Axonométrico IA"></i>${item.iaPrompt ? `<i class="ph-bold ph-magic-wand icon-btn" style="color:var(--purple)" onclick="abrirRegenIA(${i})" title="Re-generar con IA"></i>` : ''}<i class="ph-bold ph-brain icon-btn" style="color:${(item.ctx_img||item.ctx_mat||item.ctx_est)?'var(--blue)':'var(--gray)'}" onclick="toggleCtxPanel(${i})" title="Contexto IA"></i><i class="ph-bold ph-copy icon-btn" onclick="dup(${i})"></i>${_copyMode ? `<i id="copy-chk-${i}" class="ph-bold ${_copySelected.has(i)?'ph-check-square':'ph-square'} icon-btn" style="color:${_copySelected.has(i)?'var(--green)':'var(--gray)'};font-size:17px;" onclick="toggleCopySelect(${i})" title="Seleccionar para copiar"></i>` : ''}${hasChapters ? `<button onclick="moveToChap(${i})" style="background:rgba(255,159,10,0.15);color:var(--orange);border:1px solid rgba(255,159,10,0.4);border-radius:7px;padding:3px 8px;font-size:10px;font-weight:800;cursor:pointer;white-space:nowrap;display:flex;align-items:center;gap:3px;"><i class="ph-bold ph-folder-open"></i> Mover</button>` : ''}<i class="ph-bold ph-trash icon-btn" style="color:var(--red)" onclick="del(${i})"></i></div></div>${_buildCtxPanel(i, item)}</div>`;
+                </div><div class="val-box"><span class="lbl">P.UNIT</span><input id="pu-${i}" class="inp-num" type="number" step="any" value="${visualPu}" oninput="upd(${i}, 'pu', this.value)"><button class="btn-mini btn-orange" onclick="openApu(${i})">APU</button></div><div class="val-box"><span class="lbl">CARACTERÍSTICAS</span><textarea id="feat-${i}" class="feat-area" onchange="upd(${i}, 'feat', this.value)">${item.feat || ''}</textarea></div></div><div class="item-foot"><div class="total-lbl" id="tot-lbl-${i}" style="${activo ? '' : 'text-decoration:line-through; color:var(--gray);'}">TOTAL: ${fMoney(sub)}</div>${item.origen === '3d' ? (() => { const n = ((item.apu && item.apu.mat) || []).filter(r => r && r.revisar).length; return `<span onclick="openApu(${i})" title="${n ? n + ' filas del APU para revisar' : 'Importado de un modelo 3D'}" style="cursor:pointer;font-size:10px;font-weight:800;border-radius:6px;padding:2px 6px;${n ? 'color:var(--red);border:1px solid var(--red);' : 'color:var(--green);border:1px solid var(--green);'}">3D${n ? ' ⚠' + n : ''}</span>`; })() : ''}<i class="ph-bold ${eyeIcon} icon-btn" style="color:${eyeColor}" onclick="toggleActivo(${i})" title="${activo ? 'Desactivar ítem' : 'Activar ítem'}"></i><i class="ph-bold ph-image-square icon-btn" style="color:${iconColor}" onclick="openPhotoOpt(${i})"></i><i class="ph-bold ph-cube icon-btn" style="color:var(--blue)" onclick="abrirRenderItem(${i})" title="Render Axonométrico IA"></i>${item.iaPrompt ? `<i class="ph-bold ph-magic-wand icon-btn" style="color:var(--purple)" onclick="abrirRegenIA(${i})" title="Re-generar con IA"></i>` : ''}<i class="ph-bold ph-brain icon-btn" style="color:${(item.ctx_img||item.ctx_mat||item.ctx_est)?'var(--blue)':'var(--gray)'}" onclick="toggleCtxPanel(${i})" title="Contexto IA"></i><i class="ph-bold ph-copy icon-btn" onclick="dup(${i})"></i>${_copyMode ? `<i id="copy-chk-${i}" class="ph-bold ${_copySelected.has(i)?'ph-check-square':'ph-square'} icon-btn" style="color:${_copySelected.has(i)?'var(--green)':'var(--gray)'};font-size:17px;" onclick="toggleCopySelect(${i})" title="Seleccionar para copiar"></i>` : ''}${hasChapters ? `<button onclick="moveToChap(${i})" style="background:rgba(255,159,10,0.15);color:var(--orange);border:1px solid rgba(255,159,10,0.4);border-radius:7px;padding:3px 8px;font-size:10px;font-weight:800;cursor:pointer;white-space:nowrap;display:flex;align-items:center;gap:3px;"><i class="ph-bold ph-folder-open"></i> Mover</button>` : ''}<i class="ph-bold ph-trash icon-btn" style="color:var(--red)" onclick="del(${i})"></i></div></div>${_buildCtxPanel(i, item)}</div>`;
             }
         });
         
@@ -977,7 +982,7 @@
 
     function addChapter() { data.push({type:'chapter', name:'CAPÍTULO', collapsed: false}); saveDB(); render(); }
     function del(i) { if(confirm("¿Borrar?")) { clearTimeout(saveTimeout); data.splice(i,1); saveDB(true); render(); } }
-    function dup(i) { data.splice(i+1, 0, JSON.parse(JSON.stringify(data[i]))); saveDB(true); render(); }
+    function dup(i) { const c = JSON.parse(JSON.stringify(data[i])); if (c.id) c.id = db.ref().push().key; data.splice(i+1, 0, c); saveDB(true); render(); }
 
     // ── Contexto IA por ítem ──────────────────────────────────────────
     function _buildCtxPanel(i, item) {
@@ -1166,7 +1171,7 @@
                     <input id="apu-p-${type}-${idx}" type="number" step="any" class="mod-inp" value="${vP}" oninput="updApu('${type}',${idx},'p',this.value)">
                     <div id="apu-sub-${type}-${idx}" style="font-weight:700; text-align:right;">${sub}</div>
                     <i class="ph-bold ph-x" style="color:var(--red); cursor:pointer" onclick="delApu('${type}',${idx})"></i>
-                </div>`;
+                </div>${el.revisar ? `<div style="color:var(--red);font-size:11px;font-weight:700;margin:-2px 0 6px;">⚠ ${String(el.revisar).replace(/</g,'&lt;')}</div>` : (el.nota ? `<div style="color:var(--gray);font-size:10px;margin:-2px 0 6px;">3D: ${String(el.nota).replace(/</g,'&lt;')}</div>` : '')}`;
         });
         box.innerHTML = htmlBuffer; 
     }
@@ -1176,6 +1181,13 @@
     
     function updApu(t, i, f, v) { 
         data[targetIdx].apu[t][i][f] = (f==='q'||f==='p') ? stripZeros(v) : v; 
+        // Filas importadas de 3D: al cargar a mano la cantidad o el precio, se quita esa marca
+        const _r3 = data[targetIdx].apu[t][i];
+        if (_r3.revisar && (f==='q'||f==='p'||f==='d')) {
+            const quitar = f==='p' ? /sin precio/ : (f==='q' ? /rendimiento|definir|caras|volumen/ : /sin vincular|no está en el catálogo/);
+            const resto = String(_r3.revisar).split(' · ').filter(x => !quitar.test(x)).join(' · ');
+            if (resto) _r3.revisar = resto; else delete _r3.revisar;
+        }
         if(f === 'd') {
             const upV = v.toUpperCase();
             if(t === 'mat' && dbMats) { const fd = Object.values(dbMats).find(m => (m.n||m.desc||'').toUpperCase() === upV); if(fd) { data[targetIdx].apu[t][i].u = fd.u||fd.und||'und'; data[targetIdx].apu[t][i].p = stripZeros(fd.p||fd.pu); document.getElementById(`apu-u-${t}-${i}`).value = data[targetIdx].apu[t][i].u; document.getElementById(`apu-p-${t}-${i}`).value = data[targetIdx].apu[t][i].p; } }
@@ -4841,6 +4853,7 @@ EJEMPLO SIN CAPÍTULOS (menos de 4 ítems):
     <button class="m-act-btn" onclick="addChapter()"><i class="ph-bold ph-text-t"></i><span>Cap&#237;tulo</span></button>
     <button class="m-act-btn green" onclick="addItem()"><i class="ph-bold ph-plus-circle"></i><span>&#205;tem</span></button>
     <button class="m-act-btn purple" onclick="abrirModalIABudget()"><i class="ph-bold ph-magic-wand"></i><span>IA</span></button>
+    <button class="m-act-btn green" onclick="abrirImportar3D()"><i class="ph-bold ph-cube-transparent"></i><span>3D</span></button>
     <button class="m-act-btn" onclick="abrirModalPDF()"><i class="ph-bold ph-file-pdf"></i><span>PDF</span></button>
     <button class="m-act-btn" style="color:var(--blue);" onclick="abrirModalRender3D()"><i class="ph-bold ph-cube"></i><span>Render</span></button>
     <button class="m-act-btn" style="color:#5ac8fa;" onclick="abrirMailPresupuesto()"><i class="ph-bold ph-envelope"></i><span>Enviar</span></button>
@@ -7650,7 +7663,7 @@ async function ejecutarCopia(targetPid, targetPname, el) {
     if (!confirm(`¿Copiar ${n} ítem${n>1?'s':''} al presupuesto de "${targetPname}"?\nSe agregarán al final.`)) return;
     if (el) { el.style.opacity = '0.5'; el.style.pointerEvents = 'none'; }
     try {
-        const itemsToCopy = [..._copySelected].sort((a,b)=>a-b).map(i => JSON.parse(JSON.stringify(data[i])));
+        const itemsToCopy = [..._copySelected].sort((a,b)=>a-b).map(i => { const c = JSON.parse(JSON.stringify(data[i])); if (c.id) c.id = db.ref().push().key; return c; });
         const snap = await db.ref('proyectos/' + destCid + '/' + targetPid + '/presupuesto/items').once('value');
         const existingItems = snap.val() || [];
         const newItems = Array.isArray(existingItems) ? [...existingItems, ...itemsToCopy] : [...Object.values(existingItems), ...itemsToCopy];
