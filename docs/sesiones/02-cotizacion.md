@@ -68,7 +68,7 @@ Vectorworks ──(exportar)──▶ Blender ──(script en el repo, lo corre
 Necesita un login desde Blender, y se diseña con la misma seguridad de la Sesión 0: lista blanca y una
 Function propia.
 
-### Qué exporta Blender por cada objeto (borrador)
+### Qué exporta Blender por cada objeto (borrador inicial — el formato final está más abajo)
 
 ```json
 {
@@ -96,6 +96,78 @@ Function propia.
   ítem queda en **rojo** ("material sin vincular") y no se inventa un precio.
 - **Piezas** → van a `items/$idx/measures` de `computo.html`. Así siguen funcionando el plano de corte y
   el cálculo por planchas o barras.
+
+### Formato de `rubik.json` — versión `rubik/1` (cerrado en el paso 2.2)
+
+Lo escribe `tools/blender/exportar_rubik.py` (cómo se usa: `tools/blender/LEEME.md`). Medidas siempre en **metros**.
+
+```json
+{
+  "formato": "rubik/1",
+  "proyecto": "stand-feria-2026",            // nombre del .blend si no se indica
+  "archivo": "stand-feria-2026.blend",
+  "generado": "2026-11-10T19:00:00+00:00",
+  "unidad": "m",
+  "items": ["Mostrador recepción", "Repisa", "SIM Banqueta"], // en el orden en que aparecen
+  "piezas": [
+    {
+      "item": "Mostrador recepción",
+      "pieza": "Frente curvo",
+      "origen_vw": "MDF-9-Laca",              // clase de VW (propiedad) o material con más superficie
+      "material": "MDF_9",                    // clave de /base_datos/materiales, o null si no hay equivalencia
+      "cant": 1,                              // piezas iguales (ítem, nombre, material, medidas al mm) se suman
+      "largo": 1.764, "ancho": 0.982, "espesor": 0.009,   // caja más ajustada, aunque la pieza esté girada
+      "tipo": "plancha",                      // "plancha" si espesor ≤ 6 cm, si no "volumen"
+      "area_m2": 3.5139,                      // todas las caras (pintura, laminado)
+      "area_cara_m2": 1.7322,                 // solo planchas: una cara
+      "perimetro_ml": 5.492,                  // solo planchas: tope para canto
+      "volumen_m3": 0.01559,                  // null si la malla está abierta
+      "acabados": [
+        { "origen_vw": "Canto PVC Blanco", "material": "CANTO_PVC_BLANCO", "area_m2": 0.0494 },
+        { "origen_vw": null, "material": "LACA_BLANCA", "area_m2": 3.5139, "desde": "equivalencia" }
+      ],
+      "revisar": false,                       // true si el material o algún acabado no tiene equivalencia
+      "motivos": [],                          // por qué revisar, o avisos (ej. "malla abierta")
+      "fuente": { "item": "coleccion", "origen_vw": "material" },  // de dónde salió cada dato
+      "objetos": ["Frente curvo"]             // objetos de Blender que forman esta fila
+    }
+  ],
+  "sin_equivalencia": ["Fierro-3mm"],         // nombres de VW que faltan en equivalencias_vw
+  "ocultos_salteados": ["Referencia oculta"],
+  "resumen": "7 piezas distintas (9 en total) en 3 ítems. 2 para revisar. Sin equivalencia: Fierro-3mm."
+}
+```
+
+**Qué es el ítem** (en este orden): propiedad `rubik_item` → nombre del símbolo de VW (instancia de
+colección) → padre más alto (grupo de VW) → colección más interna (capa o clase de VW). La fila también
+guarda `fuente.item` para saber cuál se usó; si con el modelo real conviene otro criterio, se cambia sin
+tocar el formato.
+
+### Tabla `/base_datos/equivalencias_vw/` (diseño, todavía no está en la app)
+
+Traduce el nombre que trae Vectorworks a la clave del catálogo. Se carga una sola vez por nombre y se reusa
+en todos los trabajos.
+
+```
+/base_datos/equivalencias_vw/{clave}
+  vw:         "MDF-18-Blanco"      // nombre tal como llega a Blender (clase o material de VW)
+  material:   "MDF_18_BLANCO"      // clave en /base_datos/materiales (obligatoria)
+  acabados:   ["LACA_BLANCA"]      // opcional: acabados que siempre lleva (claves de materiales)
+  tipo:       "clase" | "material" // de dónde viene el nombre en VW (informativo)
+  nota:       "texto libre"        // opcional
+  actualizado: 1762800000000       // ServerValue.TIMESTAMP
+  por:        "uid"                // quién la cargó
+```
+
+- **`{clave}`** = `vw` en minúsculas, sin espacios al borde, con los caracteres prohibidos de Firebase
+  (`. # $ [ ] /`) cambiados por `_`. Así la búsqueda es directa y no se duplica `MDF-18-Blanco` con
+  `mdf-18-blanco `. El script compara igual (sin mayúsculas ni espacios al borde).
+- **Se carga desde la app** (paso 2.3): al importar, cada `sin_equivalencia` aparece en rojo con un
+  selector del catálogo; al elegir, se guarda acá y la próxima importación ya sale vinculada.
+- **El script lee lo mismo:** `exportar(equivalencias=...)` acepta este nodo exportado de Firebase tal cual
+  (objetos con `vw` y `material`) o un JSON simple `{"MDF-18-Blanco": "MDF_18_BLANCO"}`.
+- **Reglas (cuando se implemente):** lectura para el equipo con sesión; escritura solo para quien hoy puede
+  editar `/base_datos/materiales`. Validar que `material` exista en el catálogo.
 
 ### Cómo se pasa de medidas a precio (sin IA)
 
@@ -144,8 +216,8 @@ el Camino A llega a un número parecido.
 
 ## Orden de trabajo propuesto
 
-- [ ] **2.1** Con un modelo real: ver qué llega de Vectorworks a Blender y definir el JSON (las decisiones 1–3)
-- [ ] **2.2** Script `tools/blender/exportar_rubik.py` (lo corre Claude por MCP) + tabla `equivalencias_vw`
+- [~] **2.1** Formato `rubik/1` cerrado (ver arriba) y `inventario()` listo para ver qué llega de VW. **Falta validarlo con un modelo real** y las respuestas 1–3 y 6
+- [x] **2.2** Script `tools/blender/exportar_rubik.py` + prueba `probar_exportar.py` + `LEEME.md` + diseño de `equivalencias_vw` (10 nov 2026)
 - [ ] **2.3** "Importar de Blender" en `presupuesto.html` → ítems + `measures`, con materiales vinculados o en rojo
 - [ ] **2.4** Cálculo medidas → APU con datos de la base (origen `blender`)
 - [ ] **2.5** Remodelar "Presupuesto IA" como Camino B: sin precios, con confianza y marcado "Estimado IA"
@@ -154,3 +226,32 @@ el Camino A llega a un número parecido.
 
 **Depende de:** Sesión B (precios, unidades, rendimientos y desperdicio en la base). Se puede arrancar con
 2.1–2.3 en paralelo, porque traer medidas exactas no necesita precios.
+
+---
+
+## Decisiones tomadas en los pasos 2.1–2.2 (10 nov 2026)
+
+La subsesión trabajó sin el modelo real ni las respuestas del dueño, así que el script **no depende** de
+ellas: lee todas las formas posibles y anota de dónde sacó cada dato (`fuente`).
+
+1. **Formato de exportación:** el script sirve para FBX, OBJ, glTF e IFC. Si llegan las clases de VW como
+   propiedad del objeto (IFC o FBX con datos), las usa y el material con más superficie se toma como
+   textura del cuerpo (no como acabado); si no hay clase, usa el nombre del material con más superficie.
+2. **Ítem del presupuesto:** símbolo → grupo (padre) → capa/colección, con la propiedad `rubik_item` para
+   forzarlo. Se ajusta con el modelo real.
+3. **Qué se mide:** todo lo que sirve para cotizar sin decidir todavía la unidad de compra (eso es Sesión B):
+   medidas de la caja, cantidad, m² totales, m² de una cara y perímetro (planchas), volumen y m² por acabado.
+   El canto se informa como perímetro total y como m² del material de canto si el modelo lo tiene pintado;
+   qué lados llevan canto se decide al cotizar.
+4. **Sin inventar:** sin equivalencia → `material: null`, `revisar: true` y el motivo. Malla abierta →
+   `volumen_m3: null` y aviso.
+5. **Modificadores y símbolos:** se lee el depsgraph evaluado (modificadores aplicados, instancias
+   resueltas) sin cambiar el archivo. Los objetos ocultos no se cuentan.
+6. **Pruebas:** `tools/blender/probar_exportar.py` arma una escena por código y verifica medidas, pieza
+   girada, Solidify, piezas repetidas, símbolo, pieza sin material y objeto oculto. **Pasó completa con
+   el módulo `bpy` 5.3.0 de PyPI** en la sesión de Claude (Linux). El ejemplo de arriba es su salida real.
+
+**Preguntas que siguen abiertas para el dueño** (decisiones 1, 2, 3 y 6 de arriba): formato de exportación,
+cómo organiza en VW (clases por material, capas o grupos por mueble), qué mide para cotizar y qué MCP de
+Blender usa. Y traer un trabajo real ya cotizado (`.blend` + lo que se cobró). Con eso se corre
+`inventario()` y `exportar()` sobre el modelo y se cierra el 2.1.

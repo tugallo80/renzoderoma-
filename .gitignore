@@ -83,3 +83,5 @@ public/backups/
 # Archivos temporales de Google Drive sync
 .tmp.driveupload/
 .tmp.*/
+__pycache__/
+*.pyc
