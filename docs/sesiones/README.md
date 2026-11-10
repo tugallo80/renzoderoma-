@@ -5,19 +5,17 @@ Cada sesión o subsesión tiene su ficha en esta carpeta.
 
 ---
 
-## 1. Para retomar: primero cerrar lo pendiente (lo hace el dueño, ~20 min)
+## 1. Sesión 0 cerrada (10 nov 2026)
 
-Son pruebas de cambios ya desplegados y una revisión de consola. No hace falta Claude.
+El dueño confirmó las pruebas en la app y la revisión de claves:
+- ✅ a · PDF de Auditoría Impositiva con fotos (ficha 01)
+- ✅ b · PDF de Consolidado de Contratistas con la foto correcta por ítem (ficha 03)
+- ✅ c · Nombre del cliente en vez del código (PR #266)
+- ✅ d · Pagos de Compras visibles al instante y en el balance (PR #267)
+- ✅ e · Claves viejas de Gemini y token de Meta revisados
 
-| # | Qué probar o hacer | Dónde | Resultado esperado |
-|---|---|---|---|
-| a | PDF de **Auditoría Impositiva** de un mes con fotos de comprobantes | Tesorería → Impuestos | Salen las fotos (ficha 01) |
-| b | PDF de **Consolidado de Contratistas** de un trabajador con fotos | Tesorería → Licitaciones | Cada ítem con **su** foto, una vez; medidas correctas (ficha 03) |
-| c | Lista de proyectos en Consolidado de Contratistas | Tesorería → Licitaciones | Nombre del cliente, no un código tipo `-Ows…` (PR #266) |
-| d | Cargar un pago en **Compras** con Tesorería abierta en otra pestaña y exportar el balance sin recargar | Compras + Tesorería | El pago aparece al instante y está en el PDF (PR #267) |
-| e | Revisar claves viejas de Gemini y token de Meta | Cloud Shell, desde la PC: `bash revisar-claves-viejas.sh` | Una sola clave de Gemini **EN USO**; token de WhatsApp válido |
-
-Si algo falla, avisar con el proyecto y el trabajador del ejemplo. Con todo en ✅ se cierra la **Sesión 0**.
+Quedan abiertos, sin bloquear nada: Prioridad 4 (Actions y repo privado), la prueba de permisos con la
+llave, y reabrir las apps antes de la salida a la venta (ver `docs/plan-sesiones.md`).
 
 ---
 
@@ -25,21 +23,20 @@ Si algo falla, avisar con el proyecto y el trabajador del ejemplo. Con todo en �
 
 | Ficha | Tema | Estado |
 |---|---|---|
-| `01-cerrar-api-imagen.md` | Cerrar `/api/imagen` (proxy abierto) | ✅ Desplegado · falta prueba **a** |
+| `01-cerrar-api-imagen.md` | Cerrar `/api/imagen` (proxy abierto) | ✅ Cerrada |
 | `02-cotizacion.md` | Cotización: Vectorworks → Blender → app; IA solo para fotos y referencias | 📝 Planificada · esperando el modelo real |
-| `03-fotos-pdf-rendicion.md` | Fotos repetidas o faltantes en el PDF de rendición de contratistas | ✅ Desplegado · falta prueba **b** |
-| *(sin ficha)* PR #266 | Código del cliente en vez de su nombre (Consolidado de Contratistas) | ✅ Desplegado · falta prueba **c** |
-| *(sin ficha)* PR #267 | Pagos a trabajadores que no aparecían sin recargar (Compras / Tesorería) | ✅ Desplegado · falta prueba **d** |
-| `../plan-sesiones.md` Sesión 0 | Protección: respaldos, seguridad, permisos | 🟡 Casi cerrada · falta **e** y la Prioridad 4 |
+| `03-fotos-pdf-rendicion.md` | Fotos repetidas o faltantes en el PDF de rendición de contratistas | ✅ Cerrada |
+| *(sin ficha)* PR #266 | Código del cliente en vez de su nombre (Consolidado de Contratistas) | ✅ Cerrada |
+| *(sin ficha)* PR #267 | Pagos a trabajadores que no aparecían sin recargar (Compras / Tesorería) | ✅ Cerrada |
+| `../plan-sesiones.md` Sesión 0 | Protección: respaldos, seguridad, permisos | ✅ Cerrada · Prioridad 4 queda en paralelo |
 
 ---
 
 ## 3. Orden propuesto de las próximas sesiones
 
+**Próxima sesión → Sesión 2, pasos 2.1–2.2** (traer lo que dice la sección 4).
+
 ```
- Sesión 0 (cerrar)          ── pruebas a–e
-        │
-        ▼
  Sesión 2 · pasos 2.1–2.2   ── Vectorworks → Blender: ver qué datos llegan y armar el script
         │                      (no toca la app; necesita un trabajo real exportado)
         ▼

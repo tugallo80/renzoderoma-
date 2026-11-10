@@ -56,21 +56,21 @@ El problema no es Gemini — es que opera en vacío:
 ### Sesión 0 — Protección antes de tocar datos
 **Objetivo**: poder deshacer cualquier error antes de migrar datos (Sesión A) o tocar permisos.
 
-**Estado al cierre (5 nov 2026)**
+**Estado: ✅ cerrada el 10 nov 2026** (pruebas del dueño en `docs/sesiones/README.md`, sección 1)
 
 | Prioridad | Estado |
 |---|---|
 | 1 — Respaldos | ✅ Hecha. Solo falta verificar el respaldo justo antes de la migración de la Sesión A |
-| 2 — Seguridad | ✅ Pasos B, C y D hechos y probados. `/api/imagen` cerrado. Queda: revisar claves viejas Gemini/Meta |
+| 2 — Seguridad | ✅ Hecha: pasos B, C y D, `/api/imagen` cerrado y claves viejas Gemini/Meta revisadas |
 | 3 — Permisos | ✅ Hecha (roles verificados en Cloud Shell). Prueba con la llave pendiente |
-| 4 — Despliegue | ⏳ Pendiente (revisado: hoy es automático al mergear a `main`) |
+| 4 — Despliegue | ⏳ En paralelo, no bloquea (hoy es automático al mergear a `main`) |
 
 Paso D de la Prioridad 2 (consola de Firebase, hecho por el dueño y verificado):
 D1 login anónimo desactivado · D2 registro abierto con email desactivado ·
 D3 borrados `test@rubikbolivia.com` y 35 usuarios anónimos (queda solo la cuenta del dueño) ·
 D4 retención de versiones de Hosting limitada a 20.
 
-**Pendientes para la próxima sesión** → ver `docs/sesiones/README.md`, sección 1 (pruebas a–e del dueño).
+**Próxima sesión** → Sesión 2, pasos 2.1–2.2 (ver `docs/sesiones/README.md`, sección 3).
 Además: Prioridad 4 (Actions y repo privado) y, antes de la salida a la venta, reabrir las apps (ver abajo).
 
 **Prioridad 1 — Respaldos** (ver `docs/respaldos.md`)
@@ -83,14 +83,14 @@ Además: Prioridad 4 (Actions y repo privado) y, antes de la salida a la venta, 
 **Prioridad 2 — Seguridad**
 - [x] Revisar el export que estuvo publicado en `public/backups/` (ver `docs/respaldos.md`, "Antecedente")
 - [x] Confirmar que la clave de Gemini y el token de Meta no están en el historial de git
-- [ ] Confirmar en consola que la clave vieja de Gemini y el token viejo de Meta están revocados
+- [x] Confirmar que la clave vieja de Gemini y el token viejo de Meta están revocados (`tools/revisar-claves-viejas.sh`, nov 2026)
 - [x] Reglas: toda la base solo para la lista blanca `/acceso/hub/{uid}` (pruebas en `tools/probar-reglas`) — PR #256, probado en PC y teléfono el 2 nov 2026
 - [x] Functions: IA, TTS, Gemini Live y correo solo para la lista blanca (`functions/acceso.js`) — PR #256
 - [x] Desactivar el login anónimo y el registro abierto con email en Firebase Auth (paso D1–D2, nov 2026)
 - [x] Borrar la cuenta de prueba `test@rubikbolivia.com` y los 35 usuarios anónimos (paso D3): queda solo la cuenta del dueño
 - [x] Limitar la retención de versiones de Hosting a 20 (paso D4): se borran las versiones con el export
 - [x] `/api/imagen` (`proxyImagen`): solo lista blanca, solo imágenes de nuestro Storage (`docs/sesiones/01-cerrar-api-imagen.md`).
-      Falta la prueba del dueño en la app (PDF de Auditoría Impositiva con fotos)
+      Probado por el dueño (PDF de Auditoría Impositiva con fotos)
 
 **Prioridad 3 — Permisos**
 - [x] Permisos mínimos para la cuenta `claude-code` en `rubik-bolivia` (sin admin de IAM ni lectura de pagos): aplicados 5 roles de solo lectura
