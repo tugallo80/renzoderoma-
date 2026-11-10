@@ -1,6 +1,6 @@
 # Plan de Sesiones — Rubik Bolivia OS
 
-Última actualización: octubre 2026.
+Última actualización: 10 nov 2026. **Para retomar, empezar por `docs/sesiones/README.md`** (orden y estado de las sesiones).
 
 ---
 
@@ -61,8 +61,8 @@ El problema no es Gemini — es que opera en vacío:
 | Prioridad | Estado |
 |---|---|
 | 1 — Respaldos | ✅ Hecha. Solo falta verificar el respaldo justo antes de la migración de la Sesión A |
-| 2 — Seguridad | ✅ Pasos B, C y D hechos y probados. Quedan: revocación Gemini/Meta y `/api/imagen` |
-| 3 — Permisos | ⏳ Pendiente |
+| 2 — Seguridad | ✅ Pasos B, C y D hechos y probados. `/api/imagen` cerrado. Queda: revisar claves viejas Gemini/Meta |
+| 3 — Permisos | ✅ Hecha (roles verificados en Cloud Shell). Prueba con la llave pendiente |
 | 4 — Despliegue | ⏳ Pendiente (revisado: hoy es automático al mergear a `main`) |
 
 Paso D de la Prioridad 2 (consola de Firebase, hecho por el dueño y verificado):
@@ -70,12 +70,8 @@ D1 login anónimo desactivado · D2 registro abierto con email desactivado ·
 D3 borrados `test@rubikbolivia.com` y 35 usuarios anónimos (queda solo la cuenta del dueño) ·
 D4 retención de versiones de Hosting limitada a 20.
 
-**Pendientes para la próxima sesión**
-1. Prioridad 3: hecha (roles aplicados y script en `tools/`); queda la prueba con la llave (ver Prioridad 3).
-2. Prioridad 4: optimizar minutos de GitHub Actions y **después** pasar el repo a privado.
-3. `/api/imagen`: cerrado en código; falta probar el PDF de Auditoría Impositiva con fotos en la app.
-4. Confirmar en consola que la clave vieja de Gemini y el token viejo de Meta están revocados.
-5. Antes de la salida a la venta: reabrir con permisos mínimos las apps de clientes y trabajadores (ver abajo).
+**Pendientes para la próxima sesión** → ver `docs/sesiones/README.md`, sección 1 (pruebas a–e del dueño).
+Además: Prioridad 4 (Actions y repo privado) y, antes de la salida a la venta, reabrir las apps (ver abajo).
 
 **Prioridad 1 — Respaldos** (ver `docs/respaldos.md`)
 - [x] Respaldos automáticos diarios activos (bucket `rubik-bolivia-default-rtdb-backups`)
@@ -126,6 +122,8 @@ D4 retención de versiones de Hosting limitada a 20.
 **Objetivo**: dejar la app sin bugs estructurales antes de construir encima.
 
 - [ ] **Antes de migrar:** respaldo manual + verificación en Cloud Shell (`docs/respaldos.md`)
+- [ ] **ID estable por ítem del presupuesto** (hoy se identifican por posición: al reordenar, licitaciones y PDFs
+      apuntan al ítem equivocado — ver `docs/sesiones/03-fotos-pdf-rendicion.md`). Necesario antes de importar desde Blender
 - [ ] Migrar nodo `pagos_cliente/` → `pagos/` en proyectos existentes (script de migración en Cloud Functions o directo en DB)
 - [ ] Cambiar `localStorage` para `cid`/`pid` por URL hash params (`#cid=X&pid=Y`) en todos los módulos — resuelve el bug de múltiples pestañas y permite links compartibles
 - [ ] Crear `public/css/variables.css` con todos los tokens de color (`--accent`, `--blue`, `--green`, etc.) e incluirlo en todos los HTML
@@ -168,7 +166,7 @@ D4 retención de versiones de Hosting limitada a 20.
 
 ---
 
-### Sesión D — IA con contexto de empresa (el cambio más importante)
+### Sesión D — IA con contexto de empresa (reemplazada por `docs/sesiones/02-cotizacion.md`)
 > **Nov 2026:** se replantea en `docs/sesiones/02-cotizacion.md`. Con modelo de Blender, las cantidades salen
 > del modelo y de la base, no de la IA. La IA queda para fotos y referencias del cliente (estimado marcado).
 
