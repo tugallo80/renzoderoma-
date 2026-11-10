@@ -17,7 +17,7 @@ que el script de Blender. El archivo no se sube a ningún lado.
 ```bash
 cd tools/lector-3d
 npm install          # three 0.170.0 (la misma versión que carga la app)
-npm test             # probar_lector.mjs + verificar_sintaxis.mjs → "303 OK, 0 fallas" y "Sintaxis OK"
+npm test             # probar_lector.mjs + verificar_sintaxis.mjs → "307 OK, 0 fallas" y "Sintaxis OK"
 ```
 
 Para regenerar los ejemplos (solo si cambia la escena o el script de Blender):
@@ -37,6 +37,7 @@ python tools/lector-3d/generar_ejemplos.py
 | pieza | nombre original del objeto, sin `.001` (three.js cambia los nombres; se usa el original que guarda el loader) |
 | origen_vw | propiedad de clase (`vw_clase`, `clase`, `class`, `layer`…) → material con más superficie |
 | medidas | caja más ajustada aunque la pieza esté girada; vértices soldados a 0,01 mm para saber si la malla es cerrada |
+| texturas | **no se cargan ni se decodifican** (`pluginSinTexturas`, `modificadorURL`): el ejemplo trae una incrustada y la prueba lo comprueba |
 | unidad | glTF: metros. FBX: `UnitScaleFactor`. Si el modelo mide más de 200 en esa unidad, se sugiere una más chica. Siempre se puede cambiar (mm, cm, m) |
 
 Diferencias con el script de Blender que vienen del formato, no del lector:

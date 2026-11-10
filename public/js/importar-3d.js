@@ -12,8 +12,8 @@
     'use strict';
 
     var CDN_THREE = 'https://cdn.jsdelivr.net/npm/three@0.170.0/';
-    var PIXEL = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
     var NUEVO = '__nuevo__';
+    var MB_AVISO = 30;   // más que esto suele ser por texturas incrustadas
     var est = null;   // estado de la importación en curso
     var three = null;
 
@@ -95,10 +95,12 @@
         $('i3-body').innerHTML =
             (error ? '<div class="i3-card" style="border-color:var(--red);color:var(--red);font-weight:700;">' + esc(error) + '</div>' : '') +
             '<label class="i3-drop"><i class="ph-bold ph-upload-simple"></i><div style="font-weight:800;font-size:16px;margin-top:6px;">Elegir el modelo 3D</div>' +
-            '<div class="i3-nota">.glb, .gltf o .fbx — y si lo tenés, el rubik.json de Blender</div>' +
-            '<input type="file" id="i3-file" multiple accept=".glb,.gltf,.fbx,.json,.bin,.png,.jpg,.jpeg" style="display:none" onchange="_i3Archivos(this.files)"></label>' +
+            '<div class="i3-nota">.glb, .gltf, .fbx o un .zip que los tenga — y si lo tenés, el rubik.json de Blender</div>' +
+            '<input type="file" id="i3-file" multiple accept=".glb,.gltf,.fbx,.zip,.json,.bin,.skp" style="display:none" onchange="_i3Archivos(this.files)"></label>' +
             '<div class="i3-card" style="margin-top:12px;"><div class="i3-nota"><b>🔒 El archivo no se sube a ningún lado.</b> Se lee en este dispositivo; ' +
-            'solo se guardan los ítems que confirmes. Si es un .gltf con su .bin aparte, elegí los dos juntos.</div></div>' +
+            'solo se guardan los ítems que confirmes. Si es un .gltf con su .bin aparte, elegí los dos juntos.</div>' +
+            '<div class="i3-nota" style="margin-top:6px;">Consejo: exportá <b>sin texturas</b> (en SketchUp/Vectorworks, "Embed media" desactivado). ' +
+            'Las medidas y los nombres de materiales llegan igual y el archivo pesa mucho menos.</div></div>' +
             '<div class="i3-nota">La app arma ítem → piezas → medidas → material. Antes de guardar podés renombrar o juntar ítems, ' +
             'descartar piezas (personas, plantas, entorno) y vincular los materiales que falten.</div>';
         $('i3-foot').innerHTML = '<button class="i3-btn" style="flex:1" onclick="cerrarImportar3D()">Cancelar</button>';
@@ -153,14 +155,40 @@
         var archivos = Array.from(lista || []);
         if (!archivos.length) return;
         var ext = function (f) { return (f.name.split('.').pop() || '').toLowerCase(); };
+        if (archivos.some(function (f) { return ext(f) === 'skp'; })) {
+            return pasoElegir('El .skp de SketchUp no se puede leer directo. En SketchUp: Archivo → Exportar → Modelo 3D → FBX o glTF (mejor sin texturas), y elegí ese archivo.');
+        }
+        // .zip: se sacan solo el modelo, su .bin y el rubik.json (las imágenes ni se descomprimen)
+        var zips = archivos.filter(function (f) { return ext(f) === 'zip'; });
+        if (zips.length) {
+            if (typeof JSZip === 'undefined') return pasoElegir('No se pudo abrir el .zip (falta JSZip). Descomprimilo y elegí el archivo de adentro.');
+            try {
+                await pasoCargando('Abriendo ' + zips[0].name + '…');
+                for (var z = 0; z < zips.length; z++) {
+                    var zip = await JSZip.loadAsync(zips[z]);
+                    var entradas = Object.keys(zip.files).filter(function (n) {
+                        return !zip.files[n].dir && n.indexOf('__MACOSX') < 0 && /\.(glb|gltf|fbx|bin|json)$/i.test(n);
+                    });
+                    for (var e = 0; e < entradas.length; e++) {
+                        var blob = await zip.files[entradas[e]].async('blob');
+                        archivos.push(new File([blob], entradas[e].split('/').pop()));
+                    }
+                }
+            } catch (err) { return pasoElegir('No se pudo abrir el .zip: ' + (err && err.message ? err.message : err)); }
+            archivos = archivos.filter(function (f) { return ext(f) !== 'zip'; });
+        }
         var modelo = archivos.find(function (f) { return ['glb', 'gltf', 'fbx'].indexOf(ext(f)) >= 0; });
         var json = archivos.find(function (f) { return ext(f) === 'json'; });
-        if (!modelo && !json) return pasoElegir('Ese archivo no es un modelo 3D. Elegí un .glb, .gltf, .fbx o rubik.json.');
+        if (!modelo && !json) return pasoElegir('No encontré un modelo 3D. Elegí un .glb, .gltf, .fbx, un .zip que lo tenga, o el rubik.json.');
+        var pesado = modelo && modelo.size > MB_AVISO * 1024 * 1024 ? Math.round(modelo.size / 1048576) : 0;
+        var consejo = 'Pesa ' + pesado + ' MB, seguramente por texturas incrustadas. Se lee igual (sin cargar las texturas), pero puede tardar ' +
+            'o quedarse sin memoria en el celular. La próxima vez exportalo sin texturas ("Embed media" / "Incrustar texturas" desactivado).';
         var urls = [];
         try {
             await pasoCargando('Leyendo ' + (json || modelo).name + '…');
             var eqNodo = await (basePromesa || cargarBase());
             est = { archivo: (json || modelo).name, eqNodo: eqNodo, avisos: [] };
+            if (pesado && !json) est.avisos.push('⚠ ' + consejo);
 
             if (json) {
                 var datos = JSON.parse(await json.text());
@@ -170,17 +198,12 @@
             } else {
                 await pasoCargando('Cargando el lector 3D…');
                 var T = await cargarThree();
-                await pasoCargando('Leyendo ' + modelo.name + '…');
+                await pasoCargando('Leyendo ' + modelo.name + '…' + (pesado ? ' (' + pesado + ' MB: puede tardar)' : ''));
+                if (pesado) $('i3-body').insertAdjacentHTML('beforeend', '<div class="i3-card" style="border-color:var(--orange);"><div class="i3-nota">⚠ ' + esc(consejo) + '</div></div>');
                 var mapa = {}, faltan = [];
-                archivos.forEach(function (f) { if (f !== modelo) { var u = URL.createObjectURL(f); urls.push(u); mapa[f.name] = u; } });
+                archivos.forEach(function (f) { if (f !== modelo && /\.(bin|gltf)$/i.test(f.name)) { var u = URL.createObjectURL(f); urls.push(u); mapa[f.name] = u; } });
                 var manager = new T.THREE.LoadingManager();
-                manager.setURLModifier(function (url) {
-                    if (/^(data|blob):/.test(url)) return url;
-                    var base = decodeURIComponent(url.split(/[\\/]/).pop().split('?')[0]);
-                    if (mapa[base]) return mapa[base];
-                    if (/\.bin$/i.test(base)) { faltan.push(base); return url; }
-                    return PIXEL;   // texturas: no se necesitan para medir, y así no se pide nada afuera
-                });
+                manager.setURLModifier(Lector3D.modificadorURL(mapa, faltan));   // sin texturas ni pedidos afuera
                 var buf = await modelo.arrayBuffer();
                 if (ext(modelo) === 'fbx') {
                     est.raiz = new T.FBXLoader(manager).parse(buf, '');
@@ -188,6 +211,7 @@
                     est.tipo = 'fbx';
                 } else {
                     var loader = new T.GLTFLoader(manager);
+                    loader.register(Lector3D.pluginSinTexturas(T.THREE));
                     var draco = new T.DRACOLoader(); draco.setDecoderPath(CDN_THREE + 'examples/jsm/libs/draco/gltf/');
                     loader.setDRACOLoader(draco);
                     var entrada = ext(modelo) === 'gltf' ? new TextDecoder().decode(buf) : buf;

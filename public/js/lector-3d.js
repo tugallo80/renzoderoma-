@@ -341,6 +341,38 @@
         return raiz;
     }
 
+    /**
+     * Plugin de GLTFLoader que NO carga texturas: devuelve una textura vacía sin leer ni decodificar la imagen.
+     * Para medir alcanza con la geometría y el nombre del material, y así un archivo de 100+ MB con
+     * texturas no agota la memoria del celular. Uso: loader.register(Lector3D.pluginSinTexturas(THREE)).
+     */
+    function pluginSinTexturas(THREE) {
+        return function () {
+            return { name: 'rubik_sin_texturas', loadTexture: function () { return Promise.resolve(new THREE.Texture()); } };
+        };
+    }
+
+    var PIXEL = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
+
+    /**
+     * Para LoadingManager.setURLModifier: nada se pide afuera y ninguna imagen se decodifica.
+     *   - archivos que eligió el usuario (ej. el .bin de un .gltf) → su blob (`mapa`: nombre → url)
+     *   - .bin que falta → se deja (falla, y `faltan` dice cuál)
+     *   - imágenes (archivo, blob incrustado del FBX o data:image) → 1 píxel
+     */
+    function modificadorURL(mapa, faltan) {
+        var propias = Object.keys(mapa || {}).map(function (k) { return mapa[k]; });
+        return function (url) {
+            if (/^blob:/.test(url)) return propias.indexOf(url) >= 0 ? url : PIXEL;
+            if (/^data:image\//.test(url)) return PIXEL;
+            if (/^data:/.test(url)) return url;
+            var base = decodeURIComponent(String(url).split(/[\\/]/).pop().split('?')[0]);
+            if (mapa && mapa[base]) return mapa[base];
+            if (/\.bin$/i.test(base)) { if (faltan) faltan.push(base); return url; }
+            return PIXEL;
+        };
+    }
+
     function matMul(a, b) {   // matrices 4x4 column-major (como three.js)
         var r = new Array(16);
         for (var c = 0; c < 4; c++) for (var f = 0; f < 4; f++) {
@@ -833,7 +865,7 @@
         medidasOrientadas: medidasOrientadas, areaPoligono: areaPoligono, volumenMalla: volumenMalla, mallaCerrada: mallaCerrada,
         normalizarNombre: normalizarNombre, claveEquivalencia: claveEquivalencia, cargarEquivalencias: cargarEquivalencias,
         buscarEquivalencia: buscarEquivalencia, agruparPiezas: agruparPiezas,
-        prepararGLTF: prepararGLTF, leerPropiedadesFBX: leerPropiedadesFBX, aplicarPropiedadesFBX: aplicarPropiedadesFBX, leerEscena: leerEscena, armarResultado: armarResultado, analizar: analizar,
+        prepararGLTF: prepararGLTF, pluginSinTexturas: pluginSinTexturas, modificadorURL: modificadorURL, PIXEL: PIXEL, leerPropiedadesFBX: leerPropiedadesFBX, aplicarPropiedadesFBX: aplicarPropiedadesFBX, leerEscena: leerEscena, armarResultado: armarResultado, analizar: analizar,
         tamanoEscena: tamanoEscena, detectarUnidad: detectarUnidad,
         desdeRubikJson: desdeRubikJson, resolverMateriales: resolverMateriales,
         sugerirDescarte: sugerirDescarte, familiaUnidad: familiaUnidad, cantidadPrincipal: cantidadPrincipal,
