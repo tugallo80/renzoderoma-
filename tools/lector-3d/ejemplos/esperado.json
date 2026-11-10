@@ -1,0 +1,268 @@
+{
+  "formato": "rubik/1",
+  "proyecto": "ejemplo",
+  "archivo": null,
+  "generado": "2026-11-10T22:12:59+00:00",
+  "unidad": "m",
+  "items": [
+    "Mostrador recepción",
+    "Repisa",
+    "Vitrina",
+    "Sin ítem"
+  ],
+  "piezas": [
+    {
+      "item": "Mostrador recepción",
+      "pieza": "Tapa superior",
+      "origen_vw": "MDF-18-Blanco",
+      "material": "MDF_18_BLANCO",
+      "cant": 1,
+      "largo": 1.8,
+      "ancho": 0.6,
+      "espesor": 0.018,
+      "tipo": "plancha",
+      "area_m2": 2.2464,
+      "area_cara_m2": 1.08,
+      "perimetro_ml": 4.8,
+      "volumen_m3": 0.01944,
+      "acabados": [],
+      "revisar": false,
+      "motivos": [],
+      "fuente": {
+        "item": "padre",
+        "origen_vw": "material"
+      },
+      "objetos": [
+        "Tapa superior"
+      ]
+    },
+    {
+      "item": "Mostrador recepción",
+      "pieza": "Lateral",
+      "origen_vw": "MDF-18-Blanco",
+      "material": "MDF_18_BLANCO",
+      "cant": 2,
+      "largo": 0.982,
+      "ancho": 0.6,
+      "espesor": 0.018,
+      "tipo": "plancha",
+      "area_m2": 1.2354,
+      "area_cara_m2": 0.5892,
+      "perimetro_ml": 3.164,
+      "volumen_m3": 0.010606,
+      "acabados": [],
+      "revisar": false,
+      "motivos": [],
+      "fuente": {
+        "item": "padre",
+        "origen_vw": "material"
+      },
+      "objetos": [
+        "Lateral",
+        "Lateral.001"
+      ]
+    },
+    {
+      "item": "Mostrador recepción",
+      "pieza": "Frente curvo",
+      "origen_vw": "MDF-9-Laca",
+      "material": "MDF_9",
+      "cant": 1,
+      "largo": 1.764,
+      "ancho": 0.982,
+      "espesor": 0.009,
+      "tipo": "plancha",
+      "area_m2": 3.5139,
+      "area_cara_m2": 1.7322,
+      "perimetro_ml": 5.492,
+      "volumen_m3": 0.01559,
+      "acabados": [
+        {
+          "origen_vw": "Canto PVC Blanco",
+          "material": "CANTO_PVC_BLANCO",
+          "area_m2": 0.0494
+        },
+        {
+          "origen_vw": null,
+          "material": "LACA_BLANCA",
+          "area_m2": 3.5139,
+          "desde": "equivalencia"
+        }
+      ],
+      "revisar": false,
+      "motivos": [],
+      "fuente": {
+        "item": "padre",
+        "origen_vw": "material"
+      },
+      "objetos": [
+        "Frente curvo"
+      ]
+    },
+    {
+      "item": "Mostrador recepción",
+      "pieza": "Zócalo",
+      "origen_vw": null,
+      "material": null,
+      "cant": 1,
+      "largo": 1.7,
+      "ancho": 0.08,
+      "espesor": 0.018,
+      "tipo": "plancha",
+      "area_m2": 0.3361,
+      "area_cara_m2": 0.136,
+      "perimetro_ml": 3.56,
+      "volumen_m3": 0.002448,
+      "acabados": [],
+      "revisar": true,
+      "motivos": [
+        "sin material ni clase de Vectorworks"
+      ],
+      "fuente": {
+        "item": "padre",
+        "origen_vw": null
+      },
+      "objetos": [
+        "Zócalo"
+      ]
+    },
+    {
+      "item": "Repisa",
+      "pieza": "Estante",
+      "origen_vw": "Melamina-25-Roble",
+      "material": "MELAMINA_25_ROBLE",
+      "cant": 1,
+      "largo": 1.2,
+      "ancho": 0.3,
+      "espesor": 0.025,
+      "tipo": "plancha",
+      "area_m2": 0.795,
+      "area_cara_m2": 0.36,
+      "perimetro_ml": 3.0,
+      "volumen_m3": 0.009,
+      "acabados": [],
+      "revisar": false,
+      "motivos": [],
+      "fuente": {
+        "item": "padre",
+        "origen_vw": "clase"
+      },
+      "objetos": [
+        "Estante"
+      ]
+    },
+    {
+      "item": "Repisa",
+      "pieza": "Ménsula",
+      "origen_vw": "Fierro-3mm",
+      "material": null,
+      "cant": 2,
+      "largo": 0.25,
+      "ancho": 0.05,
+      "espesor": 0.003,
+      "tipo": "plancha",
+      "area_m2": 0.0268,
+      "area_cara_m2": 0.0125,
+      "perimetro_ml": 0.6,
+      "volumen_m3": 3.8e-05,
+      "acabados": [],
+      "revisar": true,
+      "motivos": [
+        "'Fierro-3mm' sin equivalencia en equivalencias_vw"
+      ],
+      "fuente": {
+        "item": "padre",
+        "origen_vw": "material"
+      },
+      "objetos": [
+        "Ménsula",
+        "Ménsula.001"
+      ]
+    },
+    {
+      "item": "Vitrina",
+      "pieza": "Vidrio",
+      "origen_vw": "Vidrio-6",
+      "material": "VIDRIO_6",
+      "cant": 1,
+      "largo": 1.2,
+      "ancho": 0.6,
+      "espesor": 0.006,
+      "tipo": "plancha",
+      "area_m2": 1.4616,
+      "area_cara_m2": 0.72,
+      "perimetro_ml": 3.6,
+      "volumen_m3": 0.00432,
+      "acabados": [],
+      "revisar": false,
+      "motivos": [],
+      "fuente": {
+        "item": "padre",
+        "origen_vw": "material"
+      },
+      "objetos": [
+        "Vidrio"
+      ]
+    },
+    {
+      "item": "Vitrina",
+      "pieza": "Base",
+      "origen_vw": "MDF-18-Blanco",
+      "material": "MDF_18_BLANCO",
+      "cant": 1,
+      "largo": 0.62,
+      "ancho": 0.4,
+      "espesor": 0.1,
+      "tipo": "volumen",
+      "area_m2": 0.7,
+      "area_cara_m2": null,
+      "perimetro_ml": null,
+      "volumen_m3": 0.0248,
+      "acabados": [],
+      "revisar": false,
+      "motivos": [],
+      "fuente": {
+        "item": "padre",
+        "origen_vw": "material"
+      },
+      "objetos": [
+        "Base"
+      ]
+    },
+    {
+      "item": "Sin ítem",
+      "pieza": "Persona 1.75",
+      "origen_vw": "Piel",
+      "material": null,
+      "cant": 1,
+      "largo": 1.75,
+      "ancho": 0.45,
+      "espesor": 0.25,
+      "tipo": "volumen",
+      "area_m2": 2.675,
+      "area_cara_m2": null,
+      "perimetro_ml": null,
+      "volumen_m3": 0.196875,
+      "acabados": [],
+      "revisar": true,
+      "motivos": [
+        "'Piel' sin equivalencia en equivalencias_vw"
+      ],
+      "fuente": {
+        "item": "ninguno",
+        "origen_vw": "material"
+      },
+      "objetos": [
+        "Persona 1.75"
+      ]
+    }
+  ],
+  "sin_equivalencia": [
+    "Fierro-3mm",
+    "Piel"
+  ],
+  "ocultos_salteados": [
+    "Referencia oculta"
+  ],
+  "resumen": "9 piezas distintas (11 en total) en 4 ítems. 3 para revisar. Sin equivalencia: Fierro-3mm, Piel."
+}

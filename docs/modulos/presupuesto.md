@@ -25,6 +25,10 @@ HTML/CSS/JS puro con Firebase Realtime DB y Storage. Librerías: JSZip, Sortable
 - El botón "Actualizar Precios BD" sincroniza los precios de cada ítem con la base de datos maestra.
 - El modo "Copiar ítems" permite seleccionar ítems y copiarlos a otro proyecto.
 - El "Presupuesto IA" llama a Gemini para generar ítems desde una descripción de texto o imagen.
+- "Importar 3D" (`/js/lector-3d.js` + `/js/importar-3d.js`, three.js 0.170.0 por import map) lee .glb/.gltf/.fbx o
+  `rubik.json` en el navegador, sin subir el archivo, y agrega ítems **al final** con `id`, `origen: "3d"`, `measures`
+  y APU de materiales (filas sin precio o rendimiento quedan con `revisar`). Guarda `/base_datos/equivalencias_vw/`.
+  Detalle: `docs/sesiones/02-cotizacion.md` (paso 2.3) y `tools/lector-3d/LEEME.md`.
 
 ## Problemas conocidos y pendientes
 - En proyectos con más de ~200 ítems el re-render puede ser lento.

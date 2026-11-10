@@ -1,0 +1,12 @@
+{
+  "name": "probar-lector-3d",
+  "private": true,
+  "type": "module",
+  "description": "Prueba el lector 3D de la app (public/js/lector-3d.js) contra exportar_rubik.py",
+  "scripts": {
+    "test": "node probar_lector.mjs && node verificar_sintaxis.mjs"
+  },
+  "devDependencies": {
+    "three": "0.170.0"
+  }
+}

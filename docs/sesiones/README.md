@@ -1,6 +1,6 @@
 # Sesiones de trabajo — índice y orden para retomar
 
-Última actualización: 10 nov 2026 (Sesión 2, pasos 2.1–2.2). Plan general y visión: `docs/plan-sesiones.md`.
+Última actualización: 10 nov 2026 (Sesión 2, pasos 2.1–2.3). Plan general y visión: `docs/plan-sesiones.md`.
 Cada sesión o subsesión tiene su ficha en esta carpeta.
 
 ---
@@ -24,7 +24,7 @@ llave, y reabrir las apps antes de la salida a la venta (ver `docs/plan-sesiones
 | Ficha | Tema | Estado |
 |---|---|---|
 | `01-cerrar-api-imagen.md` | Cerrar `/api/imagen` (proxy abierto) | ✅ Cerrada |
-| `02-cotizacion.md` | Cotización: Vectorworks → Blender → app; IA solo para fotos y referencias | 🟡 2.2 hecho (script `tools/blender/` probado) · 2.1 formato cerrado, falta validar con el modelo real |
+| `02-cotizacion.md` | Cotización: Vectorworks → Blender → app; IA solo para fotos y referencias | 🟡 2.2 y 2.3 hechos (script de Blender + botón "Importar 3D" que lee .glb/.fbx en la app) · 2.1 falta validar con el modelo real · sigue 2.4 (depende de la Sesión B) |
 | `03-fotos-pdf-rendicion.md` | Fotos repetidas o faltantes en el PDF de rendición de contratistas | ✅ Cerrada |
 | *(sin ficha)* PR #266 | Código del cliente en vez de su nombre (Consolidado de Contratistas) | ✅ Cerrada |
 | *(sin ficha)* PR #267 | Pagos a trabajadores que no aparecían sin recargar (Compras / Tesorería) | ✅ Cerrada |
@@ -48,7 +48,7 @@ Después sigue la Sesión A.
  Sesión B · base de precios ── unidades, rendimientos y desperdicio por material
         │
         ▼
- Sesión 2 · pasos 2.3–2.6   ── "Importar de Blender", cálculo del APU sin IA, IA para fotos
+ Sesión 2 · pasos 2.4–2.6   ── cálculo del APU sin IA, IA para fotos ("Importar 3D", 2.3, ya está)
         │
         ▼
  Sesiones C, E, F, H, G     ── historial, aprendizaje, flujo completo, tesorería, app Android

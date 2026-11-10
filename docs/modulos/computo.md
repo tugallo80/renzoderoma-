@@ -24,6 +24,7 @@ HTML/CSS/JS con Firebase Realtime DB y Storage. La optimización de corte (bin p
 - Las medidas se guardan automáticamente al agregar cada pieza (no solo al confirmar), para no perder datos.
 - El algoritmo de bin packing es Guillotine o First Fit Decreasing; optimiza la distribución de cortes para minimizar desperdicios.
 - El "Confirmar" escribe la cantidad calculada de vuelta al ítem del presupuesto.
+- El modo se guarda con las piezas (`measures_modo`) y al abrir se restaura sin borrarlas (las piezas de "Importar 3D" abren en Planchas).
 
 ## Problemas conocidos y pendientes
 - El plano de corte visual en canvas es orientativo; no tiene escala exacta ni exportación.
