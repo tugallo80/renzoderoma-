@@ -110,6 +110,18 @@ def armar_escena():
     # Entorno suelto (sin grupo): una "persona" de referencia → en la app se sugiere descartar
     _caja("Persona 1.75", (0.45, 0.25, 1.75), (-2, 0, 0.875), mat="Piel")
 
+    # Textura incrustada en "Piel" (como los FBX de SketchUp con "Embed media"): el lector no la decodifica
+    img = bpy.data.images.new("textura-piel", 32, 32)
+    img.pixels = [0.8, 0.6, 0.5, 1.0] * (32 * 32)
+    img.file_format = "PNG"
+    img.filepath_raw = os.path.join(SALIDA, "textura-piel.png")
+    img.save()
+    piel = _material("Piel")
+    piel.use_nodes = True
+    nodo = piel.node_tree.nodes.new("ShaderNodeTexImage")
+    nodo.image = img
+    piel.node_tree.links.new(nodo.outputs["Color"], piel.node_tree.nodes["Principled BSDF"].inputs["Base Color"])
+
     # Oculto: no tiene que salir ni en el script ni en los archivos exportados
     oc = _caja("Referencia oculta", (1, 1, 1), (9, 9, 9), mat="MDF-18-Blanco")
     oc.hide_set(True)
@@ -129,7 +141,9 @@ def main():
     bpy.ops.export_scene.gltf(filepath=os.path.join(SALIDA, "ejemplo.glb"), export_format="GLB",
                               use_visible=True, export_apply=True, export_extras=True)
     bpy.ops.export_scene.fbx(filepath=os.path.join(SALIDA, "ejemplo.fbx"), use_visible=True,
-                             use_mesh_modifiers=True, use_custom_props=True)
+                             use_mesh_modifiers=True, use_custom_props=True,
+                             path_mode="COPY", embed_textures=True)
+    os.remove(os.path.join(SALIDA, "textura-piel.png"))   # queda solo dentro del GLB y el FBX
     with open(os.path.join(SALIDA, "equivalencias.json"), "w", encoding="utf-8") as f:
         json.dump(EQUIVALENCIAS, f, ensure_ascii=False, indent=2)
     for n in sorted(os.listdir(SALIDA)):

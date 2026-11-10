@@ -271,7 +271,7 @@ no es solo "importar el rubik.json": la app **lee el modelo directamente**.
 3. **Misma lógica que el script de Blender**, en `public/js/lector-3d.js` (sin DOM, probado en Node):
    ítem = `rubik_item` → grupo (padre más alto) → **"Sin agrupar"**; origen_vw = clase de VW → material con más
    superficie; caja orientada, áreas, volumen; piezas iguales se suman. Prueba: `tools/lector-3d/` compara GLB y FBX
-   con `exportar_rubik.py` para la misma escena (generada con `bpy`): **303 OK**.
+   con `exportar_rubik.py` para la misma escena (generada con `bpy`): **307 OK**.
 4. **Unidades:** glTF = metros; FBX = `UnitScaleFactor`; si el modelo mide más de 200 en esa unidad se sugiere una
    más chica. La pantalla muestra el tamaño total en metros y deja cambiar mm / cm / m.
 5. **Archivos "planos"** (sin grupos ni nombres): todo cae en "Sin agrupar" y se reparte en la revisión.
@@ -294,6 +294,13 @@ no es solo "importar el rubik.json": la app **lee el modelo directamente**.
    - Las marcas se ven en rojo en el APU y como "3D ⚠n" en el ítem; se van al cargar la cantidad o el precio.
    - Mano de obra vacía (manual, como hoy). El cálculo con rendimientos y desperdicio es el **2.4** (Sesión B).
 10. **Seguridad:** sin claves ni Functions nuevas; las reglas actuales ya limitan `/base_datos` a la lista blanca.
+11. **Archivos pesados (el real viene de SketchUp, FBX de ~169 MB con texturas, plano en mm):**
+    - las texturas **no se cargan ni se decodifican** (glTF: plugin que devuelve una textura vacía; FBX: las imágenes
+      incrustadas se cambian por 1 píxel antes de decodificar). Solo se usa la geometría y el nombre del material.
+    - más de 30 MB → aviso con el consejo de exportar sin texturas ("Embed media" desactivado). No se bloquea.
+    - acepta **`.zip`** con el `.fbx`/`.glb`/`.gltf` adentro (JSZip, ya cargado en la página); solo se descomprimen
+      el modelo, su `.bin` y el `rubik.json`, no las imágenes.
+    - un `.skp` muestra cómo exportarlo a FBX o glTF desde SketchUp. FBX en mm (`UnitScaleFactor` 0.1) → mm.
 
 **Para el 2.6 / modelo real:** lo que vea la subsesión del archivo real del cliente (si trae nombres de material,
 grupos por mueble y en qué unidad) puede ajustar los nombres de entorno a descartar, el contenedor único o la

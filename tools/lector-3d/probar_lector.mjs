@@ -83,14 +83,35 @@ function comparar(nombre, r) {
   console.log(`  ${nombre}: ${r.resumen}`);
 }
 
-const gltf = await new Promise((ok, ko) => new GLTFLoader().parse(leer('ejemplo.glb'), '', ok, ko));
+// Como en la app: plugin sin texturas + modificador de URLs. El ejemplo trae una textura incrustada ("Piel")
+// y la prueba comprueba que la imagen NO se lee ni se decodifica (los archivos reales vienen con 100+ MB de texturas).
+let imagenesLeidas = 0, imagenesPedidas = [];
+const cargador = (Clase) => {
+  const manager = new THREE.LoadingManager();
+  manager.setURLModifier(L.modificadorURL({}, []));
+  return new Clase(manager);
+};
+const lgltf = cargador(GLTFLoader);
+lgltf.register(L.pluginSinTexturas(THREE));
+lgltf.register((parser) => { const orig = parser.loadImageSource.bind(parser); parser.loadImageSource = (...a) => { imagenesLeidas++; return orig(...a); }; return { name: 'espia' }; });
+const gltf = await new Promise((ok, ko) => lgltf.parse(leer('ejemplo.glb'), '', ok, ko));
+chk('GLB: la textura incrustada no se lee', imagenesLeidas === 0, imagenesLeidas);
 L.prepararGLTF(gltf);
 const uGlb = L.detectarUnidad(gltf.scene, 'gltf');
 chk('GLB: unidad m', uGlb.unidad === 'm', uGlb);
 comparar('GLB', L.analizar(gltf.scene, { equivalencias: eq, factor: uGlb.factor, archivo: 'ejemplo.glb' }));
 
 const bufFbx = leer('ejemplo.fbx');
-const fbx = new FBXLoader().parse(bufFbx, '');
+// FBXLoader saca la imagen incrustada a un blob: el modificador lo cambia por 1 píxel antes de decodificar
+globalThis.window = { URL: { createObjectURL: () => 'blob:incrustada-' + Math.random() } };
+globalThis.document = { createElementNS: () => ({ addEventListener() {}, removeEventListener() {}, set src(v) { imagenesPedidas.push(v); } }) };
+const fbx = cargador(FBXLoader).parse(bufFbx, '');
+chk('FBX: la textura incrustada no se decodifica', imagenesPedidas.length > 0 && imagenesPedidas.every(u => u === L.PIXEL), imagenesPedidas);
+chk('URL: .bin elegido pasa, .bin que falta se avisa, textura → 1 píxel', (() => {
+  const faltan = []; const m = L.modificadorURL({ 'a.bin': 'blob:a' }, faltan);
+  return m('a.bin') === 'blob:a' && m('blob:a') === 'blob:a' && m('b.bin') === 'b.bin' && faltan[0] === 'b.bin' &&
+    m('tex/madera.jpg') === L.PIXEL && m('data:image/png;base64,xx') === L.PIXEL && m('data:application/octet-stream;base64,xx').startsWith('data:application');
+})());
 L.aplicarPropiedadesFBX(fbx, L.leerPropiedadesFBX(bufFbx));
 const uFbx = L.detectarUnidad(fbx, 'fbx');
 chk('FBX: unidad cm (Blender exporta en cm)', uFbx.unidad === 'cm', uFbx);
@@ -98,7 +119,7 @@ comparar('FBX', L.analizar(fbx, { equivalencias: eq, factor: uFbx.factor, archiv
 
 // --- 3. Unidades: el mismo modelo escalado a mm se detecta y se lee igual -----------------------
 {
-  const g2 = await new Promise((ok, ko) => new GLTFLoader().parse(leer('ejemplo.glb'), '', ok, ko));
+  const g2 = await new Promise((ok, ko) => lgltf.parse(leer('ejemplo.glb'), '', ok, ko));
   L.prepararGLTF(g2);
   g2.scene.scale.setScalar(1000);   // como si alguien exportara mm sin escalar
   const u = L.detectarUnidad(g2.scene, 'gltf');
@@ -106,6 +127,14 @@ comparar('FBX', L.analizar(fbx, { equivalencias: eq, factor: uFbx.factor, archiv
   const r = L.analizar(g2.scene, { equivalencias: eq, factor: u.factor });
   const tapa = r.piezas.find(p => p.pieza === 'Tapa superior');
   chk('mm: tapa 1.8 × 0.6 × 0.018 m', tapa && cerca(tapa.largo, 1.8, 1e-3) && cerca(tapa.espesor, 0.018, 1e-4), tapa);
+}
+
+{
+  // SketchUp exporta FBX en mm (UnitScaleFactor 0.1)
+  const g = new THREE.Group(); g.userData.unitScaleFactor = 0.1;
+  g.add(new THREE.Mesh(new THREE.BoxGeometry(1800, 600, 18)));
+  const u = L.detectarUnidad(g, 'fbx');
+  chk('FBX de SketchUp en mm', u.unidad === 'mm', u);
 }
 
 // --- 4. Archivo "plano": sin grupos, sin nombres, sin materiales --------------------------------
