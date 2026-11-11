@@ -361,5 +361,38 @@ comparar('FBX', L.analizar(fbx, { equivalencias: eq, factor: uFbx.factor, archiv
   chk('nombre: ya correcto queda igual', L.nombreConTipo('copa.FBX', 'fbx') === 'copa.FBX' || L.nombreConTipo('copa.fbx', 'fbx') === 'copa.fbx');
 }
 
+// --- 10. Respuestas reales típicas de Gemini que rompen JSON.parse --------------------------------
+{
+  const gem = (texto, fin = 'STOP') => ({ candidates: [{ content: { parts: [{ text: texto }] }, finishReason: fin }] });
+  const base = '{\n  "medidas_generales": {\n    "alto_mm": 800,\n    "ancho_mm": null,\n    "fondo_mm": null,\n    "confianza": "alta",\n    "cita": "ALTO TOTAL 80 cm",\n    "pagina": 1\n  },\n  "piezas": [\n    {"nombre_pdf": "Base", "pieza_3d": "Base", "cantidad": 1, "material_texto": "MDF 18", "material_clave": null, "confianza": "media", "cita": "base MDF"}\n  ],\n  "notas": ""\n}';
+  const casos = [
+    ['con ```json y texto antes', 'Claro, acá está el resultado:\n```json\n' + base + '\n```\nEspero que sirva.'],
+    ['comas finales', base.replace('"pagina": 1\n', '"pagina": 1,\n').replace('"notas": ""', '"notas": "",')],
+    ['comillas de pulgadas sin escapar (cota 3/4")', base.replace('"ALTO TOTAL 80 cm"', '"tubo 3/4" x 1.5mm, alto 80 cm"')],
+    ['comillas tipográficas', base.replace('"cita": "base MDF"', '“cita”: “base MDF”')],
+    ['comentarios y NaN', base.replace('"ancho_mm": null,', '"ancho_mm": NaN, // no figura')],
+    ['salto de línea dentro de un texto', base.replace('"notas": ""', '"notas": "linea 1\nlinea 2"')],
+  ];
+  for (const [n, t] of casos) {
+    let r = null, err = null;
+    try { r = L.leerRespuestaPDF(gem(t)); } catch (e) { err = e; }
+    chk('Gemini ' + n, r && r.medidas_generales.alto_mm === 800 && r.piezas.length === 1 && r.piezas[0].pieza_3d === 'Base', err ? err.message + ' ' + err.crudo : r);
+  }
+  // Cortada por MAX_TOKENS: se salva lo que hay y se marca incompleta
+  const cortada = base.slice(0, base.indexOf('"material_texto"') + 14);
+  let rc = null, ec = null;
+  try { rc = L.leerRespuestaPDF(gem(cortada, 'MAX_TOKENS')); } catch (e) { ec = e; }
+  chk('cortada (MAX_TOKENS) → se salva lo que hay y queda incompleta', rc && rc.incompleta && rc.medidas_generales.alto_mm === 800, ec ? ec.message + ' ' + ec.crudo : rc);
+  // Basura: error de IA con los primeros 300 caracteres para el detalle técnico, y marca para reintentar
+  let eb = null; try { L.leerRespuestaPDF(gem('Lo siento, no puedo leer ese plano. '.repeat(20))); } catch (e) { eb = e; }
+  chk('sin JSON → "no devolvió datos legibles" + detalle de 300 caracteres', eb && eb.ia && /legibles/.test(eb.message) && eb.crudo.length === 300, eb && eb.message);
+  let ev = null; try { L.leerRespuestaPDF({ candidates: [{ finishReason: 'MAX_TOKENS', content: { parts: [] } }] }); } catch (e) { ev = e; }
+  chk('vacía por MAX_TOKENS → error de IA marcado como cortada', ev && ev.ia && ev.cortada);
+  // Pedido: sin "razonamiento" (gasta los tokens) y el reintento es compacto con más tokens
+  const p1 = L.armarPedidoPDF({ texto: 'x' }), p2 = L.armarPedidoPDF({ texto: 'x' }, { compacto: true });
+  chk('pedido: thinkingBudget 0 y JSON', p1.generationConfig.thinkingConfig.thinkingBudget === 0 && p1.generationConfig.responseMimeType === 'application/json');
+  chk('reintento: compacto y con más tokens', p2.generationConfig.maxOutputTokens > p1.generationConfig.maxOutputTokens && /Respuesta CORTA/.test(p2.systemInstruction.parts[0].text));
+}
+
 console.log(`\n${ok} OK, ${mal} fallas`);
 process.exit(mal ? 1 : 0);

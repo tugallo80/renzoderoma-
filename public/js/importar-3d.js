@@ -406,7 +406,10 @@
         if (est.pdf.estado === 'leyendo') return h + '<div class="i3-nota" style="margin-top:6px;">⏳ ' + esc(est.pdf.paso || 'Leyendo…') + '</div></div>';
         if (est.pdf.estado === 'error') {
             return h + '<div class="i3-nota" style="color:var(--red);font-weight:700;margin-top:6px;">' + esc(est.pdf.error) + '</div>' +
-                '<label class="i3-btn" style="display:inline-block;margin-top:8px;">Probar otro PDF<input type="file" accept="application/pdf,.pdf" style="display:none" onchange="_i3PDF(this.files[0])"></label></div>';
+                '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;"><button class="i3-btn prim" onclick="_i3PDF()">Reintentar</button>' +
+                '<label class="i3-btn" style="display:inline-block;">Otro PDF<input type="file" accept="application/pdf,.pdf" style="display:none" onchange="_i3PDF(this.files[0])"></label></div>' +
+                (est.pdf.crudo ? '<details style="margin-top:8px;"><summary class="i3-nota">Detalle técnico</summary><pre style="white-space:pre-wrap;word-break:break-all;font-size:11px;' +
+                    'background:var(--bg);padding:8px;border-radius:8px;margin:6px 0 0;">' + esc(est.pdf.crudo) + '</pre></details>' : '') + '</div>';
         }
         var props = propuestasActuales();
         h += '<div class="i3-nota" style="margin:4px 0;">' + esc(est.pdf.nombre) + ' · ' + est.pdf.paginas + ' pág. · leído por la IA. ' +
@@ -420,6 +423,8 @@
                     : (p.aplicable === false ? '' : '<button class="i3-btn" onclick="_i3AplicarProp(' + i + ')">Aplicar</button>')) + '</div>';
         });
         if (est.pdf.info.notas) h += '<div class="i3-nota" style="margin-top:6px;">Notas de la IA: ' + esc(est.pdf.info.notas) + '</div>';
+        if (est.pdf.info.incompleta) h += '<div class="i3-nota" style="margin-top:6px;color:var(--orange);">⚠ La respuesta de la IA vino cortada: puede faltar alguna pieza. Podés tocar Reintentar.</div>' +
+            '<button class="i3-btn" style="margin-top:6px;" onclick="_i3PDF()">Reintentar</button>';
         return h + '</div>';
     }
 
@@ -482,27 +487,45 @@
 
     function refrescarPDF() { var el = $('i3-pdf'); if (el) el.outerHTML = tarjetaPDF(); }
 
+    async function pedirIA(pedido) {
+        var usuario = firebase.auth().currentUser;
+        var headers = { 'Content-Type': 'application/json' };
+        if (usuario) headers['Authorization'] = 'Bearer ' + await usuario.getIdToken();
+        var ctrl = new AbortController(), reloj = setTimeout(function () { ctrl.abort(); }, 120000);
+        try {
+            var resp = await fetch('/api/gemini', { method: 'POST', headers: headers, body: JSON.stringify(pedido), signal: ctrl.signal });
+            if (!resp.ok) {
+                var cuerpo = ''; try { cuerpo = (await resp.text()).slice(0, 300); } catch (e) { /* nada */ }
+                var err = new Error('La IA respondió ' + resp.status + (resp.status === 401 || resp.status === 403 ? ' (sesión del hub vencida: recargá la página)' : ''));
+                err.crudo = cuerpo; throw err;
+            }
+            return await resp.json();
+        } finally { clearTimeout(reloj); }
+    }
+
     window._i3PDF = async function (archivo) {
+        if (!archivo) archivo = est && est.pdf && est.pdf.archivo;   // "Reintentar"
         if (!archivo || !est) return;
-        est.pdf = { estado: 'leyendo', nombre: archivo.name, aplicadas: {}, paso: 'Abriendo ' + archivo.name + '…' };
+        est.pdf = { estado: 'leyendo', nombre: archivo.name, archivo: archivo, aplicadas: {}, paso: 'Abriendo ' + archivo.name + '…' };
         refrescarPDF();
         try {
             var c = await textoEImagenesPDF(archivo);
             est.pdf.paginas = c.paginas;
-            est.pdf.paso = 'La IA está leyendo el PDF (puede tardar un minuto)…'; refrescarPDF();
-            var pedido = Lector3D.armarPedidoPDF({
+            var datos = {
                 texto: c.texto, imagenes: c.imagenes, piezas: est.filas.filter(function (f) { return f.incluir; }),
                 tamano_mm: est.modo === '3d' ? est.det.tamano.map(function (x) { return x * est.factor * 1000; }) : null,
                 catalogo: catalogo()
-            });
-            var usuario = firebase.auth().currentUser;
-            var headers = { 'Content-Type': 'application/json' };
-            if (usuario) headers['Authorization'] = 'Bearer ' + await usuario.getIdToken();
-            var ctrl = new AbortController(), reloj = setTimeout(function () { ctrl.abort(); }, 120000);
-            var resp = await fetch('/api/gemini', { method: 'POST', headers: headers, body: JSON.stringify(pedido), signal: ctrl.signal })
-                .finally(function () { clearTimeout(reloj); });
-            if (!resp.ok) throw new Error('La IA respondió ' + resp.status + (resp.status === 401 || resp.status === 403 ? ' (sesión del hub vencida: recargá la página)' : ''));
-            est.pdf.info = Lector3D.leerRespuestaPDF(await resp.json());
+            };
+            est.pdf.paso = 'La IA está leyendo el PDF (puede tardar un minuto)…'; refrescarPDF();
+            try {
+                est.pdf.info = Lector3D.leerRespuestaPDF(await pedirIA(Lector3D.armarPedidoPDF(datos)));
+            } catch (e1) {
+                if (!e1.ia) throw e1;   // error de red o del servidor: no se reintenta solo
+                // Respuesta ilegible o cortada: un reintento con esquema compacto y más espacio
+                console.warn('[importar3d] respuesta de la IA ilegible, reintento compacto', e1.crudo);
+                est.pdf.paso = 'La respuesta vino incompleta; pidiendo una versión más corta…'; refrescarPDF();
+                est.pdf.info = Lector3D.leerRespuestaPDF(await pedirIA(Lector3D.armarPedidoPDF(datos, { compacto: true })));
+            }
             est.pdf.estado = 'listo';
             // Medida total con confianza alta o media → la escala se calibra sola (con Deshacer). Lo demás, solo propuesto.
             var escala = est.modo === '3d' && propuestasActuales().find(function (p) { return p.tipo === 'escala'; });
@@ -517,7 +540,9 @@
         } catch (e) {
             console.warn('[importar3d] pdf', e);
             est.pdf.estado = 'error';
-            est.pdf.error = 'No se pudo leer el PDF: ' + (e && e.name === 'AbortError' ? 'la IA tardó demasiado' : (e && e.message ? e.message : e));
+            est.pdf.error = e && e.ia ? 'La IA no devolvió datos legibles.' :
+                'No se pudo leer el PDF: ' + (e && e.name === 'AbortError' ? 'la IA tardó demasiado' : (e && e.message ? e.message : e));
+            est.pdf.crudo = e && e.crudo ? e.crudo : '';
         }
         conScroll(function () {});
     };

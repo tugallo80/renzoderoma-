@@ -916,7 +916,9 @@
      * Cuerpo para /api/gemini (mismo proxy y modelo que "Presupuesto IA").
      * datos: { texto, imagenes: [base64 jpeg sin prefijo], piezas: filas del lector, tamano_mm: [x,y,z], catalogo }
      */
-    function armarPedidoPDF(datos) {
+    function armarPedidoPDF(datos, opciones) {
+        opciones = opciones || {};
+        var compacto = !!opciones.compacto;   // reintento: esquema mínimo y más tokens
         var piezas = (datos.piezas || []).map(function (p) {
             return '- "' + p.pieza + '" × ' + p.cant + ': ' + Math.round(p.largo * 1000) + ' × ' + Math.round(p.ancho * 1000) + ' × ' +
                 Math.round(p.espesor * 1000) + ' mm' + (p.origen_vw ? ' (material en el 3D: ' + p.origen_vw + ')' : ' (sin material en el 3D)');
@@ -933,7 +935,11 @@
             'medidas_generales: las medidas TOTALES del objeto terminado (alto, ancho, fondo), no las de una pieza.',
             'pieza_3d: si la pieza del PDF es una de las piezas del modelo 3D, su nombre EXACTO de la lista; si no, null.',
             'material_clave: SOLO una clave de la lista del catálogo que corresponda al material descripto; si ninguna corresponde, null (y describilo en material_texto).',
-            'Devolvé SOLO este JSON, sin texto antes ni después:',
+            'Devolvé SOLO JSON válido, sin texto antes ni después y sin ```. Dentro de los textos no uses comillas dobles: ' +
+            'para pulgadas escribí "pulg" (no el símbolo de comillas).',
+            compacto ? 'Respuesta CORTA: solo medidas_generales y, por pieza, nombre_pdf, pieza_3d, cantidad y material_clave/material_texto. ' +
+                'Citas de menos de 60 caracteres. Máximo 25 piezas. Notas de menos de 200 caracteres.' : '',
+            'Formato:',
             '{"medidas_generales":{"alto_mm":null,"ancho_mm":null,"fondo_mm":null,"confianza":"alta","cita":"","pagina":null},' +
             '"piezas":[{"nombre_pdf":"","pieza_3d":null,"largo_mm":null,"ancho_mm":null,"espesor_mm":null,"cantidad":null,' +
             '"material_texto":null,"material_clave":null,"acabados":[],"confianza":"media","cita":""}],"notas":""}'
@@ -950,18 +956,81 @@
             model: 'gemini-2.5-flash',
             systemInstruction: { parts: [{ text: sys }] },
             contents: [{ role: 'user', parts: partes }],
-            generationConfig: { maxOutputTokens: 8000, temperature: 0, responseMimeType: 'application/json' }
+            generationConfig: {
+                maxOutputTokens: compacto ? 16000 : 8000, temperature: 0, responseMimeType: 'application/json',
+                // En gemini-2.5-flash el "razonamiento" gasta maxOutputTokens y corta el JSON: se apaga
+                thinkingConfig: { thinkingBudget: 0 }
+            }
         };
     }
 
-    /** Respuesta de /api/gemini → datos normalizados (o error claro). */
+    /**
+     * Repara lo típico de un JSON escrito por un modelo: comillas tipográficas, comentarios, comas finales,
+     * NaN/Infinity/undefined, comillas sin escapar dentro de textos (ej. 3/4" en una cota) y respuestas cortadas
+     * (cierra el texto, las listas y los objetos abiertos). No inventa datos: lo cortado se pierde.
+     */
+    function repararJSON(t) {
+        t = String(t).replace(/[“”„″]/g, '"').replace(/[‘’]/g, "'");
+        var out = '', enTexto = false, pila = [], i, c;
+        for (i = 0; i < t.length; i++) {
+            c = t[i];
+            if (enTexto) {
+                if (c === '\\') { out += c + (t[i + 1] || ''); i++; continue; }
+                if (c === '\n' || c === '\r') { out += '\\n'; continue; }
+                if (c === '"') {
+                    // ¿cierra el texto? Solo si después viene , } ] : o el final
+                    var j = i + 1; while (j < t.length && /\s/.test(t[j])) j++;
+                    if (j >= t.length || ',}]:'.indexOf(t[j]) >= 0) { enTexto = false; out += c; }
+                    else out += '\\"';
+                    continue;
+                }
+                out += c; continue;
+            }
+            if (c === '/' && t[i + 1] === '/') { while (i < t.length && t[i] !== '\n') i++; continue; }
+            if (c === '/' && t[i + 1] === '*') { var k = t.indexOf('*/', i + 2); i = k < 0 ? t.length : k + 1; continue; }
+            if (c === '"') { enTexto = true; out += c; continue; }
+            if (c === '{' || c === '[') pila.push(c === '{' ? '}' : ']');
+            if (c === '}' || c === ']') pila.pop();
+            out += c;
+        }
+        out = out.replace(/\b(NaN|-?Infinity|undefined)\b/g, 'null');
+        if (enTexto) out += '"';
+        // cortado: sacar la última clave/valor a medias y cerrar lo abierto
+        if (pila.length) {
+            out = out.replace(/,\s*"[^"]*"\s*:?\s*$/, '').replace(/[,:]\s*$/, '');
+            while (pila.length) out += pila.pop();
+        }
+        return out.replace(/,\s*([}\]])/g, '$1');
+    }
+
+    /** JSON.parse tolerante: fences ```json, texto antes/después y los errores de repararJSON. */
+    function parsearJSONRobusto(txt) {
+        var t = String(txt || '').replace(/```(?:json|JSON)?/g, '').trim();
+        var a = t.indexOf('{');
+        if (a < 0) throw new Error('no hay un objeto JSON');
+        var b = t.lastIndexOf('}');
+        var recorte = b > a ? t.slice(a, b + 1) : t.slice(a);
+        try { return JSON.parse(recorte); } catch (e1) { /* sigue */ }
+        try { return JSON.parse(repararJSON(recorte)); } catch (e2) { /* sigue */ }
+        return JSON.parse(repararJSON(t.slice(a)));   // por si el último } era de un texto y la respuesta está cortada
+    }
+
+    /** Error de lectura con lo necesario para reintentar y para mostrar el detalle técnico. */
+    function errorIA(mensaje, crudo, cortada) {
+        var e = new Error(mensaje); e.crudo = String(crudo || '').slice(0, 300); e.cortada = !!cortada; e.ia = true; return e;
+    }
+
+    /** Respuesta de /api/gemini → datos normalizados (o error con .crudo y .cortada). */
     function leerRespuestaPDF(resp) {
-        var txt = resp && resp.candidates && resp.candidates[0] && resp.candidates[0].content &&
-            (resp.candidates[0].content.parts || []).map(function (p) { return p.text || ''; }).join('');
-        if (!txt) throw new Error('La IA no devolvió nada.');
-        txt = txt.replace(/```json|```/g, '').trim();
-        var a = txt.indexOf('{'), b = txt.lastIndexOf('}');
-        var d = JSON.parse(txt.slice(a, b + 1));
+        var cand = resp && resp.candidates && resp.candidates[0];
+        var txt = cand && cand.content && (cand.content.parts || []).filter(function (p) { return !p.thought; })
+            .map(function (p) { return p.text || ''; }).join('');
+        var fin = cand && cand.finishReason;
+        if (!txt) throw errorIA('La IA no devolvió nada' + (fin ? ' (' + fin + ')' : '') + '.', JSON.stringify(resp || {}).slice(0, 300), fin === 'MAX_TOKENS');
+        var d;
+        try { d = parsearJSONRobusto(txt); }
+        catch (e) { throw errorIA('La IA no devolvió datos legibles.', txt, fin === 'MAX_TOKENS'); }
+        if (!d || typeof d !== 'object') throw errorIA('La IA no devolvió datos legibles.', txt, fin === 'MAX_TOKENS');
         var g = d.medidas_generales || {};
         return {
             medidas_generales: {
@@ -980,7 +1049,8 @@
                     confianza: normConf(p.confianza), cita: String(p.cita || '').slice(0, 200)
                 };
             }),
-            notas: String(d.notas || '').slice(0, 1000)
+            notas: String(d.notas || '').slice(0, 1000),
+            incompleta: fin === 'MAX_TOKENS'   // vino cortada: se salvó lo que había
         };
     }
 
@@ -1124,7 +1194,7 @@
         sugerirDescarte: sugerirDescarte, familiaUnidad: familiaUnidad, cantidadPrincipal: cantidadPrincipal,
         armarApuMateriales: armarApuMateriales,
         detectarTipo: detectarTipo, nombreConTipo: nombreConTipo, extensionDe: extensionDe,
-        armarPedidoPDF: armarPedidoPDF, leerRespuestaPDF: leerRespuestaPDF, propuestasPDF: propuestasPDF, buscarFila: buscarFila, armarItems: armarItems, calcPu: calcPu, medidaDePieza: medidaDePieza
+        armarPedidoPDF: armarPedidoPDF, parsearJSONRobusto: parsearJSONRobusto, repararJSON: repararJSON, leerRespuestaPDF: leerRespuestaPDF, propuestasPDF: propuestasPDF, buscarFila: buscarFila, armarItems: armarItems, calcPu: calcPu, medidaDePieza: medidaDePieza
     };
     if (typeof module !== 'undefined' && module.exports) module.exports = api;
     else global.Lector3D = api;
