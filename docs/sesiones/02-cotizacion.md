@@ -311,6 +311,21 @@ no es solo "importar el rubik.json": la app **lee el modelo directamente**.
     - **Archivo plano** (sin grupos): el ítem toma el nombre del archivo en vez de "Sin agrupar".
     - **Malla de 400.000 caras:** medida en ~1,2 s en Node (se optimizó: casco convexo y agrupación por normal sin
       claves de texto). En el celular puede tardar unas veces más; falta medirlo con el archivo real.
+13. **PDF del cliente (opcional, pedido del dueño 11 nov 2026):** en la revisión, tarjeta "📄 PDF del cliente".
+    - pdf.js (ya cargado) saca el texto de hasta 30 páginas; las páginas con poco texto (planos escaneados o
+      dibujos) van como imagen, hasta 6. Se manda a **`/api/gemini`** (mismo proxy con token del hub y mismo modelo
+      que "Presupuesto IA"), junto con la lista de piezas del 3D y el catálogo de materiales.
+    - La IA devuelve JSON: medidas generales, y por pieza medidas, cantidad, material (solo claves del catálogo),
+      acabados, **confianza** (alta/media/baja) y la **cita** del PDF. Si no está en el PDF → null (no inventa).
+    - **Solo propone, nunca aplica solo:** escala (medida mayor del PDF contra la del modelo), calibrar con la medida
+      de una pieza, material de cada pieza y cantidades. Cada una tiene su botón "Aplicar". Una clave que no está en
+      el catálogo o una pieza del PDF que no está en el 3D quedan solo como información.
+    - Lo aplicado queda marcado **"según PDF (IA) · confianza"** en la revisión y en el APU (`segun`, `confianza`).
+      El material propuesto por la IA **no** se guarda como equivalencia (es de este archivo).
+    - **El PDF no se guarda** (solo su nombre en `import3d.pdf`). A diferencia del 3D, **su contenido sí sale a la IA**,
+      y la pantalla lo avisa.
+    - Lógica pura en `lector-3d.js` (`armarPedidoPDF`, `leerRespuestaPDF`, `propuestasPDF`), probada en Node con una
+      respuesta simulada; en Playwright, con un PDF inventado y `/api/gemini` simulado.
 
 **Para el 2.6 / modelo real:** lo que vea la subsesión del archivo real del cliente (si trae nombres de material,
 grupos por mueble y en qué unidad) puede ajustar los nombres de entorno a descartar, el contenedor único o la

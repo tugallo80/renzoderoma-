@@ -273,5 +273,61 @@ comparar('FBX', L.analizar(fbx, { equivalencias: eq, factor: uFbx.factor, archiv
   chk('ítems al final, sin mover los existentes', JSON.stringify(presupuesto.slice(0, 2)) === antes && presupuesto.length === 5);
 }
 
+// --- 8. PDF del cliente: pedido a la IA, respuesta y propuestas (datos inventados) -------------------
+{
+  // Modelo plano, sin escala real ni materiales (como el trofeo): 3 piezas
+  const raiz = new THREE.Group();
+  const caja = (n, x, y, z, px) => { const m = new THREE.Mesh(new THREE.BoxGeometry(x, y, z), new THREE.MeshStandardMaterial()); m.name = n; m.position.x = px; raiz.add(m); };
+  caja('Base ', 120, 120, 10, 0); caja('pANEL Frente', 200, 80, 4, 300); caja('Columna', 30, 30, 150, 600);
+  const det = L.detectarUnidad(raiz, 'fbx');
+  const r = L.analizar(raiz, { factor: det.factor });
+  const filas = r.piezas.map(p => ({ ...p, incluir: true }));
+  const catalogo = { ACRILICO_4: { n: 'Acrílico 4mm transparente', u: 'm2', p: 260 }, MDF_18: { n: 'MDF 18mm', u: 'm2', p: 95 } };
+  const pedido = L.armarPedidoPDF({ texto: 'Copa institucional. Alto total 800 mm.', imagenes: ['QUJD'], piezas: filas,
+    tamano_mm: det.tamano.map(x => x * det.factor * 1000), catalogo });
+  const todo = JSON.stringify(pedido);
+  chk('pedido: mismo modelo y proxy que Presupuesto IA', pedido.model === 'gemini-2.5-flash' && pedido.contents[0].role === 'user');
+  chk('pedido: lleva piezas, catálogo, texto e imagen', todo.includes('pANEL Frente') && todo.includes('ACRILICO_4 = Acrílico 4mm') &&
+    todo.includes('Alto total 800 mm') && pedido.contents[0].parts.some(p => p.inlineData && p.inlineData.mimeType === 'image/jpeg'));
+  chk('pedido: pide no inventar y JSON', /no inventes/i.test(pedido.systemInstruction.parts[0].text) && pedido.generationConfig.temperature === 0);
+
+  // Respuesta simulada de Gemini (con ```json y texto suelto, como a veces llega)
+  const json = {
+    medidas_generales: { alto_mm: 800, ancho_mm: 480, fondo_mm: 480, confianza: 'alta', cita: 'Alto total 800 mm' },
+    piezas: [
+      { nombre_pdf: 'Panel frontal', pieza_3d: 'pANEL Frente', largo_mm: 800, ancho_mm: 320, espesor_mm: 4, cantidad: 2,
+        material_texto: 'acrílico transparente 4 mm', material_clave: 'ACRILICO_4', acabados: ['pulido de cantos'], confianza: 'alta', cita: 'Panel frontal acrílico 4mm (x2)' },
+      { nombre_pdf: 'columna central', pieza_3d: null, largo_mm: null, cantidad: null, material_texto: 'Inox', material_clave: 'INOX_INVENTADO', confianza: 'media', cita: 'columna en acero inox' },
+      { nombre_pdf: 'Placa grabada', pieza_3d: null, material_texto: 'bronce', material_clave: null, confianza: 'baja', cita: 'placa' }
+    ], notas: 'El PDF no dice el espesor de la base.'
+  };
+  const resp = { candidates: [{ content: { parts: [{ text: 'Acá va:\n```json\n' + JSON.stringify(json) + '\n```' }] } }] };
+  const info = L.leerRespuestaPDF(resp);
+  chk('respuesta: se lee aunque venga con ```json', info.medidas_generales.alto_mm === 800 && info.piezas.length === 3 && info.piezas[0].cantidad === 2);
+  let err = null; try { L.leerRespuestaPDF({ candidates: [] }); } catch (e) { err = e; }
+  chk('respuesta vacía → error claro', err && /no devolvió/.test(err.message));
+
+  const tam = det.tamano.map(x => x * det.factor);
+  const props = L.propuestasPDF(info, filas, tam, catalogo);
+  const esc = props.find(p => p.tipo === 'escala');
+  chk('propone escala con la medida mayor del PDF', esc && cerca(esc.factor * Math.max(...tam) * 1000, 800, 0.5) && esc.confianza !== undefined, esc);
+  const mat = props.find(p => p.tipo === 'material' && p.pieza === 'pANEL Frente');
+  chk('propone material de la base para la pieza del 3D', mat && mat.clave === 'ACRILICO_4' && mat.aplicable && mat.confianza === 'alta', mat);
+  const inox = props.find(p => p.tipo === 'material' && p.nombre_pdf === 'columna central');
+  chk('busca la pieza por nombre parecido ("columna central" → Columna)', inox && inox.pieza === 'Columna');
+  chk('clave que no está en el catálogo → no se aplica, se vincula a mano', inox && inox.clave === null && inox.aplicable === false && /no está en la base/.test(inox.texto), inox);
+  const placa = props.find(p => p.nombre_pdf === 'Placa grabada');
+  chk('pieza del PDF que no está en el 3D → solo informativa', placa && placa.pieza === null && placa.aplicable === false);
+  chk('propone cantidad del PDF', props.some(p => p.tipo === 'cantidad' && p.pieza === 'pANEL Frente' && p.cantidad === 2));
+  chk('propone calibrar con la medida de una pieza', props.some(p => p.tipo === 'medida' && p.pieza === 'pANEL Frente' && p.largo_mm === 800));
+  chk('nada cambia sin aplicar', filas.every(f => f.material === null && f.cant === 1));
+
+  // Aceptada en la revisión → el APU la marca "según PDF (IA)" con su confianza
+  const panel = filas.find(f => f.pieza === 'pANEL Frente');
+  Object.assign(panel, { material: 'ACRILICO_4', material_desde: 'pdf_ia', material_confianza: 'alta', revisar: false });
+  const fila = L.armarApuMateriales([panel], catalogo).find(x => x.clave === 'ACRILICO_4');
+  chk('APU: fila marcada según PDF (IA)', fila && fila.segun === 'PDF (IA)' && fila.confianza === 'alta' && /según PDF \(IA\)/.test(fila.nota), fila);
+}
+
 console.log(`\n${ok} OK, ${mal} fallas`);
 process.exit(mal ? 1 : 0);
