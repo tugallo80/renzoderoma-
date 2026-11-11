@@ -220,8 +220,11 @@ el Camino A llega a un número parecido.
 - [~] **2.1** Formato `rubik/1` cerrado (ver arriba) y `inventario()` listo para ver qué llega de VW. **Falta validarlo con un modelo real** y las respuestas 1–3 y 6
 - [x] **2.2** Script `tools/blender/exportar_rubik.py` + prueba `probar_exportar.py` + `LEEME.md` + diseño de `equivalencias_vw` (10 nov 2026)
 - [x] **2.3** "Importar 3D" en `presupuesto.html`: lee `.glb`/`.gltf`/`.fbx` en el navegador (o el `rubik.json`) → ítems + `measures` + APU de materiales, con materiales vinculados o en rojo (10 nov 2026)
-- [ ] **2.4** Cálculo medidas → APU con datos de la base (origen `blender`)
-- [ ] **2.5** Remodelar "Presupuesto IA" como Camino B: sin precios, con confianza y marcado "Estimado IA"
+- [~] **2.4** Cálculo medidas → APU con datos de la base: **hecho lo posible sin la Sesión B** (11 nov 2026, punto 18): materiales por
+      m², ml, m³, und, planchas (plano de corte estimado) y barras, con desperdicio editable (0 % por defecto); mano de obra propuesta
+      por la IA desde el PDF con unidad y precio de la base. Falta: rendimientos (m²/jornal, m²/litro) y desperdicio por material en la base
+- [~] **2.5** Camino B: **"Importar 3D" acepta solo el PDF** (11 nov 2026): la IA arma ítems, piezas, medidas, cantidades, materiales y
+      operaciones, sin precios y con confianza ("según PDF (IA)"); los precios salen de la base. Falta remodelar el "Presupuesto IA" viejo
 - [ ] **2.6** Prueba con el trabajo real: comparar el Camino A con lo que se cobró
 - [ ] **2.7** (después) Paso 2: envío directo de Blender a la app con login
 
@@ -440,3 +443,30 @@ Los datos del cliente no se guardan en el repo (es público); acá va solo lo ap
 - **Conclusión para el 2.1:** con modelos de clientes el material casi nunca viene en el 3D; sale del PDF o de la
   descripción. Camino A sirve para despiece y cantidades; los materiales se vinculan a mano (en rojo) o por la IA
   leyendo el PDF.
+
+18. **APU visible, materiales del PDF y "solo PDF" (11 nov 2026, devolución del dueño con la Copa).** Prioridad del dueño:
+    ver un APU y un precio antes de agregar.
+    - **APU por ítem en la revisión, antes de "Agregar":** precio unitario estimado, materiales, mano de obra y cuántas
+      filas faltan de precio; "Ver el detalle" muestra cada fila (cantidad × precio, o "falta precio" en rojo).
+    - **Materiales** (`armarApuMateriales`): m² (una cara de cada plancha), ml, m³, und, y ahora **planchas** con un plano
+      de corte estimado (guillotina, plancha de 2,44 × 1,22 o la que diga el nombre del material, ej. "183x244") y
+      **barras** de 6 m. **Desperdicio** editable por material en la revisión (0 % por defecto; no se suma a planchas ni
+      barras porque el corte ya lo cuenta). kg y litros siguen marcados "falta rendimiento" (Sesión B).
+    - **Materiales del PDF:** la IA devuelve el material **como lo describe el PDF** (texto libre) y la unidad de compra
+      sugerida. La app lo cruza con la base (equivalencia guardada → clave de la IA → por palabras, exigiendo el mismo
+      espesor). Si no hay, **"＋ Crear material"**: nombre, unidad y espesor sugeridos, **precio vacío** (`p: 0`,
+      `falta_precio: true`, `origen: "pdf_ia"`). El vínculo "texto del PDF → material" se guarda en
+      `/base_datos/equivalencias_vw/` con `tipo: "pdf"`, y el próximo PDF con el mismo texto se vincula solo.
+    - **Mano de obra:** la IA propone las **operaciones** de cada ítem (corte CNC, laqueado, armado…) con su medida
+      (m² de superficie, m² de una cara, ml de perímetro, ml de largo, unidades o global) y a qué piezas se aplican. La
+      app calcula la cantidad con las medidas y toma unidad y precio de `/base_datos/mano_obra`. Si la base la tiene en
+      jornal u hora, falta el rendimiento (q 0, marcada). Sin coincidencia: "＋ Crear en la base (sin precio)". Todo
+      queda marcado "propuesto por IA" y cada operación se puede destildar.
+    - **Solo PDF:** en la primera pantalla (y por "Compartir → Rubik") se puede elegir solo el PDF. La IA arma ítems →
+      piezas → medidas → cantidades → material; todo marcado "según PDF (IA)" con su confianza. "＋ Sumar el 3D" vuelve a
+      leer con el modelo y las medidas del 3D reemplazan a las del PDF. El ítem guardado lleva `origen: "pdf"`.
+    - **Nunca se inventan precios:** lo que no tiene precio queda en 0 y en rojo, en la revisión y en el APU.
+    - Pruebas: `npm test` 411 OK (empaquetado, barras, desperdicio, cruce de textos, MO, solo PDF, resumen). Playwright con
+      `/api/gemini` simulado y un PDF inventado: solo PDF → "Aplicar todo" → crear 2 materiales → APU 57,66 Bs → con 10 %
+      de desperdicio 59,30 Bs → ítem guardado con 3 filas de materiales y 3 de mano de obra.
+
