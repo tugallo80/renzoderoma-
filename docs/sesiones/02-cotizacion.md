@@ -359,6 +359,14 @@ no es solo "importar el rubik.json": la app **lee el modelo directamente**.
        cambio, abrila una vez y, si Rubik no aparece en Compartir, desinstalala y volvé a instalarla (Android lee el
        `share_target` del manifest al instalar).
     4. En Drive o WhatsApp: abrí el archivo → **Compartir → Rubik** → "Importar en el último presupuesto".
+16. **Arreglo (11 nov 2026): "No encontré un modelo 3D" al elegir el FBX desde Drive en Android.** El archivo llegaba
+    sin extensión (o con otro nombre, y `type` vacío o `application/octet-stream`) y el tipo se miraba solo por la
+    extensión. Ahora `Lector3D.detectarTipo()` mira **primero los primeros bytes** (FBX binario `Kaydara FBX Binary`,
+    FBX ASCII `; FBX`, GLB `glTF`, ZIP `PK\x03\x04`, PDF `%PDF`, SKP, JSON glTF por `asset` o rubik.json por `formato`),
+    después la extensión y después el MIME. El archivo se renombra (ej. `modelo.fbx`) y sigue igual. Vale para el
+    selector, lo que llega por "Compartir → Rubik" y lo que viene dentro de un `.zip`. Si no se reconoce, el error
+    muestra **nombre, tipo y tamaño** recibidos. El `accept` del selector suma `application/octet-stream` y los MIME
+    de modelos para que Android deje elegir archivos sin extensión.
 
 **Para el 2.6 / modelo real:** lo que vea la subsesión del archivo real del cliente (si trae nombres de material,
 grupos por mueble y en qué unidad) puede ajustar los nombres de entorno a descartar, el contenedor único o la

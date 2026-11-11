@@ -103,7 +103,7 @@
             '<div class="i3-nota">.glb, .gltf, .fbx o un .zip que los tenga — y si lo tenés, el rubik.json de Blender</div>' +
             '<div class="i3-nota" style="margin-top:4px;"><b>Si tenés el PDF o los planos del cliente, elegilo junto con el 3D</b>: la app calibra la escala sola.</div>' +
             '<div class="i3-nota" style="margin-top:4px;">📱 <b>En el celular:</b> desde Drive o WhatsApp tocá <b>Compartir → Rubik</b> (con el hub instalado como app). No hace falta descargarlo.</div>' +
-            '<input type="file" id="i3-file" multiple accept=".glb,.gltf,.fbx,.zip,.json,.bin,.skp,.pdf" style="display:none" onchange="_i3Archivos(this.files)"></label>' +
+            '<input type="file" id="i3-file" multiple accept=".glb,.gltf,.fbx,.zip,.json,.bin,.skp,.pdf,application/octet-stream,model/gltf-binary,model/gltf+json,application/zip,application/pdf,application/json" style="display:none" onchange="_i3Archivos(this.files)"></label>' +
             '<div class="i3-card" style="margin-top:12px;"><div class="i3-nota"><b>🔒 El archivo no se sube a ningún lado.</b> Se lee en este dispositivo; ' +
             'solo se guardan los ítems que confirmes. Si es un .gltf con su .bin aparte, elegí los dos juntos.</div>' +
             '<div class="i3-nota" style="margin-top:6px;">Consejo: exportá <b>sin texturas</b> (en SketchUp/Vectorworks, "Embed media" desactivado). ' +
@@ -158,9 +158,39 @@
         });
     }
 
+    // Cada archivo con el nombre que corresponde a su contenido (Drive/WhatsApp en Android mandan
+    // archivos sin extensión, con otro nombre o con type vacío / application/octet-stream).
+    async function normalizarArchivos(archivos) {
+        var salida = [], raros = [];
+        for (var i = 0; i < archivos.length; i++) {
+            var f = archivos[i], tipo = null;
+            try { tipo = Lector3D.detectarTipo(f.name, f.type, new Uint8Array(await f.slice(0, 4096).arrayBuffer())); } catch (e) { tipo = null; }
+            if (tipo === 'json' && !/"formato"\s*:\s*"rubik\//.test((await f.slice(0, 4096).text()))) {
+                // JSON sin pistas al principio: se mira entero (glTF tiene "asset", rubik.json tiene "formato")
+                try { var j = JSON.parse(await f.text()); if (j && j.asset) tipo = 'gltf'; else if (!(j && j.formato)) tipo = null; } catch (e) { tipo = null; }
+            }
+            if (!tipo) { raros.push(f); continue; }
+            var nombre = Lector3D.nombreConTipo(f.name, tipo);
+            salida.push(nombre === f.name ? f : new File([f], nombre, { type: f.type || '' }));
+        }
+        return { archivos: salida, raros: raros };
+    }
+
+    function describir(f) {
+        return '"' + (f.name || '(sin nombre)') + '" · tipo: ' + (f.type || '(vacío)') + ' · ' +
+            (f.size >= 1048576 ? (f.size / 1048576).toFixed(1) + ' MB' : f.size >= 1024 ? Math.round(f.size / 1024) + ' KB' : f.size + ' bytes');
+    }
+
     window._i3Archivos = async function (lista) {
-        var archivos = Array.from(lista || []);
-        if (!archivos.length) return;
+        var originales = Array.from(lista || []);
+        if (!originales.length) return;
+        await pasoCargando('Revisando ' + (originales[0].name || 'el archivo') + '…');
+        var norm = await normalizarArchivos(originales);
+        var archivos = norm.archivos;
+        if (!archivos.length) {
+            return pasoElegir('No reconozco este archivo como modelo 3D, PDF o .zip. Recibí: ' + norm.raros.map(describir).join(' / ') +
+                '. Si es un FBX, probá exportarlo de nuevo o mandarlo dentro de un .zip.');
+        }
         var ext = function (f) { return (f.name.split('.').pop() || '').toLowerCase(); };
         if (archivos.some(function (f) { return ext(f) === 'skp'; })) {
             return pasoElegir('El .skp de SketchUp no se puede leer directo. En SketchUp: Archivo → Exportar → Modelo 3D → FBX o glTF (mejor sin texturas), y elegí ese archivo.');
@@ -174,12 +204,16 @@
                 for (var z = 0; z < zips.length; z++) {
                     var zip = await JSZip.loadAsync(zips[z]);
                     var entradas = Object.keys(zip.files).filter(function (n) {
-                        return !zip.files[n].dir && n.indexOf('__MACOSX') < 0 && /\.(glb|gltf|fbx|bin|json|pdf)$/i.test(n);
+                        var base = n.split('/').pop();
+                        return !zip.files[n].dir && n.indexOf('__MACOSX') < 0 && base.charAt(0) !== '.' &&
+                            (/\.(glb|gltf|fbx|bin|json|pdf)$/i.test(n) || base.indexOf('.') < 0);   // también sin extensión
                     });
+                    var sacados = [];
                     for (var e = 0; e < entradas.length; e++) {
                         var blob = await zip.files[entradas[e]].async('blob');
-                        archivos.push(new File([blob], entradas[e].split('/').pop()));
+                        sacados.push(new File([blob], entradas[e].split('/').pop()));
                     }
+                    archivos = archivos.concat((await normalizarArchivos(sacados)).archivos);
                 }
             } catch (err) { return pasoElegir('No se pudo abrir el .zip: ' + (err && err.message ? err.message : err)); }
             archivos = archivos.filter(function (f) { return ext(f) !== 'zip'; });
@@ -187,7 +221,10 @@
         var modelo = archivos.find(function (f) { return ['glb', 'gltf', 'fbx'].indexOf(ext(f)) >= 0; });
         var pdfJunto = archivos.find(function (f) { return ext(f) === 'pdf'; });
         var json = archivos.find(function (f) { return ext(f) === 'json'; });
-        if (!modelo && !json) return pasoElegir('No encontré un modelo 3D. Elegí un .glb, .gltf, .fbx, un .zip que lo tenga, o el rubik.json.');
+        if (!modelo && !json) {
+            return pasoElegir('No encontré un modelo 3D. Elegí un .glb, .gltf, .fbx, un .zip que lo tenga, o el rubik.json. Recibí: ' +
+                originales.map(describir).join(' / ') + '.');
+        }
         var pesado = modelo && modelo.size > MB_AVISO * 1024 * 1024 ? Math.round(modelo.size / 1048576) : 0;
         var consejo = 'Pesa ' + pesado + ' MB, seguramente por texturas incrustadas. Se lee igual (sin cargar las texturas), pero puede tardar ' +
             'o quedarse sin memoria en el celular. La próxima vez exportalo sin texturas ("Embed media" / "Incrustar texturas" desactivado).';

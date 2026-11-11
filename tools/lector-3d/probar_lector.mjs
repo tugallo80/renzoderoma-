@@ -338,5 +338,28 @@ comparar('FBX', L.analizar(fbx, { equivalencias: eq, factor: uFbx.factor, archiv
   chk('APU: fila marcada según PDF (IA)', fila && fila.segun === 'PDF (IA)' && fila.confianza === 'alta' && /según PDF \(IA\)/.test(fila.nota), fila);
 }
 
+// --- 9. Tipo por contenido: Drive/WhatsApp en Android mandan el archivo sin extensión ---------------
+{
+  const b = (n) => new Uint8Array(readFileSync(join(AQUI, 'ejemplos', n)).subarray(0, 4096));
+  const txt = (t) => new TextEncoder().encode(t);
+  chk('FBX binario sin extensión ni type', L.detectarTipo('1AbCdEfGh', '', b('ejemplo.fbx')) === 'fbx');
+  chk('FBX con type octet-stream y nombre raro', L.detectarTipo('Copa separada (2)', 'application/octet-stream', b('ejemplo.fbx')) === 'fbx');
+  chk('GLB sin extensión', L.detectarTipo('documento', '', b('ejemplo.glb')) === 'glb');
+  chk('FBX ASCII', L.detectarTipo('x', '', txt('; FBX 7.4.0 project file\nFBXHeaderExtension:  {')) === 'fbx');
+  chk('ZIP', L.detectarTipo('x', '', new Uint8Array([0x50, 0x4b, 3, 4, 0, 0])) === 'zip');
+  chk('PDF', L.detectarTipo('x', '', txt('%PDF-1.7\n')) === 'pdf');
+  chk('SKP', L.detectarTipo('x', '', new Uint8Array([0xff, 0xfe, 0xff, 0x0e, 0x53, 0])) === 'skp');
+  chk('glTF JSON', L.detectarTipo('x', '', txt('{"asset":{"version":"2.0"},"scenes":[]}')) === 'gltf');
+  chk('rubik.json', L.detectarTipo('x', '', txt('{\n  "formato": "rubik/1", "piezas": []}')) === 'json');
+  chk('MIME cuando no hay firma (.bin del glTF por nombre)', L.detectarTipo('escena.bin', '', new Uint8Array([1, 2, 3])) === 'bin');
+  chk('MIME model/gltf-binary sin firma', L.detectarTipo('x', 'model/gltf-binary', new Uint8Array([1, 2])) === 'glb');
+  chk('nada reconocible → null', L.detectarTipo('foto', 'image/heic', new Uint8Array([1, 2, 3, 4])) === null);
+  chk('la firma manda sobre la extensión equivocada', L.detectarTipo('modelo.pdf', 'application/pdf', b('ejemplo.fbx')) === 'fbx');
+  chk('nombre: sin extensión → .fbx', L.nombreConTipo('Copa separada blender (2)', 'fbx') === 'Copa separada blender (2).fbx');
+  chk('nombre: vacío → modelo.fbx', L.nombreConTipo('', 'fbx') === 'modelo.fbx');
+  chk('nombre: extensión equivocada se cambia', L.nombreConTipo('copa.pdf', 'fbx') === 'copa.fbx');
+  chk('nombre: ya correcto queda igual', L.nombreConTipo('copa.FBX', 'fbx') === 'copa.FBX' || L.nombreConTipo('copa.fbx', 'fbx') === 'copa.fbx');
+}
+
 console.log(`\n${ok} OK, ${mal} fallas`);
 process.exit(mal ? 1 : 0);
