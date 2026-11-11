@@ -305,3 +305,23 @@ no es solo "importar el rubik.json": la app **lee el modelo directamente**.
 **Para el 2.6 / modelo real:** lo que vea la subsesión del archivo real del cliente (si trae nombres de material,
 grupos por mueble y en qué unidad) puede ajustar los nombres de entorno a descartar, el contenedor único o la
 unidad por defecto. Todo eso está en `lector-3d.js` y tiene prueba.
+
+---
+
+### Primera prueba con un modelo real de cliente (11 nov 2026)
+
+Los datos del cliente no se guardan en el repo (es público); acá va solo lo aprendido.
+
+- **El archivo no vino de Vectorworks:** fue un FBX exportado desde Blender 5.3, con 6 objetos sueltos, sin
+  jerarquía, sin colecciones y **sin materiales**. Los nombres de los objetos los escribió una persona a mano
+  (mayúsculas mezcladas y espacios al final). Ningún objeto sobraba: no había cámaras, luces ni entorno.
+- **Escala:** `UnitScaleFactor` = 1 (cm según FBX), pero el modelo se hizo con unidades sueltas y **no estaba a
+  escala real**. Comparado con el plano en PDF, era unas 2,6 veces más chico, parejo en todas las piezas. Las
+  medidas de corte salen del plano. El modelo sirve para el despiece y las proporciones.
+- **Espesores** de planchas y acrílicos: en el modelo no eran los reales.
+- **Mallas unidas:** un objeto tenía 7 partes (letras) y otro 2. Por eso se agregó `partes` y el aviso.
+- **Malla pesada:** una pieza tenía unas 400.000 caras. El script la midió en unos 5 s en total.
+- **Cambios en el script:** `unidad_modelo` para forzar mm/cm, aviso de escala dudosa (> 20 m) y conteo de partes.
+- **Conclusión para el 2.1:** con modelos de clientes el material casi nunca viene en el 3D; sale del PDF o de la
+  descripción. Camino A sirve para despiece y cantidades; los materiales se vinculan a mano (en rojo) o por la IA
+  leyendo el PDF.

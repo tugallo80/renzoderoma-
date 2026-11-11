@@ -31,6 +31,7 @@ if "exportar" not in globals():
     sys.path.insert(0, _AQUI)
     from exportar_rubik import (  # noqa: E402
         exportar, medidas_orientadas, agrupar_piezas, normalizar_nombre, buscar_equivalencia,
+        contar_partes,
     )
 
 
@@ -56,6 +57,8 @@ def probar_geometria_pura():
     l, a, e = medidas_orientadas(vs, caras)
     assert _cerca(l, L) and _cerca(a, A) and _cerca(e, E), (l, a, e)
     assert normalizar_nombre("MDF-18-Blanco.003") == "MDF-18-Blanco"
+    assert contar_partes(8, [(0, 1, 2, 3), (4, 5, 6, 7)]) == 2
+    assert contar_partes(8, caras) == 1
     assert buscar_equivalencia(" mdf-18-blanco ", {"MDF-18-Blanco": "X"}) == "X"
     assert buscar_equivalencia("MDF-15", {"MDF-18-Blanco": "X"}) is None
     print("  geometría pura: OK")
@@ -192,6 +195,12 @@ def probar_escena():
     assert "Referencia oculta" in datos["ocultos_salteados"]
     assert not any(pz == "Referencia oculta" for _, pz in piezas)
     assert "Fierro-3mm" in datos["sin_equivalencia"]
+    assert all(p["partes"] == 1 for p in datos["piezas"])
+
+    # Modelo hecho con 1 unidad = 1 mm: con unidad_modelo="mm" la tapa mide 1.8 mm; sin él, avisa la escala.
+    r_mm = exportar(ruta_salida=salida, equivalencias=eq, proyecto="prueba", unidad_modelo="mm")
+    tapa_mm = [p for p in r_mm["piezas"] if p["pieza"] == "Tapa superior"][0]
+    assert _cerca(tapa_mm["largo"], 0.0018, 1e-6), tapa_mm
     print("  escena de prueba: OK")
 
 

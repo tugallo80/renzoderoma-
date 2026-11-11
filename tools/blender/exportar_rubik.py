@@ -29,6 +29,10 @@ FORMATO = "rubik/1"
 
 # Por debajo de este espesor (m) la pieza se considera "plancha" (tablero, chapa, vidrio…)
 ESPESOR_MAX_PLANCHA = 0.06
+# Una pieza más larga que esto (m) casi seguro es un modelo en mm o cm leído como metros.
+ESCALA_SOSPECHOSA_M = 20.0
+# Factores de unidad del modelo a metros, para el parámetro `unidad_modelo`.
+UNIDADES = {"m": 1.0, "cm": 0.01, "mm": 0.001, "in": 0.0254, "ft": 0.3048}
 # Redondeo para agrupar piezas iguales (m). 1 mm.
 TOLERANCIA_AGRUPAR = 0.001
 
@@ -109,6 +113,27 @@ def malla_cerrada(caras):
             k = (a, b) if a < b else (b, a)
             cuenta[k] = cuenta.get(k, 0) + 1
     return all(c == 2 for c in cuenta.values())
+
+
+def contar_partes(n_vertices, caras):
+    """Cuántas partes sueltas (islas) tiene la malla. Más de 1 = piezas unidas en un solo objeto."""
+    padre = list(range(n_vertices))
+
+    def raiz(i):
+        while padre[i] != i:
+            padre[i] = padre[padre[i]]
+            i = padre[i]
+        return i
+
+    usados = set()
+    for cara in caras:
+        r0 = raiz(cara[0])
+        usados.update(cara)
+        for v in cara[1:]:
+            r = raiz(v)
+            if r != r0:
+                padre[r] = r0
+    return len({raiz(v) for v in usados})
 
 
 def _base_desde(eje):
@@ -432,6 +457,7 @@ def pieza_desde_objeto(obj_eval, matriz, instanciador, escena, escala_unidad, eq
         area_por_mat[nombre] = area_por_mat.get(nombre, 0.0) + a
 
     cerrada = malla_cerrada(caras)
+    partes = contar_partes(len(vertices), caras)
     volumen = volumen_malla(vertices, caras) if cerrada else None
 
     original = obj_eval.original if hasattr(obj_eval, "original") else obj_eval
@@ -458,6 +484,10 @@ def pieza_desde_objeto(obj_eval, matriz, instanciador, escena, escala_unidad, eq
         revisar.append("sin material ni clase de Vectorworks")
     elif material is None:
         revisar.append(f"'{origen}' sin equivalencia en equivalencias_vw")
+    if partes > 1:
+        revisar.append(f"{partes} partes sueltas en un solo objeto: puede ser más de una pieza")
+    if largo > ESCALA_SOSPECHOSA_M:
+        revisar.append(f"mide {largo:.1f} m: revisar la unidad (¿el modelo está en mm o cm?)")
     if not cerrada:
         revisar.append("malla abierta: volumen no calculado")
 
@@ -496,22 +526,29 @@ def pieza_desde_objeto(obj_eval, matriz, instanciador, escena, escala_unidad, eq
         "area_cara_m2": redondear(largo * ancho) if es_plancha else None,
         "perimetro_ml": redondear(2 * (largo + ancho)) if es_plancha else None,
         "volumen_m3": redondear(volumen, 6) if volumen is not None else None,
+        "partes": partes,
         "acabados": acabados,
-        # Para revisar = falta vincular algo. La malla abierta es solo un aviso.
-        "revisar": material is None or any(a["material"] is None for a in acabados),
+        # Para revisar = falta vincular algo, piezas unidas o unidad dudosa. La malla abierta es solo un aviso.
+        "revisar": (material is None or any(a["material"] is None for a in acabados)
+                    or partes > 1 or largo > ESCALA_SOSPECHOSA_M),
         "motivos": revisar,
         "fuente": {"item": fuente_item, "origen_vw": fuente_origen},
         "objetos": [original.name],
     }
 
 
-def leer_escena(equivalencias=None, incluir_ocultos=False):
+def leer_escena(equivalencias=None, incluir_ocultos=False, unidad_modelo=None):
     """Recorre el depsgraph evaluado (modificadores aplicados, instancias resueltas)."""
     import bpy  # noqa: solo dentro de Blender
 
     escena = bpy.context.scene
     depsgraph = bpy.context.evaluated_depsgraph_get()
-    escala_unidad = escena.unit_settings.scale_length or 1.0
+    # unidad_modelo: "mm", "cm", "m"… fuerza la unidad cuando quien modeló usó 1 unidad = 1 mm.
+    # Si no se indica, se usa la escala de unidades de la escena.
+    if unidad_modelo:
+        escala_unidad = UNIDADES[unidad_modelo]
+    else:
+        escala_unidad = escena.unit_settings.scale_length or 1.0
     eq = cargar_equivalencias(equivalencias)
 
     tipos = {"MESH", "CURVE", "SURFACE", "META", "FONT"}
@@ -564,7 +601,7 @@ def armar_resultado(piezas, proyecto, archivo_origen=None, salteados=None):
     }
 
 
-def exportar(ruta_salida=None, equivalencias=None, proyecto=None, incluir_ocultos=False):
+def exportar(ruta_salida=None, equivalencias=None, proyecto=None, incluir_ocultos=False, unidad_modelo=None):
     """Punto de entrada. Escribe rubik.json y devuelve el resultado (dict)."""
     import bpy  # noqa
 
@@ -575,7 +612,7 @@ def exportar(ruta_salida=None, equivalencias=None, proyecto=None, incluir_oculto
         carpeta = os.path.dirname(blend) if blend else os.getcwd()
         ruta_salida = os.path.join(carpeta, "rubik.json")
 
-    piezas, salteados = leer_escena(equivalencias, incluir_ocultos)
+    piezas, salteados = leer_escena(equivalencias, incluir_ocultos, unidad_modelo)
     resultado = armar_resultado(piezas, proyecto, os.path.basename(blend) if blend else None, salteados)
     with open(ruta_salida, "w", encoding="utf-8") as f:
         json.dump(resultado, f, ensure_ascii=False, indent=2)
