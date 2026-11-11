@@ -301,6 +301,16 @@ no es solo "importar el rubik.json": la app **lee el modelo directamente**.
     - acepta **`.zip`** con el `.fbx`/`.glb`/`.gltf` adentro (JSZip, ya cargado en la página); solo se descomprimen
       el modelo, su `.bin` y el `rubik.json`, no las imágenes.
     - un `.skp` muestra cómo exportarlo a FBX o glTF desde SketchUp. FBX en mm (`UnitScaleFactor` 0.1) → mm.
+12. **Lo aprendido con el modelo real (trofeo, 11 nov 2026):**
+    - **Calibrar con una medida conocida:** el modelo no estaba a escala (unas 2,6 veces más chico), así que ni
+      mm/cm/m lo arreglan. En cada pieza hay un botón **📏 Mide…**: escribís el largo real en mm y se escala todo
+      parejo. Al cambiar la escala se conserva lo revisado (descartes, ítems, vínculos). Queda anotado en
+      `import3d.unidad_archivo` del ítem.
+    - **`partes`** (islas de la malla), igual que `exportar_rubik.py`: más de 1 → aviso "partes sueltas en un solo
+      objeto" y `revisar`. También avisa si una pieza mide más de 20 m (unidad dudosa).
+    - **Archivo plano** (sin grupos): el ítem toma el nombre del archivo en vez de "Sin agrupar".
+    - **Malla de 400.000 caras:** medida en ~1,2 s en Node (se optimizó: casco convexo y agrupación por normal sin
+      claves de texto). En el celular puede tardar unas veces más; falta medirlo con el archivo real.
 
 **Para el 2.6 / modelo real:** lo que vea la subsesión del archivo real del cliente (si trae nombres de material,
 grupos por mueble y en qué unidad) puede ajustar los nombres de entorno a descartar, el contenedor único o la
