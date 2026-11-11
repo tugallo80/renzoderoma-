@@ -176,13 +176,13 @@ comparar('FBX', L.analizar(fbx, { equivalencias: eq, factor: uFbx.factor, archiv
   const letras = new THREE.BufferGeometry(); letras.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); letras.setIndex(idx);
   const raiz = new THREE.Group(); const m = new THREE.Mesh(letras, new THREE.MeshStandardMaterial()); m.name = 'Logo '; raiz.add(m);
   // Escala no uniforme + giro de 90° en el objeto (como en el archivo real): se aplica matrixWorld
-  const tapa = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshStandardMaterial()); tapa.name = 'cRUZ';
+  const tapa = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshStandardMaterial()); tapa.name = 'pANEL Frente';
   tapa.scale.set(0.9, 0.3, 0.004); tapa.rotation.set(Math.PI / 2, 0, Math.PI / 2); raiz.add(tapa);
   const r = L.analizar(raiz, {});
   const logo = r.piezas.find(p => p.pieza === 'Logo');
   chk('logo: 3 partes sueltas, para revisar', logo && logo.partes === 3 && logo.revisar && /3 partes sueltas/.test(logo.motivos.join()), logo);
   chk('nombre con espacio al final se recorta', !!logo);
-  const cruz = r.piezas.find(p => p.pieza === 'cRUZ');
+  const cruz = r.piezas.find(p => p.pieza === 'pANEL Frente');
   chk('escala no uniforme + giro: 900 × 300 × 4 mm', cruz && cerca(cruz.largo, 0.9, 1e-4) && cerca(cruz.ancho, 0.3, 1e-4) && cerca(cruz.espesor, 0.004, 1e-5) && cruz.partes === 1, cruz);
   // Modelo en cm leído como m → pieza de 31 m → aviso
   const grande = new THREE.Group(); grande.add(new THREE.Mesh(new THREE.BoxGeometry(31, 1, 1)));
