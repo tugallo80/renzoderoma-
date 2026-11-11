@@ -344,9 +344,18 @@ no es solo "importar el rubik.json": la app **lee el modelo directamente**.
       `/sw-cliente.js`, que es de la app de clientes y vive en `/`). Solo atiende ese POST: guarda los archivos en
       IndexedDB (`public/js/compartidos-3d.js`) y redirige a `/compartir/elegir.html`. **No cachea nada**; cualquier
       otro pedido va a la red. Lo registran `index.html`, `login.html` y `presupuesto.html` (`js/registrar-sw-hub.js`).
-    - `elegir.html`: muestra el archivo y ofrece **"Importar en el último presupuesto"**, "Elegir otro proyecto" o
-      "Descartar". Al abrir el presupuesto, "Importar 3D" arranca solo con el archivo, que **se borra de IndexedDB
-      apenas se lee** (y los olvidados, a las 24 h). Si se eligió otro proyecto, su presupuesto pregunta si importarlo.
+    - `elegir.html` = **"¿Dónde lo importo?"** (la app **nunca** asigna el archivo sola a un proyecto):
+      1. arriba, destacado: **"Seguir en: Proyecto · Cliente"** (el último presupuesto abierto);
+      2. **Recientes** (los últimos presupuestos abiertos en este teléfono, `localStorage.rubik_recientes`) y un
+         **buscador** por cliente o proyecto (se tocan los clientes de `/clientes` para ver sus proyectos);
+      3. **"＋ Proyecto nuevo"**: cliente existente o "＋ Cliente nuevo" y nombre del proyecto, **prellenado con el nombre
+         del archivo** (editable). Crea con la misma estructura que `clientes.html` (`/clientes/{push}`) y
+         `proyectos-cliente.html`/`index.html` (`/proyectos/{cid}/{push}` con `nombre`, `estado: "cotizacion"`, `fecha_creacion`);
+      4. **"Cancelar (borra el archivo)"**.
+      Al elegir, abre el presupuesto con "Importar 3D" ya cargado; el archivo **se borra de IndexedDB apenas se lee**
+      (y los olvidados, a las 24 h). Si en cambio se abre otro presupuesto, la app pregunta antes de importarlo.
+    - Pendiente (como sugerencia, nunca automático): proponer cliente o proyecto según lo que diga el PDF. Hoy el PDF
+      lo lee la IA recién dentro de "Importar 3D", así que en "¿Dónde lo importo?" todavía no hay esa información.
     - Probado con Playwright (servidor local, POST multipart simulado como el de Android): el SW guarda, redirige,
       el presupuesto lo importa y el archivo queda borrado.
     - No se integró la API de Google Drive ni el Picker (necesitan OAuth y habilitar APIs). "Abrir con" desde el

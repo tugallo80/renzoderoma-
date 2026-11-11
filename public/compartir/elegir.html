@@ -3,70 +3,227 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Rubik · Archivo compartido</title>
+    <title>Rubik · ¿Dónde lo importo?</title>
     <link rel="manifest" href="/manifest.json">
     <link rel="icon" type="image/png" href="/icono app.png">
+    <script src="https://www.gstatic.com/firebasejs/9.1.3/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.1.3/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.1.3/firebase-database-compat.js"></script>
+    <script>
+        window._rubikFirebaseConfig = window._rubikFirebaseConfig || {
+            apiKey: "AIzaSyDXYlofy31cDP14xVAVxWo_7TqXdSgsIjA",
+            authDomain: "rubik-bolivia.firebaseapp.com",
+            databaseURL: "https://rubik-bolivia-default-rtdb.firebaseio.com",
+            projectId: "rubik-bolivia",
+            storageBucket: "rubik-bolivia.firebasestorage.app",
+            messagingSenderId: "4153087958",
+            appId: "1:4153087958:web:cf2dd16106580ed6437677"
+        };
+        if (!firebase.apps.length) firebase.initializeApp(window._rubikFirebaseConfig);
+    </script>
+    <script src="/js/auth-guard.js?v=3"></script>
+    <script src="/js/compartidos-3d.js?v=1"></script>
     <style>
-        :root { --bg: #f4f4f7; --card: #fff; --text: #1a1a1a; --gray: #8e8e93; --blue: #007aff; --red: #ff3b30; --border: #d1d1d6; }
+        :root { --bg: #f4f4f7; --card: #fff; --text: #1a1a1a; --gray: #8e8e93; --blue: #007aff; --green: #34c759; --red: #ff3b30; --border: #d1d1d6; }
         @media (prefers-color-scheme: dark) { :root { --bg: #000; --card: #1c1c1e; --text: #fff; --border: #333; } }
-        body { font-family: -apple-system, sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 16px; }
+        * { box-sizing: border-box; }
+        body { font-family: -apple-system, sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 16px; padding-bottom: 40px; }
         .box { max-width: 520px; margin: 0 auto; }
-        h1 { font-size: 20px; margin: 8px 0 4px; }
+        h1 { font-size: 21px; margin: 6px 0 4px; }
+        h2 { font-size: 13px; text-transform: uppercase; color: var(--gray); letter-spacing: .4px; margin: 20px 4px 6px; }
         .nota { font-size: 13px; color: var(--gray); line-height: 1.4; }
-        .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 14px; margin-top: 12px; }
+        .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px; margin-top: 10px; }
         .archivo { font-weight: 700; word-break: break-all; margin: 2px 0; }
-        .btn { display: block; width: 100%; box-sizing: border-box; text-align: center; text-decoration: none; border-radius: 12px;
-               padding: 14px; font-size: 15px; font-weight: 800; margin-top: 10px; border: 1px solid var(--border); background: var(--card); color: var(--text); cursor: pointer; }
-        .btn.prim { background: var(--blue); border-color: var(--blue); color: #fff; }
+        .btn { display: block; width: 100%; text-align: left; text-decoration: none; border-radius: 12px; padding: 13px 14px; font-size: 15px;
+               font-weight: 700; margin-top: 8px; border: 1px solid var(--border); background: var(--card); color: var(--text); cursor: pointer; font-family: inherit; }
+        .btn small { display: block; font-weight: 400; font-size: 13px; color: var(--gray); margin-top: 2px; }
+        .btn.prim { background: var(--blue); border-color: var(--blue); color: #fff; text-align: center; }
+        .btn.prim small { color: rgba(255,255,255,.85); }
+        .btn.linea { text-align: center; }
+        .inp { width: 100%; border: 1px solid var(--border); border-radius: 10px; padding: 12px; font-size: 16px; background: var(--card); color: var(--text); margin-top: 6px; font-family: inherit; }
+        .lista .btn { margin-top: 6px; }
+        .cliente-proy { margin-left: 12px; border-left: 3px solid var(--border); padding-left: 8px; }
         .error { color: var(--red); font-weight: 700; }
+        label { font-size: 13px; font-weight: 700; display: block; margin-top: 10px; }
     </style>
 </head>
 <body>
 <div class="box">
-    <h1>📦 Archivo para Importar 3D</h1>
-    <div class="nota">Llegó por "Compartir → Rubik". Elegí en qué presupuesto importarlo. Queda guardado solo en este
-        teléfono y se borra apenas lo abrís (o a las 24 h).</div>
+    <h1>📦 ¿Dónde lo importo?</h1>
+    <div class="nota">Llegó por "Compartir → Rubik". Elegí el proyecto: la app nunca lo asigna sola. El archivo queda solo en
+        este teléfono y se borra apenas lo importás, si cancelás, o a las 24 h.</div>
     <div class="card" id="archivos"><div class="nota">Buscando el archivo…</div></div>
-    <div id="acciones"></div>
+    <div id="cuerpo"></div>
 </div>
-<script src="/js/compartidos-3d.js?v=1"></script>
 <script>
 (function () {
+    'use strict';
     var q = new URLSearchParams(location.search);
     var id = q.get('id'), error = q.get('error');
-    var esc = function (s) { return String(s || '').replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); };
+    var envio = null, clientes = [], proyectosDe = {}, abiertos = {};
     var $ = function (x) { return document.getElementById(x); };
+    var esc = function (s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); };
+    var norm = function (s) { return String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, ''); };
 
-    if (error) {
-        $('archivos').innerHTML = '<div class="error">' + (error === 'vacio' ? 'No llegó ningún archivo.' : 'No se pudo recibir el archivo: ' + esc(error)) + '</div>';
-        $('acciones').innerHTML = '<a class="btn" href="/index.html">Ir al hub</a>';
-        return;
-    }
-    Compartidos3D.pendientes().then(function (lista) {
-        var envio = lista.find(function (e) { return e.id === id; }) || lista[0];
-        if (!envio) {
-            $('archivos').innerHTML = '<div class="nota">No hay archivos pendientes (ya se importaron o vencieron).</div>';
-            $('acciones').innerHTML = '<a class="btn" href="/index.html">Ir al hub</a>';
-            return;
-        }
-        $('archivos').innerHTML = envio.nombres.map(function (n) { return '<div class="archivo">' + esc(n) + '</div>'; }).join('');
+    function recientes() {
+        var r = [];
+        try { r = JSON.parse(localStorage.getItem('rubik_recientes') || '[]'); } catch (e) { r = []; }
         var cid = localStorage.getItem('rubik_client_id'), pid = localStorage.getItem('rubik_current_pid');
-        var html = '';
-        if (cid && pid) {
-            var nombre = (localStorage.getItem('rubik_client_name') || 'Cliente') + ' · ' + (localStorage.getItem('rubik_current_pname') || 'Proyecto');
-            html += '<a class="btn prim" href="/presupuesto.html?cid=' + encodeURIComponent(cid) + '&pid=' + encodeURIComponent(pid) +
-                '&importar3d=' + encodeURIComponent(envio.id) + '">Importar en el último presupuesto<br><span style="font-weight:400;font-size:13px;">' + esc(nombre) + '</span></a>';
+        if (cid && pid && !r.some(function (x) { return x.cid === cid && x.pid === pid; })) {
+            r.unshift({ cid: cid, pid: pid, pname: localStorage.getItem('rubik_current_pname') || 'Proyecto',
+                cname: localStorage.getItem('rubik_client_name') || 'Cliente', ts: Date.now() });
         }
-        html += '<a class="btn' + (cid && pid ? '' : ' prim') + '" href="/index.html">Elegir otro proyecto</a>' +
-            '<div class="nota" style="margin-top:8px;">Al abrir el presupuesto de cualquier proyecto, la app te ofrece importar este archivo.</div>' +
-            '<button class="btn" id="descartar">Descartar el archivo</button>';
-        $('acciones').innerHTML = html;
-        $('descartar').onclick = function () {
-            Compartidos3D.borrar(envio.id).then(function () { location.href = '/index.html'; });
-        };
-    }).catch(function (e) {
-        $('archivos').innerHTML = '<div class="error">No se pudo leer el archivo guardado: ' + esc(e && e.message) + '</div>';
-    });
+        return r;
+    }
+
+    // Nombre sugerido para un proyecto nuevo: el del archivo, sin extensión ni "(2)"
+    function nombreSugerido() {
+        var n = (envio && envio.nombres.find(function (x) { return !/\.pdf$/i.test(x); })) || (envio && envio.nombres[0]) || '';
+        return n.replace(/\.[a-z0-9]{2,5}$/i, '').replace(/\s*\(\d+\)\s*$/, '').replace(/[_]+/g, ' ').replace(/\s+/g, ' ').trim();
+    }
+
+    window._ir = function (cid, pid, pname, cname) {
+        localStorage.setItem('rubik_client_id', cid); localStorage.setItem('rubik_current_pid', pid);
+        localStorage.setItem('rubik_current_pname', pname || ''); localStorage.setItem('rubik_client_name', cname || '');
+        location.href = '/presupuesto.html?cid=' + encodeURIComponent(cid) + '&pid=' + encodeURIComponent(pid) + '&importar3d=' + encodeURIComponent(envio.id);
+    };
+    window._irIdx = function (i) { var r = recientes()[i]; window._ir(r.cid, r.pid, r.pname, r.cname); };
+    window._irProy = function (cid, pid) {
+        var c = clientes.find(function (x) { return x.id === cid; }) || {}, p = (proyectosDe[cid] || []).find(function (x) { return x.pid === pid; }) || {};
+        window._ir(cid, pid, p.nombre, c.nombre);
+    };
+
+    window._cancelar = function () {
+        if (!confirm('¿Cancelar? El archivo compartido se borra de este teléfono.')) return;
+        Compartidos3D.borrar(envio.id).then(function () { location.href = '/index.html'; });
+    };
+
+    window._abrirCliente = function (cid) {
+        abiertos[cid] = !abiertos[cid];
+        if (abiertos[cid] && !proyectosDe[cid]) {
+            proyectosDe[cid] = 'cargando';
+            firebase.database().ref('proyectos/' + cid).once('value').then(function (snap) {
+                var arr = [];
+                snap.forEach(function (ch) { var v = ch.val() || {}; if (v && v.nombre) arr.push({ pid: ch.key, nombre: v.nombre, fecha: v.fecha_creacion || '', estado: v.estado || '' }); });
+                arr.sort(function (a, b) { return String(b.fecha).localeCompare(String(a.fecha)); });
+                proyectosDe[cid] = arr; pintarBusqueda();
+            }).catch(function (e) { proyectosDe[cid] = []; alert('No se pudieron cargar los proyectos: ' + e.message); });
+        }
+        pintarBusqueda();
+    };
+
+    function pintarBusqueda() {
+        var t = norm($('buscar') && $('buscar').value);
+        var h = '';
+        var lista = clientes.filter(function (c) {
+            if (!t) return true;
+            if (norm(c.nombre).indexOf(t) >= 0) return true;
+            var ps = proyectosDe[c.id];
+            return Array.isArray(ps) && ps.some(function (p) { return norm(p.nombre).indexOf(t) >= 0; });
+        }).slice(0, 40);
+        lista.forEach(function (c) {
+            h += '<button class="btn" onclick="_abrirCliente(\'' + esc(c.id) + '\')">' + (abiertos[c.id] ? '▾ ' : '▸ ') + esc(c.nombre) + '</button>';
+            if (abiertos[c.id]) {
+                var ps = proyectosDe[c.id];
+                h += '<div class="cliente-proy">';
+                if (ps === 'cargando') h += '<div class="nota" style="padding:8px;">Cargando proyectos…</div>';
+                else if (!ps || !ps.length) h += '<div class="nota" style="padding:8px;">Sin proyectos. Creá uno con "＋ Proyecto nuevo".</div>';
+                else ps.filter(function (p) { return !t || norm(p.nombre).indexOf(t) >= 0 || norm(c.nombre).indexOf(t) >= 0; }).slice(0, 30).forEach(function (p) {
+                    h += '<button class="btn" onclick="_irProy(\'' + esc(c.id) + '\',\'' + esc(p.pid) + '\')">' + esc(p.nombre) +
+                        '<small>' + esc(String(p.fecha).slice(0, 10)) + (p.estado ? ' · ' + esc(p.estado) : '') + '</small></button>';
+                });
+                h += '</div>';
+            }
+        });
+        if (!lista.length) h = '<div class="nota" style="padding:6px;">' + (clientes.length ? 'Nada coincide.' : 'Cargando clientes…') + '</div>';
+        $('resultados').innerHTML = h;
+    }
+
+    window._nuevo = function () {
+        var f = $('form-nuevo');
+        f.style.display = f.style.display === 'none' ? 'block' : 'none';
+        if (f.style.display === 'block') { $('nuevo-nombre').value = $('nuevo-nombre').value || nombreSugerido(); }
+    };
+    window._clienteSel = function (v) { $('cliente-nuevo-box').style.display = v === '__nuevo' ? 'block' : 'none'; };
+
+    // Misma estructura que clientes.html (/clientes/{push}) y proyectos-cliente.html / index.html (/proyectos/{cid}/{push})
+    window._crear = async function () {
+        var btn = $('btn-crear');
+        var nombre = $('nuevo-nombre').value.trim(), sel = $('nuevo-cliente').value, cid = sel, cname = '';
+        if (!sel) return alert('Elegí el cliente.');
+        if (!nombre) return alert('Escribí el nombre del proyecto.');
+        btn.disabled = true; btn.textContent = 'Creando…';
+        try {
+            var db = firebase.database();
+            if (sel === '__nuevo') {
+                cname = $('cliente-nuevo').value.trim();
+                if (!cname) { btn.disabled = false; btn.textContent = 'Crear y abrir'; return alert('Escribí el nombre del cliente nuevo.'); }
+                var ahora = new Date().toISOString();
+                var ref = db.ref('clientes').push();
+                await ref.set({ nombre: cname, rubro: '', wsp: '', email: '', logo: '', cover: '', fecha_mod: ahora, fecha_creacion: ahora });
+                cid = ref.key;
+            } else {
+                cname = (clientes.find(function (c) { return c.id === sel; }) || {}).nombre || '';
+            }
+            var pref = db.ref('proyectos/' + cid).push();
+            await pref.set({ nombre: nombre, estado: 'cotizacion', fecha_creacion: new Date().toISOString() });
+            window._ir(cid, pref.key, nombre, cname);
+        } catch (e) {
+            btn.disabled = false; btn.textContent = 'Crear y abrir';
+            alert('No se pudo crear: ' + e.message);
+        }
+    };
+
+    function pintar() {
+        var rs = recientes(), h = '';
+        if (rs.length) {
+            var r0 = rs[0];
+            h += '<button class="btn prim" onclick="_irIdx(0)">Seguir en: ' + esc(r0.pname) + '<small>' + esc(r0.cname) + '</small></button>';
+        }
+        if (rs.length > 1) {
+            h += '<h2>Recientes</h2><div class="lista">' + rs.slice(1, 7).map(function (r, i) {
+                return '<button class="btn" onclick="_irIdx(' + (i + 1) + ')">' + esc(r.pname) + '<small>' + esc(r.cname) + '</small></button>';
+            }).join('') + '</div>';
+        }
+        h += '<h2>Buscar</h2><input class="inp" id="buscar" placeholder="Cliente o proyecto…" oninput="_buscar()" autocomplete="off">' +
+            '<div class="nota" style="margin-top:4px;">Tocá un cliente para ver sus proyectos.</div><div class="lista" id="resultados"></div>';
+        h += '<button class="btn linea" style="margin-top:16px;" onclick="_nuevo()">＋ Proyecto nuevo</button>' +
+            '<div class="card" id="form-nuevo" style="display:none;">' +
+            '<label>Cliente</label><select class="inp" id="nuevo-cliente" onchange="_clienteSel(this.value)"><option value="">Elegí…</option>' +
+            '<option value="__nuevo">＋ Cliente nuevo…</option>' +
+            clientes.map(function (c) { return '<option value="' + esc(c.id) + '">' + esc(c.nombre) + '</option>'; }).join('') + '</select>' +
+            '<div id="cliente-nuevo-box" style="display:none;"><label>Nombre del cliente nuevo</label><input class="inp" id="cliente-nuevo" autocomplete="off"></div>' +
+            '<label>Nombre del proyecto</label><input class="inp" id="nuevo-nombre" autocomplete="off">' +
+            '<div class="nota" style="margin-top:4px;">Sugerido según el nombre del archivo. Cambialo si querés.</div>' +
+            '<button class="btn prim" id="btn-crear" onclick="_crear()">Crear y abrir</button></div>';
+        h += '<button class="btn linea" style="margin-top:22px;color:var(--red);" onclick="_cancelar()">Cancelar (borra el archivo)</button>';
+        $('cuerpo').innerHTML = h;
+        pintarBusqueda();
+    }
+    window._buscar = function () {
+        // Al buscar por nombre de proyecto, se cargan los proyectos de los clientes abiertos/encontrados de a poco
+        pintarBusqueda();
+    };
+
+    function sinEnvio(msg) {
+        $('archivos').innerHTML = '<div class="' + (error ? 'error' : 'nota') + '">' + esc(msg) + '</div>';
+        $('cuerpo').innerHTML = '<a class="btn linea" href="/index.html">Ir al hub</a>';
+    }
+
+    if (error) return sinEnvio(error === 'vacio' ? 'No llegó ningún archivo.' : 'No se pudo recibir el archivo: ' + error);
+    Compartidos3D.pendientes().then(function (lista) {
+        envio = lista.find(function (e) { return e.id === id; }) || lista[0];
+        if (!envio) return sinEnvio('No hay archivos pendientes (ya se importaron, se cancelaron o vencieron).');
+        $('archivos').innerHTML = envio.nombres.map(function (n) { return '<div class="archivo">' + esc(n) + '</div>'; }).join('');
+        pintar();
+        (window.rubikAuthReady || Promise.resolve()).then(function () {
+            return firebase.database().ref('clientes').once('value');
+        }).then(function (snap) {
+            snap.forEach(function (ch) { var c = ch.val() || {}; clientes.push({ id: ch.key, nombre: c.empresa || c.nombre || 'Sin nombre' }); });
+            clientes.sort(function (a, b) { return a.nombre.localeCompare(b.nombre); });
+            pintar();
+        }).catch(function (e) { console.warn('[elegir] clientes', e); });
+    }).catch(function (e) { sinEnvio('No se pudo leer el archivo guardado: ' + (e && e.message)); });
 })();
 </script>
 </body>

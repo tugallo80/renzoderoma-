@@ -767,5 +767,17 @@
         window.abrirImportar3D();
         window._i3Archivos(archivos);
     }
-    window.addEventListener('load', function () { setTimeout(revisarCompartidos, 1200); });
+    // Proyectos recientes (para "¿Dónde lo importo?" de /compartir/elegir.html). Solo en este teléfono.
+    function anotarReciente() {
+        try {
+            var q = new URLSearchParams(location.search);
+            var cid = q.get('cid') || localStorage.getItem('rubik_client_id'), pid = q.get('pid') || localStorage.getItem('rubik_current_pid');
+            if (!cid || !pid) return;
+            var r = JSON.parse(localStorage.getItem('rubik_recientes') || '[]').filter(function (x) { return !(x.cid === cid && x.pid === pid); });
+            r.unshift({ cid: cid, pid: pid, pname: localStorage.getItem('rubik_current_pname') || 'Proyecto',
+                cname: localStorage.getItem('rubik_client_name') || 'Cliente', ts: Date.now() });
+            localStorage.setItem('rubik_recientes', JSON.stringify(r.slice(0, 10)));
+        } catch (e) { /* sin localStorage: no hay recientes */ }
+    }
+    window.addEventListener('load', function () { anotarReciente(); setTimeout(revisarCompartidos, 1200); });
 })();
