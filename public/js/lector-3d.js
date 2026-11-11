@@ -966,13 +966,17 @@
      * nuevoId(): genera un id estable (en la app, un push id de Firebase).
      * El orden de los ítems es el de `nombresItems`. Se agregan AL FINAL: no se reordena nada.
      */
-    /** APU de un ítem: materiales (con desperdicio) + mano de obra propuesta (si hay). */
+    /**
+     * APU de un ítem: materiales (con desperdicio) + mano de obra por receta del material.
+     * Recargos (cs, ind, util): los que pasa quien llama (los del presupuesto); no hay valores fijos acá.
+     */
     function armarApu(ps, catalogo, extras) {
         extras = extras || {};
+        var rc = extras.recargos || {};
         return {
             mat: armarApuMateriales(ps, catalogo, extras.desperdicios),
-            mo: armarApuMO(extras.operaciones || [], ps, extras.catalogoMO, extras.eqMO),
-            eq: [], sub: [], util: 50, ind: 10, cs: 55
+            mo: armarApuMO(ps, catalogo, extras.catalogoMO),
+            eq: [], sub: [], util: rc.util, ind: rc.ind, cs: rc.cs
         };
     }
 
@@ -981,13 +985,10 @@
         return nombresItems.map(function (nombre) {
             var ps = piezas.filter(function (p) { return p.item === nombre; });
             if (!ps.length) return null;
-            var apu = armarApu(ps, catalogo, {
-                desperdicios: extras.desperdicios, catalogoMO: extras.catalogoMO, eqMO: extras.eqMO,
-                operaciones: (extras.operacionesPorItem || {})[nombre] || []
-            });
+            var apu = armarApu(ps, catalogo, { desperdicios: extras.desperdicios, catalogoMO: extras.catalogoMO, recargos: extras.recargos });
             var pendientes = apu.mat.concat(apu.mo).filter(function (r) { return r.revisar; }).length;
             var item = {
-                type: 'item', id: nuevoId(), origen: meta.origen || '3d',
+                type: 'item', id: nuevoId(), origen: '3d',
                 desc: nombre, und: 'glb', cant: 1, pu: calcPu(apu), feat: '',
                 apu: apu,
                 measures: ps.map(medidaDePieza), measures_modo: modoMedidas(ps),
@@ -1016,52 +1017,48 @@
      * Cuerpo para /api/gemini (mismo proxy y modelo que "Presupuesto IA").
      * datos: { texto, imagenes: [base64 jpeg sin prefijo], piezas: filas del lector, tamano_mm: [x,y,z], catalogo }
      */
+    /**
+     * Pedido para /api/gemini. Principio: el cómputo lo hace el algoritmo (geometría del 3D); la IA SOLO lee:
+     *   - qué material lleva cada pieza del 3D (según el PDF, el plano o una foto/render), con cita y confianza;
+     *   - la medida TOTAL del objeto en el plano, para calibrar la escala.
+     * No pide medidas por pieza, cantidades ni mano de obra.
+     * datos: { texto, imagenes: [base64 jpeg], piezas: filas del 3D, tamano_mm, catalogo }
+     */
     function armarPedidoPDF(datos, opciones) {
         opciones = opciones || {};
-        var compacto = !!opciones.compacto;   // reintento: esquema mínimo y más tokens
+        var compacto = !!opciones.compacto;
         var piezas = (datos.piezas || []).map(function (p) {
-            return '- "' + p.pieza + '" × ' + p.cant + ': ' + Math.round(p.largo * 1000) + ' × ' + Math.round(p.ancho * 1000) + ' × ' +
-                Math.round(p.espesor * 1000) + ' mm' + (p.origen_vw ? ' (material en el 3D: ' + p.origen_vw + ')' : ' (sin material en el 3D)');
+            return '- "' + p.pieza + '" (ítem "' + p.item + '") × ' + p.cant + ': forma ' + Math.round(p.largo * 1000) + ' × ' + Math.round(p.ancho * 1000) + ' × ' +
+                Math.round(p.espesor * 1000) + ' (' + (p.tipo === 'plancha' ? 'plancha' : 'volumen') + ', medidas del archivo, quizás sin escala)' +
+                (p.origen_vw ? '; material en el 3D: ' + p.origen_vw : '; sin material en el 3D');
         }).join('\n');
-        var lista = function (c, max) {
-            return Object.keys(c || {}).slice(0, max).map(function (k) {
-                var m = c[k]; return k + ' = ' + (m.n || m.desc || k) + (m.u || m.und ? ' [' + (m.u || m.und) + ']' : '');
-            }).join('\n');
-        };
-        var cat = lista(datos.catalogo, 500), mo = lista(datos.manoObra, 300);
-        var soloPDF = !(datos.piezas && datos.piezas.length);
+        var cat = Object.keys(datos.catalogo || {}).slice(0, 500).map(function (k) {
+            var m = datos.catalogo[k]; return k + ' = ' + (m.n || m.desc || k) + (m.u || m.und ? ' [' + (m.u || m.und) + ']' : '');
+        }).join('\n');
         var sys = [
-            'Leés el PDF descriptivo o de planos que mandó un cliente para cotizar una pieza de carpintería/metalmecánica (mueble, stand, trofeo, exhibidor).',
-            'El modelo 3D del cliente trae la geometría pero puede no estar a escala y no trae materiales. Tu trabajo es sacar del PDF lo que el 3D no trae.',
-            'REGLAS: no inventes. Si un dato no está en el PDF, poné null. Medidas siempre en milímetros.',
-            'confianza: "alta" = escrito tal cual en el PDF; "media" = deducido de una cota o de la escala del plano; "baja" = interpretación dudosa.',
-            'cita: el texto o la cota del PDF de donde sale el dato (corto). pagina: número de página del PDF donde está.',
-            'medidas_generales: las medidas TOTALES del objeto terminado (alto, ancho, fondo), no las de una pieza.',
-            'pieza_3d: si la pieza del PDF es una de las piezas del modelo 3D, su nombre EXACTO de la lista; si no, null.',
-            'material_texto: el material TAL COMO LO DESCRIBE el PDF (ej. "acrílico cristal 3 mm", "MDF 9 mm laqueado dorado"), siempre que el PDF lo diga.',
-            'material_clave: SOLO si una clave del CATÁLOGO DE MATERIALES corresponde claramente a ese material; si no, null.',
-            'unidad_sugerida: cómo se compra ese material (m2, ml, plancha, barra, und, kg, lt). item: el mueble o conjunto al que pertenece la pieza según el PDF.',
-            'operaciones: los trabajos de mano de obra que hacen falta para fabricar cada ítem (ej. corte CNC, laqueado, pintura, armado, pulido, ' +
-                'impresión, ploteo, soldadura, instalación). medida: cómo se cuenta: "m2_superficie" (todas las caras: pintura, laca, ploteo), ' +
-                '"m2_cara" (una cara: corte, enchapado), "ml_perimetro" (canto, pulido de cantos), "ml_largo" (soldadura de perfiles), "und" (por pieza: armado), "glb" (una vez por ítem). ' +
-                'piezas: nombres de las piezas a las que se aplica ([] = todas las del ítem). mo_clave: SOLO una clave del CATÁLOGO DE MANO DE OBRA si corresponde claramente; si no, null.',
-            soloPDF ? 'NO HAY MODELO 3D: listá TODAS las piezas que se puedan identificar, con largo, ancho y espesor en mm y su cantidad, agrupadas por item.' : '',
-            'Devolvé SOLO JSON válido, sin texto antes ni después y sin ```. Dentro de los textos no uses comillas dobles: ' +
-            'para pulgadas escribí "pulg" (no el símbolo de comillas).',
-            compacto ? 'Respuesta CORTA: citas de menos de 60 caracteres, máximo 30 piezas y 15 operaciones, notas de menos de 200 caracteres.' : '',
+            'Leés el PDF, el plano o la foto/render que mandó un cliente para cotizar un objeto (mueble, stand, trofeo, exhibidor).',
+            'Las medidas y cantidades las calcula un algoritmo desde el modelo 3D: NO las des. Tu trabajo es SOLO:',
+            '1) Para cada pieza del modelo 3D (por su nombre, su forma o su posición), qué MATERIAL y ACABADOS dice el documento.',
+            '2) La medida TOTAL del objeto terminado (alto, ancho o fondo) si el plano la da, para calibrar la escala.',
+            'REGLAS: no inventes. Si el documento no lo dice, null. Medidas totales en milímetros.',
+            'confianza: "alta" = escrito tal cual; "media" = se deduce con claridad (ej. por la forma o la posición); "baja" = dudoso.',
+            'cita: el texto del documento de donde sale (corto). pagina: número de página (null en una foto).',
+            'pieza_3d: el nombre EXACTO de una pieza de la lista. material_texto: el material TAL COMO LO DESCRIBE el documento.',
+            'material_clave: SOLO si una clave del CATÁLOGO corresponde claramente a ese material; si no, null.',
+            'unidad_sugerida: cómo se compra ese material (m2, ml, plancha, barra, und, kg, lt).',
+            'Devolvé SOLO JSON válido, sin texto antes ni después y sin ```. En los textos no uses comillas dobles (para pulgadas escribí "pulg").',
+            compacto ? 'Respuesta CORTA: citas de menos de 60 caracteres, notas de menos de 200.' : '',
             'Formato:',
             '{"medidas_generales":{"alto_mm":null,"ancho_mm":null,"fondo_mm":null,"confianza":"alta","cita":"","pagina":null},' +
-            '"piezas":[{"item":"","nombre_pdf":"","pieza_3d":null,"largo_mm":null,"ancho_mm":null,"espesor_mm":null,"cantidad":null,' +
-            '"material_texto":null,"material_clave":null,"unidad_sugerida":null,"acabados":[],"confianza":"media","cita":"","pagina":null}],' +
-            '"operaciones":[{"item":"","operacion":"","mo_clave":null,"medida":"m2_superficie","piezas":[],"confianza":"media","cita":""}],"notas":""}'
-        ].join('\n');
-        var partes = [{ text: (soloPDF ? 'NO HAY MODELO 3D: todo sale del PDF.' : 'PIEZAS DEL MODELO 3D (medidas tal como vienen en el archivo, quizás sin escala):\n' + piezas) +
-            (datos.tamano_mm ? '\nTamaño total del modelo: ' + datos.tamano_mm.map(Math.round).join(' × ') + ' mm' : '') }];
+            '"piezas":[{"pieza_3d":"","nombre_pdf":"","material_texto":null,"material_clave":null,"unidad_sugerida":null,"acabados":[],' +
+            '"confianza":"media","cita":"","pagina":null}],"notas":""}'
+        ].filter(Boolean).join('\n');
+        var partes = [{ text: 'PIEZAS DEL MODELO 3D:\n' + (piezas || '(ninguna)') +
+            (datos.tamano_mm ? '\nTamaño total del modelo (sin escala segura): ' + datos.tamano_mm.map(Math.round).join(' × ') : '') }];
         partes.push({ text: 'CATÁLOGO DE MATERIALES (clave = nombre [unidad]):\n' + (cat || '(vacío)') });
-        partes.push({ text: 'CATÁLOGO DE MANO DE OBRA (clave = nombre [unidad]):\n' + (mo || '(vacío)') });
-        partes.push({ text: 'TEXTO DEL PDF:\n' + (String(datos.texto || '').slice(0, 30000) || '(sin texto: ver las imágenes)') });
+        partes.push({ text: 'TEXTO DEL DOCUMENTO:\n' + (String(datos.texto || '').slice(0, 30000) || '(sin texto: ver las imágenes)') });
         (datos.imagenes || []).forEach(function (b64, i) {
-            partes.push({ text: '[Página ' + (i + 1) + ' del PDF como imagen]' });
+            partes.push({ text: '[Imagen ' + (i + 1) + ' (página del PDF, plano o foto)]' });
             partes.push({ inlineData: { data: b64, mimeType: 'image/jpeg' } });
         });
         return {
@@ -1070,8 +1067,7 @@
             contents: [{ role: 'user', parts: partes }],
             generationConfig: {
                 maxOutputTokens: compacto ? 16000 : 8000, temperature: 0, responseMimeType: 'application/json',
-                // En gemini-2.5-flash el "razonamiento" gasta maxOutputTokens y corta el JSON: se apaga
-                thinkingConfig: { thinkingBudget: 0 }
+                thinkingConfig: { thinkingBudget: 0 }   // en gemini-2.5-flash el "razonamiento" gasta los tokens y corta el JSON
             }
         };
     }
@@ -1152,25 +1148,13 @@
             },
             piezas: (Array.isArray(d.piezas) ? d.piezas : []).map(function (p) {
                 return {
-                    item: p.item ? String(p.item).trim() : null, unidad_sugerida: p.unidad_sugerida ? String(p.unidad_sugerida).trim() : null,
-                    pagina: numOnull(p.pagina) ? Math.round(numOnull(p.pagina)) : null,
-                    nombre_pdf: String(p.nombre_pdf || '').trim(), pieza_3d: p.pieza_3d ? String(p.pieza_3d).trim() : null,
-                    largo_mm: numOnull(p.largo_mm), ancho_mm: numOnull(p.ancho_mm), espesor_mm: numOnull(p.espesor_mm),
-                    cantidad: numOnull(p.cantidad) ? Math.round(numOnull(p.cantidad)) : null,
+                    pieza_3d: p.pieza_3d ? String(p.pieza_3d).trim() : null, nombre_pdf: String(p.nombre_pdf || '').trim(),
                     material_texto: p.material_texto ? String(p.material_texto) : null,
                     material_clave: p.material_clave ? String(p.material_clave) : null,
+                    unidad_sugerida: p.unidad_sugerida ? String(p.unidad_sugerida).trim() : null,
                     acabados: Array.isArray(p.acabados) ? p.acabados.map(String) : [],
-                    confianza: normConf(p.confianza), cita: String(p.cita || '').slice(0, 200)
-                };
-            }),
-            operaciones: (Array.isArray(d.operaciones) ? d.operaciones : []).filter(function (o) { return o && o.operacion; }).map(function (o) {
-                var med = String(o.medida || '').toLowerCase();
-                return {
-                    item: o.item ? String(o.item).trim() : null, operacion: String(o.operacion).trim(),
-                    mo_clave: o.mo_clave ? String(o.mo_clave) : null,
-                    medida: ['m2_superficie', 'm2_cara', 'ml_perimetro', 'ml_largo', 'und', 'glb'].indexOf(med) >= 0 ? med : 'glb',
-                    piezas: Array.isArray(o.piezas) ? o.piezas.map(String) : [],
-                    confianza: normConf(o.confianza), cita: String(o.cita || '').slice(0, 200)
+                    confianza: normConf(p.confianza), cita: String(p.cita || '').slice(0, 200),
+                    pagina: numOnull(p.pagina) ? Math.round(numOnull(p.pagina)) : null
                 };
             }),
             notas: String(d.notas || '').slice(0, 1000),
@@ -1222,84 +1206,74 @@
         return { n: nombre, desc: nombre, u: String(u).toLowerCase(), espesor_mm: esp || null };
     }
 
-    /** Cantidad de una operación de mano de obra sobre sus piezas, en la medida que dijo la IA. */
-    function cantidadOperacion(op, piezas) {
-        var q = 0;
+    /**
+     * Mano de obra por RECETA del material (la arma el algoritmo, no la IA).
+     *   /base_datos/materiales/{k}/mo_receta: [{ mo: claveManoObra, medida, factor }]
+     *   medida: "m2_cara" | "m2_sup" | "ml_perimetro" | "ml_largo" | "und" | "m3" | "glb"
+     * Cada pieza con ese material suma cantidad (geometría × factor) a su operación; precio y unidad, de /base_datos/mano_obra.
+     * Si la unidad de la base es otra (jornal, hora…), falta el rendimiento: q 0 y marcada. Nunca se inventa.
+     */
+    var MEDIDAS_RECETA = { m2_cara: 'm2', m2_sup: 'm2', m2_superficie: 'm2', ml_perimetro: 'ml', ml_largo: 'ml', und: 'und', m3: 'm3', glb: 'glb' };
+    function cantidadMedida(medida, p) {
+        var c = p.cant || 1;
+        switch (medida) {
+            case 'm2_cara': return (p.area_cara_m2 != null ? p.area_cara_m2 : p.largo * p.ancho) * c;
+            case 'm2_sup': case 'm2_superficie': return (p.area_m2 || 0) * c;
+            case 'ml_perimetro': return (p.perimetro_ml != null ? p.perimetro_ml : 2 * (p.largo + p.ancho)) * c;
+            case 'ml_largo': return p.largo * c;
+            case 'und': return c;
+            case 'm3': return (p.volumen_m3 != null ? p.volumen_m3 : p.largo * p.ancho * p.espesor) * c;
+            default: return 0;
+        }
+    }
+    function recetaDe(cat) {
+        var r = cat && cat.mo_receta;
+        if (!r) return null;
+        return (Array.isArray(r) ? r : Object.keys(r).map(function (k) { return r[k]; })).filter(function (x) { return x && x.mo; });
+    }
+
+    function armarApuMO(piezas, catalogo, catalogoMO) {
+        catalogo = catalogo || {}; catalogoMO = catalogoMO || {};
+        var porMO = new Map();   // clave MO + medida → { q, medida, materiales }
         piezas.forEach(function (p) {
-            var c = p.cant || 1;
-            if (op.medida === 'm2_superficie') q += (p.area_m2 || 0) * c;
-            else if (op.medida === 'm2_cara') q += (p.area_cara_m2 || p.largo * p.ancho) * c;
-            else if (op.medida === 'ml_perimetro') q += (p.perimetro_ml || 2 * (p.largo + p.ancho)) * c;
-            else if (op.medida === 'ml_largo') q += p.largo * c;
-            else if (op.medida === 'und') q += c;
+            var cat = p.material && catalogo[p.material];
+            (recetaDe(cat) || []).forEach(function (paso) {
+                var medida = MEDIDAS_RECETA[paso.medida] ? paso.medida : 'und';
+                var k = paso.mo + '|' + medida;
+                var acc = porMO.get(k) || { mo: paso.mo, medida: medida, q: 0, glb: false, materiales: [] };
+                var f = parseFloat(paso.factor); if (!(f > 0)) f = 1;
+                if (medida === 'glb') acc.glb = true; else acc.q += cantidadMedida(medida, p) * f;
+                if (acc.materiales.indexOf(cat.n || cat.desc || p.material) < 0) acc.materiales.push(cat.n || cat.desc || p.material);
+                porMO.set(k, acc);
+            });
         });
-        if (op.medida === 'glb') q = 1;
-        var u = { m2_superficie: 'm2', m2_cara: 'm2', ml_perimetro: 'ml', ml_largo: 'ml', und: 'und', glb: 'glb' }[op.medida];
-        return { q: redondear(q, 3), u: u };
-    }
-
-    /** Piezas a las que se aplica una operación ([] = todas). */
-    function piezasDeOperacion(op, piezas) {
-        if (!op.piezas || !op.piezas.length) return piezas;
-        var objetivo = op.piezas.map(textoComparable);
-        var ps = piezas.filter(function (p) { var n = textoComparable(p.pieza); return objetivo.some(function (o) { return o && (n === o || n.indexOf(o) >= 0 || o.indexOf(n) >= 0); }); });
-        return ps.length ? ps : piezas;
-    }
-
-    /**
-     * Mano de obra propuesta por la IA → filas del APU. Unidad y precio salen de /base_datos/mano_obra.
-     * Si la unidad de la base es otra (jornal, hora…), falta el rendimiento: q 0 y marcada. Sin coincidencia: marcada.
-     */
-    function armarApuMO(operaciones, piezas, catalogoMO, eq) {
-        catalogoMO = catalogoMO || {};
-        return (operaciones || []).filter(function (o) { return o.incluir !== false; }).map(function (op) {
-            var ps = piezasDeOperacion(op, piezas);
-            var calc = cantidadOperacion(op, ps);
-            var hallado = op.mo_clave_elegida ? { clave: op.mo_clave_elegida } : buscarEnCatalogo(op.operacion, op.mo_clave, catalogoMO, eq);
-            var cat = hallado && catalogoMO[hallado.clave];
-            var r = { d: cat ? (cat.n || cat.desc || hallado.clave) : op.operacion, u: cat ? (cat.u || cat.und || calc.u) : calc.u,
-                q: 0, p: cat ? precioDe(cat) : 0, origen: 'pdf_ia', segun: 'IA', confianza: op.confianza, clave: cat ? hallado.clave : null };
+        var filas = [];
+        porMO.forEach(function (acc) {
+            var cat = catalogoMO[acc.mo];
+            var uMed = MEDIDAS_RECETA[acc.medida], q = acc.glb ? 1 : redondear(acc.q, 3);
+            var r = { d: cat ? (cat.n || cat.desc || acc.mo) : acc.mo, u: cat ? (cat.u || cat.und || uMed) : uMed, q: 0,
+                p: cat ? precioDe(cat) : 0, origen: '3d', clave: acc.mo, receta: true };
             var motivos = [];
-            if (!cat) motivos.push('"' + op.operacion + '" no está en la base de mano de obra');
+            if (!cat) motivos.push('"' + acc.mo + '" no está en la base de mano de obra');
             else if (!r.p) motivos.push('sin precio en la base');
-            var famBase = familiaUnidad(r.u), famOp = familiaUnidad(calc.u);
-            if (!cat || famBase === famOp || (famOp === 'glb' && !famBase)) r.q = calc.q;
-            else motivos.push('falta el rendimiento: ' + calc.q + ' ' + calc.u + ' a pasar a "' + r.u + '" — Sesión B');
-            r.nota = 'propuesto por IA: ' + op.operacion + ' (' + calc.q + ' ' + calc.u + ', confianza ' + op.confianza + ')';
+            var famBase = familiaUnidad(r.u), famMed = familiaUnidad(uMed);
+            if (!cat || famBase === famMed || (famMed === 'glb' && !famBase)) r.q = q;
+            else motivos.push('falta el rendimiento: ' + q + ' ' + uMed + ' a pasar a "' + r.u + '" — Sesión B');
+            r.nota = 'receta de ' + acc.materiales.join(', ') + ': ' + q + ' ' + uMed;
             if (motivos.length) r.revisar = motivos.join(' · ');
-            return r;
+            filas.push(r);
         });
+        return filas;
     }
 
-    /**
-     * Sin 3D: piezas armadas desde el PDF (ítem → pieza → medidas → cantidad → material en texto).
-     * El texto del material queda como origen_vw: se vincula igual que un nombre de Vectorworks y se recuerda.
-     */
-    function piezasDesdePDF(info, eq, nombreItem) {
-        eq = cargarEquivalencias(eq);
-        return (info.piezas || []).map(function (pz) {
-            var dims = [pz.largo_mm, pz.ancho_mm, pz.espesor_mm].map(function (x) { return x ? x / 1000 : 0; }).sort(function (a, b) { return b - a; });
-            var l = dims[0], a = dims[1], e = dims[2];
-            var sinMedidas = !l;
-            var plancha = e > 0 && e <= ESPESOR_MAX_PLANCHA;
-            var origen = pz.material_texto ? String(pz.material_texto).trim() : null;
-            var dato = buscarEquivalencia(origen, eq);
-            var motivos = ['según PDF (IA), confianza ' + pz.confianza];
-            if (sinMedidas) motivos.push('el PDF no da las medidas de esta pieza');
-            if (!origen) motivos.push('el PDF no dice el material');
-            var p = {
-                item: pz.item || nombreItem || SIN_ITEM, pieza: pz.nombre_pdf || 'Pieza', origen_vw: origen,
-                material: claveMaterial(dato), cant: pz.cantidad || 1,
-                largo: redondear(l), ancho: redondear(a), espesor: redondear(e), tipo: plancha ? 'plancha' : 'volumen',
-                area_m2: redondear(2 * (l * a + l * e + a * e)), area_cara_m2: plancha ? redondear(l * a) : null,
-                perimetro_ml: plancha ? redondear(2 * (l + a)) : null, volumen_m3: e ? redondear(l * a * e, 6) : null,
-                partes: 1, acabados: [], motivos: motivos,
-                fuente: { item: 'pdf', origen_vw: 'pdf' }, objetos: [], medidas_desde: 'pdf_ia', medidas_confianza: pz.confianza,
-                material_desde: dato ? 'equivalencia' : null, pdf: pz
-            };
-            p.revisar = !p.material || sinMedidas;
-            return p;
+    /** Materiales usados que todavía no tienen receta de mano de obra (para pedirla una sola vez). */
+    function materialesSinReceta(piezas, catalogo) {
+        var vistos = [];
+        piezas.forEach(function (p) {
+            var cat = p.material && catalogo[p.material];
+            if (cat && !recetaDe(cat) && !cat.mo_receta_ninguna && vistos.indexOf(p.material) < 0) vistos.push(p.material);
         });
+        return vistos;
     }
 
     /** Resumen del APU de un ítem para mostrar ANTES de agregar: materiales, MO, total y filas sin precio. */
@@ -1311,7 +1285,8 @@
         return {
             materiales: redondear(mat, 2), mano_obra: redondear(mo, 2), directo: redondear(dir, 2), pu: calcPu(apu),
             sin_precio: filas.filter(function (r) { return !(parseFloat(r.p) > 0); }).length,
-            a_revisar: filas.filter(function (r) { return r.revisar; }).length, filas: filas.length
+            a_revisar: filas.filter(function (r) { return r.revisar; }).length, filas: filas.length,
+            recargos: { cs: parseFloat(apu.cs) || 0, ind: parseFloat(apu.ind) || 0, util: parseFloat(apu.util) || 0 }
         };
     }
 
@@ -1383,19 +1358,6 @@
                     });
                 }
             }
-            if (f && pz.cantidad && pz.cantidad !== f.cant) {
-                out.push({ tipo: 'cantidad', pieza: nombre, cantidad: pz.cantidad, confianza: pz.confianza, cita: pz.cita, aplicable: true,
-                    texto: '"' + nombre + '": ' + pz.cantidad + ' unidades según el PDF (el 3D tiene ' + f.cant + ').' });
-            }
-            if (f && pz.largo_mm) {
-                var dims = [pz.largo_mm, pz.ancho_mm, pz.espesor_mm].filter(Boolean).sort(function (a, b) { return b - a; });
-                var difiere = Math.abs(dims[0] / (f.largo * 1000) - 1) > 0.02;
-                if (difiere) {
-                    out.push({ tipo: 'medida', pieza: nombre, largo_mm: dims[0], confianza: pz.confianza, cita: pz.cita, aplicable: true,
-                        texto: '"' + nombre + '" mide ' + dims.map(Math.round).join(' × ') + ' mm según el PDF (en el modelo: ' +
-                            Math.round(f.largo * 1000) + ' × ' + Math.round(f.ancho * 1000) + ' × ' + Math.round(f.espesor * 1000) + ' mm). Calibrar la escala con esta pieza.' });
-                }
-            }
         });
         return out;
     }
@@ -1404,6 +1366,7 @@
     // Tipo de archivo por contenido (Drive/WhatsApp en Android mandan archivos sin extensión o con otro nombre)
     // ---------------------------------------------------------------------
     var EXT_CONOCIDAS = ['fbx', 'glb', 'gltf', 'zip', 'pdf', 'json', 'bin', 'skp'];
+    var EXT_IMAGEN = ['jpg', 'jpeg', 'png', 'webp'];
     var MIME_TIPO = {
         'model/gltf-binary': 'glb', 'model/gltf+json': 'gltf', 'application/zip': 'zip', 'application/x-zip-compressed': 'zip',
         'application/pdf': 'pdf', 'application/json': 'json', 'model/fbx': 'fbx', 'application/vnd.sketchup.skp': 'skp'
@@ -1414,7 +1377,7 @@
     }
 
     /**
-     * Tipo de un archivo: 'fbx' | 'glb' | 'gltf' | 'json' (rubik.json) | 'zip' | 'pdf' | 'skp' | 'bin' | null.
+     * Tipo de un archivo: 'fbx' | 'glb' | 'gltf' | 'json' (rubik.json) | 'zip' | 'pdf' | 'imagen' | 'skp' | 'bin' | null.
      * Primero los primeros bytes (lo más confiable), después la extensión y por último el MIME.
      * bytes: Uint8Array con el principio del archivo (alcanza con 4 KB).
      */
@@ -1426,6 +1389,7 @@
         if (cab.indexOf('glTF') === 0) return 'glb';
         if (cab.indexOf('PK\x03\x04') === 0) return 'zip';
         if (cab.indexOf('%PDF') === 0) return 'pdf';
+        if (cab.indexOf('\xFF\xD8\xFF') === 0 || cab.indexOf('\x89PNG') === 0 || (cab.indexOf('RIFF') === 0 && cab.indexOf('WEBP') === 8)) return 'imagen';
         if (cab.indexOf('\xFF\xFE\xFF\x0E') === 0 || /S\x00k\x00e\x00t\x00c\x00h\x00U\x00p\x00/.test(cab)) return 'skp';
         var texto = '';
         try { texto = new TextDecoder('utf-8').decode(bytes.subarray(0, 4096)); } catch (e) { /* nada */ }
@@ -1439,8 +1403,10 @@
         }
         var e = extensionDe(nombre);
         if (EXT_CONOCIDAS.indexOf(e) >= 0) return e;
+        if (EXT_IMAGEN.indexOf(e) >= 0) return 'imagen';
         var m = String(mime || '').toLowerCase().split(';')[0].trim();
         if (MIME_TIPO[m]) return MIME_TIPO[m];
+        if (/^image\/(jpeg|png|webp)$/.test(m)) return 'imagen';
         return null;
     }
 
@@ -1448,7 +1414,8 @@
     function nombreConTipo(nombre, tipo) {
         var n = String(nombre || '').trim();
         var e = extensionDe(n);
-        if (e === tipo) return n;
+        if (e === tipo || (tipo === 'imagen' && EXT_IMAGEN.indexOf(e) >= 0)) return n;
+        if (tipo === 'imagen') return (n || 'foto') + '.jpg';
         if (!n || n === 'blob') n = tipo === 'pdf' ? 'planos' : tipo === 'zip' ? 'archivos' : 'modelo';
         if (EXT_CONOCIDAS.indexOf(e) >= 0 || ['png', 'jpg', 'jpeg', 'tmp', 'download', 'bin'].indexOf(e) >= 0) n = n.replace(/\.[a-z0-9]{2,5}$/i, '');
         return n + '.' + (tipo === 'json' && !/rubik/i.test(n) ? 'json' : tipo);
@@ -1465,7 +1432,8 @@
         sugerirDescarte: sugerirDescarte, familiaUnidad: familiaUnidad, cantidadPrincipal: cantidadPrincipal,
         armarApuMateriales: armarApuMateriales,
         detectarTipo: detectarTipo, buscarEnCatalogo: buscarEnCatalogo, claveBase: claveBase, materialSugerido: materialSugerido,
-        cantidadOperacion: cantidadOperacion, armarApuMO: armarApuMO, piezasDesdePDF: piezasDesdePDF, resumenApu: resumenApu,
+        armarApuMO: armarApuMO, cantidadMedida: cantidadMedida, recetaDe: recetaDe, materialesSinReceta: materialesSinReceta,
+        MEDIDAS_RECETA: MEDIDAS_RECETA, resumenApu: resumenApu,
         armarApu: armarApu, empacarPlanchas: empacarPlanchas, empacarBarras: empacarBarras, medidasPlancha: medidasPlancha, nombreConTipo: nombreConTipo, extensionDe: extensionDe,
         armarPedidoPDF: armarPedidoPDF, parsearJSONRobusto: parsearJSONRobusto, repararJSON: repararJSON, leerRespuestaPDF: leerRespuestaPDF, propuestasPDF: propuestasPDF, buscarFila: buscarFila, armarItems: armarItems, calcPu: calcPu, medidaDePieza: medidaDePieza
     };
