@@ -23,6 +23,8 @@
     function catalogo() { return (typeof dbMats !== 'undefined' && dbMats) || {}; }
     function nombreMat(clave) { var m = catalogo()[clave]; return m ? (m.n || m.desc || clave) : null; }
     function catalogoMO() { return (typeof dbMo !== 'undefined' && dbMo) || {}; }
+    // Ruta B (trato): oficios con su costo por jornal, rendimientos por oficio/indicador, y la ruta preferida por tipo de ítem
+    var oficiosBD = {}, rendimientosBD = {}, prefsMO = {};
     function bs(x) { return (Math.round((parseFloat(x) || 0) * 100) / 100).toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
 
     // ------------------------------------------------------------------ modal
@@ -152,7 +154,10 @@
             Object.keys(catalogo()).length ? Promise.resolve(null) :
                 db.ref('base_datos/materiales').once('value').then(function (s) { if (typeof dbMats !== 'undefined') dbMats = s.val() || {}; }),
             Object.keys(catalogoMO()).length ? Promise.resolve(null) :
-                db.ref('base_datos/mano_obra').once('value').then(function (s) { if (typeof dbMo !== 'undefined') dbMo = s.val() || {}; })
+                db.ref('base_datos/mano_obra').once('value').then(function (s) { if (typeof dbMo !== 'undefined') dbMo = s.val() || {}; }),
+            db.ref('base_datos/oficios').once('value').then(function (s) { oficiosBD = s.val() || {}; }),
+            db.ref('base_datos/rendimientos').once('value').then(function (s) { rendimientosBD = s.val() || {}; }),
+            db.ref('base_datos/preferencias_mo').once('value').then(function (s) { prefsMO = s.val() || {}; })
         ]).then(function (r) {
             var dl = $('i3-dl-mats'), html = '';
             Object.keys(catalogo()).forEach(function (k) { var m = catalogo()[k]; html += '<option value="' + esc(m.n || m.desc || k) + '">'; });
@@ -683,9 +688,11 @@
     // Cómputo = algoritmo: cantidades desde la geometría; precios y unidades de la base; mano de obra por receta del material.
     function tarjetaApu(nombre, ps) {
         if (!ps.length) return '';
-        var apu = Lector3D.armarApu(ps, catalogo(), { desperdicios: est.desp, catalogoMO: catalogoMO(), recargos: est.recargos });
+        var rt = rutaDe(nombre, ps);
+        var apu = Lector3D.armarApu(ps, catalogo(), { desperdicios: est.desp, catalogoMO: catalogoMO(), recargos: est.recargos,
+            ruta: rt.ruta, rendimiento: rt.rend, oficio: rt.oficio });
         var r = Lector3D.resumenApu(apu), rc = est.recargos;
-        var sinReceta = Lector3D.materialesSinReceta(ps, catalogo());
+        var sinReceta = rt.ruta === 'B' ? [] : Lector3D.materialesSinReceta(ps, catalogo());
         var h = '<div style="margin-top:10px;padding:10px;border-radius:10px;background:var(--bg);">' +
             '<div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap;">' +
             '<b>APU estimado</b><span style="font-size:17px;font-weight:800;color:var(--green);">' + bs(r.pu) + ' Bs <span class="i3-nota">/ unidad</span></span></div>' +
@@ -707,16 +714,157 @@
                 (cat && !x.acabado ? '<button class="i3-btn" style="padding:5px 9px;font-size:11px;margin-top:4px;" onclick="_i3Receta(\'' + esc(x.clave) + '\')">' +
                     (tieneReceta ? '✎ Mano de obra de este material' : '＋ Armar la mano de obra de este material') + '</button>' : '') + '</div>';
         });
-        h += '<div style="font-size:12px;font-weight:800;margin-top:8px;">Mano de obra <span class="i3-nota">(receta de cada material × geometría)</span></div>';
+        h += '<div style="font-size:12px;font-weight:800;margin-top:8px;">Mano de obra <span class="i3-nota">(' +
+            (rt.ruta === 'B' ? 'por trato: referencia para negociar' : 'receta de cada material × geometría') + ')</span></div>';
         if (!apu.mo.length) h += '<div class="i3-nota">' + (sinReceta.length ? 'Los materiales todavía no tienen receta: armala una vez y queda guardada.' : 'Sin mano de obra en las recetas.') + '</div>';
         apu.mo.forEach(function (x) {
             h += '<div style="font-size:12px;padding:5px 0;border-top:1px solid var(--border);"><div style="display:flex;justify-content:space-between;gap:6px;">' +
-                '<span>' + esc(x.d) + '</span><b>' + (x.p > 0 && x.q > 0 ? bs(x.q * x.p) : '<span style="color:var(--red);">' + (x.p > 0 ? 'falta cantidad' : 'falta precio') + '</span>') + '</b></div>' +
+                '<span>' + esc(x.d) + (x.referencia ? ' <span class="i3-ia">referencia para negociar</span>' : '') + '</span><b>' + (x.p > 0 && x.q > 0 ? bs(x.q * x.p) : '<span style="color:var(--red);">' + (x.p > 0 ? 'falta cantidad' : 'falta precio') + '</span>') + '</b></div>' +
                 '<div class="i3-nota">' + x.q + ' ' + esc(x.u) + ' × ' + bs(x.p) + ' · ' + esc(x.nota) + '</div>' +
                 (x.revisar ? '<div style="color:var(--red);font-size:11px;">⚠ ' + esc(x.revisar) + '</div>' : '') + '</div>';
         });
         return h + '</details></div>';
     }
+
+    // ---------- Ruta de mano de obra por ítem: A = por medida (receta del material) · B = por trato (oficio + rendimiento)
+    function claveItem(nombre) { return Lector3D.claveEquivalencia(nombre); }
+    function rutaDe(nombre, ps) {
+        est.rutas = est.rutas || {};
+        var r = est.rutas[nombre];
+        if (!r) {
+            var pref = prefsMO[claveItem(nombre)];
+            ps = ps || est.filas.filter(function (f) { return f.item === nombre && f.incluir; });
+            r = est.rutas[nombre] = pref ? { ruta: pref.ruta === 'B' ? 'B' : 'A', rendKey: pref.rendimiento || null, desde: 'preferencia' }
+                : { ruta: Lector3D.rutaSugerida(ps), rendKey: null, desde: 'sugerida' };
+        }
+        r.rend = r.rendKey ? rendimientosBD[r.rendKey] || null : null;
+        r.oficio = r.rend ? oficiosBD[r.rend.oficio] || null : null;
+        return r;
+    }
+    function guardarPreferencia(nombre) {
+        var r = est.rutas[nombre];
+        prefsMO[claveItem(nombre)] = { ruta: r.ruta, rendimiento: r.rendKey || null };
+        db.ref('base_datos/preferencias_mo/' + claveItem(nombre)).set({ item: nombre, ruta: r.ruta, rendimiento: r.rendKey || null,
+            actualizado: firebase.database.ServerValue.TIMESTAMP }).catch(function (e) { console.warn('[importar3d] preferencia', e); });
+    }
+    function etiquetaRend(k) {
+        var x = rendimientosBD[k] || {}, of = oficiosBD[x.oficio] || {}, ind = Lector3D.INDICADORES[x.indicador] || {};
+        return (of.nombre || x.oficio || '?') + (x.trabajo ? ' · ' + x.trabajo : '') + ' — ' +
+            (x.indicador === 'letras_por_alto' ? 'letras por tramos de alto' : (x.por_jornal || '?') + ' ' + (ind.unidad || '') + ' por jornal');
+    }
+
+    function tarjetaRuta(nombre, ps) {
+        if (!ps.length) return '';
+        var rt = rutaDe(nombre, ps), i = est.items.indexOf(nombre);
+        var h = '<div style="margin-top:10px;"><div class="i3-nota" style="font-weight:700;color:var(--text);">Mano de obra de este ítem</div>' +
+            '<div class="i3-seg" style="margin-top:4px;display:flex;">' +
+            '<button class="' + (rt.ruta === 'A' ? 'on' : '') + '" style="flex:1;font-size:12px;" onclick="_i3Ruta(' + i + ',\'A\')">Por medida<br><span style="font-weight:400;">receta del material</span></button>' +
+            '<button class="' + (rt.ruta === 'B' ? 'on' : '') + '" style="flex:1;font-size:12px;" onclick="_i3Ruta(' + i + ',\'B\')">Por trato<br><span style="font-weight:400;">oficio + rendimiento</span></button></div>' +
+            '<div class="i3-nota" style="margin-top:3px;">' + (rt.desde === 'preferencia' ? 'Como la última vez para este tipo de ítem.' : rt.desde === 'sugerida' ?
+                (rt.ruta === 'A' ? 'Sugerida: casi todo es plano (lona, vinilo, chapa).' : 'Sugerida: tiene volumen o muchas piezas (mueble, letra).') : '') + '</div>';
+        if (rt.ruta === 'B') {
+            var keys = Object.keys(rendimientosBD);
+            h += '<div class="i3-row2"><select class="i3-inp" onchange="_i3Rend(' + i + ',this.value)"><option value="">' + (keys.length ? 'Elegí el rendimiento…' : 'Todavía no hay rendimientos cargados') + '</option>' +
+                keys.map(function (k) { return '<option value="' + esc(k) + '"' + (k === rt.rendKey ? ' selected' : '') + '>' + esc(etiquetaRend(k)) + '</option>'; }).join('') +
+                '</select><button class="i3-btn" onclick="_i3NuevoRend(' + i + ')">＋ Nuevo</button></div>';
+            if (rt.rend) {
+                var c = Lector3D.jornalesTrato(ps, rt.rend), ind = Lector3D.INDICADORES[rt.rend.indicador] || {};
+                h += '<div class="i3-nota" style="margin-top:4px;">Del 3D: <b>' + c.indicador + ' ' + esc(ind.unidad || '') + '</b> (' + esc(ind.nombre || '') + ')' +
+                    (c.jornales != null ? ' → <b>' + c.jornales + ' jornales</b>' : '') + (rt.oficio && parseFloat(rt.oficio.costo_jornal) > 0 ? ' × ' + bs(rt.oficio.costo_jornal) + ' Bs/jornal' : '') + '</div>';
+                if (rt.oficio && !(parseFloat(rt.oficio.costo_jornal) > 0)) {
+                    h += '<button class="i3-btn" style="padding:5px 9px;font-size:11px;margin-top:4px;" onclick="_i3CostoOficio(\'' + esc(rt.rend.oficio) + '\')">Cargar el costo del jornal de ' + esc(rt.oficio.nombre) + '</button>';
+                }
+            }
+        }
+        return h + '</div>';
+    }
+
+    window._i3Ruta = function (i, ruta) { var n = est.items[i]; conScroll(function () { rutaDe(n).ruta = ruta; est.rutas[n].desde = 'elegida'; guardarPreferencia(n); }); pedirRecetas(); };
+    window._i3Rend = function (i, k) { var n = est.items[i]; conScroll(function () { rutaDe(n).rendKey = k || null; guardarPreferencia(n); }); };
+    window._i3CostoOficio = async function (k) {
+        var of = oficiosBD[k] || {};
+        var v = parseFloat(String(prompt('Costo de un jornal de ' + (of.nombre || k) + ' (Bs):', '') || '').replace(',', '.'));
+        if (!(v > 0)) return;
+        try { await db.ref('base_datos/oficios/' + k + '/costo_jornal').set(v); of.costo_jornal = v; } catch (e) { alert('No se pudo guardar: ' + e.message); return; }
+        conScroll(function () {});
+    };
+
+    // Rendimiento nuevo: se carga UNA vez y queda en /base_datos/rendimientos (y el oficio en /base_datos/oficios)
+    window._i3NuevoRend = function (i) {
+        var nombre = est.items[i];
+        est.nuevoRend = { item: i, oficio: '', indicador: 'm2_tablero', por_jornal: '', trabajo: nombre, notas: '', tramos: [{ hasta_mm: 300, por_jornal: '' }, { hasta_mm: 600, por_jornal: '' }, { hasta_mm: 1200, por_jornal: '' }] };
+        pintarNuevoRend();
+    };
+    function pintarNuevoRend() {
+        var r = est.nuevoRend, ps = est.filas.filter(function (f) { return f.item === est.items[r.item] && f.incluir; });
+        var ofs = Object.keys(oficiosBD).sort(function (a, b) { return String(oficiosBD[a].nombre).localeCompare(String(oficiosBD[b].nombre)); });
+        var h = '<div style="font-weight:800;font-size:15px;">Rendimiento para negociar el trato</div>' +
+            '<div class="i3-nota" style="margin:4px 0 8px;">Se carga <b>una vez</b>: cuánto produce el oficio en un jornal, medido con algo que la app saca del 3D. ' +
+            'Jornales = indicador ÷ rendimiento; referencia = jornales × costo del jornal.</div>' +
+            '<label class="i3-nota">Oficio</label><select class="i3-inp" style="width:100%;" onchange="_i3NR(\'oficio\',this.value)"><option value="">Elegí…</option>' +
+            ofs.map(function (k) { return '<option value="' + esc(k) + '"' + (k === r.oficio ? ' selected' : '') + '>' + esc(oficiosBD[k].nombre) +
+                (parseFloat(oficiosBD[k].costo_jornal) > 0 ? ' · ' + bs(oficiosBD[k].costo_jornal) + ' Bs/jornal' : ' · sin costo') + '</option>'; }).join('') +
+            '<option value="__nuevo">＋ Oficio nuevo…</option></select>' +
+            '<label class="i3-nota" style="margin-top:8px;display:block;">Se mide en</label><select class="i3-inp" style="width:100%;" onchange="_i3NR(\'indicador\',this.value)">' +
+            Object.keys(Lector3D.INDICADORES).map(function (k) {
+                return '<option value="' + k + '"' + (k === r.indicador ? ' selected' : '') + '>' + esc(Lector3D.INDICADORES[k].nombre) + ' — este ítem: ' + Lector3D.indicadorItem(k, ps) + '</option>';
+            }).join('') + '</select>';
+        if (r.indicador === 'letras_por_alto') {
+            h += '<div class="i3-nota" style="margin-top:8px;">Letras por jornal según el alto (cada letra se mide del 3D):</div>' + r.tramos.map(function (t, j) {
+                return '<div style="display:flex;gap:6px;margin-top:4px;align-items:center;"><span class="i3-nota">hasta</span><input class="i3-inp" type="number" inputmode="decimal" value="' + t.hasta_mm + '" onchange="_i3NRT(' + j + ',\'hasta_mm\',this.value)">' +
+                    '<span class="i3-nota">mm:</span><input class="i3-inp" type="number" inputmode="decimal" placeholder="letras/jornal" value="' + t.por_jornal + '" onchange="_i3NRT(' + j + ',\'por_jornal\',this.value)"></div>';
+            }).join('');
+        } else {
+            h += '<label class="i3-nota" style="margin-top:8px;display:block;">Cuánto hace en un jornal (' + esc(Lector3D.INDICADORES[r.indicador].unidad) + ')</label>' +
+                '<input class="i3-inp" style="width:100%;" type="number" inputmode="decimal" value="' + r.por_jornal + '" onchange="_i3NR(\'por_jornal\',this.value)">';
+        }
+        h += '<label class="i3-nota" style="margin-top:8px;display:block;">Tipo de trabajo</label><input class="i3-inp" style="width:100%;" value="' + esc(r.trabajo) + '" onchange="_i3NR(\'trabajo\',this.value)">' +
+            '<label class="i3-nota" style="margin-top:8px;display:block;">Notas</label><input class="i3-inp" style="width:100%;" value="' + esc(r.notas) + '" onchange="_i3NR(\'notas\',this.value)">' +
+            '<div style="display:flex;gap:8px;margin-top:12px;"><button class="i3-btn prim" onclick="_i3NRGuardar()">Guardar</button><button class="i3-btn" onclick="_i3NRCerrar()">Cancelar</button></div>';
+        var cont = $('i3-receta');
+        if (!cont) {
+            cont = document.createElement('div'); cont.id = 'i3-receta';
+            cont.style.cssText = 'position:fixed;inset:0;z-index:9900;background:rgba(0,0,0,.55);display:flex;align-items:flex-end;justify-content:center;';
+            cont.innerHTML = '<div id="i3-receta-box" class="i3-card" style="width:100%;max-width:620px;max-height:85vh;overflow-y:auto;margin:0;border-radius:16px 16px 0 0;padding:16px;padding-bottom:max(16px,env(safe-area-inset-bottom));"></div>';
+            $('mod-imp3d').appendChild(cont);
+        }
+        $('i3-receta-box').innerHTML = h;
+    }
+    window._i3NR = async function (campo, v) {
+        var r = est.nuevoRend;
+        if (campo === 'oficio' && v === '__nuevo') {
+            var nombre = (prompt('Nombre del oficio (ej. Carpintero, Letrista, Soldador):', '') || '').trim();
+            if (nombre) {
+                var costo = parseFloat(String(prompt('Costo de un jornal de ' + nombre + ' en Bs (vacío si no lo sabés todavía):', '') || '').replace(',', '.'));
+                var k = Lector3D.claveBase(nombre), reg = { nombre: nombre, actualizado: firebase.database.ServerValue.TIMESTAMP };
+                if (costo > 0) reg.costo_jornal = costo;
+                try { await db.ref('base_datos/oficios/' + k).set(reg); oficiosBD[k] = Object.assign({}, reg); r.oficio = k; } catch (e) { alert('No se pudo crear: ' + e.message); }
+            }
+        } else r[campo] = v;
+        pintarNuevoRend();
+    };
+    window._i3NRT = function (j, campo, v) { est.nuevoRend.tramos[j][campo] = v; };
+    window._i3NRCerrar = function () { var c = $('i3-receta'); if (c) c.remove(); est.nuevoRend = null; };
+    window._i3NRGuardar = async function () {
+        var r = est.nuevoRend;
+        if (!r.oficio) return alert('Elegí el oficio.');
+        var reg = { oficio: r.oficio, indicador: r.indicador, trabajo: String(r.trabajo || '').trim(), notas: String(r.notas || '').trim(),
+            actualizado: firebase.database.ServerValue.TIMESTAMP };
+        if (r.indicador === 'letras_por_alto') {
+            reg.tramos = r.tramos.map(function (t) { return { hasta_mm: parseFloat(t.hasta_mm) || null, por_jornal: parseFloat(String(t.por_jornal).replace(',', '.')) || null }; })
+                .filter(function (t) { return t.por_jornal > 0; });
+            if (!reg.tramos.length) return alert('Cargá al menos un tramo con letras por jornal.');
+        } else {
+            reg.por_jornal = parseFloat(String(r.por_jornal).replace(',', '.'));
+            if (!(reg.por_jornal > 0)) return alert('Cargá cuánto hace en un jornal.');
+        }
+        var k = Lector3D.claveBase((oficiosBD[r.oficio] || {}).nombre + ' ' + reg.indicador + ' ' + (reg.trabajo || ''));
+        try { await db.ref('base_datos/rendimientos/' + k).set(reg); } catch (e) { alert('No se pudo guardar: ' + e.message); return; }
+        rendimientosBD[k] = Object.assign({}, reg);
+        var nombre = est.items[r.item];
+        window._i3NRCerrar();
+        conScroll(function () { var rt = rutaDe(nombre); rt.ruta = 'B'; rt.rendKey = k; guardarPreferencia(nombre); });
+    };
 
     window._i3Desp = function (clave, v) { conScroll(function () { est.desp[clave] = Math.max(0, Math.min(100, parseFloat(String(v).replace(',', '.')) || 0)); }); };
 
@@ -739,7 +887,7 @@
 
     function pedirRecetas() {
         if (!est) return;
-        var usados = est.filas.filter(function (f) { return f.incluir; });
+        var usados = est.filas.filter(function (f) { return f.incluir && rutaDe(f.item).ruta !== 'B'; });
         est.recetaPend = Lector3D.materialesSinReceta(usados, catalogo()).filter(function (k) { return !(est.recetaOmitida || {})[k]; });
         if (est.recetaPend.length && !$('i3-receta')) window._i3Receta(est.recetaPend[0], true);
     }
@@ -919,6 +1067,7 @@
                     est.items.filter(function (n) { return n !== nombre; }).map(function (n) { return '<option value="' + esc(n) + '">' + esc(n) + '</option>'; }).join('') +
                     '<option value="' + NUEVO + '">➕ Ítem nuevo…</option></select></div></div>';
             });
+            h += tarjetaRuta(nombre, filas.filter(function (f) { return f.incluir; }));
             h += tarjetaApu(nombre, filas.filter(function (f) { return f.incluir; }));
             h += '</div>';
         });
@@ -996,7 +1145,11 @@
         var nuevos = Lector3D.armarItems(filas, nombres, catalogo(), function () { return db.ref().push().key; }, {
             archivo: est.archivo, fecha: Date.now(), pdf: est.pdf && est.pdf.info ? est.pdf.nombre : null,
             unidad: est.modo !== '3d' ? 'm' : (est.calibrado ? textoCalibrado() + ' (×' + (est.factor / Lector3D.FACTORES[est.unidad]).toPrecision(4) + ' sobre ' + est.unidad + ')' : est.unidad)
-        }, { desperdicios: est.desp, catalogoMO: catalogoMO(), recargos: est.recargos });
+        }, { desperdicios: est.desp, catalogoMO: catalogoMO(), recargos: est.recargos, rutaPorItem: (function () {
+            var m = {};
+            nombres.forEach(function (n) { var rt = rutaDe(n); m[n] = { ruta: rt.ruta, rendimiento: rt.rend, oficio: rt.oficio }; });
+            return m;
+        })() });
         if ($('i3-cap') && $('i3-cap').checked) {
             data.push({ type: 'chapter', name: ('3D · ' + est.archivo.replace(/\.[^.]+$/, '')).toUpperCase(), collapsed: false });
         }
@@ -1012,7 +1165,8 @@
             window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
             alert('✅ ' + nuevos.length + ' ítem' + (nuevos.length > 1 ? 's' : '') + ' agregado' + (nuevos.length > 1 ? 's' : '') + ' al final.\n' +
                 (marcadas ? marcadas + ' fila' + (marcadas > 1 ? 's' : '') + ' del APU en rojo: falta precio, rendimiento o vincular.\n' : '') +
-                (conMO ? 'La mano de obra sale de la receta de cada material.' : 'Sin recetas de mano de obra todavía: armalas desde "Importar 3D" o cargala a mano en el APU.'));
+                (conMO ? 'Mano de obra: por medida (receta del material) o por trato (referencia para negociar; el monto cerrado va en licitaciones).'
+                    : 'Sin mano de obra todavía: armá las recetas o los rendimientos desde "Importar 3D", o cargala a mano en el APU.'));
         }, 150);
     };
 

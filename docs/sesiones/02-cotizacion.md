@@ -514,3 +514,30 @@ Los datos del cliente no se guardan en el repo (es público); acá va solo lo ap
       superficie) guardada en la base → acrílico creado → "No lleva mano de obra" → utilidad 30 % → guardado con la MO de la
       receta y `util: 30`.
 
+20. **Mano de obra en dos rutas (11 nov 2026, cómo paga el dueño).** Cada ítem elige su ruta en la revisión:
+    - **Ruta A — Por medida (destajo):** adhesivado, tensado de lona, bastidores y cosas planas. Se paga por m² (u otra
+      medida) a precio fijo → la **receta del material** (`mo_receta`, punto 19): cantidad del 3D × precio de la base.
+    - **Ruta B — Por trato, con base de rendimiento:** muebles (carpintero), letras corpóreas y piezas de detalle. El dueño
+      cierra un precio por ítem con el oficio; el sistema da el **precio de referencia para negociar**:
+      ```
+      /base_datos/oficios/{k}:      { nombre: "Carpintero", costo_jornal: 200 }
+      /base_datos/rendimientos/{k}: { oficio: "CARPINTERO", indicador: "m2_tablero", por_jornal: 3,
+                                      trabajo: "Mueble melamina", notas: "" }
+                                    // letras: indicador "letras_por_alto", tramos: [{ hasta_mm: 300, por_jornal: 4 }, …]
+      /base_datos/preferencias_mo/{claveDelÍtem}: { item, ruta: "A"|"B", rendimiento: k }   // la ruta por tipo de ítem
+      ```
+      Indicadores que saca el algoritmo del 3D: `m2_tablero` (una cara de cada plancha), `ml_canto` (perímetro de las
+      planchas), `m2_superficie`, `piezas`, `m3`, `letras_por_alto` (cada letra según su alto, por tramos).
+      **jornales = indicador ÷ rendimiento; referencia = jornales × costo del jornal.** En el APU queda **una fila por ítem**:
+      "Trato con Carpintero (referencia: 1.4 jornales)", `referencia: true`, nota "referencia para negociar". En esa ruta
+      no se suman las recetas de los materiales (no se cuenta dos veces). El monto cerrado se carga después en licitaciones.
+    - **De a poco, sin inventar:** sin rendimiento, sin oficio o sin costo del jornal, la fila queda en 0 y marcada, con el
+      botón para cargarlo **una vez** ("＋ Nuevo" rendimiento, "＋ Oficio nuevo", "Cargar el costo del jornal").
+    - **Ruta sugerida:** si el 80 % o más de las piezas son planas (espesor < 5 mm: lona, vinilo, chapa) → A; si no
+      (volumen o muchas piezas: mueble, letra) → B. El dueño la cambia y queda guardada por tipo de ítem (nombre).
+    - Lógica en `lector-3d.js` (`indicadorItem`, `jornalesTrato`, `filaTrato`, `rutaSugerida`; `armarApu` con `ruta`).
+      Pruebas: `npm test` 421 OK. Playwright: ejemplo con 3 ítems → ruta B sugerida → oficio nuevo "Carpintero" 200 Bs →
+      rendimiento 3 m² de tablero por jornal → "Trato con Carpintero (referencia: 1.376 jornales)" = 275,20 Bs; Repisa
+      cambiada a ruta A → guardado con `ruta_mo` y preferencias en la base.
+    - Esto es lo que iba a ser la **Sesión B** (rendimientos): ver `docs/plan-sesiones.md`.
+
