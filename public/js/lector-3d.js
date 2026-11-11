@@ -1059,6 +1059,60 @@
         return out;
     }
 
+    // ---------------------------------------------------------------------
+    // Tipo de archivo por contenido (Drive/WhatsApp en Android mandan archivos sin extensión o con otro nombre)
+    // ---------------------------------------------------------------------
+    var EXT_CONOCIDAS = ['fbx', 'glb', 'gltf', 'zip', 'pdf', 'json', 'bin', 'skp'];
+    var MIME_TIPO = {
+        'model/gltf-binary': 'glb', 'model/gltf+json': 'gltf', 'application/zip': 'zip', 'application/x-zip-compressed': 'zip',
+        'application/pdf': 'pdf', 'application/json': 'json', 'model/fbx': 'fbx', 'application/vnd.sketchup.skp': 'skp'
+    };
+    function extensionDe(nombre) {
+        var m = /\.([a-z0-9]{2,5})$/i.exec(String(nombre || ''));
+        return m ? m[1].toLowerCase() : '';
+    }
+
+    /**
+     * Tipo de un archivo: 'fbx' | 'glb' | 'gltf' | 'json' (rubik.json) | 'zip' | 'pdf' | 'skp' | 'bin' | null.
+     * Primero los primeros bytes (lo más confiable), después la extensión y por último el MIME.
+     * bytes: Uint8Array con el principio del archivo (alcanza con 4 KB).
+     */
+    function detectarTipo(nombre, mime, bytes) {
+        bytes = bytes || new Uint8Array(0);
+        var cab = '';
+        for (var i = 0; i < Math.min(bytes.length, 64); i++) cab += String.fromCharCode(bytes[i]);
+        if (cab.indexOf('Kaydara FBX Binary') === 0) return 'fbx';
+        if (cab.indexOf('glTF') === 0) return 'glb';
+        if (cab.indexOf('PK\x03\x04') === 0) return 'zip';
+        if (cab.indexOf('%PDF') === 0) return 'pdf';
+        if (cab.indexOf('\xFF\xFE\xFF\x0E') === 0 || /S\x00k\x00e\x00t\x00c\x00h\x00U\x00p\x00/.test(cab)) return 'skp';
+        var texto = '';
+        try { texto = new TextDecoder('utf-8').decode(bytes.subarray(0, 4096)); } catch (e) { /* nada */ }
+        var limpio = texto.replace(/^﻿/, '').replace(/^\s+/, '');
+        if (/^;\s*FBX/.test(limpio) || /^FBXHeaderExtension\s*:/m.test(limpio.slice(0, 2000))) return 'fbx';
+        if (limpio.charAt(0) === '{') {
+            if (/"formato"\s*:\s*"rubik\//.test(limpio)) return 'json';
+            if (/"asset"\s*:\s*\{/.test(limpio) || /"accessors"\s*:/.test(limpio)) return 'gltf';
+            var e0 = extensionDe(nombre);
+            return e0 === 'gltf' ? 'gltf' : 'json';   // JSON sin pistas: se decide al leerlo entero
+        }
+        var e = extensionDe(nombre);
+        if (EXT_CONOCIDAS.indexOf(e) >= 0) return e;
+        var m = String(mime || '').toLowerCase().split(';')[0].trim();
+        if (MIME_TIPO[m]) return MIME_TIPO[m];
+        return null;
+    }
+
+    /** Nombre con la extensión que corresponde al tipo detectado (sin perder el nombre que vino). */
+    function nombreConTipo(nombre, tipo) {
+        var n = String(nombre || '').trim();
+        var e = extensionDe(n);
+        if (e === tipo) return n;
+        if (!n || n === 'blob') n = tipo === 'pdf' ? 'planos' : tipo === 'zip' ? 'archivos' : 'modelo';
+        if (EXT_CONOCIDAS.indexOf(e) >= 0 || ['png', 'jpg', 'jpeg', 'tmp', 'download', 'bin'].indexOf(e) >= 0) n = n.replace(/\.[a-z0-9]{2,5}$/i, '');
+        return n + '.' + (tipo === 'json' && !/rubik/i.test(n) ? 'json' : tipo);
+    }
+
     var api = {
         FORMATO: FORMATO, SIN_ITEM: SIN_ITEM, FACTORES: FACTORES, ESPESOR_MAX_PLANCHA: ESPESOR_MAX_PLANCHA,
         medidasOrientadas: medidasOrientadas, areaPoligono: areaPoligono, volumenMalla: volumenMalla, mallaCerrada: mallaCerrada, contarPartes: contarPartes,
@@ -1069,6 +1123,7 @@
         desdeRubikJson: desdeRubikJson, resolverMateriales: resolverMateriales,
         sugerirDescarte: sugerirDescarte, familiaUnidad: familiaUnidad, cantidadPrincipal: cantidadPrincipal,
         armarApuMateriales: armarApuMateriales,
+        detectarTipo: detectarTipo, nombreConTipo: nombreConTipo, extensionDe: extensionDe,
         armarPedidoPDF: armarPedidoPDF, leerRespuestaPDF: leerRespuestaPDF, propuestasPDF: propuestasPDF, buscarFila: buscarFila, armarItems: armarItems, calcPu: calcPu, medidaDePieza: medidaDePieza
     };
     if (typeof module !== 'undefined' && module.exports) module.exports = api;
