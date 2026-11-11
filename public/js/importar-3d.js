@@ -91,21 +91,43 @@
         pasoElegir();
         cargarBase();
     };
+    window.$_i3IrIA = function () {
+        $('mod-imp3d').style.display = 'none'; est = null;
+        window.abrirModalIABudget();
+    };
+
+    // Recargos del APU: no hay una configuración global; se toman del último ítem del presupuesto que los tenga
+    // (el dueño los edita en cada APU) y si no, los valores por defecto de ApuUtils.normalizeApu (apu-utils.js).
+    function recargosDelPresupuesto() {
+        var d = (window.ApuUtils && ApuUtils.normalizeApu({ mat: [], mo: [] }, {})) || {};
+        var lista = (typeof data !== 'undefined' && Array.isArray(data)) ? data : [];
+        for (var i = lista.length - 1; i >= 0; i--) {
+            var a = lista[i] && lista[i].type !== 'chapter' && lista[i].apu;
+            if (a && a.util != null && a.ind != null && ((a.mat && a.mat.length) || (a.mo && a.mo.length))) {
+                return { cs: a.cs != null ? parseFloat(a.cs) || 0 : d.cs, ind: parseFloat(a.ind) || 0, util: parseFloat(a.util) || 0,
+                    desde: 'el último ítem del presupuesto con APU ("' + String(lista[i].desc || '').slice(0, 40) + '")' };
+            }
+        }
+        return { cs: d.cs, ind: d.ind, util: d.util, desde: 'los valores por defecto del APU (apu-utils.js)' };
+    }
+
     window.cerrarImportar3D = function () {
         if (est && est.filas && !confirm('¿Salir sin agregar los ítems?')) return;
         $('mod-imp3d').style.display = 'none';
         est = null;   // se suelta el modelo de la memoria
     };
 
-    function pasoElegir(error) {
+    function pasoElegir(error, irIA) {
         $('i3-titulo').textContent = 'Importar 3D';
         $('i3-body').innerHTML =
-            (error ? '<div class="i3-card" style="border-color:var(--red);color:var(--red);font-weight:700;">' + esc(error) + '</div>' : '') +
+            (error ? '<div class="i3-card" style="border-color:var(--red);color:var(--red);font-weight:700;">' + esc(error) +
+                (irIA && typeof window.abrirModalIABudget === 'function' ? '<div><button class="i3-btn prim" style="margin-top:10px;" onclick="$_i3IrIA()">Abrir Presupuesto IA</button></div>' : '') + '</div>' : '') +
             '<label class="i3-drop"><i class="ph-bold ph-upload-simple"></i><div style="font-weight:800;font-size:16px;margin-top:6px;">Elegir el modelo 3D</div>' +
-            '<div class="i3-nota">.glb, .gltf, .fbx o un .zip que los tenga — <b>o solo el PDF / planos</b> del cliente</div>' +
-            '<div class="i3-nota" style="margin-top:4px;"><b>Si tenés el PDF o los planos del cliente, elegilo junto con el 3D</b>: la app calibra la escala sola.</div>' +
+            '<div class="i3-nota">.glb, .gltf, .fbx o un .zip que los tenga — y si lo tenés, el rubik.json de Blender</div>' +
+            '<div class="i3-nota" style="margin-top:4px;"><b>Si tenés el PDF, el plano o una foto/render, elegilo junto con el 3D</b>: la IA lee de qué material es cada pieza y la medida total (escala). ' +
+            'Las medidas y cantidades las calcula la app con la geometría. Para cotizar sin 3D, usá "Presupuesto IA".</div>' +
             '<div class="i3-nota" style="margin-top:4px;">📱 <b>En el celular:</b> desde Drive o WhatsApp tocá <b>Compartir → Rubik</b> (con el hub instalado como app). No hace falta descargarlo.</div>' +
-            '<input type="file" id="i3-file" multiple accept=".glb,.gltf,.fbx,.zip,.json,.bin,.skp,.pdf,application/octet-stream,model/gltf-binary,model/gltf+json,application/zip,application/pdf,application/json" style="display:none" onchange="_i3Archivos(this.files)"></label>' +
+            '<input type="file" id="i3-file" multiple accept=".glb,.gltf,.fbx,.zip,.json,.bin,.skp,.pdf,.jpg,.jpeg,.png,.webp,application/octet-stream,model/gltf-binary,model/gltf+json,application/zip,application/pdf,application/json,image/jpeg,image/png,image/webp" style="display:none" onchange="_i3Archivos(this.files)"></label>' +
             '<div class="i3-card" style="margin-top:12px;"><div class="i3-nota"><b>🔒 El archivo no se sube a ningún lado.</b> Se lee en este dispositivo; ' +
             'solo se guardan los ítems que confirmes. Si es un .gltf con su .bin aparte, elegí los dos juntos.</div>' +
             '<div class="i3-nota" style="margin-top:6px;">Consejo: exportá <b>sin texturas</b> (en SketchUp/Vectorworks, "Embed media" desactivado). ' +
@@ -223,9 +245,15 @@
             archivos = archivos.filter(function (f) { return ext(f) !== 'zip'; });
         }
         var modelo = archivos.find(function (f) { return ['glb', 'gltf', 'fbx'].indexOf(ext(f)) >= 0; });
-        var pdfJunto = archivos.find(function (f) { return ext(f) === 'pdf'; });
+        // Documento para leer materiales: PDF, plano o foto/render (opcional, junto con el 3D)
+        var pdfJunto = archivos.find(function (f) { return ext(f) === 'pdf'; }) ||
+            archivos.find(function (f) { return ['jpg', 'jpeg', 'png', 'webp'].indexOf(ext(f)) >= 0; });
         var json = archivos.find(function (f) { return ext(f) === 'json'; });
-        if (!modelo && !json && !pdfJunto) {
+        if (!modelo && !json && pdfJunto) {
+            return pasoElegir('"Importar 3D" necesita el modelo 3D: el cómputo lo hace la app con la geometría. ' +
+                'Para cotizar solo con un PDF o una foto usá "Presupuesto IA".', true);
+        }
+        if (!modelo && !json) {
             return pasoElegir('No encontré un modelo 3D. Elegí un .glb, .gltf, .fbx, un .zip que lo tenga, o el rubik.json. Recibí: ' +
                 originales.map(describir).join(' / ') + '.');
         }
@@ -234,16 +262,9 @@
             'o quedarse sin memoria en el celular. La próxima vez exportalo sin texturas ("Embed media" / "Incrustar texturas" desactivado).';
         var urls = [];
         try {
-            await pasoCargando('Leyendo ' + (json || modelo || pdfJunto).name + '…');
+            await pasoCargando('Leyendo ' + (json || modelo).name + '…');
             var eqNodo = await (basePromesa || cargarBase());
-            est = { archivo: (json || modelo || pdfJunto).name, eqNodo: eqNodo, avisos: [], desp: {}, ops: [] };
-            if (!json && !modelo) {
-                // Solo PDF: la IA arma ítems → piezas → medidas → cantidades → material desde el PDF
-                est.modo = 'pdf'; est.filas = []; est.items = []; est.res = { piezas: [] };
-                renderRevision();
-                window._i3PDF(pdfJunto);
-                return;
-            }
+            est = { archivo: (json || modelo).name, eqNodo: eqNodo, avisos: [], desp: {}, recargos: recargosDelPresupuesto(), recetaPend: [] };
             if (pesado && !json) est.avisos.push('⚠ ' + consejo);
 
             if (json) {
@@ -290,6 +311,7 @@
             }
             prepararFilas();
             renderRevision();
+            pedirRecetas();   // materiales ya vinculados que todavía no tienen receta de mano de obra
             if (pdfJunto) window._i3PDF(pdfJunto);   // si eligió el PDF junto con el 3D, se lee enseguida
         } catch (e) {
             console.error('[importar3d]', e);
@@ -333,8 +355,7 @@
                 var v = viejas[i];
                 f.incluir = v.incluir; f.item = v.item;
                 if (!f.material && v.material) { f.material = v.material; f.revisar = v.revisar; }
-                ['material_desde', 'material_confianza', 'cant_desde'].forEach(function (k) { if (v[k]) f[k] = v[k]; });
-                if (v.cant_desde) f.cant = v.cant;
+                ['material_desde', 'material_confianza'].forEach(function (k) { if (v[k]) f[k] = v[k]; });
             });
             est.items = viejosItems.filter(function (n) { return est.filas.some(function (f) { return f.item === n; }); });
         }
@@ -407,34 +428,33 @@
     // por /api/gemini (mismo proxy con token del hub que "Presupuesto IA"). La IA solo PROPONE: escala,
     // material y cantidades; cada propuesta se aplica a mano y queda marcada "según PDF (IA)".
     function tarjetaPDF() {
-        var h = '<div class="i3-card" id="i3-pdf" style="border:2px solid var(--purple);"><div style="font-weight:800;">📄 Paso 2 · ¿Tenés el PDF o los planos del cliente?</div>';
+        var h = '<div class="i3-card" id="i3-pdf" style="border:2px solid var(--purple);"><div style="font-weight:800;">📄 Paso 2 · ¿Tenés el PDF, el plano o una foto/render?</div>';
+        var entrada = '<input type="file" accept="application/pdf,.pdf,image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp" style="display:none" onchange="_i3PDF(this.files[0])">';
         if (!est.pdf) {
-            return h + '<div class="i3-nota" style="margin:4px 0 8px;">Subilo y <b>la app calibra la escala sola</b> con la medida total del PDF, ' +
-                'y te propone el material de cada pieza y las cantidades (esos los confirmás vos).</div>' +
-                '<label class="i3-btn prim" style="display:inline-block;">Subir PDF<input type="file" accept="application/pdf,.pdf" style="display:none" onchange="_i3PDF(this.files[0])"></label>' +
-                '<div class="i3-nota" style="margin-top:8px;">🔒 El PDF no se guarda. Pero, a diferencia del 3D, <b>su contenido se envía a la IA</b> (Gemini, por el servidor de Rubik) para leerlo.</div></div>';
+            return h + '<div class="i3-nota" style="margin:4px 0 8px;">La IA <b>solo lee de qué material es cada pieza</b> (con su cita) y la <b>medida total</b> del plano para calibrar la escala. ' +
+                'Medidas, cantidades, áreas y planchas las calcula la app con la geometría del 3D.</div>' +
+                '<label class="i3-btn prim" style="display:inline-block;">Subir PDF o foto' + entrada + '</label>' +
+                '<div class="i3-nota" style="margin-top:8px;">🔒 No se guarda. Pero, a diferencia del 3D, <b>su contenido se envía a la IA</b> (Gemini, por el servidor de Rubik) para leerlo.</div></div>';
         }
         if (est.pdf.estado === 'leyendo') return h + '<div class="i3-nota" style="margin-top:6px;">⏳ ' + esc(est.pdf.paso || 'Leyendo…') + '</div></div>';
         if (est.pdf.estado === 'error') {
             return h + '<div class="i3-nota" style="color:var(--red);font-weight:700;margin-top:6px;">' + esc(est.pdf.error) + '</div>' +
                 '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;"><button class="i3-btn prim" onclick="_i3PDF()">Reintentar</button>' +
-                '<label class="i3-btn" style="display:inline-block;">Otro PDF<input type="file" accept="application/pdf,.pdf" style="display:none" onchange="_i3PDF(this.files[0])"></label></div>' +
+                '<label class="i3-btn" style="display:inline-block;">Otro PDF o foto' + entrada + '</label></div>' +
                 (est.pdf.crudo ? '<details style="margin-top:8px;"><summary class="i3-nota">Detalle técnico</summary><pre style="white-space:pre-wrap;word-break:break-all;font-size:11px;' +
                     'background:var(--bg);padding:8px;border-radius:8px;margin:6px 0 0;">' + esc(est.pdf.crudo) + '</pre></details>' : '') + '</div>';
         }
         var props = propuestasActuales();
         h += '<div class="i3-nota" style="margin:4px 0;">' + esc(est.pdf.nombre) + ' · ' + est.pdf.paginas + ' pág. · leído por la IA. ' +
-            (est.pdf.auto ? 'La escala ya se calibró (arriba, con Deshacer). ' : '') + 'Materiales y cantidades no se aplican solos: tocá <b>Aplicar</b> en lo que esté bien. ' +
-            'Los materiales que no están en la base se pueden crear (sin precio).</div>' +
-            (props.some(function (p) { return !est.pdf.aplicadas[claveProp(p)] && (p.confianza === 'alta' || p.confianza === 'media') && (p.tipo === 'cantidad' || (p.tipo === 'material' && p.clave)); })
-                ? '<button class="i3-btn prim" style="margin:4px 0;" onclick="_i3AplicarTodo()">Aplicar todo lo de confianza alta y media</button>' : '') +
-            (est.ops.length ? '<div class="i3-nota" style="margin:4px 0;">La IA propuso ' + est.ops.length + ' operación' + (est.ops.length > 1 ? 'es' : '') +
-                ' de mano de obra: están en el APU de cada ítem (abajo), para revisar.</div>' : '');
+            (est.pdf.auto ? 'La escala ya se calibró (arriba, con Deshacer). ' : '') + 'Los materiales no se aplican solos: tocá <b>Aplicar</b> en lo que esté bien ' +
+            '(los que no están en la base se pueden crear, sin precio).</div>' +
+            (props.some(function (p) { return !est.pdf.aplicadas[claveProp(p)] && (p.confianza === 'alta' || p.confianza === 'media') && p.tipo === 'material' && p.clave; })
+                ? '<button class="i3-btn prim" style="margin:4px 0;" onclick="_i3AplicarTodo()">Aplicar los materiales de confianza alta y media</button>' : '');
         if (!props.length) h += '<div class="i3-nota">La IA no encontró en el PDF nada para proponer.</div>';
         props.forEach(function (p, i) {
             var hecho = est.pdf.aplicadas[claveProp(p)];
             h += '<div class="i3-prop"><div class="i3-pm"><div><span class="i3-ia">' + esc(p.tipo) + ' · ' + esc(p.confianza) + '</span> ' + esc(p.texto) + '</div>' +
-                (p.cita ? '<div class="i3-cita">PDF: “' + esc(p.cita) + '”</div>' : '') + '</div>' +
+                (p.cita ? '<div class="i3-cita">“' + esc(p.cita) + '”' + (p.pagina ? ' (pág. ' + p.pagina + ')' : '') + '</div>' : '') + '</div>' +
                 (hecho ? '<span style="color:var(--green);font-weight:800;font-size:12px;">✓ aplicado</span>'
                     : (p.aplicable === false ? '' : (p.tipo === 'material' && !p.clave
                         ? (p.crear ? '<button class="i3-btn" onclick="_i3AplicarProp(' + i + ')">＋ Crear material</button>' : '')
@@ -473,13 +493,28 @@
         if (!est.pdf || !est.pdf.info) return [];
         var tam = est.modo === '3d' ? est.det.tamano.map(function (x) { return x * est.factor; }) : null;
         return Lector3D.propuestasPDF(est.pdf.info, est.filas, tam, catalogo(), est.eqNodo).filter(function (p) {
-            if (est.modo !== '3d' && (p.tipo === 'escala' || p.tipo === 'medida')) return false;   // rubik.json ya viene en metros
+            if (est.modo !== '3d' && p.tipo === 'escala') return false;   // rubik.json ya viene en metros
+            if (p.tipo !== 'escala' && p.tipo !== 'material') return false;
             // la escala ya aplicada deja de proponerse (si no, se vuelve a ofrecer con factor ~1)
             return !(p.tipo === 'escala' && est.pdf.aplicadas['escala||']);
         });
     }
 
+    async function imagenDeFoto(archivo) {
+        var url = URL.createObjectURL(archivo);
+        try {
+            var img = await new Promise(function (ok, ko) { var i = new Image(); i.onload = function () { ok(i); }; i.onerror = function () { ko(new Error('No se pudo abrir la imagen.')); }; i.src = url; });
+            var esc2 = Math.min(1, 1600 / Math.max(img.width, img.height)), c = document.createElement('canvas');
+            c.width = Math.round(img.width * esc2); c.height = Math.round(img.height * esc2);
+            c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+            var b64 = c.toDataURL('image/jpeg', 0.75).split(',')[1];
+            c.width = c.height = 0;
+            return { texto: '', imagenes: [b64], paginas: 1 };
+        } finally { URL.revokeObjectURL(url); }
+    }
+
     async function textoEImagenesPDF(archivo) {
+        if (/^image\//.test(archivo.type) || /\.(jpe?g|png|webp)$/i.test(archivo.name)) return imagenDeFoto(archivo);
         if (!window.pdfjsLib) throw new Error('No se pudo cargar el lector de PDF (pdf.js).');
         var doc = await window.pdfjsLib.getDocument({ data: await archivo.arrayBuffer() }).promise;
         var texto = '', imagenes = [], n = Math.min(doc.numPages, 30);
@@ -530,8 +565,7 @@
             var c = await textoEImagenesPDF(archivo);
             est.pdf.paginas = c.paginas;
             var datos = {
-                texto: c.texto, imagenes: c.imagenes, piezas: est.modo === 'pdf' ? [] : est.filas.filter(function (f) { return f.incluir; }),
-                manoObra: catalogoMO(),
+                texto: c.texto, imagenes: c.imagenes, piezas: est.filas.filter(function (f) { return f.incluir; }),
                 tamano_mm: est.modo === '3d' ? est.det.tamano.map(function (x) { return x * est.factor * 1000; }) : null,
                 catalogo: catalogo()
             };
@@ -546,20 +580,11 @@
                 est.pdf.info = Lector3D.leerRespuestaPDF(await pedirIA(Lector3D.armarPedidoPDF(datos, { compacto: true })));
             }
             est.pdf.estado = 'listo';
-            est.ops = (est.pdf.info.operaciones || []).map(function (o) { return Object.assign({ incluir: true }, o); });
-            if (est.modo === 'pdf') {
-                var base = est.archivo.replace(/\.[^.]+$/, '').replace(/[_-]+/g, ' ').trim();
-                est.filas = Lector3D.piezasDesdePDF(est.pdf.info, est.eqNodo, base).map(function (p, i) {
-                    var desc = Lector3D.sugerirDescarte(p.pieza);
-                    return Object.assign(p, { _i: i, incluir: !desc, _sugerido: desc });
-                });
-                est.items = [];
-                est.filas.forEach(function (f) { if (est.items.indexOf(f.item) < 0) est.items.push(f.item); });
-            }
             // Textos de material del PDF que ya se vincularon antes: se aplican solos (la próxima vez no se pregunta)
             propuestasActuales().forEach(function (p) {
                 if (p.tipo === 'material' && p.auto) aplicarMaterial(p, p.clave, true);
             });
+            setTimeout(pedirRecetas, 0);
             // Medida total con confianza alta o media → la escala se calibra sola (con Deshacer). Lo demás, solo propuesto.
             var escala = est.modo === '3d' && propuestasActuales().find(function (p) { return p.tipo === 'escala'; });
             if (escala && (escala.confianza === 'alta' || escala.confianza === 'media')) {
@@ -613,13 +638,6 @@
         return clave;
     }
 
-    window._i3Sumar3D = function (lista) {
-        var arch = Array.from(lista || []);
-        if (!arch.length) return;
-        if (est.pdf && est.pdf.archivo) arch.push(est.pdf.archivo);   // el PDF se vuelve a leer junto con el 3D
-        window._i3Archivos(arch);
-    };
-
     window._i3AplicarTodo = function () {
         var hechas = 0;
         conScroll(function () {
@@ -628,10 +646,10 @@
                 var fila = p.pieza ? est.filas.find(function (f) { return f.pieza === p.pieza; }) : null;
                 if (!fila) return;
                 if (p.tipo === 'material' && p.clave) { aplicarMaterial(p, p.clave); hechas++; }
-                if (p.tipo === 'cantidad') { fila.cant = p.cantidad; fila.cant_desde = p.confianza; est.pdf.aplicadas[claveProp(p)] = true; hechas++; }
             });
         });
-        if (!hechas) alert('No hay propuestas de confianza alta o media para aplicar (los materiales nuevos se crean de a uno).');
+        if (!hechas) alert('No hay materiales de confianza alta o media para aplicar (los materiales nuevos se crean de a uno).');
+        pedirRecetas();
     };
 
     window._i3AplicarProp = async function (i) {
@@ -639,18 +657,10 @@
         if (!p) return;
         var k = claveProp(p);
         var fila = p.pieza ? est.filas.find(function (f) { return f.pieza === p.pieza; }) : null;
-        if (p.tipo === 'escala' || p.tipo === 'medida') {
-            if (p.tipo === 'medida') {
-                if (!fila) return;
-                if (!confirm('Calibrar con "' + fila.pieza + '" = ' + Math.round(p.largo_mm) + ' mm (según PDF, confianza ' + p.confianza + ')?')) return;
-                est.factor = est.factor * (p.largo_mm / 1000) / fila.largo;
-                est.calibrado = { pieza: '"' + fila.pieza + '" (según PDF, IA)', mm: Math.round(p.largo_mm) };
-                est.pdf.auto = null; delete est.pdf.aplicadas['escala||'];
-            } else {
-                est.factor = est.factor * p.factor;
-                est.calibrado = { pieza: p.dimension + ' según PDF (IA)', mm: p.mm };
-                k = 'escala||';
-            }
+        if (p.tipo === 'escala') {
+            est.factor = est.factor * p.factor;
+            est.calibrado = { pieza: p.dimension + ' según PDF (IA)', mm: p.mm };
+            k = 'escala||';
             est.pdf.aplicadas[k] = true;
             remedir('Escalando según el PDF…');
             return;
@@ -663,81 +673,153 @@
             if (!claveNueva) return;
         }
         conScroll(function () {
-            if (p.tipo === 'material') {
-                aplicarMaterial(p, p.clave || claveNueva);
-            } else if (p.tipo === 'cantidad') {
-                fila.cant = p.cantidad; fila.cant_desde = p.confianza;
-            }
+            if (p.tipo === 'material') aplicarMaterial(p, p.clave || claveNueva);
             est.pdf.aplicadas[k] = true;
         });
+        pedirRecetas();
     };
 
     // ------------------------------------------------------- APU por ítem (lo que ve el dueño ANTES de agregar)
-    function opsPorItem() {
-        var salida = {}, norm = function (t) { return String(t || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').trim(); };
-        (est.ops || []).forEach(function (op, i) {
-            op._i = i;
-            var item = est.items.find(function (n) { return norm(n) === norm(op.item); });
-            if (!item && op.piezas && op.piezas.length) {
-                var f = est.filas.find(function (x) { return op.piezas.some(function (n) { return norm(n) === norm(x.pieza); }); });
-                if (f) item = f.item;
-            }
-            if (!item) item = est.items[0];
-            (salida[item] = salida[item] || []).push(op);
-        });
-        return salida;
-    }
-
+    // Cómputo = algoritmo: cantidades desde la geometría; precios y unidades de la base; mano de obra por receta del material.
     function tarjetaApu(nombre, ps) {
         if (!ps.length) return '';
-        var ops = opsPorItem()[nombre] || [];
-        var apu = Lector3D.armarApu(ps, catalogo(), { desperdicios: est.desp, operaciones: ops, catalogoMO: catalogoMO() });
-        var r = Lector3D.resumenApu(apu);
+        var apu = Lector3D.armarApu(ps, catalogo(), { desperdicios: est.desp, catalogoMO: catalogoMO(), recargos: est.recargos });
+        var r = Lector3D.resumenApu(apu), rc = est.recargos;
+        var sinReceta = Lector3D.materialesSinReceta(ps, catalogo());
         var h = '<div style="margin-top:10px;padding:10px;border-radius:10px;background:var(--bg);">' +
             '<div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap;">' +
             '<b>APU estimado</b><span style="font-size:17px;font-weight:800;color:var(--green);">' + bs(r.pu) + ' Bs <span class="i3-nota">/ unidad</span></span></div>' +
-            '<div class="i3-nota">Materiales ' + bs(r.materiales) + ' · Mano de obra ' + bs(r.mano_obra) + ' (+55 % cargas) · +10 % indirectos · +50 % utilidad' +
-            (r.sin_precio ? ' · <b style="color:var(--red);">' + r.sin_precio + ' fila' + (r.sin_precio > 1 ? 's' : '') + ' sin precio</b>' : '') + '</div>' +
+            '<div class="i3-nota">Materiales ' + bs(r.materiales) + ' · Mano de obra ' + bs(r.mano_obra) + ' (+' + rc.cs + ' % cargas) · +' + rc.ind + ' % indirectos · +' + rc.util + ' % utilidad' +
+            (r.sin_precio ? ' · <b style="color:var(--red);">' + r.sin_precio + ' fila' + (r.sin_precio > 1 ? 's' : '') + ' sin precio</b>' : '') +
+            (sinReceta.length ? ' · <b style="color:var(--orange);">' + sinReceta.length + ' material' + (sinReceta.length > 1 ? 'es' : '') + ' sin receta de mano de obra</b>' : '') + '</div>' +
             '<details style="margin-top:6px;"><summary class="i3-nota" style="cursor:pointer;">Ver el detalle (' + r.filas + ' filas)</summary>';
-        h += '<div style="font-size:12px;font-weight:800;margin-top:8px;">Materiales</div>';
+        h += '<div style="font-size:12px;font-weight:800;margin-top:8px;">Materiales <span class="i3-nota">(cantidades de la geometría)</span></div>';
         apu.mat.forEach(function (x) {
+            var cat = x.clave && catalogo()[x.clave];
+            var tieneReceta = cat && (Lector3D.recetaDe(cat) || cat.mo_receta_ninguna);
             h += '<div style="font-size:12px;padding:5px 0;border-top:1px solid var(--border);"><div style="display:flex;justify-content:space-between;gap:6px;">' +
-                '<span>' + esc(x.d) + (x.segun ? ' <span class="i3-ia">PDF (IA)</span>' : '') + '</span><b>' + (x.p > 0 ? bs(x.q * x.p) : '<span style="color:var(--red);">falta precio</span>') + '</b></div>' +
+                '<span>' + esc(x.d) + (x.segun ? ' <span class="i3-ia">material según ' + esc(x.segun) + '</span>' : '') + '</span><b>' + (x.p > 0 ? bs(x.q * x.p) : '<span style="color:var(--red);">falta precio</span>') + '</b></div>' +
                 '<div class="i3-nota">' + x.q + ' ' + esc(x.u) + ' × ' + bs(x.p) + (x.nota ? ' · ' + esc(x.nota) : '') + '</div>' +
                 (x.revisar ? '<div style="color:var(--red);font-size:11px;">⚠ ' + esc(x.revisar) + '</div>' : '') +
                 (x.clave && x.desperdicio != null ? '<label class="i3-nota" style="display:flex;align-items:center;gap:6px;margin-top:3px;">Desperdicio ' +
                     '<input type="number" inputmode="decimal" min="0" max="100" step="1" value="' + x.desperdicio + '" style="width:60px;padding:4px;border:1px solid var(--border);border-radius:6px;background:var(--card);color:var(--text);" ' +
-                    'onchange="_i3Desp(\'' + esc(x.clave) + '\',this.value)"> %</label>' : '') + '</div>';
+                    'onchange="_i3Desp(\'' + esc(x.clave) + '\',this.value)"> %</label>' : '') +
+                (cat && !x.acabado ? '<button class="i3-btn" style="padding:5px 9px;font-size:11px;margin-top:4px;" onclick="_i3Receta(\'' + esc(x.clave) + '\')">' +
+                    (tieneReceta ? '✎ Mano de obra de este material' : '＋ Armar la mano de obra de este material') + '</button>' : '') + '</div>';
         });
-        h += '<div style="font-size:12px;font-weight:800;margin-top:8px;">Mano de obra' + (ops.length ? ' <span class="i3-ia">propuesta por IA</span>' : '') + '</div>';
-        if (!ops.length) h += '<div class="i3-nota">' + (est.pdf && est.pdf.info ? 'La IA no propuso operaciones para este ítem.' : 'Sin PDF: se carga a mano en el APU, como siempre. Con el PDF, la IA propone las operaciones.') + '</div>';
-        ops.forEach(function (op) {
-            var fila = Lector3D.armarApuMO([Object.assign({}, op, { incluir: true })], ps, catalogoMO())[0];
-            h += '<div style="font-size:12px;padding:5px 0;border-top:1px solid var(--border);' + (op.incluir ? '' : 'opacity:.45;') + '">' +
-                '<div style="display:flex;gap:6px;align-items:flex-start;"><input type="checkbox" ' + (op.incluir ? 'checked' : '') + ' onchange="_i3Op(' + op._i + ',this.checked)" style="width:18px;height:18px;">' +
-                '<div style="flex:1;min-width:0;"><div style="display:flex;justify-content:space-between;gap:6px;"><span>' + esc(fila.d) + ' <span class="i3-nota">· ' + esc(op.confianza) + '</span></span>' +
-                '<b>' + (fila.p > 0 ? bs(fila.q * fila.p) : '<span style="color:var(--red);">falta precio</span>') + '</b></div>' +
-                '<div class="i3-nota">' + fila.q + ' ' + esc(fila.u) + ' × ' + bs(fila.p) + ' · ' + esc(op.operacion) + '</div>' +
-                (fila.revisar ? '<div style="color:var(--red);font-size:11px;">⚠ ' + esc(fila.revisar) + '</div>' : '') +
-                (!fila.clave ? '<button class="i3-btn" style="padding:5px 9px;font-size:11px;margin-top:4px;" onclick="_i3CrearMO(' + op._i + ')">＋ Crear en la base (sin precio)</button>' : '') +
-                '</div></div></div>';
+        h += '<div style="font-size:12px;font-weight:800;margin-top:8px;">Mano de obra <span class="i3-nota">(receta de cada material × geometría)</span></div>';
+        if (!apu.mo.length) h += '<div class="i3-nota">' + (sinReceta.length ? 'Los materiales todavía no tienen receta: armala una vez y queda guardada.' : 'Sin mano de obra en las recetas.') + '</div>';
+        apu.mo.forEach(function (x) {
+            h += '<div style="font-size:12px;padding:5px 0;border-top:1px solid var(--border);"><div style="display:flex;justify-content:space-between;gap:6px;">' +
+                '<span>' + esc(x.d) + '</span><b>' + (x.p > 0 && x.q > 0 ? bs(x.q * x.p) : '<span style="color:var(--red);">' + (x.p > 0 ? 'falta cantidad' : 'falta precio') + '</span>') + '</b></div>' +
+                '<div class="i3-nota">' + x.q + ' ' + esc(x.u) + ' × ' + bs(x.p) + ' · ' + esc(x.nota) + '</div>' +
+                (x.revisar ? '<div style="color:var(--red);font-size:11px;">⚠ ' + esc(x.revisar) + '</div>' : '') + '</div>';
         });
         return h + '</details></div>';
     }
 
     window._i3Desp = function (clave, v) { conScroll(function () { est.desp[clave] = Math.max(0, Math.min(100, parseFloat(String(v).replace(',', '.')) || 0)); }); };
-    window._i3Op = function (i, v) { conScroll(function () { est.ops[i].incluir = v; }); };
-    window._i3CrearMO = async function (i) {
-        var op = est.ops[i], calc = Lector3D.cantidadOperacion(op, []);
-        var nombre = prompt('Crear en la base de mano de obra (sin precio: lo cargás después).\nNombre:', op.operacion.charAt(0).toUpperCase() + op.operacion.slice(1));
-        if (nombre == null || !nombre.trim()) return;
-        var unidad = prompt('Unidad (m2, ml, und, glb, jornal, hr):', calc.u);
-        if (unidad == null || !unidad.trim()) return;
-        var clave = Lector3D.claveBase(nombre);
-        var reg = { desc: nombre.trim(), n: nombre.trim(), u: unidad.trim(), p: 0, falta_precio: true, origen: 'pdf_ia', creado: firebase.database.ServerValue.TIMESTAMP };
-        try { await db.ref('base_datos/mano_obra/' + clave).set(reg); } catch (e) { alert('No se pudo crear: ' + e.message); return; }
-        catalogoMO()[clave] = Object.assign({}, reg, { creado: Date.now() });
-        conScroll(function () { op.mo_clave_elegida = clave; });
+
+    function tarjetaRecargos() {
+        var rc = est.recargos, campo = function (k, t) {
+            return '<label class="i3-nota" style="display:flex;flex-direction:column;gap:2px;flex:1;min-width:90px;">' + t +
+                '<input type="number" inputmode="decimal" min="0" step="1" value="' + rc[k] + '" style="padding:7px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text);font-size:15px;" ' +
+                'onchange="_i3Recargo(\'' + k + '\',this.value)"></label>';
+        };
+        return '<div class="i3-card"><div style="font-weight:800;">Recargos del APU</div>' +
+            '<div class="i3-nota">Tomados de ' + esc(rc.desde) + '. Se pueden cambiar acá (y después en el APU de cada ítem).</div>' +
+            '<div style="display:flex;gap:8px;margin-top:6px;flex-wrap:wrap;">' + campo('cs', 'Cargas sociales %') + campo('ind', 'Indirectos %') + campo('util', 'Utilidad %') + '</div></div>';
+    }
+    window._i3Recargo = function (k, v) { conScroll(function () { est.recargos[k] = Math.max(0, parseFloat(String(v).replace(',', '.')) || 0); est.recargos.desde = 'lo que pusiste acá'; }); };
+
+    // ---------- Receta de mano de obra por material: se arma UNA vez y queda en /base_datos/materiales/{k}/mo_receta
+    var NOMBRES_MEDIDA = [['m2_cara', 'm² de una cara (corte, enchapado)'], ['m2_sup', 'm² de toda la superficie (laca, pintura, ploteo)'],
+        ['ml_perimetro', 'ml de perímetro (canto, pulido de cantos)'], ['ml_largo', 'ml de largo (soldadura, perfiles)'],
+        ['und', 'por pieza (armado, colocación)'], ['m3', 'm³ de volumen'], ['glb', 'una vez por ítem']];
+
+    function pedirRecetas() {
+        if (!est) return;
+        var usados = est.filas.filter(function (f) { return f.incluir; });
+        est.recetaPend = Lector3D.materialesSinReceta(usados, catalogo()).filter(function (k) { return !(est.recetaOmitida || {})[k]; });
+        if (est.recetaPend.length && !$('i3-receta')) window._i3Receta(est.recetaPend[0], true);
+    }
+
+    window._i3Receta = function (clave, automatico) {
+        var cat = catalogo()[clave];
+        if (!cat) return;
+        est.receta = { clave: clave, automatico: !!automatico, pasos: JSON.parse(JSON.stringify(Lector3D.recetaDe(cat) || [])) };
+        if (!est.receta.pasos.length) est.receta.pasos.push({ mo: '', medida: 'm2_cara', factor: 1 });
+        pintarReceta();
+    };
+
+    function pintarReceta() {
+        var r = est.receta, cat = catalogo()[r.clave], mo = catalogoMO();
+        var opcionesMO = Object.keys(mo).sort(function (a, b) { return String(mo[a].n || mo[a].desc || a).localeCompare(String(mo[b].n || mo[b].desc || b)); })
+            .map(function (k) { return [k, (mo[k].n || mo[k].desc || k) + ' [' + (mo[k].u || mo[k].und || '?') + ']' + (precioMO(mo[k]) ? '' : ' (sin precio)')]; });
+        var h = '<div style="font-weight:800;font-size:15px;">Mano de obra de "' + esc(cat.n || cat.desc || r.clave) + '"</div>' +
+            '<div class="i3-nota" style="margin:4px 0 8px;">Se arma <b>una sola vez</b> y queda guardada en la base: cada pieza con este material suma sola su mano de obra ' +
+            '(cantidad de la geometría × precio de la base).</div>';
+        r.pasos.forEach(function (p, i) {
+            h += '<div style="border-top:1px solid var(--border);padding:8px 0;">' +
+                '<select class="i3-inp" style="width:100%;" onchange="_i3RecetaPaso(' + i + ',\'mo\',this.value)"><option value="">Elegí la mano de obra…</option>' +
+                opcionesMO.map(function (o) { return '<option value="' + esc(o[0]) + '"' + (o[0] === p.mo ? ' selected' : '') + '>' + esc(o[1]) + '</option>'; }).join('') +
+                '<option value="__nueva">＋ Crear mano de obra nueva (sin precio)…</option></select>' +
+                '<div style="display:flex;gap:6px;margin-top:6px;"><select class="i3-inp" style="flex:3;" onchange="_i3RecetaPaso(' + i + ',\'medida\',this.value)">' +
+                NOMBRES_MEDIDA.map(function (m) { return '<option value="' + m[0] + '"' + (m[0] === p.medida ? ' selected' : '') + '>' + m[1] + '</option>'; }).join('') + '</select>' +
+                '<input class="i3-inp" style="flex:1;min-width:60px;" type="number" inputmode="decimal" step="0.1" min="0" value="' + (p.factor || 1) + '" title="Factor (ej. 2 = dos manos)" onchange="_i3RecetaPaso(' + i + ',\'factor\',this.value)">' +
+                '<button class="i3-btn" style="padding:6px 10px;" onclick="_i3RecetaPaso(' + i + ',\'quitar\')">✕</button></div></div>';
+        });
+        h += '<button class="i3-btn" style="margin-top:6px;" onclick="_i3RecetaPaso(-1,\'agregar\')">＋ Otro trabajo</button>' +
+            '<div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap;"><button class="i3-btn prim" onclick="_i3RecetaGuardar(false)">Guardar</button>' +
+            '<button class="i3-btn" onclick="_i3RecetaGuardar(true)">No lleva mano de obra</button>' +
+            '<button class="i3-btn" onclick="_i3RecetaCerrar()">Después</button></div>';
+        var cont = $('i3-receta');
+        if (!cont) {
+            cont = document.createElement('div'); cont.id = 'i3-receta';
+            cont.style.cssText = 'position:fixed;inset:0;z-index:9900;background:rgba(0,0,0,.55);display:flex;align-items:flex-end;justify-content:center;';
+            cont.innerHTML = '<div id="i3-receta-box" class="i3-card" style="width:100%;max-width:620px;max-height:85vh;overflow-y:auto;margin:0;border-radius:16px 16px 0 0;padding:16px;padding-bottom:max(16px,env(safe-area-inset-bottom));"></div>';
+            $('mod-imp3d').appendChild(cont);
+        }
+        $('i3-receta-box').innerHTML = h;
+    }
+    function precioMO(m) { var p = parseFloat(m && (m.p != null ? m.p : m.pu)); return p > 0 ? p : 0; }
+
+    window._i3RecetaPaso = async function (i, campo, v) {
+        var r = est.receta;
+        if (campo === 'agregar') r.pasos.push({ mo: '', medida: 'und', factor: 1 });
+        else if (campo === 'quitar') r.pasos.splice(i, 1);
+        else if (campo === 'factor') r.pasos[i].factor = Math.max(0, parseFloat(String(v).replace(',', '.')) || 1);
+        else if (campo === 'mo' && v === '__nueva') {
+            var nombre = prompt('Nombre de la mano de obra nueva (queda en la base sin precio):', '');
+            if (nombre && nombre.trim()) {
+                var unidad = prompt('Unidad (m2, ml, und, glb, jornal, hr):', NOMBRES_MEDIDA[0][0] === r.pasos[i].medida ? 'm2' : 'und') || 'und';
+                var clave = Lector3D.claveBase(nombre);
+                var reg = { desc: nombre.trim(), n: nombre.trim(), u: unidad.trim(), p: 0, falta_precio: true, origen: 'receta', creado: firebase.database.ServerValue.TIMESTAMP };
+                try { await db.ref('base_datos/mano_obra/' + clave).set(reg); catalogoMO()[clave] = Object.assign({}, reg, { creado: Date.now() }); r.pasos[i].mo = clave; }
+                catch (e) { alert('No se pudo crear: ' + e.message); }
+            }
+        } else r.pasos[i][campo] = v;
+        pintarReceta();
+    };
+
+    window._i3RecetaGuardar = async function (ninguna) {
+        var r = est.receta, pasos = r.pasos.filter(function (p) { return p.mo; }).map(function (p) { return { mo: p.mo, medida: p.medida, factor: parseFloat(p.factor) || 1 }; });
+        if (!ninguna && !pasos.length) { alert('Elegí al menos una mano de obra, o tocá "No lleva mano de obra".'); return; }
+        var ref = db.ref('base_datos/materiales/' + r.clave), cat = catalogo()[r.clave];
+        try {
+            if (ninguna) { await ref.update({ mo_receta: null, mo_receta_ninguna: true }); delete cat.mo_receta; cat.mo_receta_ninguna = true; }
+            else { await ref.update({ mo_receta: pasos, mo_receta_ninguna: null }); cat.mo_receta = pasos; delete cat.mo_receta_ninguna; }
+        } catch (e) { alert('No se pudo guardar la receta: ' + e.message); return; }
+        window._i3RecetaCerrar(true);
+    };
+
+    window._i3RecetaCerrar = function (guardada) {
+        var r = est.receta;
+        if (!guardada && r) (est.recetaOmitida = est.recetaOmitida || {})[r.clave] = true;   // "Después": no insistir en esta importación
+        var c = $('i3-receta'); if (c) c.remove();
+        est.receta = null;
+        conScroll(function () {});
+        if (r && r.automatico) pedirRecetas();   // la siguiente que falte
     };
 
     // ------------------------------------------------------- revisión
@@ -778,10 +860,6 @@
                 (est.calibrado
                     ? '<div class="i3-nota" style="margin-top:4px;color:var(--green);font-weight:700;">📏 ' + esc(textoCalibrado()) + ' Se ajustaron todas las piezas del archivo.</div>'
                     : '<div class="i3-nota" style="margin-top:4px;">Unidad detectada: ' + esc(est.det.unidad) + ' (' + esc(est.det.motivo) + ').</div>');
-        } else if (est.modo === 'pdf') {
-            h += '<div class="i3-nota" style="margin-top:6px;">Sin 3D: las piezas, <b>medidas y cantidades salen del PDF (IA)</b> y quedan marcadas con su confianza. Revisalas.</div>' +
-                '<label class="i3-btn" style="display:inline-block;margin-top:8px;">＋ Sumar el 3D (sus medidas reemplazan a las del PDF)' +
-                '<input type="file" accept=".glb,.gltf,.fbx,.zip,application/octet-stream" style="display:none" onchange="_i3Sumar3D(this.files)"></label>';
         } else {
             h += '<div class="i3-nota" style="margin-top:6px;">rubik.json de Blender (medidas en metros). ' + esc(est.res.resumen || '') + '</div>';
         }
@@ -792,6 +870,7 @@
 
         h += tarjetaPDF();
         if (est.modo === '3d') h += tarjetaEscala();
+        h += tarjetaRecargos();
 
         if (falta.length) {
             h += '<div class="i3-card"><div style="font-weight:800;">Materiales sin vincular</div>' +
@@ -830,7 +909,7 @@
                     (f.medidas_desde === 'pdf_ia' ? ' <span class="i3-ia">según PDF (IA) · ' + esc(f.medidas_confianza) + '</span>' : '') + '</div>' +
                     '<div class="i3-mat ' + matCls + '">' + esc(matTxt) +
                     (f.material_desde === 'pdf_ia' ? ' <span class="i3-ia">según PDF (IA) · ' + esc(f.material_confianza) + '</span>' : '') + '</div>' +
-                    (f.cant_desde ? '<div class="i3-nota"><span class="i3-ia">cantidad según PDF (IA) · ' + esc(f.cant_desde) + '</span></div>' : '') +
+
                     (acab ? '<div class="i3-nota">Acabados: ' + acab + '</div>' : '') +
                     (f.motivos || []).filter(function (m) { return /partes sueltas|revisar la unidad/.test(m); }).map(function (m) {
                         return '<div class="i3-nota" style="color:var(--orange);font-weight:700;">⚠ ' + esc(m) + '</div>';
@@ -843,7 +922,7 @@
             h += tarjetaApu(nombre, filas.filter(function (f) { return f.incluir; }));
             h += '</div>';
         });
-        if (!est.filas.length) h += '<div class="i3-card">' + (est.modo === 'pdf' ? (est.pdf && est.pdf.estado === 'listo' ? 'La IA no encontró piezas en el PDF.' : 'Esperando que la IA lea el PDF…') : 'El archivo no tiene piezas para medir (mallas).') + '</div>';
+        if (!est.filas.length) h += '<div class="i3-card">El archivo no tiene piezas para medir (mallas).</div>';
 
         var hayCaps = (typeof data !== 'undefined') && data.some(function (it) { return it && it.type === 'chapter'; });
         h += '<label class="i3-card" style="display:flex;gap:10px;align-items:center;"><input type="checkbox" id="i3-cap" ' + (hayCaps ? 'checked' : '') + '>' +
@@ -895,6 +974,7 @@
             est.eqNodo[Lector3D.claveEquivalencia(origen)] = { vw: origen, material: clave };
             var eq = Lector3D.cargarEquivalencias(est.eqNodo);
             conScroll(function () { est.filas.forEach(function (f) { Lector3D.resolverMateriales(f, eq); }); });
+            pedirRecetas();
         } else {
             conScroll(function () {
                 est.filas.forEach(function (f) {
@@ -914,11 +994,11 @@
         if (falta && !confirm(falta + ' material' + (falta > 1 ? 'es quedan' : ' queda') + ' sin vincular: van a quedar marcados en rojo en el APU, sin precio. ¿Agregar igual?')) return;
         var nombres = est.items.filter(function (n) { return filas.some(function (f) { return f.item === n; }); });
         var nuevos = Lector3D.armarItems(filas, nombres, catalogo(), function () { return db.ref().push().key; }, {
-            archivo: est.archivo, fecha: Date.now(), pdf: est.pdf && est.pdf.info ? est.pdf.nombre : null, origen: est.modo === 'pdf' ? 'pdf' : '3d',
+            archivo: est.archivo, fecha: Date.now(), pdf: est.pdf && est.pdf.info ? est.pdf.nombre : null,
             unidad: est.modo !== '3d' ? 'm' : (est.calibrado ? textoCalibrado() + ' (×' + (est.factor / Lector3D.FACTORES[est.unidad]).toPrecision(4) + ' sobre ' + est.unidad + ')' : est.unidad)
-        }, { desperdicios: est.desp, operacionesPorItem: opsPorItem(), catalogoMO: catalogoMO() });
+        }, { desperdicios: est.desp, catalogoMO: catalogoMO(), recargos: est.recargos });
         if ($('i3-cap') && $('i3-cap').checked) {
-            data.push({ type: 'chapter', name: ((est.modo === 'pdf' ? 'PDF · ' : '3D · ') + est.archivo.replace(/\.[^.]+$/, '')).toUpperCase(), collapsed: false });
+            data.push({ type: 'chapter', name: ('3D · ' + est.archivo.replace(/\.[^.]+$/, '')).toUpperCase(), collapsed: false });
         }
         // Siempre al final: las licitaciones apuntan a los ítems por posición (ver ficha 03)
         nuevos.forEach(function (it) { data.push(it); });
@@ -932,7 +1012,7 @@
             window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
             alert('✅ ' + nuevos.length + ' ítem' + (nuevos.length > 1 ? 's' : '') + ' agregado' + (nuevos.length > 1 ? 's' : '') + ' al final.\n' +
                 (marcadas ? marcadas + ' fila' + (marcadas > 1 ? 's' : '') + ' del APU en rojo: falta precio, rendimiento o vincular.\n' : '') +
-                (conMO ? 'La mano de obra la propuso la IA: revisala en el APU.' : 'La mano de obra se carga a mano en el APU, como siempre.'));
+                (conMO ? 'La mano de obra sale de la receta de cada material.' : 'Sin recetas de mano de obra todavía: armalas desde "Importar 3D" o cargala a mano en el APU.'));
         }, 150);
     };
 

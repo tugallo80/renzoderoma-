@@ -214,14 +214,17 @@
     Compartidos3D.pendientes().then(function (lista) {
         envio = lista.find(function (e) { return e.id === id; }) || lista[0];
         if (!envio) return sinEnvio('No hay archivos pendientes (ya se importaron, se cancelaron o vencieron).');
-        var utiles = ['fbx', 'glb', 'gltf', 'zip', 'pdf', 'json', 'bin'];
+        var utiles = ['fbx', 'glb', 'gltf', 'zip', 'pdf', 'json', 'bin', 'imagen'];
+        var det = envio.detalle || [];
+        var hay3D = det.some(function (a) { return ['fbx', 'glb', 'gltf', 'zip', 'json'].indexOf(a.detectado) >= 0; });
         $('archivos').innerHTML = (envio.detalle || envio.nombres.map(function (n) { return { nombre: n }; })).map(function (a) {
             var raro = a.detectado === null && 'detectado' in a;
             var mb = a.tamano ? ' · ' + (a.tamano >= 1048576 ? (a.tamano / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(a.tamano / 1024)) + ' KB') : '';
             return '<div class="archivo">' + esc(a.nombre) + '<span class="nota" style="font-weight:400;">' +
                 (a.detectado && utiles.indexOf(a.detectado) >= 0 ? ' · ' + a.detectado.toUpperCase() : '') + mb + '</span></div>' +
-                (raro ? '<div class="error" style="font-size:13px;">⚠ No parece un modelo 3D, PDF ni .zip (tipo: ' + esc(a.tipo || 'vacío') + '). Podés cancelar.</div>' : '');
-        }).join('');
+                (raro ? '<div class="error" style="font-size:13px;">⚠ No parece un modelo 3D, PDF, foto ni .zip (tipo: ' + esc(a.tipo || 'vacío') + '). Podés cancelar.</div>' : '');
+        }).join('') + (det.length && !hay3D ? '<div class="nota" style="margin-top:6px;color:var(--text);">Sin modelo 3D: "Importar 3D" lo va a pedir. ' +
+            'Para cotizar solo con un PDF o una foto, usá <b>Presupuesto IA</b> en el presupuesto.</div>' : '');
         pintar();
         (window.rubikAuthReady || Promise.resolve()).then(function () {
             return firebase.database().ref('clientes').once('value');

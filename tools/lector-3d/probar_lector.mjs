@@ -238,7 +238,7 @@ comparar('FBX', L.analizar(fbx, { equivalencias: eq, factor: uFbx.factor, archiv
   const piezas = r.piezas.filter(p => !L.sugerirDescarte(p.pieza));
   chk('se sugiere descartar la persona', r.piezas.length - piezas.length === 1 && L.sugerirDescarte('Persona 1.75'));
   chk('no se descarta un mueble', !L.sugerirDescarte('Mostrador recepción') && !L.sugerirDescarte('Planchas MDF'));
-  const items = L.armarItems(piezas, [...new Set(piezas.map(p => p.item))], catalogo, () => 'id' + (++n), { archivo: 'ejemplo.glb' });
+  const items = L.armarItems(piezas, [...new Set(piezas.map(p => p.item))], catalogo, () => 'id' + (++n), { archivo: 'ejemplo.glb' }, { recargos: { cs: 55, ind: 10, util: 50 } });
   chk('3 ítems', items.length === 3, items.map(i => i.desc));
   chk('ids estables y origen 3d', items.every(i => i.id && i.origen === '3d' && i.type === 'item'));
   const mos = items.find(i => i.desc === 'Mostrador recepción');
@@ -303,7 +303,7 @@ comparar('FBX', L.analizar(fbx, { equivalencias: eq, factor: uFbx.factor, archiv
   };
   const resp = { candidates: [{ content: { parts: [{ text: 'Acá va:\n```json\n' + JSON.stringify(json) + '\n```' }] } }] };
   const info = L.leerRespuestaPDF(resp);
-  chk('respuesta: se lee aunque venga con ```json', info.medidas_generales.alto_mm === 800 && info.piezas.length === 3 && info.piezas[0].cantidad === 2);
+  chk('respuesta: se lee aunque venga con ```json', info.medidas_generales.alto_mm === 800 && info.piezas.length === 3 && info.piezas[0].pieza_3d === 'pANEL Frente' && info.piezas[0].cantidad === undefined);
   let err = null; try { L.leerRespuestaPDF({ candidates: [] }); } catch (e) { err = e; }
   chk('respuesta vacía → error claro', err && /no devolvió/.test(err.message));
 
@@ -313,7 +313,7 @@ comparar('FBX', L.analizar(fbx, { equivalencias: eq, factor: uFbx.factor, archiv
   chk('propone escala con la medida mayor del PDF', esc && cerca(esc.factor * Math.max(...tam) * 1000, 800, 0.5) && esc.confianza !== undefined, esc);
   chk('escala: dice qué medida, de qué página y con qué confianza (para calibrar sola si es alta o media)',
     esc && esc.dimension === 'alto total' && esc.mm === 800 && esc.pagina === 2 && esc.confianza === 'alta', esc);
-  chk('pedido: pide la página y medidas TOTALES', /pagina/.test(pedido.systemInstruction.parts[0].text) && /TOTALES/.test(pedido.systemInstruction.parts[0].text));
+  chk('pedido: pide la página y medidas TOTALES', /pagina/.test(pedido.systemInstruction.parts[0].text) && /TOTAL/.test(pedido.systemInstruction.parts[0].text));
   {
     // Dos medidas que no escalan igual (>10 %) → confianza baja → solo se propone, no se calibra sola
     const raro = { ...info, medidas_generales: { ...info.medidas_generales, ancho_mm: 100 } };
@@ -327,8 +327,8 @@ comparar('FBX', L.analizar(fbx, { equivalencias: eq, factor: uFbx.factor, archiv
   chk('material que no está en la base → propone crearlo (precio vacío)', inox && inox.clave === null && inox.aplicable && inox.crear && inox.crear.n === 'Inox' && /no está en la base/.test(inox.texto), inox);
   const placa = props.find(p => p.nombre_pdf === 'Placa grabada');
   chk('pieza del PDF que no está en el 3D → solo informativa', placa && placa.pieza === null && placa.aplicable === false);
-  chk('propone cantidad del PDF', props.some(p => p.tipo === 'cantidad' && p.pieza === 'pANEL Frente' && p.cantidad === 2));
-  chk('propone calibrar con la medida de una pieza', props.some(p => p.tipo === 'medida' && p.pieza === 'pANEL Frente' && p.largo_mm === 800));
+  chk('la IA NO propone cantidades ni medidas por pieza (las da el algoritmo)', !props.some(p => p.tipo === 'cantidad' || p.tipo === 'medida'));
+  chk('pedido: no pide medidas por pieza, cantidades ni mano de obra', !/\\"(largo_mm|cantidad|operaciones)\\"/.test(JSON.stringify(pedido.systemInstruction)) && /SOLO/.test(pedido.systemInstruction.parts[0].text));
   chk('nada cambia sin aplicar', filas.every(f => f.material === null && f.cant === 1));
 
   // Aceptada en la revisión → el APU la marca "según PDF (IA)" con su confianza
@@ -354,6 +354,9 @@ comparar('FBX', L.analizar(fbx, { equivalencias: eq, factor: uFbx.factor, archiv
   chk('MIME cuando no hay firma (.bin del glTF por nombre)', L.detectarTipo('escena.bin', '', new Uint8Array([1, 2, 3])) === 'bin');
   chk('MIME model/gltf-binary sin firma', L.detectarTipo('x', 'model/gltf-binary', new Uint8Array([1, 2])) === 'glb');
   chk('nada reconocible → null', L.detectarTipo('foto', 'image/heic', new Uint8Array([1, 2, 3, 4])) === null);
+  chk('JPEG por firma → imagen (foto o render para leer materiales)', L.detectarTipo('x', '', new Uint8Array([0xff, 0xd8, 0xff, 0xe0])) === 'imagen');
+  chk('PNG por firma → imagen', L.detectarTipo('x', '', new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d])) === 'imagen');
+  chk('nombre de imagen se conserva', L.nombreConTipo('render.png', 'imagen') === 'render.png');
   chk('la firma manda sobre la extensión equivocada', L.detectarTipo('modelo.pdf', 'application/pdf', b('ejemplo.fbx')) === 'fbx');
   chk('nombre: sin extensión → .fbx', L.nombreConTipo('Copa separada blender (2)', 'fbx') === 'Copa separada blender (2).fbx');
   chk('nombre: vacío → modelo.fbx', L.nombreConTipo('', 'fbx') === 'modelo.fbx');
@@ -422,53 +425,34 @@ comparar('FBX', L.analizar(fbx, { equivalencias: eq, factor: uFbx.factor, archiv
   chk('equivalencia guardada manda', (L.buscarEnCatalogo('MDF 9 mm laqueado dorado', null, base, { x: { vw: 'MDF 9 mm laqueado dorado', material: 'MDF_9' } }) || {}).desde === 'equivalencia');
   chk('clave nueva como presupuesto.html', L.claveBase('Acrílico cristal 3 mm.') === 'ACRÍLICO CRISTAL 3 MM');
 
-  // Mano de obra propuesta por la IA
-  const piezasMO = [pz({ pieza: 'Tapa', cant: 2 }), pz({ pieza: 'Base', cant: 1, tipo: 'volumen', area_cara_m2: null, perimetro_ml: null, area_m2: 0.8 })];
-  chk('MO m² superficie = todas las caras × cantidad', L.cantidadOperacion({ medida: 'm2_superficie' }, piezasMO).q === 2.94);
-  chk('MO ml perímetro (canto)', L.cantidadOperacion({ medida: 'ml_perimetro' }, piezasMO).q === 9);
-  chk('MO por pieza = unidades', L.cantidadOperacion({ medida: 'und' }, piezasMO).q === 3);
-  const catMO = { LAQUEADO: { desc: 'Laqueado', u: 'm2', p: 80 }, ARMADO: { desc: 'Armado de mueble', u: 'jornal', p: 150 } };
-  const mo = L.armarApuMO([
-    { operacion: 'laqueado', mo_clave: 'LAQUEADO', medida: 'm2_superficie', piezas: ['Tapa'], confianza: 'alta' },
-    { operacion: 'armado de mueble', mo_clave: null, medida: 'und', piezas: [], confianza: 'media' },
-    { operacion: 'corte CNC', mo_clave: null, medida: 'm2_cara', piezas: [], confianza: 'media' },
-    { operacion: 'pulido', mo_clave: null, medida: 'ml_perimetro', piezas: [], confianza: 'baja', incluir: false },
-  ], piezasMO, catMO, {});
-  chk('MO laqueado: solo la Tapa, m² y precio de la base', mo[0].d === 'Laqueado' && mo[0].q === 2.14 && mo[0].p === 80 && !mo[0].revisar && mo[0].segun === 'IA', mo[0]);
-  chk('MO en jornal → falta rendimiento (q 0, marcada)', mo[1].d === 'Armado de mueble' && mo[1].q === 0 && /rendimiento/.test(mo[1].revisar), mo[1]);
-  chk('MO que no está en la base → cantidad calculada, sin precio, marcada', mo[2].d === 'corte CNC' && mo[2].q > 0 && mo[2].p === 0 && /no está en la base/.test(mo[2].revisar), mo[2]);
-  chk('MO destildada no entra', mo.length === 3);
+  // Mano de obra por RECETA del material (la arma el algoritmo; la IA no propone operaciones)
+  const catMO = { LAQUEADO: { desc: 'Laqueado', u: 'm2', p: 80 }, CANTEADO: { desc: 'Canteado', u: 'ml', p: 5 }, ARMADO: { desc: 'Armado', u: 'jornal', p: 150 } };
+  const catR = {
+    M: { n: 'MDF 18', u: 'm2', p: 100, mo_receta: [{ mo: 'LAQUEADO', medida: 'm2_sup', factor: 1 }, { mo: 'CANTEADO', medida: 'ml_perimetro', factor: 1 }, { mo: 'ARMADO', medida: 'und', factor: 1 }] },
+    V: { n: 'Vidrio 6', u: 'm2', p: 180 },                                    // sin receta → se pide una vez
+    X: { n: 'Pintura', u: 'm2', p: 30, mo_receta: { a: { mo: 'NO_EXISTE', medida: 'm2_cara', factor: 2 } } },
+  };
+  const piezasR = [pz({ pieza: 'Tapa', cant: 2 }), pz({ pieza: 'Lateral', cant: 1 }), pz({ pieza: 'Vidrio', material: 'V' }), pz({ pieza: 'Fondo', material: 'X' })];
+  const moR = L.armarApuMO(piezasR, catR, catMO);
+  const laca = moR.find(r => r.clave === 'LAQUEADO'), canto = moR.find(r => r.clave === 'CANTEADO'), armado = moR.find(r => r.clave === 'ARMADO'), nx = moR.find(r => r.clave === 'NO_EXISTE');
+  chk('receta: laqueado = superficie de las 3 piezas de MDF × precio de la base', laca && cerca(laca.q, 1.07 * 3, 1e-3) && laca.p === 80 && laca.u === 'm2' && !laca.revisar, laca);
+  chk('receta: canteado = perímetro × cantidad', canto && cerca(canto.q, 9, 1e-6) && canto.p === 5, canto);
+  chk('receta: base en jornal → falta rendimiento (q 0, marcada)', armado && armado.q === 0 && /rendimiento/.test(armado.revisar), armado);
+  chk('receta con factor y MO que no está en la base → cantidad × factor, marcada', nx && cerca(nx.q, 1, 1e-6) && nx.p === 0 && /no está en la base/.test(nx.revisar), nx);
+  chk('material sin receta → no genera MO y se pide la receta', !moR.some(r => /Vidrio/.test(r.nota)) && JSON.stringify(L.materialesSinReceta(piezasR, catR)) === '["V"]');
+  chk('receta "ninguna" no se vuelve a pedir', L.materialesSinReceta([pz({ material: 'V' })], { V: { n: 'V', mo_receta_ninguna: true } }).length === 0);
+  chk('cantidades de receta: m³ y m² de una cara', cerca(L.cantidadMedida('m3', pz({ cant: 2 })), 0.018, 1e-9) && L.cantidadMedida('m2_cara', pz({})) === 0.5);
 
-  // Solo PDF: ítems → piezas → medidas → cantidad → material en texto (vinculable y recordado)
-  const info = L.leerRespuestaPDF({ candidates: [{ content: { parts: [{ text: JSON.stringify({
-    medidas_generales: { alto_mm: 800 }, piezas: [
-      { item: 'Copa', nombre_pdf: 'Disco base', largo_mm: 300, ancho_mm: 300, espesor_mm: 18, cantidad: 1, material_texto: 'MDF 18 mm laqueado negro', confianza: 'alta' },
-      { item: 'Copa', nombre_pdf: 'Placa frontal', largo_mm: 250, ancho_mm: 120, espesor_mm: 3, cantidad: 2, material_texto: 'acrílico cristal 3 mm', unidad_sugerida: 'plancha', confianza: 'media' },
-      { item: 'Copa', nombre_pdf: 'Logo', cantidad: 1, material_texto: null, confianza: 'baja' }],
-    operaciones: [{ item: 'Copa', operacion: 'Laqueado', medida: 'm2_superficie', piezas: ['Disco base'], confianza: 'alta' }] }) }] } }] });
-  chk('respuesta con operaciones', info.operaciones.length === 1 && info.operaciones[0].medida === 'm2_superficie');
-  const filasPDF = L.piezasDesdePDF(info, { a: { vw: 'acrílico cristal 3 mm', material: 'ACRILICO_3' } }, 'copa-cliente');
-  const disco = filasPDF.find(f => f.pieza === 'Disco base'), placa = filasPDF.find(f => f.pieza === 'Placa frontal'), logo = filasPDF.find(f => f.pieza === 'Logo');
-  chk('solo PDF: medidas en m, plancha y cantidades', disco.largo === 0.3 && disco.espesor === 0.018 && disco.tipo === 'plancha' && placa.cant === 2 && disco.item === 'Copa', disco);
-  chk('solo PDF: material en texto como origen (vinculable)', disco.origen_vw === 'MDF 18 mm laqueado negro' && disco.material === null && disco.revisar);
-  chk('solo PDF: texto ya vinculado antes → material directo', placa.material === 'ACRILICO_3' && placa.material_desde === 'equivalencia');
-  chk('solo PDF: sin medidas → marcada', logo.revisar && logo.motivos.some(m => /no da las medidas/.test(m)));
-  chk('solo PDF: marcado "según PDF (IA)" con confianza', disco.medidas_desde === 'pdf_ia' && /según PDF \(IA\), confianza alta/.test(disco.motivos[0]));
-  const pedidoSolo = L.armarPedidoPDF({ texto: 'x', piezas: [], catalogo: {}, manoObra: catMO });
-  chk('pedido solo PDF: pide TODAS las piezas y lleva el catálogo de MO', /NO HAY MODELO 3D/.test(pedidoSolo.systemInstruction.parts[0].text) && JSON.stringify(pedidoSolo).includes('LAQUEADO = Laqueado'));
-
-  // Resumen del APU (lo que ve el dueño antes de "Agregar") e ítems con MO
-  const catAll = { MDF18N: { n: 'MDF 18 mm laqueado negro', u: 'm2', p: 120 }, ACRILICO_3: { n: 'Acrílico cristal 3mm', u: 'plancha', p: 0, falta_precio: true } };
-  disco.material = 'MDF18N';
-  const apu = L.armarApu(filasPDF.filter(f => f.material), catAll, { operaciones: info.operaciones, catalogoMO: catMO, desperdicios: { MDF18N: 10 } });
-  const res = L.resumenApu(apu);
-  chk('resumen: materiales = 0.09 m² × 1.1 × 120', cerca(res.materiales, 0.09 * 1.1 * 120, 0.01), res);
-  chk('resumen: MO laqueado = área del disco × 80', cerca(res.mano_obra, disco.area_m2 * 80, 0.05), res);
-  chk('resumen: precio unitario con cargas sociales, indirectos y utilidad', cerca(res.pu, Math.round((res.materiales + res.mano_obra * 1.55) * 1.1 * 1.5 * 100) / 100, 0.02), res);
-  chk('resumen: cuenta las filas sin precio', res.sin_precio === 1, res);
+  // Recargos: los que pasa el presupuesto, no fijos en el código
+  const apuR = L.armarApu([pz({ pieza: 'Tapa' })], catR, { catalogoMO: catMO, recargos: { cs: 40, ind: 12, util: 30 } });
+  const res = L.resumenApu(apuR);
+  const moBs = 1.07 * 80 + 3 * 5;
+  chk('resumen: materiales y MO por receta', cerca(res.materiales, 50, 0.01) && cerca(res.mano_obra, moBs, 0.05), res);
+  chk('resumen: usa los recargos que se le pasan (40/12/30)', cerca(res.pu, Math.round((50 + moBs * 1.4) * 1.12 * 1.3 * 100) / 100, 0.05) && res.recargos.util === 30, res);
+  chk('sin recargos no inventa: 0 %', L.armarApu([pz({})], catR, {}).util === undefined);
   let nId = 0;
-  const its = L.armarItems(filasPDF.filter(f => f.material), ['Copa'], catAll, () => 'id' + (++nId), { origen: 'pdf' }, { operacionesPorItem: { Copa: info.operaciones }, catalogoMO: catMO });
-  chk('ítem con APU de materiales y mano de obra', its[0].apu.mo.length === 1 && its[0].apu.mo[0].d === 'Laqueado' && its[0].origen === 'pdf' && its[0].pu > 0, its[0].apu.mo);
+  const its = L.armarItems([pz({ pieza: 'Tapa' })], ['X'], catR, () => 'id' + (++nId), {}, { catalogoMO: catMO, recargos: { cs: 55, ind: 10, util: 50 } });
+  chk('ítem guardado: MO por receta, recargos del presupuesto, origen 3d', its[0].apu.mo.length === 3 && its[0].apu.util === 50 && its[0].apu.cs === 55 && its[0].origen === '3d', its[0].apu);
 }
 
 console.log(`\n${ok} OK, ${mal} fallas`);

@@ -11,6 +11,11 @@ calculara todo, con más contexto. Acá la IA deja de calcular cantidades cuando
 
 ## La idea en una frase
 
+> **Principio (aclarado por el dueño, 11 nov 2026): cómputo = algoritmo; IA = solo leer materiales y la escala del plano.**
+> Con un 3D, medidas, cantidades, áreas, volúmenes, planchas y mano de obra los calcula el algoritmo desde la geometría y la
+> base de datos. La IA solo lee lo que el algoritmo no puede: de qué material es cada pieza (en el PDF, el plano o una
+> foto/render) y la medida total del plano para calibrar la escala. Cotizar sin 3D, solo con PDF o foto, es "Presupuesto IA".
+
 > **Si hay modelo 3D, la IA no inventa números.** Blender da las medidas, la base de datos da los
 > precios y rendimientos, y el sistema hace la cuenta. La IA solo cotiza "a ojo" cuando no hay modelo,
 > y lo marca como estimado.
@@ -220,11 +225,11 @@ el Camino A llega a un número parecido.
 - [~] **2.1** Formato `rubik/1` cerrado (ver arriba) y `inventario()` listo para ver qué llega de VW. **Falta validarlo con un modelo real** y las respuestas 1–3 y 6
 - [x] **2.2** Script `tools/blender/exportar_rubik.py` + prueba `probar_exportar.py` + `LEEME.md` + diseño de `equivalencias_vw` (10 nov 2026)
 - [x] **2.3** "Importar 3D" en `presupuesto.html`: lee `.glb`/`.gltf`/`.fbx` en el navegador (o el `rubik.json`) → ítems + `measures` + APU de materiales, con materiales vinculados o en rojo (10 nov 2026)
-- [~] **2.4** Cálculo medidas → APU con datos de la base: **hecho lo posible sin la Sesión B** (11 nov 2026, punto 18): materiales por
-      m², ml, m³, und, planchas (plano de corte estimado) y barras, con desperdicio editable (0 % por defecto); mano de obra propuesta
-      por la IA desde el PDF con unidad y precio de la base. Falta: rendimientos (m²/jornal, m²/litro) y desperdicio por material en la base
-- [~] **2.5** Camino B: **"Importar 3D" acepta solo el PDF** (11 nov 2026): la IA arma ítems, piezas, medidas, cantidades, materiales y
-      operaciones, sin precios y con confianza ("según PDF (IA)"); los precios salen de la base. Falta remodelar el "Presupuesto IA" viejo
+- [~] **2.4** Cálculo medidas → APU con datos de la base: **hecho lo posible sin la Sesión B** (11 nov 2026, puntos 18–19): materiales por
+      m², ml, m³, und, planchas (plano de corte estimado) y barras, con desperdicio editable (0 % por defecto); mano de obra por
+      **receta del material** (`mo_receta`). Falta: rendimientos (m²/jornal, m²/litro) y desperdicio por material en la base
+- [ ] **2.5** Camino B (sin 3D, solo PDF o foto): es **"Presupuesto IA"**, que se limpia en otra sesión. "Importar 3D" ya no acepta
+      solo PDF (se probó en el #283 y se sacó en el punto 19)
 - [ ] **2.6** Prueba con el trabajo real: comparar el Camino A con lo que se cobró
 - [ ] **2.7** (después) Paso 2: envío directo de Blender a la app con login
 
@@ -444,7 +449,9 @@ Los datos del cliente no se guardan en el repo (es público); acá va solo lo ap
   descripción. Camino A sirve para despiece y cantidades; los materiales se vinculan a mano (en rojo) o por la IA
   leyendo el PDF.
 
-18. **APU visible, materiales del PDF y "solo PDF" (11 nov 2026, devolución del dueño con la Copa).** Prioridad del dueño:
+18. **APU visible, materiales del PDF y "solo PDF" (11 nov 2026, devolución del dueño con la Copa).** ⚠ **Corregido en el
+    punto 19:** el modo "solo PDF", las medidas y cantidades por pieza de la IA y la mano de obra propuesta por la IA se
+    sacaron. Queda: el APU visible antes de agregar, planchas/barras, desperdicio y crear materiales sin precio. Prioridad del dueño:
     ver un APU y un precio antes de agregar.
     - **APU por ítem en la revisión, antes de "Agregar":** precio unitario estimado, materiales, mano de obra y cuántas
       filas faltan de precio; "Ver el detalle" muestra cada fila (cantidad × precio, o "falta precio" en rojo).
@@ -469,4 +476,41 @@ Los datos del cliente no se guardan en el repo (es público); acá va solo lo ap
     - Pruebas: `npm test` 411 OK (empaquetado, barras, desperdicio, cruce de textos, MO, solo PDF, resumen). Playwright con
       `/api/gemini` simulado y un PDF inventado: solo PDF → "Aplicar todo" → crear 2 materiales → APU 57,66 Bs → con 10 %
       de desperdicio 59,30 Bs → ítem guardado con 3 filas de materiales y 3 de mano de obra.
+
+19. **Corrección de rumbo (11 nov 2026): "cómputo = algoritmo; IA = solo leer materiales y la escala del plano".**
+    El dueño: "NO es la IA la que arma el cómputo, es un algoritmo real que pasa los datos exactos al APU. La IA solo
+    designa materiales, que extrae leyendo el PDF, una imagen o el plano".
+    - **"Importar 3D" exige un 3D (o rubik.json).** Con solo un PDF o una foto muestra: "Para cotizar solo con un PDF o una
+      foto usá Presupuesto IA" (con el botón). Lo mismo avisa "¿Dónde lo importo?" de "Compartir → Rubik".
+    - **La IA no da medidas, cantidades ni mano de obra.** El pedido (`armarPedidoPDF`) solo pide, por pieza del 3D (por nombre,
+      forma o posición), el material como lo describe el documento, acabados, cita, página y confianza; y la **medida total**
+      del plano (lo único numérico, para calibrar la escala). Se puede subir **PDF o foto/render** (JPG, PNG, WEBP).
+    - **Materiales:** la app cruza el texto con la base (equivalencia → clave de la IA → palabras con el mismo espesor),
+      propone "Aplicar" o "＋ Crear material" (sin precio) y recuerda el vínculo en `equivalencias_vw` (`tipo: "pdf"`).
+    - **Mano de obra = receta por material** (la arma el algoritmo, no la IA):
+      ```
+      /base_datos/materiales/{k}/mo_receta: [
+        { mo: "LAQUEADO",  medida: "m2_sup",       factor: 1 },   // clave de /base_datos/mano_obra
+        { mo: "CANTEADO",  medida: "ml_perimetro", factor: 1 }
+      ]
+      /base_datos/materiales/{k}/mo_receta_ninguna: true          // "No lleva mano de obra" (no se vuelve a pedir)
+      ```
+      `medida`: `m2_cara` (una cara: corte, enchapado) · `m2_sup` (toda la superficie: laca, pintura, ploteo) ·
+      `ml_perimetro` (canto, pulido de cantos) · `ml_largo` (soldadura, perfiles) · `und` (por pieza: armado) · `m3` ·
+      `glb` (una vez por ítem). `factor`: multiplica la cantidad (ej. 2 manos de laca).
+      - Al vincular un material sin receta (desde el 3D, el PDF, a mano o al crearlo), la app **pide armarla una sola vez**,
+        eligiendo de `/base_datos/mano_obra` (o creando una sin precio), y la guarda. "Después" no insiste en esa importación.
+      - Cada pieza con ese material suma sola su mano de obra: cantidad de la geometría × factor, unidad y precio de la base.
+        Si la base la tiene en jornal u hora, falta el rendimiento (q 0, marcada, Sesión B). Nunca se inventa.
+      - `Lector3D.armarApuMO(piezas, catalogo, catalogoMO)`, `materialesSinReceta()`, `cantidadMedida()`.
+    - **Recargos (cargas sociales, indirectos, utilidad):** no hay una configuración global en la app; los 55/10/50 % son los
+      valores por defecto de `ApuUtils.normalizeApu` (`apu-utils.js`) y cada ítem los tiene en su APU. "Importar 3D" toma los
+      del **último ítem del presupuesto con APU** y, si no hay, los de `apu-utils.js`; se muestran en una tarjeta **editable**
+      ("Recargos del APU") y se guardan en cada ítem. `lector-3d.js` ya no tiene valores fijos.
+    - El resumen del APU por ítem antes de "Agregar" queda.
+    - Pruebas: `npm test` 406 OK (sin medidas por pieza en el pedido ni en las propuestas, recetas con factor, jornal → falta
+      rendimiento, MO que no está en la base, receta "ninguna", recargos que se pasan, imágenes). Playwright: PDF solo →
+      "usá Presupuesto IA"; 3D + PDF → escala sola → "Aplicar materiales" → se pide la receta del MDF → Laqueado (m² de
+      superficie) guardada en la base → acrílico creado → "No lleva mano de obra" → utilidad 30 % → guardado con la MO de la
+      receta y `util: 30`.
 
