@@ -369,6 +369,28 @@ no es solo "importar el rubik.json": la app **lee el modelo directamente**.
        `share_target` del manifest al instalar).
     4. En Drive o WhatsApp: abrí el archivo → **Compartir → Rubik** → "Importar en el último presupuesto".
 
+    **Si "Rubik" no aparece en Compartir (11 nov 2026, Samsung + Chrome, WebAPK ya instalada):**
+    - Causa encontrada en el código de Chromium (`components/webapps/.../webapk_proto_builder.cc`, la plantilla
+      `shell_apk/AndroidManifest.xml` y `MimeTypeFilter.java`): Chrome manda el `accept` del manifest **tal cual** al
+      servidor de WebAPK, que arma los `intent-filter` de Android con `<data android:mimeType>`. Android solo filtra por
+      **MIME**: las extensiones (`.fbx`) no sirven ahí, y un FBX desde Drive llega con un MIME que no estaba en la
+      lista (Drive no tiene un MIME estándar para FBX). Además, una entrada que no es MIME puede hacer que el
+      servidor descarte el share target entero (no se puede confirmar sin el APK).
+    - Arreglo: `accept: ["*/*"]` (igual que otras PWAs que aparecen en Compartir para cualquier archivo). Del lado de
+      Chrome, `MimeTypeFilter` con `*/*` acepta cualquier archivo. La app ya reconoce el tipo por el contenido (punto 16)
+      y "¿Dónde lo importo?" avisa si lo compartido no es 3D, PDF ni .zip. Rubik va a aparecer en Compartir para
+      cualquier archivo (también fotos).
+    - `manifest.json` ahora se sirve con `no-cache` (antes podía quedar 1 h en caché).
+    - **Qué tiene que hacer el dueño después del deploy** (la WebAPK guarda la lista de tipos al generarse):
+      1. Abrir rubikbolivia.com en **Chrome** (no en la app) y recargar, para que tome el manifest nuevo.
+      2. **Desinstalar** "Rubik OS" (mantener apretado el ícono → Desinstalar).
+      3. En Chrome, menú ⋮ → **Agregar a la pantalla de inicio / Instalar app**. Esperar a que diga que se instaló
+         (puede tardar un minuto: Google genera el APK nuevo).
+      4. Abrir la app una vez. Probar primero **un PDF** desde "Mis archivos" → Compartir, y después el FBX desde Drive
+         → Compartir (o "Enviar una copia").
+      Alternativa sin desinstalar: `chrome://webapks` → "Update Rubik OS", esperar un minuto y reiniciar el teléfono;
+      desinstalar y volver a instalar es más seguro.
+
     **Si Rubik no aparece en Compartir (11 nov 2026):** el ícono del manifest (`icono app.png`, 997×1004, no cuadrado y
     declarado como 192/512) hacía que Chrome creara un **acceso directo** en vez de **instalar** la app, y un acceso directo
     no se registra en Compartir. Se cambió por íconos cuadrados reales (`public/icons/hub-192.png`, `hub-512.png`,

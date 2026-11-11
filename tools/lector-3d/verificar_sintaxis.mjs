@@ -33,7 +33,8 @@ try {
   const m = JSON.parse(readFileSync(join(RAIZ, 'manifest.json'), 'utf8'));
   const st = m.share_target, f = st && st.params && st.params.files && st.params.files[0];
   if (!(st && st.action === '/compartir/recibir' && st.method === 'POST' && st.enctype === 'multipart/form-data' && f && f.name === 'archivos' &&
-        ['.fbx', '.glb', '.gltf', '.zip', '.pdf', 'application/octet-stream'].every(a => f.accept.includes(a)))) { mal++; console.log('FALLA manifest.json: share_target'); }
+        // Android (WebAPK) arma intent-filters con MIME: sin extensiones; "*/*" para que Drive/WhatsApp lo ofrezcan
+        f.accept.includes('*/*') && !f.accept.some(a => a.startsWith('.')))) { mal++; console.log('FALLA manifest.json: share_target'); }
 } catch (e) { mal++; console.log('FALLA manifest.json:', e.message); }
 console.log(mal ? `${mal} con errores` : 'Sintaxis OK');
 process.exit(mal ? 1 : 0);
