@@ -228,7 +228,7 @@ comparar('FBX', L.analizar(fbx, { equivalencias: eq, factor: uFbx.factor, archiv
   const r = L.analizar(gltf.scene, { equivalencias: eq });
   const catalogo = {
     MDF_18_BLANCO: { n: 'MDF 18mm Blanco', u: 'm2', p: 95 },
-    MDF_9: { n: 'MDF 9mm', u: 'plancha', p: 210 },          // sin rendimiento: no se calcula
+    MDF_9: { n: 'MDF 9mm', u: 'plancha', p: 210, plancha_largo: 2.44, plancha_ancho: 1.22 },   // tamaño cargado por el dueño
     CANTO_PVC_BLANCO: { n: 'Canto PVC blanco', u: 'ml', p: 3.5 },
     LACA_BLANCA: { n: 'Laca blanca', u: 'm2', p: 0 },          // sin precio
     VIDRIO_6: { n: 'Vidrio 6mm', u: 'm2', p: 180 },
@@ -406,14 +406,20 @@ comparar('FBX', L.analizar(fbx, { equivalencias: eq, factor: uFbx.factor, archiv
   chk('barras de 6 m: 4 de 2.5 m → 2 barras', L.empacarBarras([2.5, 2.5, 2.5, 2.5], 6).barras === 2);
   chk('medidas de plancha desde el nombre', JSON.stringify(L.medidasPlancha({ n: 'MDF 18 mm 183x244' })) === JSON.stringify([2.44, 1.83]));
   const pz = (o) => Object.assign({ item: 'X', pieza: 'p', cant: 1, largo: 1, ancho: 0.5, espesor: 0.018, tipo: 'plancha', area_m2: 1.07, area_cara_m2: 0.5, perimetro_ml: 3, volumen_m3: 0.009, acabados: [], material: 'M' }, o);
-  const cat = { M: { n: 'MDF 18', u: 'm2', p: 100 }, P: { n: 'Tubo 20x20', u: 'barra', p: 50 } };
+  const cat = { M: { n: 'MDF 18', u: 'm2', p: 100 }, P: { n: 'Tubo 20x20', u: 'barra', p: 50, barra_largo: 6 } };
   const conDesp = L.armarApuMateriales([pz({ cant: 2 })], cat, { M: 10 })[0];
   chk('desperdicio 10 % sobre m²', cerca(conDesp.q, 1.1, 1e-6) && conDesp.desperdicio === 10 && /10 % de desperdicio/.test(conDesp.nota), conDesp);
   const sinDesp = L.armarApuMateriales([pz({})], cat)[0];
   chk('desperdicio 0 % por defecto (editable)', sinDesp.q === 0.5 && sinDesp.desperdicio === 0, sinDesp);
   const tubos = L.armarApuMateriales([pz({ material: 'P', largo: 2.5, cant: 4, tipo: 'volumen' })], cat)[0];
   chk('material por barra → barras de 6 m', tubos.q === 2 && /barras de 6 m/.test(tubos.nota), tubos);
-  const nuevo = L.armarApuMateriales([pz({ material: 'NUEVO' })], { NUEVO: { n: 'Acrílico cristal 3 mm', u: 'plancha', p: 0, falta_precio: true } })[0];
+  const nuevo = L.armarApuMateriales([pz({ material: 'NUEVO' })], { NUEVO: { n: 'Acrílico cristal 3 mm', u: 'plancha', p: 0, falta_precio: true, plancha_largo: 2440, plancha_ancho: 1220 } })[0];
+  // Arranca en blanco: sin tamaño de plancha o de barra cargado, no se supone ninguno
+  const sinTam = L.armarApuMateriales([pz({ material: 'S' })], { S: { n: 'Acrílico', u: 'plancha', p: 100 } })[0];
+  chk('plancha sin tamaño cargado → q 0, "falta el tamaño" (no se supone 2.44×1.22)', sinTam.q === 0 && sinTam.falta_plancha && /tamaño de la plancha/.test(sinTam.revisar), sinTam);
+  const sinLargo = L.armarApuMateriales([pz({ material: 'B', largo: 2 })], { B: { n: 'Tubo', u: 'barra', p: 30 } })[0];
+  chk('barra sin largo cargado → q 0, "falta el largo"', sinLargo.q === 0 && sinLargo.falta_barra, sinLargo);
+  chk('tamaño de plancha cargado en mm se entiende', JSON.stringify(L.medidasPlancha({ plancha_largo: 2440, plancha_ancho: 1220 })) === '[2.44,1.22]');
   chk('material creado sin precio → q calculada, p 0 y marcada "sin precio"', nuevo.q === 1 && nuevo.p === 0 && /sin precio/.test(nuevo.revisar), nuevo);
 
   // Cruce de textos del PDF con la base

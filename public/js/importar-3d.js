@@ -22,6 +22,21 @@
     function mm(m) { return Math.round(m * 1000); }
     function catalogo() { return (typeof dbMats !== 'undefined' && dbMats) || {}; }
     function nombreMat(clave) { var m = catalogo()[clave]; return m ? (m.n || m.desc || clave) : null; }
+    // Lo que el dueño va cargando (arranca en blanco): se guarda con fecha_mod y deja un historial simple
+    // en /base_datos/historial_cambios {ruta, cambios: {campo: {antes, despues}}, que, fecha, por} para ver cómo evoluciona.
+    async function guardarAprendido(ruta, cambios, que) {
+        var ref = db.ref(ruta), antes = null;
+        try { antes = (await ref.once('value')).val(); } catch (e) { antes = null; }
+        var nuevo = Object.assign({}, cambios, { fecha_mod: firebase.database.ServerValue.TIMESTAMP });
+        await ref.update(nuevo);
+        var resumen = {};
+        Object.keys(cambios).forEach(function (k) { resumen[k] = { antes: antes && antes[k] !== undefined ? antes[k] : null, despues: cambios[k] === undefined ? null : cambios[k] }; });
+        Promise.resolve(db.ref('base_datos/historial_cambios').push({ ruta: ruta, que: que || '', cambios: JSON.parse(JSON.stringify(resumen)),
+            fecha: firebase.database.ServerValue.TIMESTAMP, por: (firebase.auth().currentUser || {}).uid || null }))
+            .catch(function (e) { console.warn('[importar3d] historial', e); });
+        return nuevo;
+    }
+
     function catalogoMO() { return (typeof dbMo !== 'undefined' && dbMo) || {}; }
     // Ruta B (trato): oficios con su costo por jornal, rendimientos por oficio/indicador, y la ruta preferida por tipo de ítem
     var oficiosBD = {}, rendimientosBD = {}, prefsMO = {};
@@ -711,7 +726,9 @@
                 (x.clave && x.desperdicio != null ? '<label class="i3-nota" style="display:flex;align-items:center;gap:6px;margin-top:3px;">Desperdicio ' +
                     '<input type="number" inputmode="decimal" min="0" max="100" step="1" value="' + x.desperdicio + '" style="width:60px;padding:4px;border:1px solid var(--border);border-radius:6px;background:var(--card);color:var(--text);" ' +
                     'onchange="_i3Desp(\'' + esc(x.clave) + '\',this.value)"> %</label>' : '') +
-                (cat && !x.acabado ? '<button class="i3-btn" style="padding:5px 9px;font-size:11px;margin-top:4px;" onclick="_i3Receta(\'' + esc(x.clave) + '\')">' +
+                (x.falta_plancha ? '<button class="i3-btn" style="padding:5px 9px;font-size:11px;margin-top:4px;margin-right:4px;" onclick="_i3TamPlancha(\'' + esc(x.clave) + '\')">Cargar el tamaño de la plancha</button>' : '') +
+                (x.falta_barra ? '<button class="i3-btn" style="padding:5px 9px;font-size:11px;margin-top:4px;margin-right:4px;" onclick="_i3LargoBarra(\'' + esc(x.clave) + '\')">Cargar el largo de la barra</button>' : '') +
+                (cat && !x.acabado && rutaDe(nombre).ruta !== 'B' ? '<button class="i3-btn" style="padding:5px 9px;font-size:11px;margin-top:4px;" onclick="_i3Receta(\'' + esc(x.clave) + '\')">' +
                     (tieneReceta ? '✎ Mano de obra de este material' : '＋ Armar la mano de obra de este material') + '</button>' : '') + '</div>';
         });
         h += '<div style="font-size:12px;font-weight:800;margin-top:8px;">Mano de obra <span class="i3-nota">(' +
@@ -766,7 +783,8 @@
             var keys = Object.keys(rendimientosBD);
             h += '<div class="i3-row2"><select class="i3-inp" onchange="_i3Rend(' + i + ',this.value)"><option value="">' + (keys.length ? 'Elegí el rendimiento…' : 'Todavía no hay rendimientos cargados') + '</option>' +
                 keys.map(function (k) { return '<option value="' + esc(k) + '"' + (k === rt.rendKey ? ' selected' : '') + '>' + esc(etiquetaRend(k)) + '</option>'; }).join('') +
-                '</select><button class="i3-btn" onclick="_i3NuevoRend(' + i + ')">＋ Nuevo</button></div>';
+                '</select><button class="i3-btn" onclick="_i3NuevoRend(' + i + ')">＋ Nuevo</button>' +
+                (rt.rend ? '<button class="i3-btn" onclick="_i3EditarRend(' + i + ')" title="Corregir el rendimiento guardado">✎</button>' : '') + '</div>';
             if (rt.rend) {
                 var c = Lector3D.jornalesTrato(ps, rt.rend), ind = Lector3D.INDICADORES[rt.rend.indicador] || {};
                 h += '<div class="i3-nota" style="margin-top:4px;">Del 3D: <b>' + c.indicador + ' ' + esc(ind.unidad || '') + '</b> (' + esc(ind.nombre || '') + ')' +
@@ -785,20 +803,31 @@
         var of = oficiosBD[k] || {};
         var v = parseFloat(String(prompt('Costo de un jornal de ' + (of.nombre || k) + ' (Bs):', '') || '').replace(',', '.'));
         if (!(v > 0)) return;
-        try { await db.ref('base_datos/oficios/' + k + '/costo_jornal').set(v); of.costo_jornal = v; } catch (e) { alert('No se pudo guardar: ' + e.message); return; }
+        try { await guardarAprendido('base_datos/oficios/' + k, { costo_jornal: v }, 'costo del jornal'); of.costo_jornal = v; } catch (e) { alert('No se pudo guardar: ' + e.message); return; }
         conScroll(function () {});
     };
 
     // Rendimiento nuevo: se carga UNA vez y queda en /base_datos/rendimientos (y el oficio en /base_datos/oficios)
+    window._i3EditarRend = function (i) {
+        var nombre = est.items[i], rt = rutaDe(nombre), x = rt.rend;
+        if (!x) return;
+        var tramos = (Array.isArray(x.tramos) ? x.tramos : Object.keys(x.tramos || {}).map(function (k) { return x.tramos[k]; }))
+            .map(function (t) { return { hasta_mm: t.hasta_mm || '', por_jornal: t.por_jornal || '' }; });
+        while (tramos.length < 3) tramos.push({ hasta_mm: '', por_jornal: '' });
+        est.nuevoRend = { item: i, clave: rt.rendKey, oficio: x.oficio, indicador: x.indicador, por_jornal: x.por_jornal || '',
+            trabajo: x.trabajo || '', notas: x.notas || '', tramos: tramos };
+        pintarNuevoRend();
+    };
+
     window._i3NuevoRend = function (i) {
         var nombre = est.items[i];
-        est.nuevoRend = { item: i, oficio: '', indicador: 'm2_tablero', por_jornal: '', trabajo: nombre, notas: '', tramos: [{ hasta_mm: 300, por_jornal: '' }, { hasta_mm: 600, por_jornal: '' }, { hasta_mm: 1200, por_jornal: '' }] };
+        est.nuevoRend = { item: i, oficio: '', indicador: 'm2_tablero', por_jornal: '', trabajo: nombre, notas: '', tramos: [{ hasta_mm: '', por_jornal: '' }, { hasta_mm: '', por_jornal: '' }, { hasta_mm: '', por_jornal: '' }] };
         pintarNuevoRend();
     };
     function pintarNuevoRend() {
         var r = est.nuevoRend, ps = est.filas.filter(function (f) { return f.item === est.items[r.item] && f.incluir; });
         var ofs = Object.keys(oficiosBD).sort(function (a, b) { return String(oficiosBD[a].nombre).localeCompare(String(oficiosBD[b].nombre)); });
-        var h = '<div style="font-weight:800;font-size:15px;">Rendimiento para negociar el trato</div>' +
+        var h = '<div style="font-weight:800;font-size:15px;">' + (r.clave ? 'Corregir el rendimiento' : 'Rendimiento para negociar el trato') + '</div>' +
             '<div class="i3-nota" style="margin:4px 0 8px;">Se carga <b>una vez</b>: cuánto produce el oficio en un jornal, medido con algo que la app saca del 3D. ' +
             'Jornales = indicador ÷ rendimiento; referencia = jornales × costo del jornal.</div>' +
             '<label class="i3-nota">Oficio</label><select class="i3-inp" style="width:100%;" onchange="_i3NR(\'oficio\',this.value)"><option value="">Elegí…</option>' +
@@ -811,7 +840,7 @@
             }).join('') + '</select>';
         if (r.indicador === 'letras_por_alto') {
             h += '<div class="i3-nota" style="margin-top:8px;">Letras por jornal según el alto (cada letra se mide del 3D):</div>' + r.tramos.map(function (t, j) {
-                return '<div style="display:flex;gap:6px;margin-top:4px;align-items:center;"><span class="i3-nota">hasta</span><input class="i3-inp" type="number" inputmode="decimal" value="' + t.hasta_mm + '" onchange="_i3NRT(' + j + ',\'hasta_mm\',this.value)">' +
+                return '<div style="display:flex;gap:6px;margin-top:4px;align-items:center;"><span class="i3-nota">hasta</span><input class="i3-inp" type="number" inputmode="decimal" placeholder="alto" value="' + t.hasta_mm + '" onchange="_i3NRT(' + j + ',\'hasta_mm\',this.value)">' +
                     '<span class="i3-nota">mm:</span><input class="i3-inp" type="number" inputmode="decimal" placeholder="letras/jornal" value="' + t.por_jornal + '" onchange="_i3NRT(' + j + ',\'por_jornal\',this.value)"></div>';
             }).join('');
         } else {
@@ -836,9 +865,9 @@
             var nombre = (prompt('Nombre del oficio (ej. Carpintero, Letrista, Soldador):', '') || '').trim();
             if (nombre) {
                 var costo = parseFloat(String(prompt('Costo de un jornal de ' + nombre + ' en Bs (vacío si no lo sabés todavía):', '') || '').replace(',', '.'));
-                var k = Lector3D.claveBase(nombre), reg = { nombre: nombre, actualizado: firebase.database.ServerValue.TIMESTAMP };
+                var k = Lector3D.claveBase(nombre), reg = { nombre: nombre };
                 if (costo > 0) reg.costo_jornal = costo;
-                try { await db.ref('base_datos/oficios/' + k).set(reg); oficiosBD[k] = Object.assign({}, reg); r.oficio = k; } catch (e) { alert('No se pudo crear: ' + e.message); }
+                try { await guardarAprendido('base_datos/oficios/' + k, reg, 'oficio nuevo'); oficiosBD[k] = Object.assign({}, reg); r.oficio = k; } catch (e) { alert('No se pudo crear: ' + e.message); }
             }
         } else r[campo] = v;
         pintarNuevoRend();
@@ -848,8 +877,7 @@
     window._i3NRGuardar = async function () {
         var r = est.nuevoRend;
         if (!r.oficio) return alert('Elegí el oficio.');
-        var reg = { oficio: r.oficio, indicador: r.indicador, trabajo: String(r.trabajo || '').trim(), notas: String(r.notas || '').trim(),
-            actualizado: firebase.database.ServerValue.TIMESTAMP };
+        var reg = { oficio: r.oficio, indicador: r.indicador, trabajo: String(r.trabajo || '').trim(), notas: String(r.notas || '').trim() };
         if (r.indicador === 'letras_por_alto') {
             reg.tramos = r.tramos.map(function (t) { return { hasta_mm: parseFloat(t.hasta_mm) || null, por_jornal: parseFloat(String(t.por_jornal).replace(',', '.')) || null }; })
                 .filter(function (t) { return t.por_jornal > 0; });
@@ -858,12 +886,35 @@
             reg.por_jornal = parseFloat(String(r.por_jornal).replace(',', '.'));
             if (!(reg.por_jornal > 0)) return alert('Cargá cuánto hace en un jornal.');
         }
-        var k = Lector3D.claveBase((oficiosBD[r.oficio] || {}).nombre + ' ' + reg.indicador + ' ' + (reg.trabajo || ''));
-        try { await db.ref('base_datos/rendimientos/' + k).set(reg); } catch (e) { alert('No se pudo guardar: ' + e.message); return; }
-        rendimientosBD[k] = Object.assign({}, reg);
+        if (reg.indicador === 'letras_por_alto') reg.por_jornal = null; else reg.tramos = null;
+        var k = r.clave || Lector3D.claveBase((oficiosBD[r.oficio] || {}).nombre + ' ' + reg.indicador + ' ' + (reg.trabajo || ''));
+        try { await guardarAprendido('base_datos/rendimientos/' + k, reg, r.clave ? 'rendimiento corregido' : 'rendimiento nuevo'); }
+        catch (e) { alert('No se pudo guardar: ' + e.message); return; }
+        rendimientosBD[k] = JSON.parse(JSON.stringify(reg));
         var nombre = est.items[r.item];
         window._i3NRCerrar();
         conScroll(function () { var rt = rutaDe(nombre); rt.ruta = 'B'; rt.rendKey = k; guardarPreferencia(nombre); });
+    };
+
+    window._i3TamPlancha = async function (clave) {
+        var cat = catalogo()[clave] || {}, n = cat.n || cat.desc || clave;
+        var l = parseFloat(String(prompt('Plancha de "' + n + '": LARGO (en m, cm o mm):', '') || '').replace(',', '.'));
+        if (!(l > 0)) return;
+        var a = parseFloat(String(prompt('Plancha de "' + n + '": ANCHO (en m, cm o mm):', '') || '').replace(',', '.'));
+        if (!(a > 0)) return;
+        try { await guardarAprendido('base_datos/materiales/' + clave, { plancha_largo: l, plancha_ancho: a }, 'tamaño de la plancha'); }
+        catch (e) { alert('No se pudo guardar: ' + e.message); return; }
+        cat.plancha_largo = l; cat.plancha_ancho = a;
+        conScroll(function () {});
+    };
+    window._i3LargoBarra = async function (clave) {
+        var cat = catalogo()[clave] || {}, n = cat.n || cat.desc || clave;
+        var l = parseFloat(String(prompt('Barra de "' + n + '": LARGO (en m, cm o mm):', '') || '').replace(',', '.'));
+        if (!(l > 0)) return;
+        try { await guardarAprendido('base_datos/materiales/' + clave, { barra_largo: l }, 'largo de la barra'); }
+        catch (e) { alert('No se pudo guardar: ' + e.message); return; }
+        cat.barra_largo = l;
+        conScroll(function () {});
     };
 
     window._i3Desp = function (clave, v) { conScroll(function () { est.desp[clave] = Math.max(0, Math.min(100, parseFloat(String(v).replace(',', '.')) || 0)); }); };
@@ -955,8 +1006,8 @@
         if (!ninguna && !pasos.length) { alert('Elegí al menos una mano de obra, o tocá "No lleva mano de obra".'); return; }
         var ref = db.ref('base_datos/materiales/' + r.clave), cat = catalogo()[r.clave];
         try {
-            if (ninguna) { await ref.update({ mo_receta: null, mo_receta_ninguna: true }); delete cat.mo_receta; cat.mo_receta_ninguna = true; }
-            else { await ref.update({ mo_receta: pasos, mo_receta_ninguna: null }); cat.mo_receta = pasos; delete cat.mo_receta_ninguna; }
+            if (ninguna) { await guardarAprendido('base_datos/materiales/' + r.clave, { mo_receta: null, mo_receta_ninguna: true }, 'receta de mano de obra'); delete cat.mo_receta; cat.mo_receta_ninguna = true; }
+            else { await guardarAprendido('base_datos/materiales/' + r.clave, { mo_receta: pasos, mo_receta_ninguna: null }, 'receta de mano de obra'); cat.mo_receta = pasos; delete cat.mo_receta_ninguna; }
         } catch (e) { alert('No se pudo guardar la receta: ' + e.message); return; }
         window._i3RecetaCerrar(true);
     };

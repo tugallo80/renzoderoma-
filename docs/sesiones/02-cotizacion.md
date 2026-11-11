@@ -541,3 +541,16 @@ Los datos del cliente no se guardan en el repo (es público); acá va solo lo ap
       cambiada a ruta A → guardado con `ruta_mo` y preferencias en la base.
     - Esto es lo que iba a ser la **Sesión B** (rendimientos): ver `docs/plan-sesiones.md`.
 
+21. **Arranca en blanco y va aprendiendo (11 nov 2026, decisión del dueño).** No se precargan oficios, costos por jornal,
+    rendimientos, precios, recetas ni tamaños, y la app **no sugiere valores numéricos**.
+    - La primera vez que un ítem necesita algo que no existe, aparece un formulario corto **con los campos vacíos**; lo
+      cargado se guarda en la base y se reutiliza solo: oficio y costo por jornal, rendimiento (también los **tramos** de
+      letras, ahora vacíos), receta de mano de obra, **tamaño de la plancha** y **largo de la barra** de cada material
+      (antes se suponían 2,44 × 1,22 y 6 m; ahora, sin tamaño cargado, la fila queda "falta el tamaño", con el botón).
+    - Cada corrección actualiza el valor guardado con `fecha_mod` y deja un historial simple en
+      `/base_datos/historial_cambios/{push}: { ruta, que, cambios: { campo: { antes, despues } }, fecha, por }`.
+      Los rendimientos guardados se corrigen con ✎.
+    - Pueden traer una opción por defecto solo los campos no numéricos (el indicador, la ruta A/B, la unidad sugerida).
+      Se dejan como neutros el factor 1 de la receta (multiplicador) y el desperdicio 0 %.
+    - Datos inventados solo en las pruebas (`tools/lector-3d`), nunca semillas en Firebase.
+

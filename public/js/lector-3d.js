@@ -758,12 +758,19 @@
         return null;
     }
 
-    var PLANCHA_STD = [2.44, 1.22], BARRA_STD = 6;   // los mismos que CÓMPUTO por defecto
+    // Sin tamaños supuestos: la plancha y la barra se toman del material (plancha_largo/plancha_ancho, barra_largo,
+    // o "2.44 x 1.22" en el nombre). Si no están, la fila queda marcada para cargarlos una vez (el dueño arranca en blanco).
+    function largoBarra(cat) {
+        var l = parseFloat(cat && cat.barra_largo);
+        if (l > 0) return l > 400 ? l / 1000 : l > 20 ? l / 100 : l;   // m, cm o mm
+        var m = /\b(\d+(?:[.,]\d+)?)\s*m\b/i.exec(String(cat && (cat.n || cat.desc) || ''));
+        return m ? parseFloat(m[1].replace(',', '.')) : null;
+    }
 
     /** Medidas de la plancha del material: campos largo/ancho, o "2.44 x 1.22" / "244x122" en el nombre. */
     function medidasPlancha(cat) {
         var l = parseFloat(cat && (cat.largo || cat.plancha_largo)), a = parseFloat(cat && (cat.ancho || cat.plancha_ancho));
-        if (l > 0 && a > 0) return [Math.max(l, a), Math.min(l, a)].map(function (x) { return x > 20 ? x / 100 : x; });
+        if (l > 0 && a > 0) return [Math.max(l, a), Math.min(l, a)].map(function (x) { return x > 400 ? x / 1000 : x > 20 ? x / 100 : x; });   // m, cm o mm
         var m = /(\d+(?:[.,]\d+)?)\s*[x×]\s*(\d+(?:[.,]\d+)?)/i.exec(String(cat && (cat.n || cat.desc) || ''));
         if (m) {
             var x = parseFloat(m[1].replace(',', '.')), y = parseFloat(m[2].replace(',', '.'));
@@ -842,7 +849,8 @@
             return { q: redondear(q, 5), nota: 'volumen: ' + fmt(q, 4) + ' m³' };
         }
         if (fam === 'plancha') {
-            var med = medidasPlancha(catActual) || PLANCHA_STD, rects = [];
+            var med = medidasPlancha(catActual), rects = [];
+            if (!med) return { q: 0, motivo: 'falta el tamaño de la plancha de este material (cargalo una vez)', falta_plancha: true };
             piezas.forEach(function (x) { for (var k = 0; k < x.cant; k++) rects.push([x.largo, x.ancho]); });
             var r = empacarPlanchas(rects, med[0], med[1]);
             var extra = r.grandes ? Math.ceil(piezas.reduce(function (s, x) { return s + (x.largo > med[0] ? x.largo * x.ancho * x.cant : 0); }, 0) / (med[0] * med[1])) : 0;
@@ -856,9 +864,11 @@
         if (fam === 'barra') {
             var largos = [];
             piezas.forEach(function (x) { for (var k = 0; k < x.cant; k++) largos.push(x.largo); });
-            var b = empacarBarras(largos, BARRA_STD);
-            return { q: b.barras + b.grandes, nota: 'barras de ' + BARRA_STD + ' m (estimado; ajustar en CÓMPUTO)',
-                motivo: b.grandes ? b.grandes + ' pieza(s) de más de ' + BARRA_STD + ' m' : null, empaquetado: true };
+            var lb = largoBarra(catActual);
+            if (!lb) return { q: 0, motivo: 'falta el largo de la barra de este material (cargalo una vez)', falta_barra: true };
+            var b = empacarBarras(largos, lb);
+            return { q: b.barras + b.grandes, nota: 'barras de ' + lb + ' m (estimado; ajustar en CÓMPUTO)',
+                motivo: b.grandes ? b.grandes + ' pieza(s) de más de ' + lb + ' m' : null, empaquetado: true };
         }
         if (fam === 'glb') return { q: 1, nota: 'global' };
         var detalle = neto > 0 ? ' (piezas: ' + fmt(neto, 3) + ' m² netos)' : '';
@@ -918,6 +928,8 @@
                 r.desperdicio = desp;
                 if (desp) { r.q = redondear(r.q * (1 + desp / 100), 4); calc.nota = (calc.nota ? calc.nota + ' ' : '') + '+ ' + desp + ' % de desperdicio'; }
             }
+            if (calc.falta_plancha) r.falta_plancha = true;
+            if (calc.falta_barra) r.falta_barra = true;
             if (calc.nota) r.nota = calc.nota;
             if (cat && cat.falta_precio && p === 0 && motivos.indexOf('sin precio en la base') < 0) motivos.push('sin precio en la base');
             if (motivos.length) r.revisar = motivos.join(' · ');
