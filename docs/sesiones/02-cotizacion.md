@@ -368,6 +368,13 @@ no es solo "importar el rubik.json": la app **lee el modelo directamente**.
        cambio, abrila una vez y, si Rubik no aparece en Compartir, desinstalala y volvé a instalarla (Android lee el
        `share_target` del manifest al instalar).
     4. En Drive o WhatsApp: abrí el archivo → **Compartir → Rubik** → "Importar en el último presupuesto".
+
+    **Si Rubik no aparece en Compartir (11 nov 2026):** el ícono del manifest (`icono app.png`, 997×1004, no cuadrado y
+    declarado como 192/512) hacía que Chrome creara un **acceso directo** en vez de **instalar** la app, y un acceso directo
+    no se registra en Compartir. Se cambió por íconos cuadrados reales (`public/icons/hub-192.png`, `hub-512.png`,
+    `hub-maskable-512.png`). Después del deploy: borrar el ícono viejo de la pantalla de inicio y volver a instalar
+    **desde Chrome** (no Samsung Internet), eligiendo **"Instalar"** y no "Crear acceso directo". En Drive, el menú
+    de Android se abre con **"Enviar una copia"** ("Compartir" de Drive es para dar permisos).
 16. **Arreglo (11 nov 2026): "No encontré un modelo 3D" al elegir el FBX desde Drive en Android.** El archivo llegaba
     sin extensión (o con otro nombre, y `type` vacío o `application/octet-stream`) y el tipo se miraba solo por la
     extensión. Ahora `Lector3D.detectarTipo()` mira **primero los primeros bytes** (FBX binario `Kaydara FBX Binary`,
