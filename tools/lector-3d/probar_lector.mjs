@@ -251,7 +251,7 @@ comparar('FBX', L.analizar(fbx, { equivalencias: eq, factor: uFbx.factor, archiv
   chk('MDF 18 en m²: una cara de cada plancha', mdf18 && cerca(mdf18.q, 1.08 + 2 * 0.5892, 1e-3) && mdf18.p === 95 && !mdf18.revisar, mdf18);
   chk('MDF 18 lleva sus piezas para el plano de corte', mdf18.measures.length === 2 && mdf18.measures_modo === 'plancha');
   const mdf9 = fila(mos, 'MDF 9mm');
-  chk('MDF 9 en planchas: sin rendimiento → q 0 y marcada', mdf9 && mdf9.q === 0 && mdf9.p === 210 && /rendimiento/.test(mdf9.revisar), mdf9);
+  chk('MDF 9 en planchas: plano de corte en 2.44×1.22 → 1 plancha, no marcada', mdf9 && mdf9.q === 1 && mdf9.p === 210 && /plano de corte/.test(mdf9.nota) && !mdf9.revisar, mdf9);
   const laca = fila(mos, 'Laca blanca');
   chk('laca sin precio → p 0 y marcada', laca && laca.p === 0 && /sin precio/.test(laca.revisar) && cerca(laca.q, 3.5139, 1e-3), laca);
   const canto = fila(mos, 'Canto PVC blanco');
@@ -259,7 +259,7 @@ comparar('FBX', L.analizar(fbx, { equivalencias: eq, factor: uFbx.factor, archiv
   const zocalo = mos.apu.mat.find(x => x.d === 'Sin material');
   chk('pieza sin material → fila marcada sin vincular', zocalo && zocalo.q === 0 && zocalo.p === 0 && /sin vincular/.test(zocalo.revisar), zocalo);
   chk('mano de obra vacía (manual)', mos.apu.mo.length === 0);
-  chk('pu = solo lo calculado (MDF 18) con indirectos y utilidad', cerca(mos.pu, Math.round(mdf18.q * 95 * 1.1 * 1.5 * 100) / 100, 0.01), mos.pu);
+  chk('pu = lo calculado (MDF 18 + MDF 9) con indirectos y utilidad', cerca(mos.pu, Math.round((mdf18.q * 95 + 210) * 1.1 * 1.5 * 100) / 100, 0.01), mos.pu);
   const rep = items.find(i => i.desc === 'Repisa');
   const mel = fila(rep, 'Melamina 25 roble');
   chk('melamina por unidad = cantidad de piezas', mel && mel.q === 1, mel);
@@ -324,7 +324,7 @@ comparar('FBX', L.analizar(fbx, { equivalencias: eq, factor: uFbx.factor, archiv
   chk('propone material de la base para la pieza del 3D', mat && mat.clave === 'ACRILICO_4' && mat.aplicable && mat.confianza === 'alta', mat);
   const inox = props.find(p => p.tipo === 'material' && p.nombre_pdf === 'columna central');
   chk('busca la pieza por nombre parecido ("columna central" → Columna)', inox && inox.pieza === 'Columna');
-  chk('clave que no está en el catálogo → no se aplica, se vincula a mano', inox && inox.clave === null && inox.aplicable === false && /no está en la base/.test(inox.texto), inox);
+  chk('material que no está en la base → propone crearlo (precio vacío)', inox && inox.clave === null && inox.aplicable && inox.crear && inox.crear.n === 'Inox' && /no está en la base/.test(inox.texto), inox);
   const placa = props.find(p => p.nombre_pdf === 'Placa grabada');
   chk('pieza del PDF que no está en el 3D → solo informativa', placa && placa.pieza === null && placa.aplicable === false);
   chk('propone cantidad del PDF', props.some(p => p.tipo === 'cantidad' && p.pieza === 'pANEL Frente' && p.cantidad === 2));
@@ -392,6 +392,83 @@ comparar('FBX', L.analizar(fbx, { equivalencias: eq, factor: uFbx.factor, archiv
   const p1 = L.armarPedidoPDF({ texto: 'x' }), p2 = L.armarPedidoPDF({ texto: 'x' }, { compacto: true });
   chk('pedido: thinkingBudget 0 y JSON', p1.generationConfig.thinkingConfig.thinkingBudget === 0 && p1.generationConfig.responseMimeType === 'application/json');
   chk('reintento: compacto y con más tokens', p2.generationConfig.maxOutputTokens > p1.generationConfig.maxOutputTokens && /Respuesta CORTA/.test(p2.systemInstruction.parts[0].text));
+}
+
+// --- 11. APU completo: planchas, barras, desperdicio, materiales del PDF, mano de obra, solo PDF ------
+{
+  // Planchas: 4 tableros de 1.2×0.6 entran en una de 2.44×1.22; uno de 2.5 m no entra
+  chk('empacar: 4 de 1.2×0.6 → 1 plancha', L.empacarPlanchas([[1.2, .6], [1.2, .6], [1.2, .6], [1.2, .6]], 2.44, 1.22).planchas === 1);
+  chk('empacar: 5 de 1.2×0.6 → 2 planchas', L.empacarPlanchas([[1.2, .6], [1.2, .6], [1.2, .6], [1.2, .6], [1.2, .6]], 2.44, 1.22).planchas === 2);
+  chk('empacar: pieza más grande que la plancha se cuenta aparte', L.empacarPlanchas([[2.6, .5]], 2.44, 1.22).grandes === 1);
+  chk('barras de 6 m: 4 de 2.5 m → 2 barras', L.empacarBarras([2.5, 2.5, 2.5, 2.5], 6).barras === 2);
+  chk('medidas de plancha desde el nombre', JSON.stringify(L.medidasPlancha({ n: 'MDF 18 mm 183x244' })) === JSON.stringify([2.44, 1.83]));
+  const pz = (o) => Object.assign({ item: 'X', pieza: 'p', cant: 1, largo: 1, ancho: 0.5, espesor: 0.018, tipo: 'plancha', area_m2: 1.07, area_cara_m2: 0.5, perimetro_ml: 3, volumen_m3: 0.009, acabados: [], material: 'M' }, o);
+  const cat = { M: { n: 'MDF 18', u: 'm2', p: 100 }, P: { n: 'Tubo 20x20', u: 'barra', p: 50 } };
+  const conDesp = L.armarApuMateriales([pz({ cant: 2 })], cat, { M: 10 })[0];
+  chk('desperdicio 10 % sobre m²', cerca(conDesp.q, 1.1, 1e-6) && conDesp.desperdicio === 10 && /10 % de desperdicio/.test(conDesp.nota), conDesp);
+  const sinDesp = L.armarApuMateriales([pz({})], cat)[0];
+  chk('desperdicio 0 % por defecto (editable)', sinDesp.q === 0.5 && sinDesp.desperdicio === 0, sinDesp);
+  const tubos = L.armarApuMateriales([pz({ material: 'P', largo: 2.5, cant: 4, tipo: 'volumen' })], cat)[0];
+  chk('material por barra → barras de 6 m', tubos.q === 2 && /barras de 6 m/.test(tubos.nota), tubos);
+  const nuevo = L.armarApuMateriales([pz({ material: 'NUEVO' })], { NUEVO: { n: 'Acrílico cristal 3 mm', u: 'plancha', p: 0, falta_precio: true } })[0];
+  chk('material creado sin precio → q calculada, p 0 y marcada "sin precio"', nuevo.q === 1 && nuevo.p === 0 && /sin precio/.test(nuevo.revisar), nuevo);
+
+  // Cruce de textos del PDF con la base
+  const base = { ACRILICO_3: { n: 'Acrílico cristal 3mm' }, ACRILICO_5: { n: 'Acrílico cristal 5mm' }, MDF_9: { n: 'MDF 9mm crudo' } };
+  chk('por palabras con espesor: "acrílico cristal 3 mm" → ACRILICO_3', (L.buscarEnCatalogo('acrílico cristal 3 mm', null, base, {}) || {}).clave === 'ACRILICO_3');
+  chk('el espesor tiene que coincidir: "acrílico 4 mm" → nada', L.buscarEnCatalogo('acrílico cristal 4 mm', null, base, {}) === null);
+  chk('clave de la IA si existe', (L.buscarEnCatalogo('algo raro', 'MDF_9', base, {}) || {}).desde === 'ia');
+  chk('clave de la IA que no existe → se ignora', L.buscarEnCatalogo('algo', 'NO_EXISTE', base, {}) === null);
+  chk('equivalencia guardada manda', (L.buscarEnCatalogo('MDF 9 mm laqueado dorado', null, base, { x: { vw: 'MDF 9 mm laqueado dorado', material: 'MDF_9' } }) || {}).desde === 'equivalencia');
+  chk('clave nueva como presupuesto.html', L.claveBase('Acrílico cristal 3 mm.') === 'ACRÍLICO CRISTAL 3 MM');
+
+  // Mano de obra propuesta por la IA
+  const piezasMO = [pz({ pieza: 'Tapa', cant: 2 }), pz({ pieza: 'Base', cant: 1, tipo: 'volumen', area_cara_m2: null, perimetro_ml: null, area_m2: 0.8 })];
+  chk('MO m² superficie = todas las caras × cantidad', L.cantidadOperacion({ medida: 'm2_superficie' }, piezasMO).q === 2.94);
+  chk('MO ml perímetro (canto)', L.cantidadOperacion({ medida: 'ml_perimetro' }, piezasMO).q === 9);
+  chk('MO por pieza = unidades', L.cantidadOperacion({ medida: 'und' }, piezasMO).q === 3);
+  const catMO = { LAQUEADO: { desc: 'Laqueado', u: 'm2', p: 80 }, ARMADO: { desc: 'Armado de mueble', u: 'jornal', p: 150 } };
+  const mo = L.armarApuMO([
+    { operacion: 'laqueado', mo_clave: 'LAQUEADO', medida: 'm2_superficie', piezas: ['Tapa'], confianza: 'alta' },
+    { operacion: 'armado de mueble', mo_clave: null, medida: 'und', piezas: [], confianza: 'media' },
+    { operacion: 'corte CNC', mo_clave: null, medida: 'm2_cara', piezas: [], confianza: 'media' },
+    { operacion: 'pulido', mo_clave: null, medida: 'ml_perimetro', piezas: [], confianza: 'baja', incluir: false },
+  ], piezasMO, catMO, {});
+  chk('MO laqueado: solo la Tapa, m² y precio de la base', mo[0].d === 'Laqueado' && mo[0].q === 2.14 && mo[0].p === 80 && !mo[0].revisar && mo[0].segun === 'IA', mo[0]);
+  chk('MO en jornal → falta rendimiento (q 0, marcada)', mo[1].d === 'Armado de mueble' && mo[1].q === 0 && /rendimiento/.test(mo[1].revisar), mo[1]);
+  chk('MO que no está en la base → cantidad calculada, sin precio, marcada', mo[2].d === 'corte CNC' && mo[2].q > 0 && mo[2].p === 0 && /no está en la base/.test(mo[2].revisar), mo[2]);
+  chk('MO destildada no entra', mo.length === 3);
+
+  // Solo PDF: ítems → piezas → medidas → cantidad → material en texto (vinculable y recordado)
+  const info = L.leerRespuestaPDF({ candidates: [{ content: { parts: [{ text: JSON.stringify({
+    medidas_generales: { alto_mm: 800 }, piezas: [
+      { item: 'Copa', nombre_pdf: 'Disco base', largo_mm: 300, ancho_mm: 300, espesor_mm: 18, cantidad: 1, material_texto: 'MDF 18 mm laqueado negro', confianza: 'alta' },
+      { item: 'Copa', nombre_pdf: 'Placa frontal', largo_mm: 250, ancho_mm: 120, espesor_mm: 3, cantidad: 2, material_texto: 'acrílico cristal 3 mm', unidad_sugerida: 'plancha', confianza: 'media' },
+      { item: 'Copa', nombre_pdf: 'Logo', cantidad: 1, material_texto: null, confianza: 'baja' }],
+    operaciones: [{ item: 'Copa', operacion: 'Laqueado', medida: 'm2_superficie', piezas: ['Disco base'], confianza: 'alta' }] }) }] } }] });
+  chk('respuesta con operaciones', info.operaciones.length === 1 && info.operaciones[0].medida === 'm2_superficie');
+  const filasPDF = L.piezasDesdePDF(info, { a: { vw: 'acrílico cristal 3 mm', material: 'ACRILICO_3' } }, 'copa-cliente');
+  const disco = filasPDF.find(f => f.pieza === 'Disco base'), placa = filasPDF.find(f => f.pieza === 'Placa frontal'), logo = filasPDF.find(f => f.pieza === 'Logo');
+  chk('solo PDF: medidas en m, plancha y cantidades', disco.largo === 0.3 && disco.espesor === 0.018 && disco.tipo === 'plancha' && placa.cant === 2 && disco.item === 'Copa', disco);
+  chk('solo PDF: material en texto como origen (vinculable)', disco.origen_vw === 'MDF 18 mm laqueado negro' && disco.material === null && disco.revisar);
+  chk('solo PDF: texto ya vinculado antes → material directo', placa.material === 'ACRILICO_3' && placa.material_desde === 'equivalencia');
+  chk('solo PDF: sin medidas → marcada', logo.revisar && logo.motivos.some(m => /no da las medidas/.test(m)));
+  chk('solo PDF: marcado "según PDF (IA)" con confianza', disco.medidas_desde === 'pdf_ia' && /según PDF \(IA\), confianza alta/.test(disco.motivos[0]));
+  const pedidoSolo = L.armarPedidoPDF({ texto: 'x', piezas: [], catalogo: {}, manoObra: catMO });
+  chk('pedido solo PDF: pide TODAS las piezas y lleva el catálogo de MO', /NO HAY MODELO 3D/.test(pedidoSolo.systemInstruction.parts[0].text) && JSON.stringify(pedidoSolo).includes('LAQUEADO = Laqueado'));
+
+  // Resumen del APU (lo que ve el dueño antes de "Agregar") e ítems con MO
+  const catAll = { MDF18N: { n: 'MDF 18 mm laqueado negro', u: 'm2', p: 120 }, ACRILICO_3: { n: 'Acrílico cristal 3mm', u: 'plancha', p: 0, falta_precio: true } };
+  disco.material = 'MDF18N';
+  const apu = L.armarApu(filasPDF.filter(f => f.material), catAll, { operaciones: info.operaciones, catalogoMO: catMO, desperdicios: { MDF18N: 10 } });
+  const res = L.resumenApu(apu);
+  chk('resumen: materiales = 0.09 m² × 1.1 × 120', cerca(res.materiales, 0.09 * 1.1 * 120, 0.01), res);
+  chk('resumen: MO laqueado = área del disco × 80', cerca(res.mano_obra, disco.area_m2 * 80, 0.05), res);
+  chk('resumen: precio unitario con cargas sociales, indirectos y utilidad', cerca(res.pu, Math.round((res.materiales + res.mano_obra * 1.55) * 1.1 * 1.5 * 100) / 100, 0.02), res);
+  chk('resumen: cuenta las filas sin precio', res.sin_precio === 1, res);
+  let nId = 0;
+  const its = L.armarItems(filasPDF.filter(f => f.material), ['Copa'], catAll, () => 'id' + (++nId), { origen: 'pdf' }, { operacionesPorItem: { Copa: info.operaciones }, catalogoMO: catMO });
+  chk('ítem con APU de materiales y mano de obra', its[0].apu.mo.length === 1 && its[0].apu.mo[0].d === 'Laqueado' && its[0].origen === 'pdf' && its[0].pu > 0, its[0].apu.mo);
 }
 
 console.log(`\n${ok} OK, ${mal} fallas`);
