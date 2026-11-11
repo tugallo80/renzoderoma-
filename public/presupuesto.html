@@ -1171,7 +1171,7 @@
                     <input id="apu-p-${type}-${idx}" type="number" step="any" class="mod-inp" value="${vP}" oninput="updApu('${type}',${idx},'p',this.value)">
                     <div id="apu-sub-${type}-${idx}" style="font-weight:700; text-align:right;">${sub}</div>
                     <i class="ph-bold ph-x" style="color:var(--red); cursor:pointer" onclick="delApu('${type}',${idx})"></i>
-                </div>${el.revisar ? `<div style="color:var(--red);font-size:11px;font-weight:700;margin:-2px 0 6px;">⚠ ${String(el.revisar).replace(/</g,'&lt;')}</div>` : (el.nota ? `<div style="color:var(--gray);font-size:10px;margin:-2px 0 6px;">3D: ${String(el.nota).replace(/</g,'&lt;')}</div>` : '')}`;
+                </div>${el.revisar ? `<div style="color:var(--red);font-size:11px;font-weight:700;margin:-2px 0 6px;">⚠ ${String(el.revisar).replace(/</g,'&lt;')}</div>` : ''}${el.nota && (el.segun || !el.revisar) ? `<div style="color:${el.segun ? 'var(--purple)' : 'var(--gray)'};font-size:10px;font-weight:${el.segun ? 700 : 400};margin:-2px 0 6px;">3D: ${String(el.nota).replace(/</g,'&lt;')}</div>` : ''}`;
         });
         box.innerHTML = htmlBuffer; 
     }

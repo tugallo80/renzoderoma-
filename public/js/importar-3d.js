@@ -65,7 +65,12 @@
             '#mod-imp3d .i3-mat.ok{color:var(--green);}',
             '#mod-imp3d .i3-mat.mal{color:var(--red);font-weight:700;}',
             '#mod-imp3d .i3-mv{margin-top:6px;font-size:12px;padding:5px 6px;border-radius:7px;border:1px solid var(--border);background:var(--bg);color:var(--text);max-width:100%;}',
-            '#mod-imp3d .i3-tag{font-size:10px;font-weight:800;color:var(--orange);margin-left:4px;}'
+            '#mod-imp3d .i3-tag{font-size:10px;font-weight:800;color:var(--orange);margin-left:4px;}',
+            '#mod-imp3d .i3-ia{font-size:10px;font-weight:800;color:var(--purple);border:1px solid var(--purple);border-radius:6px;padding:1px 5px;white-space:nowrap;}',
+            '#mod-imp3d .i3-prop{display:flex;gap:8px;align-items:flex-start;padding:9px 0;border-top:1px solid var(--border);}',
+            '#mod-imp3d .i3-prop .i3-pm{flex:1;min-width:0;font-size:13px;}',
+            '#mod-imp3d .i3-prop .i3-btn{padding:7px 10px;font-size:12px;flex-shrink:0;}',
+            '#mod-imp3d .i3-cita{font-size:11px;color:var(--gray);font-style:italic;margin-top:2px;}'
         ].join('\n');
         document.head.appendChild(css);
         var div = document.createElement('div');
@@ -276,6 +281,8 @@
                 var v = viejas[i];
                 f.incluir = v.incluir; f.item = v.item;
                 if (!f.material && v.material) { f.material = v.material; f.revisar = v.revisar; }
+                ['material_desde', 'material_confianza', 'cant_desde'].forEach(function (k) { if (v[k]) f[k] = v[k]; });
+                if (v.cant_desde) f.cant = v.cant;
             });
             est.items = viejosItems.filter(function (n) { return est.filas.some(function (f) { return f.item === n; }); });
         }
@@ -285,6 +292,7 @@
     window._i3Unidad = function (u) {
         if (!est || est.modo !== '3d' || (u === est.unidad && !est.calibrado)) return;
         est.unidad = u; est.factor = Lector3D.FACTORES[u]; est.calibrado = null;
+        if (est.pdf && est.pdf.aplicadas) delete est.pdf.aplicadas['escala||'];
         remedir('Midiendo en ' + u + '…');
     };
 
@@ -299,6 +307,140 @@
         est.factor = est.factor * (real / 1000) / f.largo;
         est.calibrado = { pieza: f.pieza, mm: real };
         remedir('Escalando el modelo…');
+    };
+
+    // ------------------------------------------------------- PDF del cliente (opcional)
+    // El PDF no se guarda en ningún lado. Su texto (y las páginas sin texto, como imagen) se mandan a la IA
+    // por /api/gemini (mismo proxy con token del hub que "Presupuesto IA"). La IA solo PROPONE: escala,
+    // material y cantidades; cada propuesta se aplica a mano y queda marcada "según PDF (IA)".
+    function tarjetaPDF() {
+        var h = '<div class="i3-card" id="i3-pdf"><div style="font-weight:800;">📄 PDF del cliente <span class="i3-nota">(opcional)</span></div>';
+        if (!est.pdf) {
+            return h + '<div class="i3-nota" style="margin:4px 0 8px;">Si el cliente mandó un PDF descriptivo o de planos, la IA lo lee y ' +
+                '<b>propone</b> la escala real, el material de cada pieza y las cantidades. Vos confirmás cada cosa.</div>' +
+                '<label class="i3-btn" style="display:inline-block;">Agregar PDF<input type="file" accept="application/pdf,.pdf" style="display:none" onchange="_i3PDF(this.files[0])"></label>' +
+                '<div class="i3-nota" style="margin-top:8px;">🔒 El PDF no se guarda. Pero, a diferencia del 3D, <b>su contenido se envía a la IA</b> (Gemini, por el servidor de Rubik) para leerlo.</div></div>';
+        }
+        if (est.pdf.estado === 'leyendo') return h + '<div class="i3-nota" style="margin-top:6px;">⏳ ' + esc(est.pdf.paso || 'Leyendo…') + '</div></div>';
+        if (est.pdf.estado === 'error') {
+            return h + '<div class="i3-nota" style="color:var(--red);font-weight:700;margin-top:6px;">' + esc(est.pdf.error) + '</div>' +
+                '<label class="i3-btn" style="display:inline-block;margin-top:8px;">Probar otro PDF<input type="file" accept="application/pdf,.pdf" style="display:none" onchange="_i3PDF(this.files[0])"></label></div>';
+        }
+        var props = propuestasActuales();
+        h += '<div class="i3-nota" style="margin:4px 0;">' + esc(est.pdf.nombre) + ' · ' + est.pdf.paginas + ' pág. · leído por la IA. ' +
+            'Nada se aplica solo: tocá <b>Aplicar</b> en lo que esté bien.</div>';
+        if (!props.length) h += '<div class="i3-nota">La IA no encontró en el PDF nada para proponer.</div>';
+        props.forEach(function (p, i) {
+            var hecho = est.pdf.aplicadas[claveProp(p)];
+            h += '<div class="i3-prop"><div class="i3-pm"><div><span class="i3-ia">' + esc(p.tipo) + ' · ' + esc(p.confianza) + '</span> ' + esc(p.texto) + '</div>' +
+                (p.cita ? '<div class="i3-cita">PDF: “' + esc(p.cita) + '”</div>' : '') + '</div>' +
+                (hecho ? '<span style="color:var(--green);font-weight:800;font-size:12px;">✓ aplicado</span>'
+                    : (p.aplicable === false ? '' : '<button class="i3-btn" onclick="_i3AplicarProp(' + i + ')">Aplicar</button>')) + '</div>';
+        });
+        if (est.pdf.info.notas) h += '<div class="i3-nota" style="margin-top:6px;">Notas de la IA: ' + esc(est.pdf.info.notas) + '</div>';
+        return h + '</div>';
+    }
+
+    function claveProp(p) { return [p.tipo, p.pieza || '', p.clave || p.cantidad || p.largo_mm || ''].join('|'); }
+    function propuestasActuales() {
+        if (!est.pdf || !est.pdf.info) return [];
+        var tam = est.modo === '3d' ? est.det.tamano.map(function (x) { return x * est.factor; }) : null;
+        return Lector3D.propuestasPDF(est.pdf.info, est.filas, tam, catalogo()).filter(function (p) {
+            if (est.modo !== '3d' && (p.tipo === 'escala' || p.tipo === 'medida')) return false;   // rubik.json ya viene en metros
+            // la escala ya aplicada deja de proponerse (si no, se vuelve a ofrecer con factor ~1)
+            return !(p.tipo === 'escala' && est.pdf.aplicadas['escala||']);
+        });
+    }
+
+    async function textoEImagenesPDF(archivo) {
+        if (!window.pdfjsLib) throw new Error('No se pudo cargar el lector de PDF (pdf.js).');
+        var doc = await window.pdfjsLib.getDocument({ data: await archivo.arrayBuffer() }).promise;
+        var texto = '', imagenes = [], n = Math.min(doc.numPages, 30);
+        for (var i = 1; i <= n; i++) {
+            est.pdf.paso = 'Leyendo página ' + i + ' de ' + n + '…'; refrescarPDF();
+            var pag = await doc.getPage(i);
+            var tc = await pag.getTextContent();
+            var t = tc.items.map(function (x) { return x.str; }).join(' ').replace(/\s+/g, ' ').trim();
+            texto += '\n--- Página ' + i + ' ---\n' + t;
+            // Planos escaneados o dibujos (poco texto): la página va como imagen, hasta 6
+            if (t.length < 200 && imagenes.length < 6) {
+                var vp = pag.getViewport({ scale: 1 }), escala = Math.min(2, 1400 / Math.max(vp.width, vp.height));
+                var v2 = pag.getViewport({ scale: escala }), c = document.createElement('canvas');
+                c.width = v2.width; c.height = v2.height;
+                await pag.render({ canvasContext: c.getContext('2d'), viewport: v2 }).promise;
+                imagenes.push(c.toDataURL('image/jpeg', 0.7).split(',')[1]);
+                c.width = c.height = 0;
+            }
+        }
+        doc.destroy && doc.destroy();
+        return { texto: texto, imagenes: imagenes, paginas: doc.numPages };
+    }
+
+    function refrescarPDF() { var el = $('i3-pdf'); if (el) el.outerHTML = tarjetaPDF(); }
+
+    window._i3PDF = async function (archivo) {
+        if (!archivo || !est) return;
+        est.pdf = { estado: 'leyendo', nombre: archivo.name, aplicadas: {}, paso: 'Abriendo ' + archivo.name + '…' };
+        refrescarPDF();
+        try {
+            var c = await textoEImagenesPDF(archivo);
+            est.pdf.paginas = c.paginas;
+            est.pdf.paso = 'La IA está leyendo el PDF (puede tardar un minuto)…'; refrescarPDF();
+            var pedido = Lector3D.armarPedidoPDF({
+                texto: c.texto, imagenes: c.imagenes, piezas: est.filas.filter(function (f) { return f.incluir; }),
+                tamano_mm: est.modo === '3d' ? est.det.tamano.map(function (x) { return x * est.factor * 1000; }) : null,
+                catalogo: catalogo()
+            });
+            var usuario = firebase.auth().currentUser;
+            var headers = { 'Content-Type': 'application/json' };
+            if (usuario) headers['Authorization'] = 'Bearer ' + await usuario.getIdToken();
+            var ctrl = new AbortController(), reloj = setTimeout(function () { ctrl.abort(); }, 120000);
+            var resp = await fetch('/api/gemini', { method: 'POST', headers: headers, body: JSON.stringify(pedido), signal: ctrl.signal })
+                .finally(function () { clearTimeout(reloj); });
+            if (!resp.ok) throw new Error('La IA respondió ' + resp.status + (resp.status === 401 || resp.status === 403 ? ' (sesión del hub vencida: recargá la página)' : ''));
+            est.pdf.info = Lector3D.leerRespuestaPDF(await resp.json());
+            est.pdf.estado = 'listo';
+        } catch (e) {
+            console.warn('[importar3d] pdf', e);
+            est.pdf.estado = 'error';
+            est.pdf.error = 'No se pudo leer el PDF: ' + (e && e.name === 'AbortError' ? 'la IA tardó demasiado' : (e && e.message ? e.message : e));
+        }
+        conScroll(function () {});
+    };
+
+    window._i3AplicarProp = function (i) {
+        var p = propuestasActuales()[i];
+        if (!p) return;
+        var k = claveProp(p);
+        var fila = p.pieza ? est.filas.find(function (f) { return f.pieza === p.pieza; }) : null;
+        if (p.tipo === 'escala' || p.tipo === 'medida') {
+            if (p.tipo === 'medida') {
+                if (!fila) return;
+                if (!confirm('Calibrar con "' + fila.pieza + '" = ' + Math.round(p.largo_mm) + ' mm (según PDF, confianza ' + p.confianza + ')?')) return;
+                est.factor = est.factor * (p.largo_mm / 1000) / fila.largo;
+                est.calibrado = { pieza: fila.pieza + ' (según PDF, IA)', mm: Math.round(p.largo_mm) };
+            } else {
+                est.factor = est.factor * p.factor;
+                est.calibrado = { pieza: 'medida mayor según PDF (IA)', mm: Math.round(Math.max.apply(null, est.det.tamano) * est.factor * 1000) };
+                k = 'escala||';
+            }
+            est.pdf.aplicadas[k] = true;
+            remedir('Escalando según el PDF…');
+            return;
+        }
+        if (!fila) return;
+        conScroll(function () {
+            if (p.tipo === 'material') {
+                est.filas.forEach(function (f) {
+                    if (f.pieza !== p.pieza) return;
+                    f.material = p.clave; f.material_desde = 'pdf_ia'; f.material_confianza = p.confianza;
+                    f.revisar = (f.acabados || []).some(function (a) { return !a.material; }) || (f.partes || 1) > 1;
+                });
+            } else if (p.tipo === 'cantidad') {
+                fila.cant = p.cantidad; fila.cant_desde = p.confianza;
+            }
+            est.pdf.aplicadas[k] = true;
+        });
     };
 
     // ------------------------------------------------------- revisión
@@ -343,6 +485,8 @@
             (falta.length ? '<span class="i3-chip rojo">' + falta.length + ' sin vincular</span>' : '<span class="i3-chip" style="color:var(--green)">materiales vinculados</span>') +
             '</div></div>';
 
+        h += tarjetaPDF();
+
         if (falta.length) {
             h += '<div class="i3-card"><div style="font-weight:800;">Materiales sin vincular</div>' +
                 '<div class="i3-nota">Elegí el material de la base. Queda guardado para la próxima importación.</div>';
@@ -377,7 +521,9 @@
                     '<div class="i3-pm"><div class="i3-pn">' + esc(f.pieza) + ' <span style="color:var(--blue)">× ' + f.cant + '</span>' +
                     (f._sugerido ? '<span class="i3-tag">¿entorno?</span>' : '') + '</div>' +
                     '<div class="i3-med">' + mm(f.largo) + ' × ' + mm(f.ancho) + ' × ' + mm(f.espesor) + ' mm · ' + (f.tipo === 'plancha' ? 'plancha' : 'volumen') + '</div>' +
-                    '<div class="i3-mat ' + matCls + '">' + esc(matTxt) + '</div>' +
+                    '<div class="i3-mat ' + matCls + '">' + esc(matTxt) +
+                    (f.material_desde === 'pdf_ia' ? ' <span class="i3-ia">según PDF (IA) · ' + esc(f.material_confianza) + '</span>' : '') + '</div>' +
+                    (f.cant_desde ? '<div class="i3-nota"><span class="i3-ia">cantidad según PDF (IA) · ' + esc(f.cant_desde) + '</span></div>' : '') +
                     (acab ? '<div class="i3-nota">Acabados: ' + acab + '</div>' : '') +
                     (f.motivos || []).filter(function (m) { return /partes sueltas|revisar la unidad/.test(m); }).map(function (m) {
                         return '<div class="i3-nota" style="color:var(--orange);font-weight:700;">⚠ ' + esc(m) + '</div>';
@@ -460,7 +606,7 @@
         if (falta && !confirm(falta + ' material' + (falta > 1 ? 'es quedan' : ' queda') + ' sin vincular: van a quedar marcados en rojo en el APU, sin precio. ¿Agregar igual?')) return;
         var nombres = est.items.filter(function (n) { return filas.some(function (f) { return f.item === n; }); });
         var nuevos = Lector3D.armarItems(filas, nombres, catalogo(), function () { return db.ref().push().key; }, {
-            archivo: est.archivo, fecha: Date.now(),
+            archivo: est.archivo, fecha: Date.now(), pdf: est.pdf && est.pdf.info ? est.pdf.nombre : null,
             unidad: est.modo !== '3d' ? 'm' : (est.calibrado ? 'calibrado: "' + est.calibrado.pieza + '" = ' + est.calibrado.mm + ' mm (×' + (est.factor / Lector3D.FACTORES[est.unidad]).toFixed(4) + ' ' + est.unidad + ')' : est.unidad)
         });
         if ($('i3-cap') && $('i3-cap').checked) {

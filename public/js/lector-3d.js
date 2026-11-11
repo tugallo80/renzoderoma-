@@ -837,6 +837,14 @@
             if (calc.nota) r.nota = calc.nota;
             if (motivos.length) r.revisar = motivos.join(' · ');
             if (piezasFila) { r.measures = piezasFila.map(medidaDePieza); r.measures_modo = modoMedidas(piezasFila); }
+            // Material que propuso la IA leyendo el PDF y el dueño aceptó: queda marcado con su confianza
+            var deIA = (piezasFila || []).filter(function (x) { return x.material_desde === 'pdf_ia'; });
+            if (deIA.length) {
+                r.segun = 'PDF (IA)';
+                r.confianza = deIA.map(function (x) { return x.material_confianza || 'baja'; })
+                    .sort(function (a, b) { return CONF.indexOf(a) - CONF.indexOf(b); })[0];
+                r.nota = 'material según PDF (IA), confianza ' + r.confianza + (r.nota ? ' · ' + r.nota : '');
+            }
             filas.push(r);
         }
         principales.forEach(function (ps, clave) {
@@ -885,11 +893,164 @@
                 measures: ps.map(medidaDePieza), measures_modo: modoMedidas(ps),
                 import3d: {
                     archivo: meta.archivo || null, fecha: meta.fecha || Date.now(), unidad_archivo: meta.unidad || null,
+                    pdf: meta.pdf || null,
                     piezas: ps.reduce(function (s, p) { return s + p.cant; }, 0), filas_a_revisar: pendientes
                 }
             };
             return JSON.parse(JSON.stringify(item));   // sin undefined (Firebase no los acepta)
         }).filter(Boolean);
+    }
+
+    // ---------------------------------------------------------------------
+    // PDF del cliente → IA → propuestas (nunca se aplican solas)
+    // ---------------------------------------------------------------------
+    var CONF = ['baja', 'media', 'alta'];
+    function normConf(c) { c = String(c || '').toLowerCase(); return CONF.indexOf(c) >= 0 ? c : 'baja'; }
+    function numOnull(x) { var n = parseFloat(x); return isFinite(n) && n > 0 ? n : null; }
+    function textoComparable(s) {
+        return String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
+            .replace(/[^a-z0-9]+/g, ' ').trim();
+    }
+
+    /**
+     * Cuerpo para /api/gemini (mismo proxy y modelo que "Presupuesto IA").
+     * datos: { texto, imagenes: [base64 jpeg sin prefijo], piezas: filas del lector, tamano_mm: [x,y,z], catalogo }
+     */
+    function armarPedidoPDF(datos) {
+        var piezas = (datos.piezas || []).map(function (p) {
+            return '- "' + p.pieza + '" × ' + p.cant + ': ' + Math.round(p.largo * 1000) + ' × ' + Math.round(p.ancho * 1000) + ' × ' +
+                Math.round(p.espesor * 1000) + ' mm' + (p.origen_vw ? ' (material en el 3D: ' + p.origen_vw + ')' : ' (sin material en el 3D)');
+        }).join('\n');
+        var cat = Object.keys(datos.catalogo || {}).slice(0, 600).map(function (k) {
+            var m = datos.catalogo[k]; return k + ' = ' + (m.n || m.desc || k) + (m.u ? ' [' + m.u + ']' : '');
+        }).join('\n');
+        var sys = [
+            'Leés el PDF descriptivo o de planos que mandó un cliente para cotizar una pieza de carpintería/metalmecánica (mueble, stand, trofeo, exhibidor).',
+            'El modelo 3D del cliente trae la geometría pero puede no estar a escala y no trae materiales. Tu trabajo es sacar del PDF lo que el 3D no trae.',
+            'REGLAS: no inventes. Si un dato no está en el PDF, poné null. Medidas siempre en milímetros.',
+            'confianza: "alta" = escrito tal cual en el PDF; "media" = deducido de una cota o de la escala del plano; "baja" = interpretación dudosa.',
+            'cita: el texto o la cota del PDF de donde sale el dato (corto).',
+            'pieza_3d: si la pieza del PDF es una de las piezas del modelo 3D, su nombre EXACTO de la lista; si no, null.',
+            'material_clave: SOLO una clave de la lista del catálogo que corresponda al material descripto; si ninguna corresponde, null (y describilo en material_texto).',
+            'Devolvé SOLO este JSON, sin texto antes ni después:',
+            '{"medidas_generales":{"alto_mm":null,"ancho_mm":null,"fondo_mm":null,"confianza":"alta","cita":""},' +
+            '"piezas":[{"nombre_pdf":"","pieza_3d":null,"largo_mm":null,"ancho_mm":null,"espesor_mm":null,"cantidad":null,' +
+            '"material_texto":null,"material_clave":null,"acabados":[],"confianza":"media","cita":""}],"notas":""}'
+        ].join('\n');
+        var partes = [{ text: 'PIEZAS DEL MODELO 3D (medidas tal como vienen en el archivo, quizás sin escala):\n' + (piezas || '(ninguna)') +
+            (datos.tamano_mm ? '\nTamaño total del modelo: ' + datos.tamano_mm.map(Math.round).join(' × ') + ' mm' : '') }];
+        partes.push({ text: 'CATÁLOGO DE MATERIALES (clave = nombre [unidad]):\n' + (cat || '(vacío)') });
+        partes.push({ text: 'TEXTO DEL PDF:\n' + (String(datos.texto || '').slice(0, 30000) || '(sin texto: ver las imágenes)') });
+        (datos.imagenes || []).forEach(function (b64, i) {
+            partes.push({ text: '[Página ' + (i + 1) + ' del PDF como imagen]' });
+            partes.push({ inlineData: { data: b64, mimeType: 'image/jpeg' } });
+        });
+        return {
+            model: 'gemini-2.5-flash',
+            systemInstruction: { parts: [{ text: sys }] },
+            contents: [{ role: 'user', parts: partes }],
+            generationConfig: { maxOutputTokens: 8000, temperature: 0, responseMimeType: 'application/json' }
+        };
+    }
+
+    /** Respuesta de /api/gemini → datos normalizados (o error claro). */
+    function leerRespuestaPDF(resp) {
+        var txt = resp && resp.candidates && resp.candidates[0] && resp.candidates[0].content &&
+            (resp.candidates[0].content.parts || []).map(function (p) { return p.text || ''; }).join('');
+        if (!txt) throw new Error('La IA no devolvió nada.');
+        txt = txt.replace(/```json|```/g, '').trim();
+        var a = txt.indexOf('{'), b = txt.lastIndexOf('}');
+        var d = JSON.parse(txt.slice(a, b + 1));
+        var g = d.medidas_generales || {};
+        return {
+            medidas_generales: {
+                alto_mm: numOnull(g.alto_mm), ancho_mm: numOnull(g.ancho_mm), fondo_mm: numOnull(g.fondo_mm),
+                confianza: normConf(g.confianza), cita: String(g.cita || '').slice(0, 200)
+            },
+            piezas: (Array.isArray(d.piezas) ? d.piezas : []).map(function (p) {
+                return {
+                    nombre_pdf: String(p.nombre_pdf || '').trim(), pieza_3d: p.pieza_3d ? String(p.pieza_3d).trim() : null,
+                    largo_mm: numOnull(p.largo_mm), ancho_mm: numOnull(p.ancho_mm), espesor_mm: numOnull(p.espesor_mm),
+                    cantidad: numOnull(p.cantidad) ? Math.round(numOnull(p.cantidad)) : null,
+                    material_texto: p.material_texto ? String(p.material_texto) : null,
+                    material_clave: p.material_clave ? String(p.material_clave) : null,
+                    acabados: Array.isArray(p.acabados) ? p.acabados.map(String) : [],
+                    confianza: normConf(p.confianza), cita: String(p.cita || '').slice(0, 200)
+                };
+            }),
+            notas: String(d.notas || '').slice(0, 1000)
+        };
+    }
+
+    /** Fila del 3D que corresponde a una pieza del PDF: nombre exacto (sin mayúsculas ni espacios), o por palabras. */
+    function buscarFila(filas, pz) {
+        var objetivo = textoComparable(pz.pieza_3d || pz.nombre_pdf);
+        if (!objetivo) return null;
+        var exacta = filas.find(function (f) { return textoComparable(f.pieza) === objetivo; });
+        if (exacta) return exacta;
+        var pal = objetivo.split(' ').filter(function (w) { return w.length > 2; });
+        var mejor = null, puntos = 0;
+        filas.forEach(function (f) {
+            var fp = textoComparable(f.pieza).split(' ');
+            var n = pal.filter(function (w) { return fp.indexOf(w) >= 0; }).length;
+            if (n > puntos) { puntos = n; mejor = f; }
+        });
+        return puntos > 0 && puntos >= Math.ceil(pal.length / 2) ? mejor : null;
+    }
+
+    /**
+     * Propuestas para confirmar una por una. No cambia nada.
+     *   escala: la medida mayor del PDF contra la mayor del modelo (factor relativo)
+     *   material: clave del catálogo para una pieza sin material (solo si la clave existe)
+     *   cantidad / medida: lo que dice el PDF de cada pieza
+     * tamanoM: tamaño total del modelo en metros con la escala actual.
+     */
+    function propuestasPDF(info, filas, tamanoM, catalogo) {
+        var out = [];
+        var g = info.medidas_generales || {};
+        var gen = [g.alto_mm, g.ancho_mm, g.fondo_mm].filter(Boolean).sort(function (a, b) { return b - a; });
+        var mod = (tamanoM || []).map(function (x) { return x * 1000; }).sort(function (a, b) { return b - a; });
+        if (gen.length && mod[0] > 0) {
+            var r = gen[0] / mod[0];
+            var conf = g.confianza;
+            // Si hay dos medidas y la segunda escala distinto (>10 %), baja la confianza
+            if (gen.length > 1 && mod[1] > 0 && Math.abs(gen[1] / mod[1] / r - 1) > 0.1) conf = 'baja';
+            if (Math.abs(r - 1) > 0.02) {
+                out.push({
+                    tipo: 'escala', factor: r, confianza: conf, cita: g.cita,
+                    texto: 'Medida mayor según el PDF: ' + Math.round(gen[0]) + ' mm. En el modelo: ' + Math.round(mod[0]) +
+                        ' mm. Escalar todo ×' + (r < 0.01 ? r.toExponential(2) : r.toFixed(4)) + '.'
+                });
+            }
+        }
+        (info.piezas || []).forEach(function (pz) {
+            var f = buscarFila(filas, pz);
+            var nombre = f ? f.pieza : null;
+            if (pz.material_clave || pz.material_texto) {
+                var cat = pz.material_clave && catalogo && catalogo[pz.material_clave];
+                out.push({
+                    tipo: 'material', pieza: nombre, nombre_pdf: pz.nombre_pdf, clave: cat ? pz.material_clave : null,
+                    confianza: pz.confianza, cita: pz.cita, aplicable: !!(f && cat),
+                    texto: (nombre ? '"' + nombre + '"' : '"' + pz.nombre_pdf + '" (no se encontró en el 3D)') + ': ' +
+                        (cat ? (cat.n || cat.desc || pz.material_clave) : 'material "' + (pz.material_texto || pz.material_clave) + '" — no está en la base, vincularlo a mano') +
+                        (pz.acabados.length ? ' · acabados: ' + pz.acabados.join(', ') : '')
+                });
+            }
+            if (f && pz.cantidad && pz.cantidad !== f.cant) {
+                out.push({ tipo: 'cantidad', pieza: nombre, cantidad: pz.cantidad, confianza: pz.confianza, cita: pz.cita, aplicable: true,
+                    texto: '"' + nombre + '": ' + pz.cantidad + ' unidades según el PDF (el 3D tiene ' + f.cant + ').' });
+            }
+            if (f && pz.largo_mm) {
+                var dims = [pz.largo_mm, pz.ancho_mm, pz.espesor_mm].filter(Boolean).sort(function (a, b) { return b - a; });
+                var difiere = Math.abs(dims[0] / (f.largo * 1000) - 1) > 0.02;
+                if (difiere) {
+                    out.push({ tipo: 'medida', pieza: nombre, largo_mm: dims[0], confianza: pz.confianza, cita: pz.cita, aplicable: true,
+                        texto: '"' + nombre + '" mide ' + dims.map(Math.round).join(' × ') + ' mm según el PDF (en el modelo: ' +
+                            Math.round(f.largo * 1000) + ' × ' + Math.round(f.ancho * 1000) + ' × ' + Math.round(f.espesor * 1000) + ' mm). Calibrar la escala con esta pieza.' });
+                }
+            }
+        });
+        return out;
     }
 
     var api = {
@@ -901,7 +1062,8 @@
         tamanoEscena: tamanoEscena, detectarUnidad: detectarUnidad,
         desdeRubikJson: desdeRubikJson, resolverMateriales: resolverMateriales,
         sugerirDescarte: sugerirDescarte, familiaUnidad: familiaUnidad, cantidadPrincipal: cantidadPrincipal,
-        armarApuMateriales: armarApuMateriales, armarItems: armarItems, calcPu: calcPu, medidaDePieza: medidaDePieza
+        armarApuMateriales: armarApuMateriales,
+        armarPedidoPDF: armarPedidoPDF, leerRespuestaPDF: leerRespuestaPDF, propuestasPDF: propuestasPDF, buscarFila: buscarFila, armarItems: armarItems, calcPu: calcPu, medidaDePieza: medidaDePieza
     };
     if (typeof module !== 'undefined' && module.exports) module.exports = api;
     else global.Lector3D = api;
