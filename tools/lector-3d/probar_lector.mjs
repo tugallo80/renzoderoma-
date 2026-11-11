@@ -293,7 +293,7 @@ comparar('FBX', L.analizar(fbx, { equivalencias: eq, factor: uFbx.factor, archiv
 
   // Respuesta simulada de Gemini (con ```json y texto suelto, como a veces llega)
   const json = {
-    medidas_generales: { alto_mm: 800, ancho_mm: 480, fondo_mm: 480, confianza: 'alta', cita: 'Alto total 800 mm' },
+    medidas_generales: { alto_mm: 800, ancho_mm: null, fondo_mm: null, confianza: 'alta', cita: 'Alto total 800 mm', pagina: 2 },
     piezas: [
       { nombre_pdf: 'Panel frontal', pieza_3d: 'pANEL Frente', largo_mm: 800, ancho_mm: 320, espesor_mm: 4, cantidad: 2,
         material_texto: 'acrílico transparente 4 mm', material_clave: 'ACRILICO_4', acabados: ['pulido de cantos'], confianza: 'alta', cita: 'Panel frontal acrílico 4mm (x2)' },
@@ -311,6 +311,15 @@ comparar('FBX', L.analizar(fbx, { equivalencias: eq, factor: uFbx.factor, archiv
   const props = L.propuestasPDF(info, filas, tam, catalogo);
   const esc = props.find(p => p.tipo === 'escala');
   chk('propone escala con la medida mayor del PDF', esc && cerca(esc.factor * Math.max(...tam) * 1000, 800, 0.5) && esc.confianza !== undefined, esc);
+  chk('escala: dice qué medida, de qué página y con qué confianza (para calibrar sola si es alta o media)',
+    esc && esc.dimension === 'alto total' && esc.mm === 800 && esc.pagina === 2 && esc.confianza === 'alta', esc);
+  chk('pedido: pide la página y medidas TOTALES', /pagina/.test(pedido.systemInstruction.parts[0].text) && /TOTALES/.test(pedido.systemInstruction.parts[0].text));
+  {
+    // Dos medidas que no escalan igual (>10 %) → confianza baja → solo se propone, no se calibra sola
+    const raro = { ...info, medidas_generales: { ...info.medidas_generales, ancho_mm: 100 } };
+    const e2 = L.propuestasPDF(raro, filas, tam, catalogo).find(p => p.tipo === 'escala');
+    chk('medidas que no cierran → confianza baja', e2 && e2.confianza === 'baja', e2);
+  }
   const mat = props.find(p => p.tipo === 'material' && p.pieza === 'pANEL Frente');
   chk('propone material de la base para la pieza del 3D', mat && mat.clave === 'ACRILICO_4' && mat.aplicable && mat.confianza === 'alta', mat);
   const inox = props.find(p => p.tipo === 'material' && p.nombre_pdf === 'columna central');

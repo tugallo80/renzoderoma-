@@ -101,7 +101,8 @@
             (error ? '<div class="i3-card" style="border-color:var(--red);color:var(--red);font-weight:700;">' + esc(error) + '</div>' : '') +
             '<label class="i3-drop"><i class="ph-bold ph-upload-simple"></i><div style="font-weight:800;font-size:16px;margin-top:6px;">Elegir el modelo 3D</div>' +
             '<div class="i3-nota">.glb, .gltf, .fbx o un .zip que los tenga — y si lo tenés, el rubik.json de Blender</div>' +
-            '<input type="file" id="i3-file" multiple accept=".glb,.gltf,.fbx,.zip,.json,.bin,.skp" style="display:none" onchange="_i3Archivos(this.files)"></label>' +
+            '<div class="i3-nota" style="margin-top:4px;"><b>Si tenés el PDF o los planos del cliente, elegilo junto con el 3D</b>: la app calibra la escala sola.</div>' +
+            '<input type="file" id="i3-file" multiple accept=".glb,.gltf,.fbx,.zip,.json,.bin,.skp,.pdf" style="display:none" onchange="_i3Archivos(this.files)"></label>' +
             '<div class="i3-card" style="margin-top:12px;"><div class="i3-nota"><b>🔒 El archivo no se sube a ningún lado.</b> Se lee en este dispositivo; ' +
             'solo se guardan los ítems que confirmes. Si es un .gltf con su .bin aparte, elegí los dos juntos.</div>' +
             '<div class="i3-nota" style="margin-top:6px;">Consejo: exportá <b>sin texturas</b> (en SketchUp/Vectorworks, "Embed media" desactivado). ' +
@@ -172,7 +173,7 @@
                 for (var z = 0; z < zips.length; z++) {
                     var zip = await JSZip.loadAsync(zips[z]);
                     var entradas = Object.keys(zip.files).filter(function (n) {
-                        return !zip.files[n].dir && n.indexOf('__MACOSX') < 0 && /\.(glb|gltf|fbx|bin|json)$/i.test(n);
+                        return !zip.files[n].dir && n.indexOf('__MACOSX') < 0 && /\.(glb|gltf|fbx|bin|json|pdf)$/i.test(n);
                     });
                     for (var e = 0; e < entradas.length; e++) {
                         var blob = await zip.files[entradas[e]].async('blob');
@@ -183,6 +184,7 @@
             archivos = archivos.filter(function (f) { return ext(f) !== 'zip'; });
         }
         var modelo = archivos.find(function (f) { return ['glb', 'gltf', 'fbx'].indexOf(ext(f)) >= 0; });
+        var pdfJunto = archivos.find(function (f) { return ext(f) === 'pdf'; });
         var json = archivos.find(function (f) { return ext(f) === 'json'; });
         if (!modelo && !json) return pasoElegir('No encontré un modelo 3D. Elegí un .glb, .gltf, .fbx, un .zip que lo tenga, o el rubik.json.');
         var pesado = modelo && modelo.size > MB_AVISO * 1024 * 1024 ? Math.round(modelo.size / 1048576) : 0;
@@ -239,6 +241,7 @@
             }
             prepararFilas();
             renderRevision();
+            if (pdfJunto) window._i3PDF(pdfJunto);   // si eligió el PDF junto con el 3D, se lee enseguida
         } catch (e) {
             console.error('[importar3d]', e);
             est = null;
@@ -291,22 +294,63 @@
 
     window._i3Unidad = function (u) {
         if (!est || est.modo !== '3d' || (u === est.unidad && !est.calibrado)) return;
-        est.unidad = u; est.factor = Lector3D.FACTORES[u]; est.calibrado = null;
-        if (est.pdf && est.pdf.aplicadas) delete est.pdf.aplicadas['escala||'];
-        remedir('Midiendo en ' + u + '…');
+        est.unidad = u;
+        cambiarEscala(Lector3D.FACTORES[u], null, 'Midiendo en ' + u + '…');
+    };
+
+    function tamanoM() { return est.det.tamano.map(function (x) { return x * est.factor; }); }
+    function fmtTam(m) {
+        var mx = Math.max.apply(null, m), u, f, d;
+        if (mx >= 1) { u = 'm'; f = 1; d = 2; } else if (mx >= 0.01) { u = 'cm'; f = 100; d = mx >= 0.1 ? 0 : 1; } else { u = 'mm'; f = 1000; d = 1; }
+        return m.map(function (x) { return (x * f).toFixed(d); }).join(' × ') + ' ' + u;
+    }
+    function opcionesEscala() {
+        var base = Lector3D.FACTORES[est.unidad];
+        return [
+            { etiqueta: 'Como vino (' + est.unidad + ')', factor: base },
+            { etiqueta: '÷ 10', factor: base / 10 },
+            { etiqueta: '÷ 100', factor: base / 100 },
+            { etiqueta: '÷ 1000', factor: base / 1000 },
+            { etiqueta: 'Pulgadas (× 25,4 mm)', factor: 0.0254 }
+        ];
+    }
+    function textoCalibrado() {
+        var c = est.calibrado;
+        if (c.tipo === 'rapida') return 'Escala: ' + c.pieza + '.';
+        return 'Calibrado: ' + c.pieza + ' = ' + c.mm + ' mm.';
+    }
+    function cambiarEscala(factor, calibrado, texto) {
+        est.factor = factor; est.calibrado = calibrado;
+        if (est.pdf) { est.pdf.auto = null; if (est.pdf.aplicadas) delete est.pdf.aplicadas['escala||']; }
+        remedir(texto || 'Escalando el modelo…');
+    }
+    window._i3Escala = function (i) {
+        var o = opcionesEscala()[i];
+        cambiarEscala(o.factor, i === 0 ? null : { tipo: 'rapida', pieza: o.etiqueta }, 'Escalando ' + o.etiqueta + '…');
+    };
+    window._i3MedidaTotal = function () {
+        var eje = +$('i3-dim').value, real = parseFloat(String($('i3-dim-mm').value).replace(',', '.'));
+        var nombre = ['ancho total', 'alto total', 'fondo total'][eje];
+        if (!(real > 0) || !(est.det.tamano[eje] > 0)) { alert('Escribí la medida real en mm, por ejemplo 800.'); return; }
+        cambiarEscala((real / 1000) / est.det.tamano[eje], { pieza: nombre, mm: real });
+    };
+    window._i3DeshacerPDF = function () {
+        var d = est.pdf && est.pdf.deshacer;
+        if (!d) return;
+        est.factor = d.factor; est.calibrado = d.calibrado;
+        est.pdf.auto = null; est.pdf.deshacer = null; delete est.pdf.aplicadas['escala||'];
+        remedir('Volviendo a la escala anterior…');
     };
 
     // Modelos que no están a escala real: "esta pieza mide X mm" y se escala todo parejo
     window._i3Calibrar = function (i) {
         var f = est.filas[i];
         var txt = prompt('¿Cuánto mide de LARGO "' + f.pieza + '" en la realidad (en mm)?\nEn el modelo mide ' + mm(f.largo) +
-            ' mm. Todo el modelo se escala igual.', '');
+            ' mm.\nSe ajustan TODAS las piezas del archivo.', '');
         if (txt == null) return;
         var real = parseFloat(String(txt).replace(',', '.'));
         if (!(real > 0) || !(f.largo > 0)) { alert('Escribí una medida en mm, por ejemplo 800.'); return; }
-        est.factor = est.factor * (real / 1000) / f.largo;
-        est.calibrado = { pieza: f.pieza, mm: real };
-        remedir('Escalando el modelo…');
+        cambiarEscala(est.factor * (real / 1000) / f.largo, { pieza: '"' + f.pieza + '"', mm: real });
     };
 
     // ------------------------------------------------------- PDF del cliente (opcional)
@@ -314,11 +358,11 @@
     // por /api/gemini (mismo proxy con token del hub que "Presupuesto IA"). La IA solo PROPONE: escala,
     // material y cantidades; cada propuesta se aplica a mano y queda marcada "según PDF (IA)".
     function tarjetaPDF() {
-        var h = '<div class="i3-card" id="i3-pdf"><div style="font-weight:800;">📄 PDF del cliente <span class="i3-nota">(opcional)</span></div>';
+        var h = '<div class="i3-card" id="i3-pdf" style="border:2px solid var(--purple);"><div style="font-weight:800;">📄 Paso 2 · ¿Tenés el PDF o los planos del cliente?</div>';
         if (!est.pdf) {
-            return h + '<div class="i3-nota" style="margin:4px 0 8px;">Si el cliente mandó un PDF descriptivo o de planos, la IA lo lee y ' +
-                '<b>propone</b> la escala real, el material de cada pieza y las cantidades. Vos confirmás cada cosa.</div>' +
-                '<label class="i3-btn" style="display:inline-block;">Agregar PDF<input type="file" accept="application/pdf,.pdf" style="display:none" onchange="_i3PDF(this.files[0])"></label>' +
+            return h + '<div class="i3-nota" style="margin:4px 0 8px;">Subilo y <b>la app calibra la escala sola</b> con la medida total del PDF, ' +
+                'y te propone el material de cada pieza y las cantidades (esos los confirmás vos).</div>' +
+                '<label class="i3-btn prim" style="display:inline-block;">Subir PDF<input type="file" accept="application/pdf,.pdf" style="display:none" onchange="_i3PDF(this.files[0])"></label>' +
                 '<div class="i3-nota" style="margin-top:8px;">🔒 El PDF no se guarda. Pero, a diferencia del 3D, <b>su contenido se envía a la IA</b> (Gemini, por el servidor de Rubik) para leerlo.</div></div>';
         }
         if (est.pdf.estado === 'leyendo') return h + '<div class="i3-nota" style="margin-top:6px;">⏳ ' + esc(est.pdf.paso || 'Leyendo…') + '</div></div>';
@@ -328,7 +372,7 @@
         }
         var props = propuestasActuales();
         h += '<div class="i3-nota" style="margin:4px 0;">' + esc(est.pdf.nombre) + ' · ' + est.pdf.paginas + ' pág. · leído por la IA. ' +
-            'Nada se aplica solo: tocá <b>Aplicar</b> en lo que esté bien.</div>';
+            (est.pdf.auto ? 'La escala ya se calibró (arriba, con Deshacer). ' : '') + 'Materiales y cantidades no se aplican solos: tocá <b>Aplicar</b> en lo que esté bien.</div>';
         if (!props.length) h += '<div class="i3-nota">La IA no encontró en el PDF nada para proponer.</div>';
         props.forEach(function (p, i) {
             var hecho = est.pdf.aplicadas[claveProp(p)];
@@ -339,6 +383,28 @@
         });
         if (est.pdf.info.notas) h += '<div class="i3-nota" style="margin-top:6px;">Notas de la IA: ' + esc(est.pdf.info.notas) + '</div>';
         return h + '</div>';
+    }
+
+    function tarjetaEscala() {
+        var h = '';
+            // Escala rápida: factores redondos, cada uno con cómo quedaría el modelo entero
+            h += '<div class="i3-card"><div style="font-weight:800;">' + (est.pdf && est.pdf.auto ? 'Escala a mano' : 'Sin PDF: ¿el tamaño no tiene sentido?') + '</div>' +
+                '<div class="i3-nota" style="margin-top:2px;">Elegí el que corresponda (los modelos suelen venir corridos por un factor redondo):</div><div class="i3-chips">' +
+                opcionesEscala().map(function (o, i) {
+                    var on = Math.abs(est.factor / o.factor - 1) < 1e-9;
+                    return '<button class="i3-btn' + (on ? ' prim' : '') + '" style="flex:0 0 auto;padding:7px 10px;font-size:12px;text-align:left;" onclick="_i3Escala(' + i + ')">' +
+                        '<b>' + esc(o.etiqueta) + '</b><br><span style="font-weight:400;">' + fmtTam(est.det.tamano.map(function (x) { return x * o.factor; })) + '</span></button>';
+                }).join('') + '</div>';
+            // Medida total conocida (alto, ancho o fondo): la que el dueño suele saber
+            var tm = tamanoM();
+            h += '<div style="margin-top:10px;font-size:13px;font-weight:700;">📏 ¿Sabés una medida total real?</div>' +
+                '<div class="i3-row2"><select class="i3-inp" id="i3-dim" style="flex:1.3;">' +
+                [['1', 'Alto'], ['0', 'Ancho'], ['2', 'Fondo']].map(function (d) {
+                    return '<option value="' + d[0] + '">' + d[1] + ' (hoy ' + Math.round(tm[+d[0]] * 1000) + ' mm)</option>';
+                }).join('') + '</select><input class="i3-inp" id="i3-dim-mm" type="number" inputmode="decimal" placeholder="mm reales">' +
+                '<button class="i3-btn" onclick="_i3MedidaTotal()">Calibrar</button></div>' +
+                '<div class="i3-nota" style="margin-top:4px;">También podés tocar <b>📏 Mide…</b> en una pieza. Calibrar una pieza o una medida total <b>ajusta todas las piezas del archivo</b>.</div></div>';
+        return h;
     }
 
     function claveProp(p) { return [p.tipo, p.pieza || '', p.clave || p.cantidad || p.largo_mm || ''].join('|'); }
@@ -400,6 +466,16 @@
             if (!resp.ok) throw new Error('La IA respondió ' + resp.status + (resp.status === 401 || resp.status === 403 ? ' (sesión del hub vencida: recargá la página)' : ''));
             est.pdf.info = Lector3D.leerRespuestaPDF(await resp.json());
             est.pdf.estado = 'listo';
+            // Medida total con confianza alta o media → la escala se calibra sola (con Deshacer). Lo demás, solo propuesto.
+            var escala = est.modo === '3d' && propuestasActuales().find(function (p) { return p.tipo === 'escala'; });
+            if (escala && (escala.confianza === 'alta' || escala.confianza === 'media')) {
+                est.pdf.deshacer = { factor: est.factor, calibrado: est.calibrado };
+                est.factor = est.factor * escala.factor;
+                est.calibrado = { pieza: escala.dimension + ' según PDF (IA)', mm: escala.mm };
+                est.pdf.auto = { dimension: escala.dimension, mm: escala.mm, pagina: escala.pagina, confianza: escala.confianza, cita: escala.cita };
+                est.pdf.aplicadas['escala||'] = true;
+                return remedir('Calibrando la escala según el PDF…');
+            }
         } catch (e) {
             console.warn('[importar3d] pdf', e);
             est.pdf.estado = 'error';
@@ -418,10 +494,11 @@
                 if (!fila) return;
                 if (!confirm('Calibrar con "' + fila.pieza + '" = ' + Math.round(p.largo_mm) + ' mm (según PDF, confianza ' + p.confianza + ')?')) return;
                 est.factor = est.factor * (p.largo_mm / 1000) / fila.largo;
-                est.calibrado = { pieza: fila.pieza + ' (según PDF, IA)', mm: Math.round(p.largo_mm) };
+                est.calibrado = { pieza: '"' + fila.pieza + '" (según PDF, IA)', mm: Math.round(p.largo_mm) };
+                est.pdf.auto = null; delete est.pdf.aplicadas['escala||'];
             } else {
                 est.factor = est.factor * p.factor;
-                est.calibrado = { pieza: 'medida mayor según PDF (IA)', mm: Math.round(Math.max.apply(null, est.det.tamano) * est.factor * 1000) };
+                est.calibrado = { pieza: p.dimension + ' según PDF (IA)', mm: p.mm };
                 k = 'escala||';
             }
             est.pdf.aplicadas[k] = true;
@@ -468,15 +545,19 @@
         var h = '<div class="i3-card"><div style="font-weight:800;word-break:break-all;">' + esc(est.archivo) + '</div>' +
             '<div class="i3-nota">🔒 Leído en este dispositivo. El archivo no se sube.</div>';
         if (est.modo === '3d') {
-            var t = est.det.tamano.map(function (x) { return (x * est.factor).toFixed(2); });
-            h += '<div style="margin-top:10px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;"><span style="font-size:13px;font-weight:700;">Unidad del archivo</span><span class="i3-seg">' +
-                ['mm', 'cm', 'm'].map(function (u) { return '<button class="' + (u === est.unidad && !est.calibrado ? 'on' : '') + '" onclick="_i3Unidad(\'' + u + '\')">' + u + '</button>'; }).join('') +
-                '</span></div>' +
+            if (est.pdf && est.pdf.auto) {
+                var au = est.pdf.auto;
+                h += '<div style="margin-top:10px;padding:10px;border-radius:10px;background:rgba(175,82,222,.1);border:1px solid var(--purple);font-size:13px;">' +
+                    '<b style="color:var(--purple);">📄 Escala calibrada según el PDF:</b> ' + esc(au.dimension) + ' ' + au.mm + ' mm' +
+                    (au.pagina ? ' (pág. ' + au.pagina + ')' : '') + ' · confianza ' + esc(au.confianza) +
+                    (au.cita ? '<div class="i3-cita">“' + esc(au.cita) + '”</div>' : '') +
+                    '<div style="margin-top:6px;"><button class="i3-btn" style="padding:6px 12px;font-size:12px;" onclick="_i3DeshacerPDF()">Deshacer</button> ' +
+                    '<span class="i3-nota">Se ajustaron todas las piezas del archivo.</span></div></div>';
+            }
+            h += '<div style="margin-top:10px;font-size:14px;">Todo el modelo mide <b>' + fmtTam(tamanoM()) + '</b></div>' +
                 (est.calibrado
-                    ? '<div class="i3-nota" style="margin-top:6px;color:var(--green);font-weight:700;">📏 Calibrado: "' + esc(est.calibrado.pieza) + '" = ' + est.calibrado.mm + ' mm. Todo el modelo se escaló igual. Tocá mm, cm o m para volver.</div>'
-                    : '<div class="i3-nota" style="margin-top:4px;">Detectado: ' + esc(est.det.unidad) + ' (' + esc(est.det.motivo) + ').</div>') +
-                '<div class="i3-nota" style="margin-top:4px;">Todo el modelo mide <b>' + t.join(' × ') + ' m</b>. ' +
-                (est.calibrado ? '' : '¿No coincide con el plano? Tocá <b>📏</b> en una pieza cuya medida conozcas y escribí su largo real: se escala todo parejo.') + '</div>';
+                    ? '<div class="i3-nota" style="margin-top:4px;color:var(--green);font-weight:700;">📏 ' + esc(textoCalibrado()) + ' Se ajustaron todas las piezas del archivo.</div>'
+                    : '<div class="i3-nota" style="margin-top:4px;">Unidad detectada: ' + esc(est.det.unidad) + ' (' + esc(est.det.motivo) + ').</div>');
         } else {
             h += '<div class="i3-nota" style="margin-top:6px;">rubik.json de Blender (medidas en metros). ' + esc(est.res.resumen || '') + '</div>';
         }
@@ -486,6 +567,7 @@
             '</div></div>';
 
         h += tarjetaPDF();
+        if (est.modo === '3d') h += tarjetaEscala();
 
         if (falta.length) {
             h += '<div class="i3-card"><div style="font-weight:800;">Materiales sin vincular</div>' +
@@ -607,7 +689,7 @@
         var nombres = est.items.filter(function (n) { return filas.some(function (f) { return f.item === n; }); });
         var nuevos = Lector3D.armarItems(filas, nombres, catalogo(), function () { return db.ref().push().key; }, {
             archivo: est.archivo, fecha: Date.now(), pdf: est.pdf && est.pdf.info ? est.pdf.nombre : null,
-            unidad: est.modo !== '3d' ? 'm' : (est.calibrado ? 'calibrado: "' + est.calibrado.pieza + '" = ' + est.calibrado.mm + ' mm (×' + (est.factor / Lector3D.FACTORES[est.unidad]).toFixed(4) + ' ' + est.unidad + ')' : est.unidad)
+            unidad: est.modo !== '3d' ? 'm' : (est.calibrado ? textoCalibrado() + ' (×' + (est.factor / Lector3D.FACTORES[est.unidad]).toPrecision(4) + ' sobre ' + est.unidad + ')' : est.unidad)
         });
         if ($('i3-cap') && $('i3-cap').checked) {
             data.push({ type: 'chapter', name: ('3D · ' + est.archivo.replace(/\.[^.]+$/, '')).toUpperCase(), collapsed: false });

@@ -17,7 +17,7 @@ que el script de Blender. El archivo no se sube a ningún lado.
 ```bash
 cd tools/lector-3d
 npm install          # three 0.170.0 (la misma versión que carga la app)
-npm test             # probar_lector.mjs + verificar_sintaxis.mjs → "346 OK, 0 fallas" y "Sintaxis OK"
+npm test             # probar_lector.mjs + verificar_sintaxis.mjs → "349 OK, 0 fallas" y "Sintaxis OK"
 ```
 
 Para regenerar los ejemplos (solo si cambia la escena o el script de Blender):
@@ -45,7 +45,8 @@ python tools/lector-3d/generar_ejemplos.py
 
 `armarPedidoPDF` arma el pedido a `/api/gemini` (texto del PDF, páginas sin texto como imagen, piezas del 3D y
 catálogo); `leerRespuestaPDF` lo lee; `propuestasPDF` cruza con las piezas y el catálogo y devuelve **propuestas**
-(escala, medida, material, cantidad) con confianza y cita. Nada se aplica sin que el dueño toque "Aplicar". La prueba
+(escala, medida, material, cantidad) con confianza, cita y página. La escala se calibra sola si la medida total
+viene con confianza alta o media (con Deshacer); lo demás no se aplica sin que el dueño toque "Aplicar". La prueba
 usa una respuesta simulada; no se llama a la IA.
 
 Diferencias con el script de Blender que vienen del formato, no del lector:

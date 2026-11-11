@@ -326,6 +326,16 @@ no es solo "importar el rubik.json": la app **lee el modelo directamente**.
       y la pantalla lo avisa.
     - Lógica pura en `lector-3d.js` (`armarPedidoPDF`, `leerRespuestaPDF`, `propuestasPDF`), probada en Node con una
       respuesta simulada; en Playwright, con un PDF inventado y `/api/gemini` simulado.
+14. **Después de la prueba del dueño con el FBX real (11 nov 2026):** calibrar "imaginando" una medida no servía.
+    - **Con PDF, la escala se calibra sola** si la IA da una medida total (alto, ancho o fondo) con confianza alta o
+      media: aviso arriba "Escala calibrada según el PDF: alto total X mm (pág. N) · confianza" con **Deshacer**.
+      Con confianza baja (o si dos medidas totales no escalan igual, >10 %) solo se propone. Materiales y cantidades
+      siguen siendo propuestas con "Aplicar".
+    - La tarjeta del PDF es el **Paso 2**, justo después del resumen, y el PDF se puede **elegir junto con el 3D**
+      en la primera pantalla (o venir en el `.zip`): se lee enseguida.
+    - **Sin PDF:** botones de **escala rápida** (como vino, ÷10, ÷100, ÷1000 y pulgadas), cada uno con cómo quedaría
+      el modelo entero (ej. "12 × 21 × 12 cm"); y **📏 medida total** (alto, ancho o fondo del modelo entero).
+    - En pantalla queda claro que calibrar una pieza o una medida total **ajusta todas las piezas del archivo**.
 
 **Para el 2.6 / modelo real:** lo que vea la subsesión del archivo real del cliente (si trae nombres de material,
 grupos por mueble y en qué unidad) puede ajustar los nombres de entorno a descartar, el contenedor único o la
