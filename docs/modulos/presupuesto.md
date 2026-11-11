@@ -29,6 +29,9 @@ HTML/CSS/JS puro con Firebase Realtime DB y Storage. Librerías: JSZip, Sortable
   `rubik.json` en el navegador, sin subir el archivo, y agrega ítems **al final** con `id`, `origen: "3d"`, `measures`
   y APU de materiales (filas sin precio o rendimiento quedan con `revisar`). Guarda `/base_datos/equivalencias_vw/`.
   Detalle: `docs/sesiones/02-cotizacion.md` (paso 2.3) y `tools/lector-3d/LEEME.md`.
+- "Compartir → Rubik" (Android, hub instalado como app): `manifest.json` → `share_target`; `/compartir/sw-hub.js`
+  (scope `/compartir/`, sin caché) guarda el archivo en IndexedDB y `presupuesto.html?importar3d=<id>` lo abre en
+  "Importar 3D" y lo borra.
 
 ## Problemas conocidos y pendientes
 - En proyectos con más de ~200 ítems el re-render puede ser lento.

@@ -102,6 +102,7 @@
             '<label class="i3-drop"><i class="ph-bold ph-upload-simple"></i><div style="font-weight:800;font-size:16px;margin-top:6px;">Elegir el modelo 3D</div>' +
             '<div class="i3-nota">.glb, .gltf, .fbx o un .zip que los tenga — y si lo tenés, el rubik.json de Blender</div>' +
             '<div class="i3-nota" style="margin-top:4px;"><b>Si tenés el PDF o los planos del cliente, elegilo junto con el 3D</b>: la app calibra la escala sola.</div>' +
+            '<div class="i3-nota" style="margin-top:4px;">📱 <b>En el celular:</b> desde Drive o WhatsApp tocá <b>Compartir → Rubik</b> (con el hub instalado como app). No hace falta descargarlo.</div>' +
             '<input type="file" id="i3-file" multiple accept=".glb,.gltf,.fbx,.zip,.json,.bin,.skp,.pdf" style="display:none" onchange="_i3Archivos(this.files)"></label>' +
             '<div class="i3-card" style="margin-top:12px;"><div class="i3-nota"><b>🔒 El archivo no se sube a ningún lado.</b> Se lee en este dispositivo; ' +
             'solo se guardan los ítems que confirmes. Si es un .gltf con su .bin aparte, elegí los dos juntos.</div>' +
@@ -708,4 +709,26 @@
                 'La mano de obra se carga a mano en el APU, como siempre.');
         }, 150);
     };
+
+    // ------------------------------------------------- "Compartir → Rubik" (Android)
+    // El service worker /compartir/sw-hub.js deja los archivos en IndexedDB; acá se toman (y se borran).
+    async function revisarCompartidos() {
+        if (!window.Compartidos3D || !window.indexedDB) return;
+        var q = new URLSearchParams(location.search), pedido = q.get('importar3d');
+        var lista;
+        try { lista = await Compartidos3D.pendientes(); } catch (e) { return; }
+        if (pedido) {   // sacar el parámetro de la URL (si se recarga, no vuelve a importar)
+            q.delete('importar3d');
+            history.replaceState({}, document.title, location.pathname + '?' + q.toString());
+        }
+        if (!lista.length) return;
+        var envio = lista.find(function (e) { return e.id === pedido; }) || lista[0];
+        if (!(pedido && envio.id === pedido) &&
+            !confirm('Tenés un archivo compartido a Rubik: ' + envio.nombres.join(', ') + '.\n¿Importarlo en este presupuesto?\n(Cancelar: queda guardado para otro proyecto, hasta 24 h.)')) return;
+        var archivos = await Compartidos3D.tomar(envio.id);   // lo borra de IndexedDB
+        if (!archivos.length) return;
+        window.abrirImportar3D();
+        window._i3Archivos(archivos);
+    }
+    window.addEventListener('load', function () { setTimeout(revisarCompartidos, 1200); });
 })();

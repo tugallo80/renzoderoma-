@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rubik · Archivo compartido</title>
+    <link rel="manifest" href="/manifest.json">
+    <link rel="icon" type="image/png" href="/icono app.png">
+    <style>
+        :root { --bg: #f4f4f7; --card: #fff; --text: #1a1a1a; --gray: #8e8e93; --blue: #007aff; --red: #ff3b30; --border: #d1d1d6; }
+        @media (prefers-color-scheme: dark) { :root { --bg: #000; --card: #1c1c1e; --text: #fff; --border: #333; } }
+        body { font-family: -apple-system, sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 16px; }
+        .box { max-width: 520px; margin: 0 auto; }
+        h1 { font-size: 20px; margin: 8px 0 4px; }
+        .nota { font-size: 13px; color: var(--gray); line-height: 1.4; }
+        .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 14px; margin-top: 12px; }
+        .archivo { font-weight: 700; word-break: break-all; margin: 2px 0; }
+        .btn { display: block; width: 100%; box-sizing: border-box; text-align: center; text-decoration: none; border-radius: 12px;
+               padding: 14px; font-size: 15px; font-weight: 800; margin-top: 10px; border: 1px solid var(--border); background: var(--card); color: var(--text); cursor: pointer; }
+        .btn.prim { background: var(--blue); border-color: var(--blue); color: #fff; }
+        .error { color: var(--red); font-weight: 700; }
+    </style>
+</head>
+<body>
+<div class="box">
+    <h1>📦 Archivo para Importar 3D</h1>
+    <div class="nota">Llegó por "Compartir → Rubik". Elegí en qué presupuesto importarlo. Queda guardado solo en este
+        teléfono y se borra apenas lo abrís (o a las 24 h).</div>
+    <div class="card" id="archivos"><div class="nota">Buscando el archivo…</div></div>
+    <div id="acciones"></div>
+</div>
+<script src="/js/compartidos-3d.js?v=1"></script>
+<script>
+(function () {
+    var q = new URLSearchParams(location.search);
+    var id = q.get('id'), error = q.get('error');
+    var esc = function (s) { return String(s || '').replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); };
+    var $ = function (x) { return document.getElementById(x); };
+
+    if (error) {
+        $('archivos').innerHTML = '<div class="error">' + (error === 'vacio' ? 'No llegó ningún archivo.' : 'No se pudo recibir el archivo: ' + esc(error)) + '</div>';
+        $('acciones').innerHTML = '<a class="btn" href="/index.html">Ir al hub</a>';
+        return;
+    }
+    Compartidos3D.pendientes().then(function (lista) {
+        var envio = lista.find(function (e) { return e.id === id; }) || lista[0];
+        if (!envio) {
+            $('archivos').innerHTML = '<div class="nota">No hay archivos pendientes (ya se importaron o vencieron).</div>';
+            $('acciones').innerHTML = '<a class="btn" href="/index.html">Ir al hub</a>';
+            return;
+        }
+        $('archivos').innerHTML = envio.nombres.map(function (n) { return '<div class="archivo">' + esc(n) + '</div>'; }).join('');
+        var cid = localStorage.getItem('rubik_client_id'), pid = localStorage.getItem('rubik_current_pid');
+        var html = '';
+        if (cid && pid) {
+            var nombre = (localStorage.getItem('rubik_client_name') || 'Cliente') + ' · ' + (localStorage.getItem('rubik_current_pname') || 'Proyecto');
+            html += '<a class="btn prim" href="/presupuesto.html?cid=' + encodeURIComponent(cid) + '&pid=' + encodeURIComponent(pid) +
+                '&importar3d=' + encodeURIComponent(envio.id) + '">Importar en el último presupuesto<br><span style="font-weight:400;font-size:13px;">' + esc(nombre) + '</span></a>';
+        }
+        html += '<a class="btn' + (cid && pid ? '' : ' prim') + '" href="/index.html">Elegir otro proyecto</a>' +
+            '<div class="nota" style="margin-top:8px;">Al abrir el presupuesto de cualquier proyecto, la app te ofrece importar este archivo.</div>' +
+            '<button class="btn" id="descartar">Descartar el archivo</button>';
+        $('acciones').innerHTML = html;
+        $('descartar').onclick = function () {
+            Compartidos3D.borrar(envio.id).then(function () { location.href = '/index.html'; });
+        };
+    }).catch(function (e) {
+        $('archivos').innerHTML = '<div class="error">No se pudo leer el archivo guardado: ' + esc(e && e.message) + '</div>';
+    });
+})();
+</script>
+</body>
+</html>

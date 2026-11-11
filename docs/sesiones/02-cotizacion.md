@@ -336,6 +336,29 @@ no es solo "importar el rubik.json": la app **lee el modelo directamente**.
     - **Sin PDF:** botones de **escala rápida** (como vino, ÷10, ÷100, ÷1000 y pulgadas), cada uno con cómo quedaría
       el modelo entero (ej. "12 × 21 × 12 cm"); y **📏 medida total** (alto, ancho o fondo del modelo entero).
     - En pantalla queda claro que calibrar una pieza o una medida total **ajusta todas las piezas del archivo**.
+15. **"Compartir → Rubik" en Android (Web Share Target, 11 nov 2026):** WhatsApp no deja descargar el FBX en el
+    celular, pero Drive sí lo abre. Ahora el archivo se manda a la app sin descargarlo.
+    - `public/manifest.json` → `share_target` (POST multipart a `/compartir/recibir`, campo `archivos`; acepta .fbx,
+      .glb, .gltf, .zip, .pdf y `application/octet-stream`, que es como suelen mandarlo Drive y WhatsApp).
+    - **Service worker mínimo** `public/compartir/sw-hub.js`, con scope **`/compartir/`** (no choca con
+      `/sw-cliente.js`, que es de la app de clientes y vive en `/`). Solo atiende ese POST: guarda los archivos en
+      IndexedDB (`public/js/compartidos-3d.js`) y redirige a `/compartir/elegir.html`. **No cachea nada**; cualquier
+      otro pedido va a la red. Lo registran `index.html`, `login.html` y `presupuesto.html` (`js/registrar-sw-hub.js`).
+    - `elegir.html`: muestra el archivo y ofrece **"Importar en el último presupuesto"**, "Elegir otro proyecto" o
+      "Descartar". Al abrir el presupuesto, "Importar 3D" arranca solo con el archivo, que **se borra de IndexedDB
+      apenas se lee** (y los olvidados, a las 24 h). Si se eligió otro proyecto, su presupuesto pregunta si importarlo.
+    - Probado con Playwright (servidor local, POST multipart simulado como el de Android): el SW guarda, redirige,
+      el presupuesto lo importa y el archivo queda borrado.
+    - No se integró la API de Google Drive ni el Picker (necesitan OAuth y habilitar APIs). "Abrir con" desde el
+      explorador de archivos queda para la Sesión G (app nativa).
+
+    **Cómo instalar el hub como app (una sola vez por teléfono), para que "Rubik" aparezca en Compartir:**
+    1. En el celular Android, abrí **Chrome** y entrá a rubikbolivia.com (iniciá sesión en el hub).
+    2. Menú ⋮ → **"Agregar a la pantalla de inicio"** (o "Instalar app") → Instalar.
+    3. Abrí la app instalada una vez (así se registra el service worker). Si ya estaba instalada antes de este
+       cambio, abrila una vez y, si Rubik no aparece en Compartir, desinstalala y volvé a instalarla (Android lee el
+       `share_target` del manifest al instalar).
+    4. En Drive o WhatsApp: abrí el archivo → **Compartir → Rubik** → "Importar en el último presupuesto".
 
 **Para el 2.6 / modelo real:** lo que vea la subsesión del archivo real del cliente (si trae nombres de material,
 grupos por mueble y en qué unidad) puede ajustar los nombres de entorno a descartar, el contenedor único o la
