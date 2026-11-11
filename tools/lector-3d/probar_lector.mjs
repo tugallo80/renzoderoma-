@@ -65,6 +65,7 @@ function comparar(nombre, r) {
     chk(`${d}: origen_vw`, o.origen_vw === e.origen_vw, [o.origen_vw, e.origen_vw]);
     chk(`${d}: material`, o.material === e.material, [o.material, e.material]);
     chk(`${d}: revisar`, o.revisar === e.revisar);
+    chk(`${d}: partes`, o.partes === (e.partes ?? 1), [o.partes, e.partes]);
     chk(`${d}: área`, cerca(o.area_m2, e.area_m2, Math.max(1e-4, e.area_m2 * 0.002)), [o.area_m2, e.area_m2]);
     chk(`${d}: área cara`, cerca(o.area_cara_m2, e.area_cara_m2, 1e-3), [o.area_cara_m2, e.area_cara_m2]);
     chk(`${d}: perímetro`, cerca(o.perimetro_ml, e.perimetro_ml, 1e-3));
@@ -163,6 +164,46 @@ comparar('FBX', L.analizar(fbx, { equivalencias: eq, factor: uFbx.factor, archiv
   g3.add(vis, oc);
   const r4 = L.analizar(g3, {});
   chk('ocultos no se cuentan', r4.piezas.length === 1 && r4.ocultos_salteados[0] === 'Oculto', r4);
+}
+
+// --- 4b. Modelo real (estructura del trofeo, sin datos del cliente): piezas unidas, escala y malla pesada ---------
+{
+  chk('contarPartes: dos cajas sueltas', L.contarPartes(8, [[0, 1, 2, 3], [4, 5, 6, 7]]) === 2);
+  // "Letras de un logo" en un solo objeto: 3 cajas sueltas en una malla → partes 3 y para revisar
+  const geos = [0, 1, 2].map(i => new THREE.BoxGeometry(0.1, 0.15, 0.005).translate(i * 0.2, 0, 0));
+  const pos = [], idx = []; let base = 0;
+  for (const g of geos) { const a = g.attributes.position; for (let i = 0; i < a.count; i++) pos.push(a.getX(i), a.getY(i), a.getZ(i)); g.index.array.forEach(k => idx.push(k + base)); base += a.count; }
+  const letras = new THREE.BufferGeometry(); letras.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); letras.setIndex(idx);
+  const raiz = new THREE.Group(); const m = new THREE.Mesh(letras, new THREE.MeshStandardMaterial()); m.name = 'Logo '; raiz.add(m);
+  // Escala no uniforme + giro de 90° en el objeto (como en el archivo real): se aplica matrixWorld
+  const tapa = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshStandardMaterial()); tapa.name = 'pANEL Frente';
+  tapa.scale.set(0.9, 0.3, 0.004); tapa.rotation.set(Math.PI / 2, 0, Math.PI / 2); raiz.add(tapa);
+  const r = L.analizar(raiz, {});
+  const logo = r.piezas.find(p => p.pieza === 'Logo');
+  chk('logo: 3 partes sueltas, para revisar', logo && logo.partes === 3 && logo.revisar && /3 partes sueltas/.test(logo.motivos.join()), logo);
+  chk('nombre con espacio al final se recorta', !!logo);
+  const cruz = r.piezas.find(p => p.pieza === 'pANEL Frente');
+  chk('escala no uniforme + giro: 900 × 300 × 4 mm', cruz && cerca(cruz.largo, 0.9, 1e-4) && cerca(cruz.ancho, 0.3, 1e-4) && cerca(cruz.espesor, 0.004, 1e-5) && cruz.partes === 1, cruz);
+  // Modelo en cm leído como m → pieza de 31 m → aviso
+  const grande = new THREE.Group(); grande.add(new THREE.Mesh(new THREE.BoxGeometry(31, 1, 1)));
+  const rg = L.analizar(grande, {});
+  chk('pieza de más de 20 m → revisar la unidad', rg.piezas[0].revisar && /revisar la unidad/.test(rg.piezas[0].motivos.join()), rg.piezas[0].motivos);
+  // Calibración: el trofeo medía 310 unidades y el real ~0,8 m → factor = 0,8 / 310
+  const trofeo = new THREE.Group(); trofeo.add(new THREE.Mesh(new THREE.BoxGeometry(80, 310, 60)));
+  const det = L.detectarUnidad(trofeo, 'gltf');
+  const r1 = L.analizar(trofeo, { factor: L.FACTORES[det.unidad] });
+  const factor = L.FACTORES[det.unidad] * 0.8 / r1.piezas[0].largo;
+  const r2 = L.analizar(trofeo, { factor });
+  chk('calibrar con una medida conocida escala todo parejo', cerca(r2.piezas[0].largo, 0.8, 1e-4) && cerca(r2.piezas[0].ancho, 0.8 * 80 / 310, 1e-4), r2.piezas[0]);
+  // Malla pesada: ~400.000 caras (el cuerpo del trofeo). Tiene que medirse en pocos segundos.
+  const esfera = new THREE.Mesh(new THREE.SphereGeometry(0.4, 448, 448)); esfera.name = 'Cuerpo';
+  const ge = new THREE.Group(); ge.add(esfera);
+  const t0 = performance.now();
+  const re = L.analizar(ge, {});
+  const ms = Math.round(performance.now() - t0);
+  const caras = esfera.geometry.index.count / 3;
+  console.log(`  malla pesada: ${caras} caras medidas en ${ms} ms`);
+  chk('malla de ~400.000 caras en menos de 8 s', caras > 390000 && ms < 8000 && cerca(re.piezas[0].largo, 0.8, 1e-3), { caras, ms });
 }
 
 // --- 5. FBX ASCII: propiedades personalizadas ---------------------------------------------------

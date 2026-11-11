@@ -226,6 +226,8 @@
                 }
                 est.det = Lector3D.detectarUnidad(est.raiz, est.tipo);
                 est.unidad = est.det.unidad;
+                est.factor = Lector3D.FACTORES[est.unidad];   // m por unidad del archivo (cambia al calibrar)
+                est.calibrado = null;
                 est.modo = '3d';
                 await pasoCargando('Midiendo piezas…');
                 analizar();
@@ -243,7 +245,7 @@
 
     function analizar() {
         est.res = Lector3D.analizar(est.raiz, {
-            factor: Lector3D.FACTORES[est.unidad], equivalencias: est.eqNodo,
+            factor: est.factor, equivalencias: est.eqNodo,
             archivo: est.archivo, proyecto: est.archivo.replace(/\.[^.]+$/, '')
         });
     }
@@ -255,13 +257,48 @@
         });
         est.items = [];
         est.filas.forEach(function (f) { if (est.items.indexOf(f.item) < 0) est.items.push(f.item); });
+        // Archivo "plano" (todo sin grupos): el ítem toma el nombre del archivo, ej. "trofeo"
+        var sinItem = [Lector3D.SIN_ITEM, 'Sin ítem'];
+        if (est.items.length === 1 && sinItem.indexOf(est.items[0]) >= 0) {
+            var nombre = est.archivo.replace(/\.[^.]+$/, '').replace(/[_-]+/g, ' ').trim() || est.items[0];
+            est.filas.forEach(function (f) { f.item = nombre; });
+            est.items = [nombre];
+        }
     }
 
-    window._i3Unidad = async function (u) {
-        if (!est || est.modo !== '3d' || u === est.unidad) return;
-        est.unidad = u;
-        await pasoCargando('Midiendo en ' + u + '…');
-        analizar(); prepararFilas(); renderRevision();
+    // Vuelve a medir con otra escala sin perder lo que ya se revisó (ítems, descartes, vínculos)
+    async function remedir(texto) {
+        var viejas = est.filas, viejosItems = est.items;
+        await pasoCargando(texto);
+        analizar(); prepararFilas();
+        if (viejas && viejas.length === est.filas.length) {
+            est.filas.forEach(function (f, i) {
+                var v = viejas[i];
+                f.incluir = v.incluir; f.item = v.item;
+                if (!f.material && v.material) { f.material = v.material; f.revisar = v.revisar; }
+            });
+            est.items = viejosItems.filter(function (n) { return est.filas.some(function (f) { return f.item === n; }); });
+        }
+        renderRevision();
+    }
+
+    window._i3Unidad = function (u) {
+        if (!est || est.modo !== '3d' || (u === est.unidad && !est.calibrado)) return;
+        est.unidad = u; est.factor = Lector3D.FACTORES[u]; est.calibrado = null;
+        remedir('Midiendo en ' + u + '…');
+    };
+
+    // Modelos que no están a escala real: "esta pieza mide X mm" y se escala todo parejo
+    window._i3Calibrar = function (i) {
+        var f = est.filas[i];
+        var txt = prompt('¿Cuánto mide de LARGO "' + f.pieza + '" en la realidad (en mm)?\nEn el modelo mide ' + mm(f.largo) +
+            ' mm. Todo el modelo se escala igual.', '');
+        if (txt == null) return;
+        var real = parseFloat(String(txt).replace(',', '.'));
+        if (!(real > 0) || !(f.largo > 0)) { alert('Escribí una medida en mm, por ejemplo 800.'); return; }
+        est.factor = est.factor * (real / 1000) / f.largo;
+        est.calibrado = { pieza: f.pieza, mm: real };
+        remedir('Escalando el modelo…');
     };
 
     // ------------------------------------------------------- revisión
@@ -289,16 +326,20 @@
         var h = '<div class="i3-card"><div style="font-weight:800;word-break:break-all;">' + esc(est.archivo) + '</div>' +
             '<div class="i3-nota">🔒 Leído en este dispositivo. El archivo no se sube.</div>';
         if (est.modo === '3d') {
-            var t = est.det.tamano.map(function (x) { return (x * Lector3D.FACTORES[est.unidad]).toFixed(2); });
+            var t = est.det.tamano.map(function (x) { return (x * est.factor).toFixed(2); });
             h += '<div style="margin-top:10px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;"><span style="font-size:13px;font-weight:700;">Unidad del archivo</span><span class="i3-seg">' +
-                ['mm', 'cm', 'm'].map(function (u) { return '<button class="' + (u === est.unidad ? 'on' : '') + '" onclick="_i3Unidad(\'' + u + '\')">' + u + '</button>'; }).join('') +
-                '</span></div><div class="i3-nota" style="margin-top:4px;">Detectado: ' + esc(est.det.unidad) + ' (' + esc(est.det.motivo) + '). ' +
-                'Todo el modelo mide <b>' + t.join(' × ') + ' m</b>. Si no tiene sentido, cambiá la unidad.</div>';
+                ['mm', 'cm', 'm'].map(function (u) { return '<button class="' + (u === est.unidad && !est.calibrado ? 'on' : '') + '" onclick="_i3Unidad(\'' + u + '\')">' + u + '</button>'; }).join('') +
+                '</span></div>' +
+                (est.calibrado
+                    ? '<div class="i3-nota" style="margin-top:6px;color:var(--green);font-weight:700;">📏 Calibrado: "' + esc(est.calibrado.pieza) + '" = ' + est.calibrado.mm + ' mm. Todo el modelo se escaló igual. Tocá mm, cm o m para volver.</div>'
+                    : '<div class="i3-nota" style="margin-top:4px;">Detectado: ' + esc(est.det.unidad) + ' (' + esc(est.det.motivo) + ').</div>') +
+                '<div class="i3-nota" style="margin-top:4px;">Todo el modelo mide <b>' + t.join(' × ') + ' m</b>. ' +
+                (est.calibrado ? '' : '¿No coincide con el plano? Tocá <b>📏</b> en una pieza cuya medida conozcas y escribí su largo real: se escala todo parejo.') + '</div>';
         } else {
             h += '<div class="i3-nota" style="margin-top:6px;">rubik.json de Blender (medidas en metros). ' + esc(est.res.resumen || '') + '</div>';
         }
         est.avisos.forEach(function (a) { h += '<div class="i3-nota" style="margin-top:4px;">' + esc(a) + '</div>'; });
-        h += '<div class="i3-chips"><span class="i3-chip">' + totalPiezas + ' piezas</span><span class="i3-chip">' + itemsIncl.length + ' ítems</span>' +
+        h += '<div class="i3-chips"><span class="i3-chip">' + totalPiezas + (totalPiezas === 1 ? ' pieza' : ' piezas') + '</span><span class="i3-chip">' + itemsIncl.length + (itemsIncl.length === 1 ? ' ítem' : ' ítems') + '</span>' +
             (falta.length ? '<span class="i3-chip rojo">' + falta.length + ' sin vincular</span>' : '<span class="i3-chip" style="color:var(--green)">materiales vinculados</span>') +
             '</div></div>';
 
@@ -338,6 +379,10 @@
                     '<div class="i3-med">' + mm(f.largo) + ' × ' + mm(f.ancho) + ' × ' + mm(f.espesor) + ' mm · ' + (f.tipo === 'plancha' ? 'plancha' : 'volumen') + '</div>' +
                     '<div class="i3-mat ' + matCls + '">' + esc(matTxt) + '</div>' +
                     (acab ? '<div class="i3-nota">Acabados: ' + acab + '</div>' : '') +
+                    (f.motivos || []).filter(function (m) { return /partes sueltas|revisar la unidad/.test(m); }).map(function (m) {
+                        return '<div class="i3-nota" style="color:var(--orange);font-weight:700;">⚠ ' + esc(m) + '</div>';
+                    }).join('') +
+                    (est.modo === '3d' ? '<button class="i3-mv" style="margin-right:6px;" onclick="_i3Calibrar(' + f._i + ')" title="Calibrar la escala con la medida real de esta pieza">📏 Mide…</button>' : '') +
                     '<select class="i3-mv" onchange="_i3Mover(' + f._i + ',this.value)"><option value="">Mover a otro ítem…</option>' +
                     est.items.filter(function (n) { return n !== nombre; }).map(function (n) { return '<option value="' + esc(n) + '">' + esc(n) + '</option>'; }).join('') +
                     '<option value="' + NUEVO + '">➕ Ítem nuevo…</option></select></div></div>';
@@ -415,7 +460,8 @@
         if (falta && !confirm(falta + ' material' + (falta > 1 ? 'es quedan' : ' queda') + ' sin vincular: van a quedar marcados en rojo en el APU, sin precio. ¿Agregar igual?')) return;
         var nombres = est.items.filter(function (n) { return filas.some(function (f) { return f.item === n; }); });
         var nuevos = Lector3D.armarItems(filas, nombres, catalogo(), function () { return db.ref().push().key; }, {
-            archivo: est.archivo, unidad: est.modo === '3d' ? est.unidad : 'm', fecha: Date.now()
+            archivo: est.archivo, fecha: Date.now(),
+            unidad: est.modo !== '3d' ? 'm' : (est.calibrado ? 'calibrado: "' + est.calibrado.pieza + '" = ' + est.calibrado.mm + ' mm (×' + (est.factor / Lector3D.FACTORES[est.unidad]).toFixed(4) + ' ' + est.unidad + ')' : est.unidad)
         });
         if ($('i3-cap') && $('i3-cap').checked) {
             data.push({ type: 'chapter', name: ('3D · ' + est.archivo.replace(/\.[^.]+$/, '')).toUpperCase(), collapsed: false });

@@ -21,6 +21,7 @@
     var FORMATO = 'rubik/1';
     var ESPESOR_MAX_PLANCHA = 0.06;   // m — por debajo es "plancha"
     var TOLERANCIA_AGRUPAR = 0.001;   // m — 1 mm
+    var ESCALA_SOSPECHOSA_M = 20;     // m — una pieza más larga casi seguro es un modelo en mm o cm leído como m
     var SOLDAR = 1e5;                 // vértices a menos de 0,01 mm se consideran el mismo
     var SIN_ITEM = 'Sin agrupar';
 
@@ -63,16 +64,36 @@
 
     function mallaCerrada(caras) {
         if (!caras.length) return false;
+        var n = 0;   // claves numéricas a*n+b: mucho más rápido que texto en mallas de 400.000 caras
+        caras.forEach(function (cara) { for (var i = 0; i < cara.length; i++) if (cara[i] >= n) n = cara[i] + 1; });
         var cuenta = new Map();
         caras.forEach(function (cara) {
             for (var i = 0; i < cara.length; i++) {
                 var a = cara[i], b = cara[(i + 1) % cara.length];
-                var k = a < b ? a + ',' + b : b + ',' + a;
+                var k = a < b ? a * n + b : b * n + a;
                 cuenta.set(k, (cuenta.get(k) || 0) + 1);
             }
         });
         for (var c of cuenta.values()) if (c !== 2) return false;
         return true;
+    }
+
+    /** Cuántas partes sueltas (islas) tiene la malla. Más de 1 = piezas unidas en un solo objeto. */
+    function contarPartes(nVertices, caras) {
+        var padre = new Int32Array(nVertices), usado = new Uint8Array(nVertices), i;
+        for (i = 0; i < nVertices; i++) padre[i] = i;
+        function raiz(x) { while (padre[x] !== x) { padre[x] = padre[padre[x]]; x = padre[x]; } return x; }
+        caras.forEach(function (cara) {
+            var r0 = raiz(cara[0]);
+            for (var k = 0; k < cara.length; k++) {
+                usado[cara[k]] = 1;
+                var r = raiz(cara[k]);
+                if (r !== r0) padre[r] = r0;
+            }
+        });
+        var raices = new Set();
+        for (i = 0; i < nVertices; i++) if (usado[i]) raices.add(raiz(i));
+        return raices.size;
     }
 
     function baseDesde(eje) {
@@ -84,9 +105,14 @@
     function round9(x) { return Math.round(x * 1e9) / 1e9; }
 
     function casco2d(puntos) {
-        var vistos = new Map();
-        puntos.forEach(function (p) { var q = [round9(p[0]), round9(p[1])]; vistos.set(q[0] + ',' + q[1], q); });
-        var pts = Array.from(vistos.values()).sort(function (a, b) { return a[0] - b[0] || a[1] - b[1]; });
+        // ordenar y sacar repetidos (como sorted(set(...)) en Python, sin claves de texto: rápido en mallas grandes)
+        var orden = puntos.map(function (p) { return [round9(p[0]), round9(p[1])]; })
+            .sort(function (a, b) { return a[0] - b[0] || a[1] - b[1]; });
+        var pts = [];
+        for (var j = 0; j < orden.length; j++) {
+            var u = pts[pts.length - 1];
+            if (!u || u[0] !== orden[j][0] || u[1] !== orden[j][1]) pts.push(orden[j]);
+        }
         if (pts.length <= 2) return pts;
         function cr(o, a, b) { return (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]); }
         var inf = [], sup = [], i;
@@ -141,14 +167,14 @@
 
         var porDir = new Map();
         caras.forEach(function (cara) {
-            var pts = cara.map(function (i) { return vertices[i]; });
-            var a = areaPoligono(pts);
-            if (a < 1e-12) return;
-            var n = normalPoligono(pts);
-            if (!n) return;
+            var pts = cara.length === 3 ? [vertices[cara[0]], vertices[cara[1]], vertices[cara[2]]] : cara.map(function (i) { return vertices[i]; });
+            var cr = sumaCruces(pts), largoCr = norm(cr), a = largoCr / 2;
+            if (a < 1e-12 || largoCr <= 1e-12) return;
+            var n = [cr[0] / largoCr, cr[1] / largoCr, cr[2] / largoCr];
             var k = n.map(r3), kn = k.map(function (c) { return -c + 0; });
             var clave = compararTuplas(k, kn) >= 0 ? k : kn;
-            var ks = clave.join(',');
+            // clave numérica: cada componente redondeado a 0,001 está en [-1000, 1000]
+            var ks = (Math.round(clave[0] * 1000) + 1000) * 4004001 + (Math.round(clave[1] * 1000) + 1000) * 2001 + (Math.round(clave[2] * 1000) + 1000);
             var prev = porDir.get(ks);
             porDir.set(ks, prev ? [prev[0] + a, prev[1]] : [a, n]);
         });
@@ -458,6 +484,7 @@
             areaPorMat.set(nm, (areaPorMat.get(nm) || 0) + a);
         });
         var cerrada = mallaCerrada(d.caras);
+        var partes = contarPartes(d.vertices.length, d.caras);
         var volumen = cerrada ? volumenMalla(d.vertices, d.caras) : null;
 
         var clase = null;
@@ -474,6 +501,8 @@
         var material = claveMaterial(datoEq);
         if (origen == null) motivos.push('sin material ni clase de Vectorworks');
         else if (material == null) motivos.push("'" + origen + "' sin equivalencia en equivalencias_vw");
+        if (partes > 1) motivos.push(partes + ' partes sueltas en un solo objeto: puede ser más de una pieza');
+        if (largo > ESCALA_SOSPECHOSA_M) motivos.push('mide ' + largo.toFixed(1) + ' m: revisar la unidad (¿el modelo está en mm o cm?)');
         if (!cerrada) motivos.push('malla abierta: volumen no calculado');
 
         var acabados = [];
@@ -504,8 +533,10 @@
             area_cara_m2: esPlancha ? redondear(largo * ancho) : null,
             perimetro_ml: esPlancha ? redondear(2 * (largo + ancho)) : null,
             volumen_m3: volumen != null ? redondear(volumen, 6) : null,
+            partes: partes,
             acabados: acabados,
-            revisar: material == null || acabados.some(function (a) { return a.material == null; }),
+            revisar: material == null || acabados.some(function (a) { return a.material == null; }) ||
+                partes > 1 || largo > ESCALA_SOSPECHOSA_M,
             motivos: motivos,
             fuente: { item: fuenteItem, origen_vw: fuenteOrigen },
             objetos: [nombre]
@@ -694,7 +725,8 @@
         (p.acabados || []).forEach(function (a) {
             if (a.material == null && a.origen_vw) a.material = claveMaterial(buscarEquivalencia(a.origen_vw, eq));
         });
-        p.revisar = p.material == null || (p.acabados || []).some(function (a) { return a.material == null; });
+        p.revisar = p.material == null || (p.acabados || []).some(function (a) { return a.material == null; }) ||
+            (p.partes || 1) > 1 || p.largo > ESCALA_SOSPECHOSA_M;
         return p;
     }
 
@@ -862,7 +894,7 @@
 
     var api = {
         FORMATO: FORMATO, SIN_ITEM: SIN_ITEM, FACTORES: FACTORES, ESPESOR_MAX_PLANCHA: ESPESOR_MAX_PLANCHA,
-        medidasOrientadas: medidasOrientadas, areaPoligono: areaPoligono, volumenMalla: volumenMalla, mallaCerrada: mallaCerrada,
+        medidasOrientadas: medidasOrientadas, areaPoligono: areaPoligono, volumenMalla: volumenMalla, mallaCerrada: mallaCerrada, contarPartes: contarPartes,
         normalizarNombre: normalizarNombre, claveEquivalencia: claveEquivalencia, cargarEquivalencias: cargarEquivalencias,
         buscarEquivalencia: buscarEquivalencia, agruparPiezas: agruparPiezas,
         prepararGLTF: prepararGLTF, pluginSinTexturas: pluginSinTexturas, modificadorURL: modificadorURL, PIXEL: PIXEL, leerPropiedadesFBX: leerPropiedadesFBX, aplicarPropiedadesFBX: aplicarPropiedadesFBX, leerEscena: leerEscena, armarResultado: armarResultado, analizar: analizar,
