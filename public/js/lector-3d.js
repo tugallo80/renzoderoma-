@@ -929,11 +929,12 @@
             'El modelo 3D del cliente trae la geometría pero puede no estar a escala y no trae materiales. Tu trabajo es sacar del PDF lo que el 3D no trae.',
             'REGLAS: no inventes. Si un dato no está en el PDF, poné null. Medidas siempre en milímetros.',
             'confianza: "alta" = escrito tal cual en el PDF; "media" = deducido de una cota o de la escala del plano; "baja" = interpretación dudosa.',
-            'cita: el texto o la cota del PDF de donde sale el dato (corto).',
+            'cita: el texto o la cota del PDF de donde sale el dato (corto). pagina: número de página del PDF donde está.',
+            'medidas_generales: las medidas TOTALES del objeto terminado (alto, ancho, fondo), no las de una pieza.',
             'pieza_3d: si la pieza del PDF es una de las piezas del modelo 3D, su nombre EXACTO de la lista; si no, null.',
             'material_clave: SOLO una clave de la lista del catálogo que corresponda al material descripto; si ninguna corresponde, null (y describilo en material_texto).',
             'Devolvé SOLO este JSON, sin texto antes ni después:',
-            '{"medidas_generales":{"alto_mm":null,"ancho_mm":null,"fondo_mm":null,"confianza":"alta","cita":""},' +
+            '{"medidas_generales":{"alto_mm":null,"ancho_mm":null,"fondo_mm":null,"confianza":"alta","cita":"","pagina":null},' +
             '"piezas":[{"nombre_pdf":"","pieza_3d":null,"largo_mm":null,"ancho_mm":null,"espesor_mm":null,"cantidad":null,' +
             '"material_texto":null,"material_clave":null,"acabados":[],"confianza":"media","cita":""}],"notas":""}'
         ].join('\n');
@@ -965,7 +966,8 @@
         return {
             medidas_generales: {
                 alto_mm: numOnull(g.alto_mm), ancho_mm: numOnull(g.ancho_mm), fondo_mm: numOnull(g.fondo_mm),
-                confianza: normConf(g.confianza), cita: String(g.cita || '').slice(0, 200)
+                confianza: normConf(g.confianza), cita: String(g.cita || '').slice(0, 200),
+                pagina: numOnull(g.pagina) ? Math.round(numOnull(g.pagina)) : null
             },
             piezas: (Array.isArray(d.piezas) ? d.piezas : []).map(function (p) {
                 return {
@@ -1008,7 +1010,10 @@
     function propuestasPDF(info, filas, tamanoM, catalogo) {
         var out = [];
         var g = info.medidas_generales || {};
-        var gen = [g.alto_mm, g.ancho_mm, g.fondo_mm].filter(Boolean).sort(function (a, b) { return b - a; });
+        var nombres = { alto_mm: 'alto total', ancho_mm: 'ancho total', fondo_mm: 'fondo total' };
+        var genN = ['alto_mm', 'ancho_mm', 'fondo_mm'].filter(function (k) { return g[k]; })
+            .map(function (k) { return { mm: g[k], nombre: nombres[k] }; }).sort(function (a, b) { return b.mm - a.mm; });
+        var gen = genN.map(function (x) { return x.mm; });
         var mod = (tamanoM || []).map(function (x) { return x * 1000; }).sort(function (a, b) { return b - a; });
         if (gen.length && mod[0] > 0) {
             var r = gen[0] / mod[0];
@@ -1017,7 +1022,8 @@
             if (gen.length > 1 && mod[1] > 0 && Math.abs(gen[1] / mod[1] / r - 1) > 0.1) conf = 'baja';
             if (Math.abs(r - 1) > 0.02) {
                 out.push({
-                    tipo: 'escala', factor: r, confianza: conf, cita: g.cita,
+                    tipo: 'escala', factor: r, confianza: conf, cita: g.cita, pagina: g.pagina,
+                    dimension: genN[0].nombre, mm: Math.round(gen[0]),
                     texto: 'Medida mayor según el PDF: ' + Math.round(gen[0]) + ' mm. En el modelo: ' + Math.round(mod[0]) +
                         ' mm. Escalar todo ×' + (r < 0.01 ? r.toExponential(2) : r.toFixed(4)) + '.'
                 });
