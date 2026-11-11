@@ -2,7 +2,7 @@
   "formato": "rubik/1",
   "proyecto": "ejemplo",
   "archivo": null,
-  "generado": "2026-11-10T22:26:30+00:00",
+  "generado": "2026-11-11T01:33:51+00:00",
   "unidad": "m",
   "items": [
     "Mostrador recepción",
@@ -25,6 +25,7 @@
       "area_cara_m2": 1.08,
       "perimetro_ml": 4.8,
       "volumen_m3": 0.01944,
+      "partes": 1,
       "acabados": [],
       "revisar": false,
       "motivos": [],
@@ -50,6 +51,7 @@
       "area_cara_m2": 0.5892,
       "perimetro_ml": 3.164,
       "volumen_m3": 0.010606,
+      "partes": 1,
       "acabados": [],
       "revisar": false,
       "motivos": [],
@@ -76,6 +78,7 @@
       "area_cara_m2": 1.7322,
       "perimetro_ml": 5.492,
       "volumen_m3": 0.01559,
+      "partes": 1,
       "acabados": [
         {
           "origen_vw": "Canto PVC Blanco",
@@ -113,6 +116,7 @@
       "area_cara_m2": 0.136,
       "perimetro_ml": 3.56,
       "volumen_m3": 0.002448,
+      "partes": 1,
       "acabados": [],
       "revisar": true,
       "motivos": [
@@ -140,6 +144,7 @@
       "area_cara_m2": 0.36,
       "perimetro_ml": 3.0,
       "volumen_m3": 0.009,
+      "partes": 1,
       "acabados": [],
       "revisar": false,
       "motivos": [],
@@ -165,6 +170,7 @@
       "area_cara_m2": 0.0125,
       "perimetro_ml": 0.6,
       "volumen_m3": 3.8e-05,
+      "partes": 1,
       "acabados": [],
       "revisar": true,
       "motivos": [
@@ -193,6 +199,7 @@
       "area_cara_m2": 0.72,
       "perimetro_ml": 3.6,
       "volumen_m3": 0.00432,
+      "partes": 1,
       "acabados": [],
       "revisar": false,
       "motivos": [],
@@ -218,6 +225,7 @@
       "area_cara_m2": null,
       "perimetro_ml": null,
       "volumen_m3": 0.0248,
+      "partes": 1,
       "acabados": [],
       "revisar": false,
       "motivos": [],
@@ -243,6 +251,7 @@
       "area_cara_m2": null,
       "perimetro_ml": null,
       "volumen_m3": 0.196875,
+      "partes": 1,
       "acabados": [],
       "revisar": true,
       "motivos": [

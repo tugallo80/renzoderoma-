@@ -66,6 +66,12 @@ print(r["resumen"]); print(r["ruta_salida"])
 | **area_cara_m2 / perimetro_ml** | Solo en planchas (espesor ≤ 6 cm): una cara y el perímetro (tope de canto) |
 | **volumen_m3** | Volumen real si la malla es cerrada; si no, `null` y un aviso |
 
+- **Unidad del modelo:** si quien modeló usó "1 unidad = 1 mm" (pasa seguido), Blender lo lee como metros y las
+  piezas miden cientos de metros. El script lo avisa ("revisar la unidad") y se corrige con
+  `exportar(unidad_modelo="mm")` (también `"cm"`, `"m"`, `"in"`). Si el modelo **no está a escala real**, se
+  compara una medida conocida del plano (ej. un diámetro) y se ajusta antes de cotizar.
+- **Piezas unidas:** si un objeto tiene varias partes sueltas (ej. las letras de un logo), `partes` dice cuántas y
+  la pieza queda para revisar.
 - Se lee la escena **con los modificadores aplicados** (sin cambiar el archivo) y con los símbolos resueltos.
 - Los objetos **ocultos** no se cuentan (quedan listados en `ocultos_salteados`).
 - Unidades: siempre **metros**, aunque la escena esté en mm o cm.
