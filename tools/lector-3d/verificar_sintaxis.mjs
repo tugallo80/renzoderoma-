@@ -15,7 +15,7 @@ function chequear(nombre, codigo, modulo) {
   try { execFileSync(process.execPath, ['--check', f], { stdio: 'pipe' }); }
   catch (e) { mal++; console.log(`FALLA ${nombre}:\n${e.stderr.toString().split('\n').slice(0, 6).join('\n')}`); }
 }
-for (const pag of ['presupuesto.html', 'computo.html']) {
+for (const pag of ['presupuesto.html', 'computo.html', 'compartir/elegir.html']) {
   const html = readFileSync(join(RAIZ, pag), 'utf8');
   const re = /<script\b([^>]*)>([\s\S]*?)<\/script>/gi;
   let m, i = 0;
@@ -27,6 +27,13 @@ for (const pag of ['presupuesto.html', 'computo.html']) {
   }
   console.log(`  ${pag}: ${i} scripts en línea`);
 }
-for (const js of ['js/lector-3d.js', 'js/importar-3d.js', 'js/apu-utils.js']) chequear(js, readFileSync(join(RAIZ, js), 'utf8'), false);
+for (const js of ['js/lector-3d.js', 'js/importar-3d.js', 'js/apu-utils.js', 'js/compartidos-3d.js', 'js/registrar-sw-hub.js', 'compartir/sw-hub.js']) chequear(js, readFileSync(join(RAIZ, js), 'utf8'), false);
+// manifest: share_target de "Compartir → Rubik"
+try {
+  const m = JSON.parse(readFileSync(join(RAIZ, 'manifest.json'), 'utf8'));
+  const st = m.share_target, f = st && st.params && st.params.files && st.params.files[0];
+  if (!(st && st.action === '/compartir/recibir' && st.method === 'POST' && st.enctype === 'multipart/form-data' && f && f.name === 'archivos' &&
+        ['.fbx', '.glb', '.gltf', '.zip', '.pdf', 'application/octet-stream'].every(a => f.accept.includes(a)))) { mal++; console.log('FALLA manifest.json: share_target'); }
+} catch (e) { mal++; console.log('FALLA manifest.json:', e.message); }
 console.log(mal ? `${mal} con errores` : 'Sintaxis OK');
 process.exit(mal ? 1 : 0);

@@ -33,5 +33,32 @@
       "type": "image/png",
       "purpose": "maskable"
     }
-  ]
+  ],
+  "share_target": {
+    "action": "/compartir/recibir",
+    "method": "POST",
+    "enctype": "multipart/form-data",
+    "params": {
+      "title": "titulo",
+      "text": "texto",
+      "files": [
+        {
+          "name": "archivos",
+          "accept": [
+            ".fbx",
+            ".glb",
+            ".gltf",
+            ".zip",
+            ".pdf",
+            "model/gltf-binary",
+            "model/gltf+json",
+            "application/zip",
+            "application/x-zip-compressed",
+            "application/pdf",
+            "application/octet-stream"
+          ]
+        }
+      ]
+    }
+  }
 }

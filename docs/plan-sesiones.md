@@ -234,6 +234,8 @@ Indicá confianza (alta/media/baja) por cada ítem y motivo si es baja.
 - [ ] Plugin de micrófono para dictado de descripción del proyecto
 - [ ] Integración con Claude API (o Gemini) para procesamiento de voz en tiempo real
 - [ ] Build de APK firmado para instalación directa (o Google Play)
+- [ ] **"Abrir con → Rubik"** desde el explorador de archivos (filtros de intent para .fbx, .glb, .gltf, .zip, .pdf).
+      Hoy, con la PWA, solo existe "Compartir → Rubik" (Web Share Target, ver `docs/sesiones/02-cotizacion.md`, punto 15).
 
 ---
 
