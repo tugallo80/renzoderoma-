@@ -975,7 +975,8 @@
         var rc = extras.recargos || {};
         return {
             mat: armarApuMateriales(ps, catalogo, extras.desperdicios),
-            mo: armarApuMO(ps, catalogo, extras.catalogoMO),
+            // Ruta A: receta del material (destajo por medida). Ruta B: una fila de trato con el oficio (referencia).
+            mo: extras.ruta === 'B' ? [filaTrato(ps, extras.rendimiento, extras.oficio)] : armarApuMO(ps, catalogo, extras.catalogoMO),
             eq: [], sub: [], util: rc.util, ind: rc.ind, cs: rc.cs
         };
     }
@@ -985,7 +986,9 @@
         return nombresItems.map(function (nombre) {
             var ps = piezas.filter(function (p) { return p.item === nombre; });
             if (!ps.length) return null;
-            var apu = armarApu(ps, catalogo, { desperdicios: extras.desperdicios, catalogoMO: extras.catalogoMO, recargos: extras.recargos });
+            var ruta = (extras.rutaPorItem || {})[nombre] || {};
+            var apu = armarApu(ps, catalogo, { desperdicios: extras.desperdicios, catalogoMO: extras.catalogoMO, recargos: extras.recargos,
+                ruta: ruta.ruta, rendimiento: ruta.rendimiento, oficio: ruta.oficio });
             var pendientes = apu.mat.concat(apu.mo).filter(function (r) { return r.revisar; }).length;
             var item = {
                 type: 'item', id: nuevoId(), origen: '3d',
@@ -995,6 +998,7 @@
                 import3d: {
                     archivo: meta.archivo || null, fecha: meta.fecha || Date.now(), unidad_archivo: meta.unidad || null,
                     pdf: meta.pdf || null,
+                    ruta_mo: ((extras.rutaPorItem || {})[nombre] || {}).ruta || 'A',
                     piezas: ps.reduce(function (s, p) { return s + p.cant; }, 0), filas_a_revisar: pendientes
                 }
             };
@@ -1266,6 +1270,97 @@
         return filas;
     }
 
+    // ---------------------------------------------------------------------
+    // Ruta B — mano de obra POR TRATO con un oficio, con un precio de REFERENCIA para negociar
+    //   /base_datos/oficios/{k}:      { nombre, costo_jornal }
+    //   /base_datos/rendimientos/{k}: { oficio, indicador, por_jornal, trabajo, notas, tramos? }
+    //   jornales = indicador del ítem (sale del 3D) ÷ rendimiento  →  referencia = jornales × costo del jornal
+    // ---------------------------------------------------------------------
+    var INDICADORES = {
+        m2_tablero:     { nombre: 'm² de tablero (una cara de cada plancha)', unidad: 'm²' },
+        ml_canto:       { nombre: 'ml de canto (perímetro de las planchas)', unidad: 'ml' },
+        m2_superficie:  { nombre: 'm² de superficie (todas las caras)', unidad: 'm²' },
+        piezas:         { nombre: 'piezas', unidad: 'piezas' },
+        m3:             { nombre: 'm³ de volumen', unidad: 'm³' },
+        letras_por_alto:{ nombre: 'letras según su alto (tramos)', unidad: 'letras' }
+    };
+
+    /** Valor del indicador para las piezas de un ítem (lo calcula el algoritmo, desde la geometría). */
+    function indicadorItem(indicador, piezas) {
+        var v = 0;
+        piezas.forEach(function (p) {
+            var c = p.cant || 1;
+            if (indicador === 'm2_tablero') v += p.tipo === 'plancha' ? (p.area_cara_m2 != null ? p.area_cara_m2 : p.largo * p.ancho) * c : 0;
+            else if (indicador === 'ml_canto') v += p.tipo === 'plancha' ? (p.perimetro_ml != null ? p.perimetro_ml : 2 * (p.largo + p.ancho)) * c : 0;
+            else if (indicador === 'm2_superficie') v += (p.area_m2 || 0) * c;
+            else if (indicador === 'piezas' || indicador === 'letras_por_alto') v += c;
+            else if (indicador === 'm3') v += (p.volumen_m3 != null ? p.volumen_m3 : p.largo * p.ancho * p.espesor) * c;
+        });
+        return redondear(v, 4);
+    }
+
+    /** Rendimiento de un tramo para una letra de `alto_m` (tramos: [{hasta_mm, por_jornal}], el primero que alcanza). */
+    function porJornalTramo(rend, alto_m) {
+        var tramos = (Array.isArray(rend.tramos) ? rend.tramos : Object.keys(rend.tramos || {}).map(function (k) { return rend.tramos[k]; }))
+            .filter(function (t) { return t && parseFloat(t.por_jornal) > 0; })
+            .sort(function (a, b) { return (parseFloat(a.hasta_mm) || Infinity) - (parseFloat(b.hasta_mm) || Infinity); });
+        var mm = alto_m * 1000;
+        for (var i = 0; i < tramos.length; i++) if (!(parseFloat(tramos[i].hasta_mm) > 0) || mm <= parseFloat(tramos[i].hasta_mm)) return parseFloat(tramos[i].por_jornal);
+        return null;   // más alta que el último tramo: no se inventa
+    }
+
+    /** Jornales de referencia para las piezas de un ítem con un rendimiento. { jornales, indicador, motivo } */
+    function jornalesTrato(piezas, rend) {
+        if (!rend) return { jornales: null, motivo: 'falta rendimiento' };
+        var ind = indicadorItem(rend.indicador, piezas);
+        if (rend.indicador === 'letras_por_alto') {
+            var j = 0, fuera = 0;
+            piezas.forEach(function (p) {
+                var r = porJornalTramo(rend, p.largo);
+                if (r) j += (p.cant || 1) / r; else fuera += p.cant || 1;
+            });
+            if (fuera) return { jornales: null, indicador: ind, motivo: fuera + ' letra(s) más alta(s) que el último tramo: falta ese rendimiento' };
+            return { jornales: redondear(j, 3), indicador: ind };
+        }
+        var pj = parseFloat(rend.por_jornal);
+        if (!(pj > 0)) return { jornales: null, indicador: ind, motivo: 'falta rendimiento' };
+        return { jornales: redondear(ind / pj, 3), indicador: ind };
+    }
+
+    /**
+     * Fila "Trato con <oficio> (referencia: X jornales)", marcada "referencia para negociar".
+     * Sin rendimiento o sin costo del jornal: p 0 y marcada (nunca se inventa). El monto cerrado se carga en licitaciones.
+     */
+    function filaTrato(piezas, rend, oficio) {
+        if (!rend) {
+            return { d: 'Trato con un oficio (falta elegir el rendimiento)', u: 'glb', q: 1, p: 0, origen: '3d', trato: true, referencia: true,
+                nota: 'referencia para negociar', revisar: 'falta rendimiento: elegilo o cargalo una vez en "Importar 3D"' };
+        }
+        var nombreOf = (oficio && oficio.nombre) || rend.oficio || 'oficio';
+        var calc = jornalesTrato(piezas, rend);
+        var costo = oficio ? parseFloat(oficio.costo_jornal) : NaN;
+        var r = { d: 'Trato con ' + nombreOf + (calc.jornales != null ? ' (referencia: ' + calc.jornales + ' jornales)' : ''),
+            u: 'glb', q: 1, p: 0, origen: '3d', trato: true, referencia: true };
+        var motivos = [];
+        if (calc.motivo) motivos.push(calc.motivo);
+        if (!oficio) motivos.push('falta el oficio "' + nombreOf + '" en la base');
+        else if (!(costo > 0)) motivos.push('falta el costo del jornal de ' + nombreOf);
+        if (calc.jornales != null && costo > 0) { r.p = redondear(calc.jornales * costo, 2); r.jornales = calc.jornales; }
+        var info = rend && INDICADORES[rend.indicador];
+        r.nota = 'referencia para negociar' + (info && calc.indicador != null ? ': ' + calc.indicador + ' ' + info.unidad +
+            (rend.indicador === 'letras_por_alto' ? ' por tramos de alto' : ' ÷ ' + rend.por_jornal + ' por jornal') : '') +
+            (costo > 0 ? ' × ' + costo + ' Bs/jornal' : '');
+        if (motivos.length) r.revisar = motivos.join(' · ');
+        return r;
+    }
+
+    /** Ruta sugerida: casi todo plano (espesor < 5 mm: lona, vinilo, chapa) → "A" por medida; si no → "B" por trato. */
+    function rutaSugerida(piezas) {
+        var total = 0, planas = 0;
+        piezas.forEach(function (p) { var c = p.cant || 1; total += c; if (p.espesor < 0.005) planas += c; });
+        return total && planas / total >= 0.8 ? 'A' : 'B';
+    }
+
     /** Materiales usados que todavía no tienen receta de mano de obra (para pedirla una sola vez). */
     function materialesSinReceta(piezas, catalogo) {
         var vistos = [];
@@ -1434,6 +1529,7 @@
         detectarTipo: detectarTipo, buscarEnCatalogo: buscarEnCatalogo, claveBase: claveBase, materialSugerido: materialSugerido,
         armarApuMO: armarApuMO, cantidadMedida: cantidadMedida, recetaDe: recetaDe, materialesSinReceta: materialesSinReceta,
         MEDIDAS_RECETA: MEDIDAS_RECETA, resumenApu: resumenApu,
+        INDICADORES: INDICADORES, indicadorItem: indicadorItem, jornalesTrato: jornalesTrato, filaTrato: filaTrato, rutaSugerida: rutaSugerida,
         armarApu: armarApu, empacarPlanchas: empacarPlanchas, empacarBarras: empacarBarras, medidasPlancha: medidasPlancha, nombreConTipo: nombreConTipo, extensionDe: extensionDe,
         armarPedidoPDF: armarPedidoPDF, parsearJSONRobusto: parsearJSONRobusto, repararJSON: repararJSON, leerRespuestaPDF: leerRespuestaPDF, propuestasPDF: propuestasPDF, buscarFila: buscarFila, armarItems: armarItems, calcPu: calcPu, medidaDePieza: medidaDePieza
     };

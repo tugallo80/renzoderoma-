@@ -144,6 +144,14 @@ Además: Prioridad 4 (Actions y repo privado) y, antes de la salida a la venta, 
 - [ ] Crear interfaz de admin para mantener la BD (hoy no hay forma cómoda de editarla)
 - [ ] Agregar precios con fecha de vigencia para detectar cuándo están desactualizados
 
+**Ya hecho en la Sesión 2 (11 nov 2026, ficha 02, puntos 19–20):**
+- [x] Mano de obra por **receta del material** (`/base_datos/materiales/{k}/mo_receta`) para el pago por medida (ruta A)
+- [x] **Oficios** con costo por jornal (`/base_datos/oficios`) y **rendimientos** por oficio e indicador del 3D
+      (`/base_datos/rendimientos`, incluye letras por tramos de alto) para el pago por trato (ruta B), con precio de referencia
+- [x] Desperdicio editable al importar (0 % por defecto); planchas y barras por plano de corte estimado
+- [ ] Falta: rendimiento de materiales de consumo (litros de pintura por m², kg por ml), desperdicio típico guardado por
+      material, y una pantalla para mantener oficios, rendimientos y recetas fuera de "Importar 3D"
+
 **Entrada necesaria para esta sesión**:
 - Lista de proveedores que usás habitualmente con los materiales que comprás a cada uno
 - Unidades en las que comprás vs. unidades en que cotizás (ej: comprás pintura en litros, cotizás en m²)

@@ -455,5 +455,46 @@ comparar('FBX', L.analizar(fbx, { equivalencias: eq, factor: uFbx.factor, archiv
   chk('ítem guardado: MO por receta, recargos del presupuesto, origen 3d', its[0].apu.mo.length === 3 && its[0].apu.util === 50 && its[0].apu.cs === 55 && its[0].origen === '3d', its[0].apu);
 }
 
+// --- 12. Ruta B: mano de obra por TRATO (oficio + rendimiento), referencia para negociar ---------------
+{
+  const pz = (o) => Object.assign({ item: 'Mueble', pieza: 'p', cant: 1, largo: 1.2, ancho: 0.6, espesor: 0.018, tipo: 'plancha', area_m2: 1.5, area_cara_m2: 0.72, perimetro_ml: 3.6, volumen_m3: 0.013, acabados: [], material: 'M' }, o);
+  const mueble = [pz({ pieza: 'Tapa', cant: 2 }), pz({ pieza: 'Lateral', cant: 2, largo: 0.8, ancho: 0.6, area_cara_m2: 0.48, perimetro_ml: 2.8 }), pz({ pieza: 'Pata', tipo: 'volumen', espesor: 0.07, area_cara_m2: null, perimetro_ml: null, cant: 4 })];
+  chk('indicador m² de tablero = una cara de las planchas', cerca(L.indicadorItem('m2_tablero', mueble), 0.72 * 2 + 0.48 * 2, 1e-6));
+  chk('indicador ml de canto = perímetro de las planchas', cerca(L.indicadorItem('ml_canto', mueble), 3.6 * 2 + 2.8 * 2, 1e-6));
+  chk('indicador piezas', L.indicadorItem('piezas', mueble) === 8);
+  const carp = { oficio: 'Carpintero', indicador: 'm2_tablero', por_jornal: 3 }, ofCarp = { nombre: 'Carpintero', costo_jornal: 200 };
+  const f = L.filaTrato(mueble, carp, ofCarp);
+  chk('trato: jornales = 2.4 m² ÷ 3 = 0.8 → referencia 160 Bs', f.jornales === 0.8 && f.p === 160 && f.q === 1 && f.u === 'glb' && f.referencia && !f.revisar, f);
+  chk('trato: texto "Trato con Carpintero (referencia: 0.8 jornales)" y "referencia para negociar"', /Trato con Carpintero \(referencia: 0\.8 jornales\)/.test(f.d) && /referencia para negociar/.test(f.nota), f);
+  const sinRend = L.filaTrato(mueble, null, ofCarp);
+  chk('sin rendimiento → p 0, "falta rendimiento" (no se inventa)', sinRend.p === 0 && /falta rendimiento/.test(sinRend.revisar), sinRend);
+  const sinCosto = L.filaTrato(mueble, carp, { nombre: 'Carpintero' });
+  chk('sin costo del jornal → p 0 y marcada', sinCosto.p === 0 && /costo del jornal/.test(sinCosto.revisar), sinCosto);
+  const sinOficio = L.filaTrato(mueble, carp, null);
+  chk('oficio que no está en la base → marcada', sinOficio.p === 0 && /falta el oficio/.test(sinOficio.revisar));
+  // Letras corpóreas: rendimiento por tramos de alto
+  const letras = [pz({ pieza: 'R', largo: 0.25, cant: 1 }), pz({ pieza: 'U', largo: 0.25, cant: 1 }), pz({ pieza: 'B', largo: 0.6, cant: 2 })];
+  const rL = { oficio: 'Letrista', indicador: 'letras_por_alto', tramos: [{ hasta_mm: 300, por_jornal: 4 }, { hasta_mm: 800, por_jornal: 2 }] };
+  const jl = L.jornalesTrato(letras, rL);
+  chk('letras por tramos: 2 de 25 cm (4/jornal) + 2 de 60 cm (2/jornal) = 1.5 jornales', jl.jornales === 1.5, jl);
+  const altas = L.jornalesTrato([pz({ largo: 1.2 })], rL);
+  chk('letra más alta que el último tramo → falta ese rendimiento', altas.jornales === null && /más alta/.test(altas.motivo), altas);
+  // Ruta sugerida
+  const lona = [pz({ espesor: 0.0005, tipo: 'plancha' }), pz({ espesor: 0.001 }), pz({ espesor: 0.001 }), pz({ espesor: 0.001 }), pz({ espesor: 0.02 })];
+  chk('ruta sugerida: casi todo plano (lona, vinilo) → A', L.rutaSugerida(lona) === 'A');
+  chk('ruta sugerida: mueble con volumen → B', L.rutaSugerida(mueble) === 'B');
+  // APU e ítems con ruta B: una fila de trato y NO las recetas (no se cuenta dos veces)
+  const catR = { M: { n: 'Melamina 18', u: 'm2', p: 90, mo_receta: [{ mo: 'CORTE', medida: 'm2_cara', factor: 1 }] } };
+  const catMO = { CORTE: { desc: 'Corte', u: 'm2', p: 10 } };
+  const apuA = L.armarApu(mueble, catR, { catalogoMO: catMO, recargos: { cs: 55, ind: 10, util: 50 } });
+  const apuB = L.armarApu(mueble, catR, { catalogoMO: catMO, recargos: { cs: 55, ind: 10, util: 50 }, ruta: 'B', rendimiento: carp, oficio: ofCarp });
+  chk('ruta A: MO por receta', apuA.mo.length === 1 && apuA.mo[0].clave === 'CORTE');
+  chk('ruta B: una sola fila de trato (sin recetas)', apuB.mo.length === 1 && apuB.mo[0].trato && apuB.mo[0].p === 160);
+  let n = 0;
+  const its = L.armarItems(mueble, ['Mueble'], catR, () => 'i' + (++n), {}, { catalogoMO: catMO, recargos: { cs: 55, ind: 10, util: 50 },
+    rutaPorItem: { Mueble: { ruta: 'B', rendimiento: carp, oficio: ofCarp } } });
+  chk('ítem guardado con ruta B y la fila de trato', its[0].import3d.ruta_mo === 'B' && its[0].apu.mo[0].referencia === true, its[0].apu.mo);
+}
+
 console.log(`\n${ok} OK, ${mal} fallas`);
 process.exit(mal ? 1 : 0);
