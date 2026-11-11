@@ -32,6 +32,15 @@
         ]
       },
       {
+        "source": "/manifest.json",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "no-cache, must-revalidate"
+          }
+        ]
+      },
+      {
         "source": "/compartir/sw-hub.js",
         "headers": [
           {

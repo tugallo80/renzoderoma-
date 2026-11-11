@@ -39,17 +39,7 @@
         {
           "name": "archivos",
           "accept": [
-            ".fbx",
-            ".glb",
-            ".gltf",
-            ".zip",
-            ".pdf",
-            "model/gltf-binary",
-            "model/gltf+json",
-            "application/zip",
-            "application/x-zip-compressed",
-            "application/pdf",
-            "application/octet-stream"
+            "*/*"
           ]
         }
       ]

@@ -30,11 +30,13 @@
     function pedir(req) { return new Promise(function (ok, ko) { req.onsuccess = function () { ok(req.result); }; req.onerror = function () { ko(req.error); }; }); }
 
     /** Guarda un envío (lista de File/Blob con nombre). Devuelve su id. */
-    function guardar(archivos) {
+    function guardar(archivos, tipos) {
         var id = 'c' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
         var reg = {
             id: id, fecha: Date.now(),
-            archivos: archivos.map(function (f) { return { nombre: f.name || 'archivo', tipo: f.type || '', datos: f }; })
+            archivos: archivos.map(function (f, i) {
+                return { nombre: f.name || 'archivo', tipo: f.type || '', detectado: (tipos && tipos[i]) || null, tamano: f.size || 0, datos: f };
+            })
         };
         return tx('readwrite', function (st) { st.put(reg); }).then(function () { return id; });
     }
@@ -46,7 +48,10 @@
                 var vivos = [];
                 todos.forEach(function (r) {
                     if (Date.now() - r.fecha > VENCE_MS) st.delete(r.id);
-                    else vivos.push({ id: r.id, fecha: r.fecha, nombres: r.archivos.map(function (a) { return a.nombre; }) });
+                    else vivos.push({
+                        id: r.id, fecha: r.fecha, nombres: r.archivos.map(function (a) { return a.nombre; }),
+                        detalle: r.archivos.map(function (a) { return { nombre: a.nombre, tipo: a.tipo, detectado: a.detectado || null, tamano: a.tamano || 0 }; })
+                    });
                 });
                 return vivos.sort(function (a, b) { return b.fecha - a.fecha; });
             });
