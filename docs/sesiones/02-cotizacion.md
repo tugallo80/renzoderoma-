@@ -405,6 +405,17 @@ no es solo "importar el rubik.json": la app **lee el modelo directamente**.
     selector, lo que llega por "Compartir → Rubik" y lo que viene dentro de un `.zip`. Si no se reconoce, el error
     muestra **nombre, tipo y tamaño** recibidos. El `accept` del selector suma `application/octet-stream` y los MIME
     de modelos para que Android deje elegir archivos sin extensión.
+17. **Arreglo (11 nov 2026): "No se pudo leer el PDF: Expected ',' or '}' … in JSON"** con el PDF real de planos.
+    La respuesta de Gemini no era JSON válido (cortada, con texto alrededor, o con comillas sin escapar: en los planos
+    las pulgadas se escriben `3/4"`). Ahora:
+    - `Lector3D.parsearJSONRobusto()`: saca los ```json, recorta del primer `{` al último `}` y, si falla, `repararJSON()`
+      arregla comillas tipográficas, comentarios, comas finales, `NaN`, saltos de línea y comillas sin escapar dentro de
+      textos, y cierra lo que quedó abierto si vino cortado (se salva lo que hay y se marca "incompleta").
+    - El pedido apaga el "razonamiento" de gemini-2.5-flash (`thinkingConfig.thinkingBudget: 0`, que gastaba
+      `maxOutputTokens`) y pide no usar comillas dobles dentro de los textos.
+    - Si igual no se puede leer, **un reintento automático** con esquema compacto y el doble de tokens.
+    - Si falla de nuevo: "La IA no devolvió datos legibles", botón **Reintentar** y un "Detalle técnico" plegable con
+      los primeros 300 caracteres de la respuesta. Nada queda trabado: el 3D se sigue pudiendo importar.
 
 **Para el 2.6 / modelo real:** lo que vea la subsesión del archivo real del cliente (si trae nombres de material,
 grupos por mueble y en qué unidad) puede ajustar los nombres de entorno a descartar, el contenedor único o la
