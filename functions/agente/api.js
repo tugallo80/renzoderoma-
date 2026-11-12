@@ -8,7 +8,7 @@
  * El turno corre en el trigger de /agente_cola: si el celular se bloquea, el trabajo sigue.
  */
 const N = require("./compartido/agente-nucleo.js");
-const { agregarUsuario, leerHistorial } = require("./historial");
+const { agregarUsuario, leerHistorial, effortVigente } = require("./historial");
 
 const ID = /^[A-Za-z0-9_-]{1,64}$/;
 const MAX = { pdf: 20 * 1024 * 1024, imagen: 5 * 1024 * 1024, medicion: 8 * 1024 * 1024 };
@@ -133,9 +133,17 @@ async function enviar(almacen, b, uid) {
     ids.forEach((id) => bloques.push({ type: "adjunto", id }));
     bloques.push({ type: "text", text: `[Mensaje ${msgId} del dueño · ${fechaBolivia(almacen.ahora())}]\n${texto || "(sin texto: mirá los adjuntos)"}` });
     agregarUsuario(hist, bloques);
+    // Correcciones más baratas: después del primer borrador, effort de correcciones con un mensaje de sistema
+    // de effort (beta mid-conversation-output-config) que NO rompe la caché, a diferencia de cambiar el effort del pedido.
+    const config = N.configEfectiva(await almacen.leer("config/agente"));
+    const hayBorrador = !!(await almacen.leer(`${RAIZ(cid, pid)}/borrador/total`).catch(() => null)) || !!(await almacen.leer(`${RAIZ(cid, pid)}/borrador/capitulos`).catch(() => null));
+    const objetivo = hayBorrador && config.effort_correcciones !== "igual" ? config.effort_correcciones : config.effort;
+    if (N.MODELOS_EFFORT_POR_MENSAJE.includes(config.modelo) && (effortVigente(hist) || config.effort) !== objetivo) {
+        hist.push({ role: "system", content: [], output_config: { effort: objetivo } });
+    }
     await almacen.escribir(`${RAIZ(cid, pid)}/conversacion/api`, JSON.stringify(hist));
     await encolar(almacen, b, uid, turno);
-    return { ok: true, turno, mensaje: msgId };
+    return { ok: true, turno, mensaje: msgId, effort: objetivo };
 }
 
 function fechaBolivia(ms) {
@@ -178,7 +186,7 @@ async function reintentar(almacen, b, uid) {
     if (!hist.length) throw new ErrorPedido("No hay nada para reintentar.");
     const turno = almacen.nuevaClave();
     if (!(await tomarTurno(almacen, b.cid, b.pid, turno))) throw new ErrorPedido("El agente está trabajando.", 409);
-    if (hist[hist.length - 1].role !== "user") {   // terminó bien: se le pide que siga
+    if (hist.filter((m) => m.role !== "system").pop().role !== "user") {   // terminó bien: se le pide que siga
         agregarUsuario(hist, [{ type: "text", text: "[El dueño tocó \"Seguir\": continuá desde donde quedaste.]" }]);
         await almacen.escribir(`${RAIZ(b.cid, b.pid)}/conversacion/api`, JSON.stringify(hist));
     }

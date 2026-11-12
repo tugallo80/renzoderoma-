@@ -25,7 +25,7 @@ async function expandirMensajes(mensajes, cargar) {
     const salida = [];
     let n = 0;   // numeración de adjuntos en toda la conversación (determinista: no rompe la caché)
     for (const m of mensajes) {
-        if (!Array.isArray(m.content)) { salida.push(m); continue; }
+        if (!Array.isArray(m.content) || m.role === "system") { salida.push(m); continue; }
         const content = [];
         for (const b of m.content) {
             if (!b || b.type !== "adjunto") { content.push(b); continue; }
@@ -56,7 +56,7 @@ async function expandirMensajes(mensajes, cargar) {
                 });
             }
         }
-        salida.push({ role: m.role, content });
+        salida.push(Object.assign({}, m, { content }));
     }
     return salida;
 }
@@ -94,9 +94,18 @@ function cerrarHerramientasPendientes(mensajes) {
     return mensajes;
 }
 
+/** Effort vigente según el historial: el último mensaje de sistema con output_config.effort (o null si no hay). */
+function effortVigente(mensajes) {
+    for (let i = mensajes.length - 1; i >= 0; i--) {
+        const m = mensajes[i];
+        if (m && m.role === "system" && m.output_config && m.output_config.effort) return m.output_config.effort;
+    }
+    return null;
+}
+
 function leerHistorial(texto) {
     if (!texto) return [];
     try { const v = JSON.parse(texto); return Array.isArray(v) ? v : []; } catch (e) { return []; }
 }
 
-module.exports = { claseAdjunto, expandirMensajes, contenidoParaHistorial, agregarUsuario, cerrarHerramientasPendientes, leerHistorial, etiquetaAdjunto };
+module.exports = { effortVigente, claseAdjunto, expandirMensajes, contenidoParaHistorial, agregarUsuario, cerrarHerramientasPendientes, leerHistorial, etiquetaAdjunto };

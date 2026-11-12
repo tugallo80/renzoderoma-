@@ -198,9 +198,28 @@ rolado, soldadura…"); el dueño quería **un solo ítem: el trofeo**.
 - **Norma inicial** del dueño en `/agente_memoria/normas/inicial_estructura_items`: la Function la siembra **una sola vez**
   (marca en `/agente_memoria/sembradas/`); si el dueño la borra en ⚙, no vuelve.
 
+## Menos costo por cotización (la primera real costó US$ 0,55 al primer pedido y US$ 1,88 con varias rondas)
+
+- **Una sola ronda de preguntas.** Flujo en dos fases en el prompt: (a) lectura: lee todo, mide una vez, busca en la base y hace
+  **todas** las preguntas que cambian el costo juntas y numeradas (lo obvio va como supuesto declarado); (b) borrador completo de
+  una vez. En el código, `preguntar_al_dueno` cuenta las rondas (`agente/rondas_preguntas`): **una segunda ronda se rechaza** salvo
+  con `motivo` (el dueño cambió algo). Acepta hasta 10 preguntas.
+- **Correcciones con effort `medium`.** Después del primer borrador, `enviar` agrega un mensaje de sistema de effort
+  (`{role:"system", content:[], output_config:{effort:"medium"}}`, beta `mid-conversation-output-config-2026-07-01`) en vez de
+  cambiar el effort del pedido, que rompería la caché. Configurable en ⚙ ("Esfuerzo en las correcciones": bajo, medio, alto o igual)
+  → `/config/agente/effort_correcciones`. Solo en modelos que lo soportan (Opus 5.5, Sonnet 5.5, Haiku 5.5…).
+- **Caché verificada en pruebas:** los PDF, imágenes y vistas del 3D van en los primeros mensajes (antes del último punto de caché),
+  la expansión de adjuntos es determinista y el pedido siguiente repite el anterior **byte a byte** como prefijo. En el detalle de
+  costos hay una columna **"De caché"** (% de la entrada leída de la caché en cada llamada).
+- **Resultados de herramientas compactos:** `medicion_3d` devuelve una tabla (columnas + una fila por pieza); `buscar_base` solo los
+  campos útiles y sin vacíos (12 resultados por defecto); `armar_borrador` devuelve los totales de todo y las filas **solo de los
+  ítems que tocó**.
+- El costo de cada turno se sigue mostrando junto a la respuesta.
+
 ### Pruebas (sin gastar plata)
 
-- `cd tools/agente && npm test` — 51 pruebas (estructura: avisos de ítems-componente, trofeo de 3 piezas = 1 ítem, norma inicial
+- `cd tools/agente && npm test` — 55 pruebas (costo: segunda ronda rechazada sin motivo, effort medium por mensaje sin tocar el del
+  pedido, prefijo idéntico entre llamadas, % de caché, resultados compactos). 51 pruebas (estructura: avisos de ítems-componente, trofeo de 3 piezas = 1 ítem, norma inicial
   sembrada una vez). 49 pruebas (2b: geometría supuesta calculada por la herramienta y precio de la base, supuestos
   que no se aplican hasta confirmar, stock a costo 0, trato cerrado que reemplaza la referencia, adjuntos numerados y vistas del 3D,
   normas, flujo solo con texto → confirmación por chat → aplicar). 42 pruebas (entrega 4: aplicar al final y actualizar en su lugar, memoria entre proyectos,
