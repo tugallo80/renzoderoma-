@@ -26,6 +26,7 @@
             });
         });
     }
+    function sv(v) { if (v && typeof v === 'object') { if (v['.sv']) return Date.now(); var o = Array.isArray(v) ? [] : {}; Object.keys(v).forEach(function (k) { o[k] = sv(v[k]); }); return o; } return v; }
     function ref(r) {
         r = String(r || '').replace(/^\/+|\/+$/g, '');
         var o = {
@@ -35,9 +36,9 @@
             on: function (ev, fn) { var l = { ruta: r, ev: ev, fn: fn, vistos: {} }; oyentes.push(l); setTimeout(function () { avisar(r); }, 0); return fn; },
             off: function (ev, fn) { oyentes = oyentes.filter(function (l) { return !(l.ruta === r && l.ev === ev && l.fn === fn); }); },
             once: function () { return Promise.resolve(snap(r, o.key, get(r))); },
-            set: function (v) { set(r, v); return Promise.resolve(); },
+            set: function (v) { set(r, sv(v)); return Promise.resolve(); },
             update: function (v) { Object.keys(v).forEach(function (k) { set(r + '/' + k, v[k] && v[k]['.sv'] ? Date.now() : v[k]); }); return Promise.resolve(); },
-            push: function (v) { var k = '-F' + String(++n).padStart(6, '0'); if (v !== undefined) set(r + '/' + k, v); return ref(r + '/' + k); },
+            push: function (v) { var k = '-F' + String(++n).padStart(6, '0'); if (v !== undefined) set(r + '/' + k, sv(v)); return ref(r + '/' + k); },
             remove: function () { set(r, null); return Promise.resolve(); },
             transaction: function (fn) { var v = fn(get(r)); if (v !== undefined) set(r, v); return Promise.resolve({ committed: v !== undefined, snapshot: snap(r, o.key, get(r)) }); }
         };

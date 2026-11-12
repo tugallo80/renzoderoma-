@@ -609,7 +609,69 @@ prueba('foto anotada: al agente le llegan la original, la anotada y el JSON de l
 });
 
 prueba('herramientas: orden fijo para la caché', () => {
-    assert.deepEqual(H.definiciones().map((d) => d.name), ['medicion_3d', 'buscar_base', 'armar_borrador', 'escala_3d', 'guardar_en_base', 'preguntar_al_dueno']);
+    assert.deepEqual(H.definiciones().map((d) => d.name), ['medicion_3d', 'buscar_base', 'armar_borrador', 'escala_3d', 'guardar_en_base', 'memoria', 'preguntar_al_dueno']);
+});
+
+// ------------------------------------------------------------------ entrega 4: aplicar y memoria
+prueba('aplicar al presupuesto: lo nuevo va al final; lo ya aplicado se actualiza en su lugar', () => {
+    const data = [{ type: 'item', id: 'viejo1', desc: 'Existente', pu: 10, apu: {} }, { type: 'item', id: 'viejo2', desc: 'Otro', pu: 5 }];
+    let r = B.aplicarOperaciones(null, [{ op: 'item_desde_3d', capitulo: 'Stand', adjunto: 'A3D', item3d: 'Mostrador demo', desc: 'Mostrador' }], ctxValid(), nuevoId);
+    const a1 = B.aplicarAlPresupuesto(data, B.aItemsPresupuesto(r.borrador));
+    assert.deepEqual(a1.data.map((x) => x.id), ['viejo1', 'viejo2', r.borrador.capitulos[0].id, r.borrador.capitulos[0].items[0].id]);
+    assert.equal(a1.agregados, 1); assert.equal(data.length, 2, 'no cambia el original');
+    // el dueño le puso fotos al ítem en el presupuesto y después corrige el borrador y vuelve a aplicar
+    a1.data[3].fotos = ['f1.jpg'];
+    a1.data.push({ type: 'item', id: 'manual', desc: 'Agregado a mano' });
+    r = B.aplicarOperaciones(r.borrador, [
+        { op: 'fila', item: 'Mostrador', tipo: 'mat', d: 'Adhesivo', u: 'und', q: 3, origen_q: 'dueño:M1', p: 50, origen_p: 'dueño:M1' },
+        { op: 'item', capitulo: 'Stand', desc: 'Transporte', cant: 1 },
+    ], ctxValid(), nuevoId);
+    const a2 = B.aplicarAlPresupuesto(a1.data, B.aItemsPresupuesto(r.borrador));
+    assert.deepEqual(a2.data.map((x) => x.desc || x.name), ['Existente', 'Otro', 'STAND', 'Mostrador', 'Agregado a mano', 'Transporte']);
+    assert.equal(a2.actualizados, 1); assert.equal(a2.agregados, 1);
+    assert.deepEqual(a2.data[3].fotos, ['f1.jpg'], 'conserva lo que se agregó en el presupuesto');
+    assert.ok(a2.data[3].apu.mat.some((f) => f.d === 'Adhesivo')); assert.equal(a2.data[3].origen, 'agente');
+});
+
+prueba('memoria: anota, se lee al empezar la próxima conversación y se puede borrar', async () => {
+    const alm = nuevoAlmacen();
+    const p1 = await turnoListo(alm, 'El vinil lo cobro por plancha entera, acordate');
+    const cliente = clienteFalso([herramienta('memoria', { accion: 'anotar', texto: 'El vinil de corte se cobra por plancha entera, no por m² neto.' }, 't1'), texto('Anotado.')]);
+    await ejecutarTurno({ almacen: alm, cliente }, p1);
+    const notas = alm.datos.agente_memoria.notas;
+    const id = Object.keys(notas)[0];
+    assert.match(notas[id].texto, /plancha entera/); assert.equal(notas[id].proyecto, `${CID}/${PID}`);
+    // otro proyecto: la memoria viene en el primer mensaje
+    const r = await api.atender(alm, { accion: 'enviar', cid: CID, pid: 'otroProyecto', texto: 'Nuevo stand' }, 'renzo');
+    const h = JSON.parse(alm.datos.proyectos[CID].otroProyecto.agente.conversacion.api);
+    assert.match(h[0].content[0].text, /plancha entera/);
+    assert.equal(r.status, 200);
+    const ctx = { almacen: alm, cid: CID, pid: PID, mensajesAgente: [] };
+    const b = await H.ejecutar(ctx, { type: 'tool_use', id: 'x', name: 'memoria', input: { accion: 'borrar', id } });
+    assert.equal(b.is_error, undefined);
+    assert.equal(Object.keys(alm.datos.agente_memoria.notas || {}).length, 0);
+});
+
+prueba('flujo completo con la API simulada: adjuntar → borrador → corrección → aplicar', async () => {
+    const alm = await proyectoConBase();
+    const id3d = await adjuntar3D(alm);
+    const p1 = await turnoListo(alm, 'Mostrador para la feria', [id3d]);
+    await ejecutarTurno({ almacen: alm, cliente: clienteFalso([
+        herramienta('armar_borrador', { operaciones: [{ op: 'item_desde_3d', capitulo: 'Feria', adjunto: id3d, item3d: 'Mostrador demo', desc: 'Mostrador' }] }, 't1'),
+        texto('Borrador listo.')]) }, p1);
+    const p2 = await turnoListo(alm, 'Sumale 2 adhesivos de 50');
+    const m2 = Object.entries(alm.datos.proyectos[CID][PID].agente.conversacion.mensajes).filter(([, v]) => v.rol === 'dueno').at(-1)[0];
+    await ejecutarTurno({ almacen: alm, cliente: clienteFalso([
+        herramienta('armar_borrador', { operaciones: [{ op: 'fila', item: 'Mostrador', tipo: 'mat', d: 'Adhesivo', u: 'und', q: 2, origen_q: `dueño:${m2}`, p: 50, origen_p: `dueño:${m2}` }] }, 't2'),
+        texto('Sumados.')]) }, p2);
+    const bor = alm.datos.proyectos[CID][PID].agente.borrador;
+    const presupuesto = alm.datos.proyectos[CID][PID].presupuesto.items;
+    const r = B.aplicarAlPresupuesto(presupuesto, B.aItemsPresupuesto(bor));
+    assert.equal(r.data[0].desc, 'Viejo', 'lo que había queda primero');
+    const it = r.data.at(-1);
+    assert.equal(it.desc, 'Mostrador'); assert.equal(it.origen, 'agente'); assert.equal(it.id, bor.capitulos[0].items[0].id);
+    assert.equal(it.pu, bor.capitulos[0].items[0].pu);
+    assert.ok(it.apu.mat.every((f) => f.origen_q), 'toda fila aplicada conserva su origen');
 });
 
 // ------------------------------------------------------------------ correr

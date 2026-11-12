@@ -322,6 +322,38 @@ Operaciones (campo "op"):
     },
     {
         def: {
+            name: "memoria",
+            description: "Memoria simple del agente, compartida entre proyectos (/agente_memoria). Anotá las correcciones y decisiones del dueño que valgan para trabajos futuros (cómo cobra algo, qué material usa para tal cosa, qué no le gusta). Una nota corta por idea, sin datos confidenciales del cliente (nombres, montos de este cliente). También podés leerlas o borrar una que quedó vieja.",
+            input_schema: {
+                type: "object",
+                properties: {
+                    accion: { type: "string", enum: ["anotar", "leer", "borrar"] },
+                    texto: { type: "string", description: "La nota (para anotar), máximo 400 caracteres." },
+                    id: { type: "string", description: "Id de la nota (para borrar)." },
+                },
+                required: ["accion"],
+            },
+        },
+        progreso: (e) => (e.accion === "anotar" ? "Anotando en la memoria…" : "Leyendo la memoria…"),
+        async correr(ctx, e) {
+            if (e.accion === "anotar") {
+                const t = String(e.texto || "").trim();
+                if (!t) throw new Error("falta el texto de la nota");
+                const id = await ctx.almacen.agregar("agente_memoria/notas", { texto: t.slice(0, 400), fecha: ctx.almacen.ahora(), proyecto: `${ctx.cid}/${ctx.pid}`, uid: ctx.uid || null });
+                return { ok: true, id };
+            }
+            if (e.accion === "borrar") {
+                if (!/^[A-Za-z0-9_-]{1,40}$/.test(String(e.id || ""))) throw new Error("id inválido");
+                if (!(await ctx.almacen.leer(`agente_memoria/notas/${e.id}`))) throw new Error("no existe esa nota");
+                await ctx.almacen.borrar(`agente_memoria/notas/${e.id}`);
+                return { ok: true };
+            }
+            const notas = (await ctx.almacen.leer("agente_memoria/notas")) || {};
+            return { notas: Object.keys(notas).slice(-100).map((k) => ({ id: k, texto: notas[k].texto })) };
+        },
+    },
+    {
+        def: {
             name: "preguntar_al_dueno",
             description: "Le hace al dueño preguntas concretas de ESTE proyecto que no se pueden sacar del 3D, de los documentos, de la base ni de la memoria, y TERMINA el turno hasta que responda. Juntá todas las preguntas en una sola llamada. Nada de opciones múltiples genéricas.",
             input_schema: {
