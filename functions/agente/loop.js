@@ -11,6 +11,9 @@ const { expandirMensajes, contenidoParaHistorial, cerrarHerramientasPendientes, 
 const LIMITE_MS = 400 * 1000;   // la Function corta a los 540 s: antes de eso se sigue en otra invocación
 const { RAIZ, raizConv, PRINCIPAL } = require("./rutas");
 
+/** Punto de caché: 1 h por defecto (el dueño tarda más de 5 min entre turnos; con 5 min se reescribía todo cada vez). */
+function cc(config) { return config.cache_ttl === "5m" ? { type: "ephemeral" } : { type: "ephemeral", ttl: "1h" }; }
+
 /** Pedido a la API: sistema y herramientas fijos (en caché), thinking adaptativo, effort y fallbacks por rechazo. */
 function armarPedido(config, mensajes) {
     const p = {
@@ -18,10 +21,10 @@ function armarPedido(config, mensajes) {
         max_tokens: config.max_tokens,
         thinking: { type: "adaptive" },
         output_config: { effort: config.effort },
-        system: [{ type: "text", text: SISTEMA, cache_control: { type: "ephemeral" } }],
+        system: [{ type: "text", text: SISTEMA, cache_control: cc(config) }],
         tools: H.definiciones(),
         messages: mensajes,
-        cache_control: { type: "ephemeral" },   // caché automática del último bloque (la conversación)
+        cache_control: cc(config),   // caché automática del último bloque (la conversación)
     };
     const betas = [];
     if (config.fallbacks && N.MODELOS_CON_FALLBACK.includes(config.modelo)) {
@@ -91,6 +94,8 @@ async function ejecutarTurno(deps, pedido) {
     const rc = raizConv(cid, pid, conv);                // conversación: mensajes, historial, borrador, costos
     const inicio = almacen.ahora();
     const config = N.configEfectiva(await almacen.leer("config/agente"));
+    // Modelo de las correcciones (después del primer borrador), si el dueño eligió otro en ⚙
+    if (config.modelo_correcciones !== "igual" && (await almacen.leer(`${raizConv(pedido.cid, pedido.pid, pedido.conv)}/borrador/total`)) != null) config.modelo = config.modelo_correcciones;
     const mes = N.mesClave(inicio);
     const turno = pedido.turno || null;
     let costoTurno = 0;
@@ -157,6 +162,8 @@ async function ejecutarTurno(deps, pedido) {
             llamadas++;
             const costo = N.costoDeUso(resp.usage, resp.model || config.modelo, config.precios);
             costoTurno = N.redondear(costoTurno + costo.usd, 6);
+            if (process.env.AGENTE_LOG !== "0") console.log("[agenteTurno] llamada", JSON.stringify({ modelo: resp.model || config.modelo, entrada: costo.entrada, cache_leida: costo.cache_leida,
+                cache_escrita: costo.cache_escrita, salida: costo.salida, usd: costo.usd, pct_cache: N.pctCache(costo) }));
             await registrarCosto(almacen, { cid, pid, conv, mes, costo, modelo: resp.model || config.modelo, turno, fecha: almacen.ahora() });
 
             if (resp.stop_reason === "refusal") {

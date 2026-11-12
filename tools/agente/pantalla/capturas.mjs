@@ -197,6 +197,23 @@ console.log('foco', JSON.stringify(fo));
 if (fo.txt !== 'Sobre «Restauración tótem»: ' || fo.borr !== 'block' || fo.top > 400) throw new Error('el foco del ítem no funcionó');
 await captura('14-foco-desde-presupuesto');
 
+// 14b) Edición a mano sin IA
+await page.evaluate(() => { window._agVerBorrador(true); });
+await page.click('#ag-borr .ag-it[data-id] .ag-ed');
+await page.waitForSelector('#ag-edit', { state: 'visible' });
+await page.fill('#ag-e-cant', '2');
+await captura('14b-edicion-a-mano');
+await page.click('#ag-e-ok');
+await page.waitForTimeout(400);
+const ed = await page.evaluate(() => ({ cant: window._fbFalso.get('proyectos/cliDemo/proyDemo/agente/borrador/capitulos/0/items/0/cant'),
+    ediciones: Object.keys(window._fbFalso.get('proyectos/cliDemo/proyDemo/agente/conversacion/ediciones') || {}).length,
+    pedidosNuevos: window._pedidosAgente.filter((p) => p.accion === 'enviar').length }));
+console.log('edición a mano', JSON.stringify(ed));
+if (ed.cant !== 2 || ed.ediciones !== 1) throw new Error('la edición a mano no se guardó');
+await page.click('#mod-agente .ag-ico[aria-label="Configuración"]');
+await captura('14c-config-modelo-correcciones');
+await page.click('#mod-agente .ag-ico[aria-label="Configuración"]');
+
 // 15) Varias conversaciones: ＋ Nueva empieza de cero; la anterior queda en la lista
 await page.evaluate(() => { window._agVerBorrador(false); });
 await page.click('#ag-convbar .ag-btn');

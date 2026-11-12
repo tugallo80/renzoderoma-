@@ -42,7 +42,7 @@
             '#mod-agente .ag-costo.aviso b{color:var(--orange);} #mod-agente .ag-costo.tope b{color:var(--red);}',
             '#mod-agente .ag-panel{background:var(--card);border-bottom:1px solid var(--border);padding:10px 14px;font-size:12px;max-height:45vh;overflow-y:auto;display:none;}',
             '#mod-agente .ag-panel table{width:100%;border-collapse:collapse;font-size:11px;} #mod-agente .ag-panel td,#mod-agente .ag-panel th{padding:3px 4px;border-bottom:1px solid var(--border);text-align:right;} #mod-agente .ag-panel td:first-child,#mod-agente .ag-panel th:first-child{text-align:left;}',
-            '#mod-agente .ag-panel label{display:block;font-weight:700;margin-top:8px;} #mod-agente .ag-panel select,#mod-agente .ag-panel input{width:100%;padding:8px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text);font-size:14px;margin-top:3px;}',
+            '#mod-agente .ag-panel label{display:block;font-weight:700;margin-top:8px;} #mod-agente .ag-panel select,#mod-agente .ag-panel input{box-sizing:border-box;width:100%;padding:8px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text);font-size:14px;margin-top:3px;}',
             '#mod-agente .ag-convbar{display:flex;gap:8px;align-items:center;padding:6px 12px;background:var(--card);border-bottom:1px solid var(--border);}',
             '#mod-agente .ag-convsel{flex:1;min-width:0;text-align:left;background:none;border:none;color:var(--text);font-size:13px;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-family:inherit;padding:4px 0;}',
             '#mod-agente .ag-convsel span{color:var(--gray);}',
@@ -92,6 +92,10 @@
             '#mod-agente .ag-o.supuesto{background:rgba(90,200,250,.22);color:#0b6e99;}',
             '#mod-agente .ag-f.supuesto{background:rgba(90,200,250,.10);border-left:3px solid #5ac8fa;padding-left:6px;}',
             '#mod-agente .ag-f.supuesto.ok{border-left-color:var(--green);background:none;}',
+            '#mod-agente .ag-ed{background:none;border:1px solid var(--border);border-radius:6px;padding:0 5px;font-size:12px;cursor:pointer;color:var(--gray);margin-left:4px;}',
+            '#ag-edit{position:fixed;inset:0;z-index:9960;background:rgba(0,0,0,.5);display:none;align-items:flex-end;justify-content:center;}',
+            '#ag-edit .box{background:var(--card);color:var(--text);width:100%;max-width:560px;border-radius:16px 16px 0 0;padding:16px;padding-bottom:max(16px,env(safe-area-inset-bottom));}',
+            '#ag-edit label{display:block;font-size:13px;font-weight:700;margin-top:8px;} #ag-edit input,#ag-edit textarea{width:100%;box-sizing:border-box;font-size:16px;padding:9px;border:1px solid var(--border);border-radius:10px;margin-top:3px;background:var(--bg);color:var(--text);font-family:inherit;}',
             '#mod-agente .ag-sup{margin-top:8px;padding:8px;border-radius:10px;background:rgba(90,200,250,.12);font-size:12px;display:flex;gap:8px;align-items:center;}',
             '#mod-agente .ag-tot{position:sticky;bottom:0;background:var(--bg);padding:10px 2px;font-weight:800;display:flex;justify-content:space-between;border-top:2px solid var(--text);}'
         ].join('\n');
@@ -287,16 +291,17 @@
                         var filas = ['mat', 'mo', 'eq', 'sub'].map(function (t) {
                             var fs = lista(apu[t]);
                             if (!fs.length) return '';
-                            return '<div class="ag-it-sub" style="margin-top:6px;font-weight:700;">' + TIT[t] + '</div>' + fs.map(function (f) {
+                            return '<div class="ag-it-sub" style="margin-top:6px;font-weight:700;">' + TIT[t] + '</div>' + fs.map(function (f, fi) {
                                 return '<div class="ag-f' + (f.revisar ? ' marcada' : '') + (f.supuesto ? ' supuesto' + (f.confirmado ? ' ok' : '') : '') + '"><span>' + esc(f.d) +
                                     (f.cerrado ? ' <b style="color:var(--orange);font-size:10px;">TRATO CERRADO</b>' : '') + (f.supuesto ? ' <span style="font-size:10px;font-weight:700;color:' + (f.confirmado ? 'var(--green)' : '#0b6e99') + ';">' + (f.confirmado ? '✓ confirmado' : 'supuesto sin confirmar') + '</span>' : '') +
-                                    '</span><span class="num">' + bs(f.q * f.p) + '</span>' +
+                                    '</span><span class="num">' + bs(f.q * f.p) + ' <button class="ag-ed" onclick="_agBorrarFila(\'' + esc(it.id) + '\',\'' + t + '\',' + (fi + 1) + ')" title="Borrar la fila (sin IA)" aria-label="Borrar fila">🗑</button></span>' +
                                     '<span class="ori">' + chipOrigen(f.origen_q) + (f.stock_q ? f.q_total + ' ' + esc(f.u) + ' − stock propio ' + chipOrigen(f.origen_stock) + f.stock_q + ' = ' : '') + f.q + ' ' + esc(f.u) + ' × ' + (f.p ? chipOrigen(f.origen_p) + bs(f.p) : '—') +
                                     (f.factor ? ' · factor ' + f.factor + ' ' + chipOrigen(f.origen_factor) : '') + (f.nota ? ' · ' + esc(f.nota) : '') + '</span>' +
                                     (f.revisar ? '<span class="rev">⚠ ' + esc(f.revisar) + '</span>' : '') + '</div>';
                             }).join('');
                         }).join('');
-                        return '<div class="ag-it" data-id="' + esc(it.id) + '"><div class="ag-it-cab"><span>' + esc(it.desc) + '</span><span>Bs ' + bs(it.total) + '</span></div>' +
+                        return '<div class="ag-it" data-id="' + esc(it.id) + '"><div class="ag-it-cab"><span>' + esc(it.desc) +
+                            ' <button class="ag-ed" onclick="_agEditar(\'' + esc(it.id) + '\')" title="Editar a mano (sin IA, gratis)" aria-label="Editar">✎</button></span><span>Bs ' + bs(it.total) + '</span></div>' +
                             '<div class="ag-it-sub">' + (it.cant != null ? it.cant : 1) + ' ' + esc(it.und || 'glb') + (it.cant_origen ? ' ' + chipOrigen(it.cant_origen) : '') +
                             ' × Bs ' + bs(it.pu) + ' (precio unitario con recargos)' + (it.desde3d ? ' · del 3D, ruta ' + esc(it.desde3d.ruta || 'A') : '') +
                             (it.marcadas ? ' · <b style="color:var(--red);">' + it.marcadas + (it.marcadas > 1 ? ' marcadas' : ' marcada') + '</b>' : '') + '</div>' +
@@ -348,6 +353,54 @@
         db.ref(raizConv() + '/conversacion/mensajes').push({ rol: 'aviso', fecha: firebase.database.ServerValue.TIMESTAMP,
             texto: '✅ Borrador v' + borrador.version + ' aplicado al presupuesto: ' + r.agregados + ' ítems nuevos' + (r.actualizados ? ', ' + r.actualizados + ' actualizados' : '') + ' (Bs ' + bs(borrador.total) + ').' });
         alert('✅ Listo: ' + r.agregados + ' ítems agregados al final' + (r.actualizados ? ' y ' + r.actualizados + ' actualizados en su lugar' : '') + '.');
+    };
+
+    // ------------------------------------------------------------------ edición a mano (sin IA, costo 0)
+    function buscarItemBorrador(id) {
+        var b = AgenteBorrador.normalizar(borrador), r = null;
+        b.capitulos.forEach(function (c) { c.items.forEach(function (it) { if (it.id === id) r = it; }); });
+        return r;
+    }
+    async function guardarEdicion(cambio) {
+        if (trabajando()) { alert('Esperá a que el agente termine para editar.'); return false; }
+        var ref = db.ref(raizConv() + '/conversacion/mensajes').push();
+        var r = AgenteBorrador.editarManual(borrador, cambio, ref.key);
+        if (r.error) { alert(r.error); return false; }
+        try {
+            await ref.set({ rol: 'dueno', tipo: 'edicion', texto: '✎ Editado a mano (sin IA) ' + r.texto, fecha: firebase.database.ServerValue.TIMESTAMP });
+            await db.ref(raizConv() + '/borrador').set(JSON.parse(JSON.stringify(r.borrador)));
+            await db.ref(raizConv() + '/conversacion/ediciones').push({ texto: r.texto, fecha: firebase.database.ServerValue.TIMESTAMP });
+            return true;
+        } catch (e) { alert('No se pudo guardar: ' + e.message); return false; }
+    }
+    window._agEditar = function (id) {
+        var it = buscarItemBorrador(id);
+        if (!it) return;
+        var d = $('ag-edit');
+        if (!d) { d = document.createElement('div'); d.id = 'ag-edit'; document.body.appendChild(d); }
+        d.innerHTML = '<div class="box"><b>Editar a mano (sin IA, gratis)</b>' +
+            '<label>Nombre del ítem<input id="ag-e-desc" maxlength="80" value="' + esc(it.desc) + '"></label>' +
+            '<label>Cantidad (' + esc(it.und || 'glb') + ')<input id="ag-e-cant" type="number" min="0" step="any" inputmode="decimal" value="' + esc(it.cant) + '"></label>' +
+            '<label>Características para el cliente (una por renglón)<textarea id="ag-e-car" rows="5">' + esc(lista(it.caracteristicas).map(function (c) { return c.texto; }).join('\n')) + '</textarea></label>' +
+            '<div style="display:flex;gap:8px;margin-top:12px;"><button class="ag-btn" style="flex:1;padding:12px;" onclick="document.getElementById(\'ag-edit\').style.display=\'none\'">Cancelar</button>' +
+            '<button class="ag-btn prim" style="flex:1;padding:12px;" id="ag-e-ok">Guardar</button></div>' +
+            '<div class="ag-it-sub" style="margin-top:6px;">Se guarda sin llamar al agente; en tu próximo mensaje se entera de lo que cambiaste.</div></div>';
+        d.style.display = 'flex';
+        $('ag-e-ok').onclick = async function () {
+            var cambio = { item: id };
+            var nd = $('ag-e-desc').value.trim(), nc = parseFloat($('ag-e-cant').value), car = $('ag-e-car').value;
+            if (nd !== it.desc) cambio.desc = nd;
+            if (nc !== Number(it.cant)) cambio.cant = nc;
+            var viejas = lista(it.caracteristicas).map(function (c) { return c.texto; }).join('\n');
+            if (car.trim() !== viejas.trim()) cambio.caracteristicas = car;
+            if (Object.keys(cambio).length === 1) { d.style.display = 'none'; return; }
+            if (await guardarEdicion(cambio)) d.style.display = 'none';
+        };
+    };
+    window._agBorrarFila = function (id, tipo, n) {
+        var it = buscarItemBorrador(id), f = it && lista(it.apu && it.apu[tipo])[n - 1];
+        if (!f || !confirm('¿Borrar la fila "' + f.d + '"? (sin IA)')) return;
+        guardarEdicion({ item: id, quitar: { tipo: tipo, n: n } });
     };
 
     window._agConfirmarSup = function (itemId) {
@@ -422,7 +475,7 @@
                 (t.nivel === 'tope' ? 'Se llegó al tope mensual: el agente frena antes de cada llamada (podés seguir igual).' : 'Ya se usó el ' + Math.round(t.pct) + ' % del tope mensual.') + '</div>' : '') +
                 '<div style="margin-bottom:6px;">Esta conversación: <b>' + N.usd(costoProyecto.usd || 0) + '</b> en ' + (costoProyecto.llamadas || 0) + ' llamadas · Proyecto (todas las conversaciones): <b>' + N.usd(costoTotalProyecto()) + '</b> · Mes: <b>' +
                 N.usd(costoMes.usd || 0) + '</b> (' + (costoMes.llamadas || 0) + ' llamadas, todos los proyectos)</div>' +
-                (filas.length ? '<table><tr><th>Hora</th><th>Modelo</th><th>Entrada</th><th>Salida</th><th>Caché esc.</th><th>Caché leída</th><th title="% de la entrada que vino de la caché">De caché</th><th>USD</th></tr>' +
+                (filas.length ? '<table><tr><th>Hora</th><th>Modelo</th><th>Entrada nueva</th><th>Salida (con pensamiento)</th><th>Caché esc.</th><th>Caché leída</th><th title="% de la entrada que vino de la caché">De caché</th><th>USD</th></tr>' +
                     filas.map(function (f) {
                         return '<tr><td>' + hora(f.fecha) + '</td><td>' + esc(String(f.modelo || '').replace('claude-', '')) + '</td><td>' + (f.entrada || 0) +
                             '</td><td>' + (f.salida || 0) + '</td><td>' + (f.cache_escrita || 0) + '</td><td>' + (f.cache_leida || 0) + '</td><td>' + (f.pct_cache != null ? f.pct_cache : N.pctCache(f)) + ' %</td><td>' + N.usd(f.usd) + '</td></tr>';
@@ -437,6 +490,11 @@
         p.innerHTML = '<b>Configuración del agente</b> <span style="color:var(--gray);">(vale para todos los proyectos)</span>' +
             '<label>Modelo<select id="ag-c-modelo">' + opc([['claude-opus-5-5', 'Claude Opus 5.5 (recomendado)'], ['claude-sonnet-5-5', 'Claude Sonnet 5.5 (más barato)'], ['claude-haiku-5-5', 'Claude Haiku 5.5 (el más barato)']], c.modelo) + '</select></label>' +
             '<label>Esfuerzo<select id="ag-c-effort">' + opc([['low', 'Bajo'], ['medium', 'Medio'], ['high', 'Alto (recomendado)'], ['xhigh', 'Muy alto'], ['max', 'Máximo']], c.effort) + '</select></label>' +
+            '<label>Modelo en las correcciones (después del primer borrador)<select id="ag-c-modelo2">' + opc([['igual', 'El mismo modelo principal']].concat(['claude-opus-5-5', 'claude-sonnet-5-5', 'claude-haiku-5-5'].map(function (m) {
+                var est = N.costoCorreccionEstimado(m, c.precios);
+                return [m, ({ 'claude-opus-5-5': 'Opus 5.5', 'claude-sonnet-5-5': 'Sonnet 5.5', 'claude-haiku-5-5': 'Haiku 5.5' })[m] + (est != null ? ' · ≈ ' + N.usd(est) + ' por corrección' : '')];
+            })), c.modelo_correcciones) + '</select></label>' +
+            '<div style="color:var(--gray);font-size:11px;">Estimado de una corrección chica con la conversación ya compactada (sin contar la primera escritura de la caché). Cambiar de modelo empieza otra caché.</div>' +
             '<label>Esfuerzo en las correcciones (después del primer borrador)<select id="ag-c-effort2">' + opc([['low', 'Bajo'], ['medium', 'Medio (recomendado: más barato)'], ['high', 'Alto'], ['igual', 'Igual que el primero']], c.effort_correcciones) + '</select></label>' +
             '<label>Tope mensual (US$)<input id="ag-c-tope" type="number" min="1" step="1" inputmode="decimal" value="' + c.tope_mensual_usd + '"></label>' +
             '<label>Avisar al llegar al (%)<input id="ag-c-aviso" type="number" min="10" max="100" step="5" value="' + c.aviso_pct + '"></label>' +
@@ -459,7 +517,7 @@
         db.ref('agente_memoria/' + nodo + '/' + k).remove().then(pintarConfig).catch(function (e) { alert(e.message); });
     };
     window._agGuardarConfig = function () {
-        var v = { modelo: $('ag-c-modelo').value, effort: $('ag-c-effort').value, effort_correcciones: $('ag-c-effort2').value,
+        var v = { modelo: $('ag-c-modelo').value, effort: $('ag-c-effort').value, effort_correcciones: $('ag-c-effort2').value, modelo_correcciones: $('ag-c-modelo2').value,
             tope_mensual_usd: parseFloat($('ag-c-tope').value) || N.CONFIG_DEFECTO.tope_mensual_usd,
             aviso_pct: parseFloat($('ag-c-aviso').value) || N.CONFIG_DEFECTO.aviso_pct,
             actualizado: firebase.database.ServerValue.TIMESTAMP };
