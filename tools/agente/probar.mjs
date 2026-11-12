@@ -962,6 +962,55 @@ prueba('características: con origen en los números, sin datos internos, y van 
     assert.match(B.resumen(sin.borrador).capitulos[0].items[0].aviso, /faltan las características/);
 });
 
+// ------------------------------------------------------------------ varias conversaciones por proyecto
+prueba('conversaciones: "＋ Nueva" empieza de cero (sin historial ni adjuntos) con el resumen del presupuesto; la anterior queda en la lista', async () => {
+    const alm = await proyectoConBase();
+    alm.datos.proyectos[CID][PID].presupuesto.items = [{ type: 'chapter', name: 'TROFEOS' }, { type: 'item', id: 'tA', desc: 'Trofeo Paceña', cant: 1, und: 'pza', pu: 850, origen: 'agente' }];
+    const id3d = await adjuntar3D(alm);
+    const p1 = await turnoListo(alm, 'Cotizá la copa', [id3d]);
+    await ejecutarTurno({ almacen: alm, cliente: clienteFalso([
+        herramienta('armar_borrador', { operaciones: [{ op: 'item_desde_3d', capitulo: 'Trofeos', adjunto: id3d, item3d: 'Mostrador demo', desc: 'Copa grande' }] }, 't1'), texto('Listo.')]) }, p1);
+    const ag = () => alm.datos.proyectos[CID][PID].agente;
+    assert.equal(ag().conversaciones_meta.principal.titulo, 'Copa grande', 'título automático: el primer ítem');
+    // nueva conversación
+    const n = await api.atender(alm, { accion: 'nueva', cid: CID, pid: PID }, 'renzo');
+    assert.equal(n.status, 200); const conv = n.cuerpo.conv;
+    assert.equal(ag().actual, conv); assert.equal(ag().conversaciones_meta[conv].titulo, 'Nueva conversación');
+    const r = await api.atender(alm, { accion: 'enviar', cid: CID, pid: PID, conv, texto: 'Ahora un letrero de 2×1 m' }, 'renzo');
+    assert.equal(r.status, 200); assert.equal(r.cuerpo.conv, conv);
+    const h = JSON.parse(ag().conversaciones[conv].conversacion.api);
+    assert.equal(h.length, 1);
+    assert.match(h[0].content[0].text, /Presupuesto actual de este proyecto[\s\S]*Trofeo Paceña · 1 pza · Bs 850/);
+    assert.equal(h[0].content.some((b) => b.type === 'adjunto'), false, 'sin los adjuntos de la otra conversación');
+    assert.equal(JSON.stringify(h).includes('Cotizá la copa'), false, 'sin la conversación anterior');
+    assert.equal(ag().conversaciones_meta[conv].titulo, 'Ahora un letrero de 2×1 m');
+    const cola = alm.datos.agente_cola; const k = Object.keys(cola)[0]; const p2 = cola[k]; delete cola[k];
+    assert.equal(p2.conv, conv);
+    // mientras trabaja, otra conversación del mismo proyecto espera (un turno a la vez por proyecto)
+    const bloqueado = await api.atender(alm, { accion: 'enviar', cid: CID, pid: PID, texto: 'algo en la principal' }, 'renzo');
+    assert.equal(bloqueado.status, 409);
+    await ejecutarTurno({ almacen: alm, cliente: clienteFalso([
+        herramienta('armar_borrador', { operaciones: [{ op: 'item', capitulo: 'Letreros', desc: 'Letrero 2×1', caracteristicas: [{ texto: 'Lona impresa' }] }] }, 't2'), texto('Armado.', uso(1_000_000, 0))]) }, p2);
+    // borrador, mensajes y costos de cada conversación por separado
+    assert.equal(ag().conversaciones[conv].borrador.capitulos[0].items[0].desc, 'Letrero 2×1');
+    assert.equal(ag().borrador.capitulos[0].items[0].desc, 'Copa grande', 'el borrador de la principal no cambia');
+    assert.ok(ag().conversaciones[conv].costos.total.usd >= 4);
+    assert.ok(ag().conversaciones_meta[conv].costo_usd >= 4);
+    assert.equal(ag().conversaciones_meta[conv].titulo, 'Letrero 2×1');
+    assert.equal(ag().estado.conv, conv);
+    // aplicar desde cada conversación: los ítems llevan su conversación y no se pisan
+    const a = B.aItemsPresupuesto(ag().borrador, { conv: 'principal' });
+    const b2 = B.aItemsPresupuesto(ag().conversaciones[conv].borrador, { conv });
+    let data = B.aplicarAlPresupuesto([], a).data;
+    data = B.aplicarAlPresupuesto(data, b2).data;
+    assert.deepEqual(data.filter((x) => x.type === 'item').map((x) => [x.desc, x.agente.conv]), [['Copa grande', 'principal'], ['Letrero 2×1', conv]]);
+    const re = B.aplicarAlPresupuesto(data, b2);
+    assert.equal(re.agregados, 0); assert.equal(re.actualizados, 1);
+    assert.equal(re.data.find((x) => x.desc === 'Copa grande').agente.conv, 'principal');
+    // conversación inválida
+    assert.equal((await api.atender(alm, { accion: 'enviar', cid: CID, pid: PID, conv: '../x', texto: 'x' }, 'renzo')).status, 400);
+});
+
 // ------------------------------------------------------------------ correr
 for (const [nombre, fn] of pruebas) {
     try { await fn(); ok++; console.log('ok  ', nombre); }

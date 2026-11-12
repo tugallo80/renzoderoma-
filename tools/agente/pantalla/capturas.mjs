@@ -197,6 +197,26 @@ console.log('foco', JSON.stringify(fo));
 if (fo.txt !== 'Sobre «Restauración tótem»: ' || fo.borr !== 'block' || fo.top > 400) throw new Error('el foco del ítem no funcionó');
 await captura('14-foco-desde-presupuesto');
 
+// 15) Varias conversaciones: ＋ Nueva empieza de cero; la anterior queda en la lista
+await page.evaluate(() => { window._agVerBorrador(false); });
+await page.click('#ag-convbar .ag-btn');
+await page.waitForTimeout(400);
+const nueva = await page.evaluate(() => ({ msgs: document.querySelectorAll('#ag-msgs .ag-m').length, tab: document.getElementById('ag-tab').style.display, titulo: document.querySelector('#ag-convbar b').textContent }));
+console.log('nueva', JSON.stringify(nueva));
+if (nueva.msgs !== 0 || nueva.tab !== 'none') throw new Error('la conversación nueva no arrancó vacía');
+await captura('15-conversacion-nueva');
+await page.click('#ag-convbar .ag-convsel');
+await page.waitForTimeout(300);
+await captura('16-lista-conversaciones');
+const filas = await page.evaluate(() => document.querySelectorAll('#ag-p-convs > div[style*="border-bottom"]').length);
+if (filas !== 2) throw new Error('la lista debería tener 2 conversaciones y tiene ' + filas);
+// volver a la primera
+await page.click('#ag-p-convs > div[style*="border-bottom"]:last-child span');
+await page.waitForTimeout(400);
+const vuelta = await page.evaluate(() => document.querySelectorAll('#ag-msgs .ag-m').length);
+console.log('mensajes al volver a la primera', vuelta);
+if (vuelta < 2) throw new Error('no volvió a la primera conversación');
+
 console.log(errores.length ? 'ERRORES EN LA PÁGINA:\n' + errores.join('\n') : 'sin errores en la página');
 await browser.close(); srv.close();
 if (errores.length) process.exitCode = 1;

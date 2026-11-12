@@ -234,9 +234,27 @@ En `presupuesto.html`, la etiqueta verde **🤖 Agente** de un ítem aplicado ab
 el borrador se abre, se desplaza a ese ítem y lo resalta, y el cuadro de texto queda con "Sobre «Trofeo Paceña»: " para la corrección.
 Si el ítem tiene filas sin precio, al lado aparece **⚠n APU**, que abre el APU. Es la misma plantilla del ítem en celular y escritorio.
 
+## Varias conversaciones por proyecto
+
+Para cotizar **otro ítem en el mismo proyecto** sin arrastrar el contexto (ni su costo) de la conversación anterior:
+- Barra arriba del chat: **💬 título (n) ▾** abre la lista "Conversaciones de este proyecto" (título automático, fecha y costo) y
+  **＋ Nueva** empieza una conversación de cero: historial vacío, sin adjuntos anteriores, con su propio borrador.
+- **Datos:** la conversación que ya existía es `principal` y sigue en las rutas de siempre (`agente/conversacion`, `agente/borrador`,
+  `agente/costos`, `agente/rondas_preguntas`): no hubo que migrar nada. Las nuevas: `agente/conversaciones/{conv}/…`. Por proyecto
+  quedan los adjuntos, el estado (un turno a la vez por proyecto), `actual` (la abierta) y `conversaciones_meta/{conv}`
+  `{ titulo, titulo_auto, creada, costo_usd }`. Rutas en `functions/agente/rutas.js`.
+- **Título automático:** el primer mensaje y, cuando aparece, el nombre del primer ítem del borrador.
+- **Al empezar una conversación nueva** el agente recibe un resumen compacto del presupuesto actual (capítulos, nombres de ítems,
+  cantidades y totales, sin APU) para no duplicar, más las normas y la memoria. No recibe la conversación anterior.
+- **Aplicar** agrega o actualiza solo los ítems de esa conversación (ids estables); cada ítem aplicado guarda `agente.conv`.
+  La etiqueta **🤖 Agente** del presupuesto abre la conversación que creó ese ítem.
+- **Costos:** arriba, "Conv." (la abierta) y "Proy." (todas las conversaciones), además del mes; el detalle muestra los dos.
+  Si el agente trabaja en otra conversación del proyecto, el chat lo avisa con "Ver".
+
 ### Pruebas (sin gastar plata)
 
-- `cd tools/agente && npm test` — 56 pruebas (características: origen en números, sin datos internos, desc larga rechazada, supuesto
+- `cd tools/agente && npm test` — 57 pruebas (conversaciones: nueva de cero con el resumen del presupuesto, borrador y costos por
+  conversación, título automático, un turno a la vez por proyecto, aplicar sin pisar la otra). 56 pruebas (características: origen en números, sin datos internos, desc larga rechazada, supuesto
   que no sale hasta confirmar, feat al aplicar y al reaplicar). 55 pruebas (costo: segunda ronda rechazada sin motivo, effort medium por mensaje sin tocar el del
   pedido, prefijo idéntico entre llamadas, % de caché, resultados compactos). 51 pruebas (estructura: avisos de ítems-componente, trofeo de 3 piezas = 1 ítem, norma inicial
   sembrada una vez). 49 pruebas (2b: geometría supuesta calculada por la herramienta y precio de la base, supuestos

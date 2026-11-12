@@ -9,7 +9,7 @@ const H = require("./herramientas");
 const { expandirMensajes, contenidoParaHistorial, cerrarHerramientasPendientes, leerHistorial } = require("./historial");
 
 const LIMITE_MS = 400 * 1000;   // la Function corta a los 540 s: antes de eso se sigue en otra invocación
-const RAIZ = (cid, pid) => `proyectos/${cid}/${pid}/agente`;
+const { RAIZ, raizConv, PRINCIPAL } = require("./rutas");
 
 /** Pedido a la API: sistema y herramientas fijos (en caché), thinking adaptativo, effort y fallbacks por rechazo. */
 function armarPedido(config, mensajes) {
@@ -33,15 +33,18 @@ function armarPedido(config, mensajes) {
     return p;
 }
 
-async function registrarCosto(almacen, { cid, pid, mes, costo, modelo, turno, fecha }) {
+async function registrarCosto(almacen, { cid, pid, conv, mes, costo, modelo, turno, fecha }) {
+    const RC = raizConv(cid, pid, conv);
     const fila = { fecha, modelo, turno: turno || null, entrada: costo.entrada, salida: costo.salida,
         cache_escrita: costo.cache_escrita, cache_leida: costo.cache_leida, usd: costo.usd, pct_cache: N.pctCache(costo) };
     if (Object.keys(costo.modelos || {}).length > 1) fila.por_modelo = costo.modelos;
     await Promise.all([
         almacen.transaccion(`agente_costos/${mes}/${cid}_${pid}`, (acc) => Object.assign(N.sumarCosto(acc, costo), { cid, pid, actualizado: fecha })),
         almacen.transaccion(`agente_costos/${mes}/_total`, (acc) => Object.assign(N.sumarCosto(acc, costo), { actualizado: fecha })),
-        almacen.transaccion(`${RAIZ(cid, pid)}/costos/total`, (acc) => N.sumarCosto(acc, costo)),
-        almacen.agregar(`${RAIZ(cid, pid)}/costos/llamadas`, fila),
+        almacen.transaccion(`${RC}/costos/total`, (acc) => N.sumarCosto(acc, costo)),
+        almacen.agregar(`${RC}/costos/llamadas`, fila),
+        // costo de cada conversación en su meta (lista "Conversaciones" y total del proyecto)
+        almacen.transaccion(`${RAIZ(cid, pid)}/conversaciones_meta/${conv || PRINCIPAL}/costo_usd`, (v) => N.redondear((Number(v) || 0) + costo.usd, 6)),
     ]);
 }
 
@@ -83,18 +86,20 @@ async function ejecutarTurno(deps, pedido) {
     const { almacen, cliente } = deps;
     const esErrorAPI = deps.esErrorAPI || (() => false);
     const { cid, pid } = pedido;
-    const raiz = RAIZ(cid, pid);
+    const raiz = RAIZ(cid, pid);                       // proyecto: estado, detener, adjuntos
+    const conv = pedido.conv || PRINCIPAL;
+    const rc = raizConv(cid, pid, conv);                // conversación: mensajes, historial, borrador, costos
     const inicio = almacen.ahora();
     const config = N.configEfectiva(await almacen.leer("config/agente"));
     const mes = N.mesClave(inicio);
     const turno = pedido.turno || null;
     let costoTurno = 0;
 
-    const estado = (fase, texto, extra) => almacen.actualizar(`${raiz}/estado`, Object.assign({ fase, texto: texto || "", actualizado: almacen.ahora(), turno }, extra || {}));
-    const mostrar = (m) => almacen.agregar(`${raiz}/conversacion/mensajes`, Object.assign({ fecha: almacen.ahora(), turno }, m));
-    const guardar = (hist) => almacen.escribir(`${raiz}/conversacion/api`, JSON.stringify(hist));
+    const estado = (fase, texto, extra) => almacen.actualizar(`${raiz}/estado`, Object.assign({ fase, texto: texto || "", actualizado: almacen.ahora(), turno, conv }, extra || {}));
+    const mostrar = (m) => almacen.agregar(`${rc}/conversacion/mensajes`, Object.assign({ fecha: almacen.ahora(), turno }, m));
+    const guardar = (hist) => almacen.escribir(`${rc}/conversacion/api`, JSON.stringify(hist));
 
-    let historial = cerrarHerramientasPendientes(leerHistorial(await almacen.leer(`${raiz}/conversacion/api`)));
+    let historial = cerrarHerramientasPendientes(leerHistorial(await almacen.leer(`${rc}/conversacion/api`)));
     const ultimo = historial.filter((m) => m.role !== "system").pop();   // los mensajes de effort pueden ir al final
     if (!ultimo || ultimo.role !== "user") {
         await estado("listo", "");
@@ -102,7 +107,7 @@ async function ejecutarTurno(deps, pedido) {
     }
     const cargar = cargadorDeAdjuntos(almacen, cid, pid);
     const ctx = {
-        almacen, cid, pid, turno, uid: pedido.uid, mensajesAgente: [], cortarTurno: false,
+        almacen, cid, pid, conv, turno, uid: pedido.uid, mensajesAgente: [], cortarTurno: false,
         progreso: (t) => estado("trabajando", t),
     };
     let llamadas = Number(pedido.llamadas || 0), reintentosJSON = 0, maxTokens = config.max_tokens;
@@ -112,7 +117,7 @@ async function ejecutarTurno(deps, pedido) {
         for (;;) {
             if (almacen.ahora() - inicio > LIMITE_MS) {
                 await guardar(historial);
-                await almacen.agregar("agente_cola", { cid, pid, uid: pedido.uid || null, turno, continuar: true, pasar_tope: !!pedido.pasar_tope, llamadas, fecha: almacen.ahora() });
+                await almacen.agregar("agente_cola", { cid, pid, conv, uid: pedido.uid || null, turno, continuar: true, pasar_tope: !!pedido.pasar_tope, llamadas, fecha: almacen.ahora() });
                 await estado("trabajando", "Sigo trabajando…");
                 return { fin: "continua", costo: costoTurno };
             }
@@ -152,7 +157,7 @@ async function ejecutarTurno(deps, pedido) {
             llamadas++;
             const costo = N.costoDeUso(resp.usage, resp.model || config.modelo, config.precios);
             costoTurno = N.redondear(costoTurno + costo.usd, 6);
-            await registrarCosto(almacen, { cid, pid, mes, costo, modelo: resp.model || config.modelo, turno, fecha: almacen.ahora() });
+            await registrarCosto(almacen, { cid, pid, conv, mes, costo, modelo: resp.model || config.modelo, turno, fecha: almacen.ahora() });
 
             if (resp.stop_reason === "refusal") {
                 await guardar(historial);

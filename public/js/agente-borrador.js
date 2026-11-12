@@ -572,7 +572,7 @@
                 var item = {
                     type: 'item', id: it.id, origen: 'agente', desc: it.desc, und: it.und || 'glb', cant: it.cant, feat: textoCaracteristicas(it),
                     apu: { mat: it.apu.mat.map(limpia), mo: it.apu.mo.map(limpia), eq: it.apu.eq.map(limpia), sub: it.apu.sub.map(limpia), cs: rc.cs, ind: rc.ind, util: rc.util },
-                    agente: { version: b.version, cant_origen: it.cant_origen || null, desde3d: it.desde3d || null, filas_a_revisar: it.marcadas || 0, aplicado: opciones.fecha || null }
+                    agente: { conv: opciones.conv || 'principal', version: b.version, cant_origen: it.cant_origen || null, desde3d: it.desde3d || null, filas_a_revisar: it.marcadas || 0, aplicado: opciones.fecha || null }
                 };
                 item.pu = L.calcPu(item.apu);
                 if (it.measures) { item.measures = it.measures; item.measures_modo = it.measures_modo || 'volumen'; }

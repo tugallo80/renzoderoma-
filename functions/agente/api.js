@@ -13,7 +13,7 @@ const { agregarUsuario, leerHistorial, effortVigente } = require("./historial");
 const ID = /^[A-Za-z0-9_-]{1,64}$/;
 const MAX = { pdf: 20 * 1024 * 1024, imagen: 5 * 1024 * 1024, medicion: 8 * 1024 * 1024 };
 const BLOQUEO_MS = 10 * 60 * 1000;   // un turno "trabajando" sin novedades por 10 min se considera cortado
-const RAIZ = (cid, pid) => `proyectos/${cid}/${pid}/agente`;
+const { RAIZ, raizConv, convValida, PRINCIPAL } = require("./rutas");
 
 class ErrorPedido extends Error { constructor(msg, status) { super(msg); this.status = status || 400; } }
 
@@ -97,22 +97,23 @@ async function adjuntar(almacen, b) {
 }
 
 /** Toma el turno del proyecto (uno a la vez). Devuelve false si hay otro trabajando. */
-async function tomarTurno(almacen, cid, pid, turno) {
+async function tomarTurno(almacen, cid, pid, turno, conv) {
     const ahora = almacen.ahora();
     const r = await almacen.transaccion(`${RAIZ(cid, pid)}/estado`, (cur) => {
         if (cur && (cur.fase === "trabajando" || cur.fase === "en_cola") && ahora - (cur.actualizado || 0) < BLOQUEO_MS) return undefined;
-        return { fase: "en_cola", texto: "En cola…", actualizado: ahora, turno };
+        return { fase: "en_cola", texto: "En cola…", actualizado: ahora, turno, conv: conv || PRINCIPAL };
     });
     return r.ok;
 }
 
 async function encolar(almacen, b, uid, turno) {
     await almacen.borrar(`${RAIZ(b.cid, b.pid)}/detener`).catch(() => {});
-    await almacen.agregar("agente_cola", { cid: b.cid, pid: b.pid, uid, turno, pasar_tope: !!b.pasar_tope, fecha: almacen.ahora() });
+    await almacen.agregar("agente_cola", { cid: b.cid, pid: b.pid, conv: b.conv || PRINCIPAL, uid, turno, pasar_tope: !!b.pasar_tope, fecha: almacen.ahora() });
 }
 
 async function enviar(almacen, b, uid) {
     const { cid, pid } = b;
+    const RC = raizConv(cid, pid, b.conv);
     const texto = String(b.texto || "").trim().slice(0, 20000);
     const ids = Array.isArray(b.adjuntos) ? b.adjuntos.filter((x) => ID.test(String(x))).slice(0, 30) : [];
     if (!texto && !ids.length) throw new ErrorPedido("El mensaje está vacío.");
@@ -123,9 +124,10 @@ async function enviar(almacen, b, uid) {
         metas.push({ id, nombre: m.nombre, tipo: m.tipo });
     }
     const turno = almacen.nuevaClave();
-    if (!(await tomarTurno(almacen, cid, pid, turno))) throw new ErrorPedido("El agente todavía está trabajando en el mensaje anterior.", 409);
-    const msgId = await almacen.agregar(`${RAIZ(cid, pid)}/conversacion/mensajes`, { rol: "dueno", texto, adjuntos: metas.length ? metas : null, fecha: almacen.ahora(), turno, uid });
-    const hist = leerHistorial(await almacen.leer(`${RAIZ(cid, pid)}/conversacion/api`));
+    if (!(await tomarTurno(almacen, cid, pid, turno, b.conv))) throw new ErrorPedido("El agente todavía está trabajando en el mensaje anterior.", 409);
+    await anotarConversacion(almacen, cid, pid, b.conv || PRINCIPAL, texto);
+    const msgId = await almacen.agregar(`${RC}/conversacion/mensajes`, { rol: "dueno", texto, adjuntos: metas.length ? metas : null, fecha: almacen.ahora(), turno, uid });
+    const hist = leerHistorial(await almacen.leer(`${RC}/conversacion/api`));
     const bloques = [];
     if (!hist.length) {
         bloques.push({ type: "text", text: await textoInicial(almacen, cid, pid) });
@@ -136,14 +138,14 @@ async function enviar(almacen, b, uid) {
     // Correcciones más baratas: después del primer borrador, effort de correcciones con un mensaje de sistema
     // de effort (beta mid-conversation-output-config) que NO rompe la caché, a diferencia de cambiar el effort del pedido.
     const config = N.configEfectiva(await almacen.leer("config/agente"));
-    const hayBorrador = !!(await almacen.leer(`${RAIZ(cid, pid)}/borrador/total`).catch(() => null)) || !!(await almacen.leer(`${RAIZ(cid, pid)}/borrador/capitulos`).catch(() => null));
+    const hayBorrador = !!(await almacen.leer(`${RC}/borrador/total`).catch(() => null)) || !!(await almacen.leer(`${RC}/borrador/capitulos`).catch(() => null));
     const objetivo = hayBorrador && config.effort_correcciones !== "igual" ? config.effort_correcciones : config.effort;
     if (N.MODELOS_EFFORT_POR_MENSAJE.includes(config.modelo) && (effortVigente(hist) || config.effort) !== objetivo) {
         hist.push({ role: "system", content: [], output_config: { effort: objetivo } });
     }
-    await almacen.escribir(`${RAIZ(cid, pid)}/conversacion/api`, JSON.stringify(hist));
+    await almacen.escribir(`${RC}/conversacion/api`, JSON.stringify(hist));
     await encolar(almacen, b, uid, turno);
-    return { ok: true, turno, mensaje: msgId, effort: objetivo };
+    return { ok: true, turno, mensaje: msgId, effort: objetivo, conv: b.conv || PRINCIPAL };
 }
 
 function fechaBolivia(ms) {
@@ -165,6 +167,22 @@ async function sembrarNormas(almacen) {
     }
 }
 
+/** Resumen compacto del presupuesto actual (nombres de ítems y totales, sin APU) para no duplicar y ubicar lo nuevo. */
+async function resumenPresupuesto(almacen, cid, pid) {
+    const items = await almacen.leer(`proyectos/${cid}/${pid}/presupuesto/items`).catch(() => null);
+    const lista = (Array.isArray(items) ? items : Object.values(items || {})).filter(Boolean);
+    if (!lista.length) return null;
+    const lineas = [];
+    let total = 0;
+    lista.slice(0, 150).forEach((x) => {
+        if (x.type === "chapter") { lineas.push(`## ${String(x.name || "").slice(0, 60)}`); return; }
+        const pu = parseFloat(x.pu) || 0, cant = parseFloat(x.cant) || 0;
+        total += pu * cant;
+        lineas.push(`- ${String(x.desc || "(sin nombre)").slice(0, 70)} · ${cant} ${x.und || ""} · Bs ${(Math.round(pu * cant * 100) / 100)}${x.origen === "agente" ? " (del agente)" : ""}`);
+    });
+    return `Presupuesto actual de este proyecto (${lista.filter((x) => x.type !== "chapter").length} ítems, Bs ${Math.round(total * 100) / 100} sin impuestos). Es otra conversación: no dupliques estos ítems; ubicá lo nuevo con respecto a ellos:\n` + lineas.join("\n");
+}
+
 async function textoInicial(almacen, cid, pid) {
     const partes = [`[Proyecto ${pid} del cliente ${cid}. Conversación nueva.]`];
     await sembrarNormas(almacen).catch((e) => console.warn("[agente] normas iniciales", e.message));
@@ -174,6 +192,8 @@ async function textoInicial(almacen, cid, pid) {
         partes.push("Normas constructivas del taller (cómo construye Rubik; usalas en tus propuestas):\n" +
             normas.slice(-80).map((x) => `- ${String(x.texto).slice(0, 400)}`).join("\n"));
     }
+    const pres = await resumenPresupuesto(almacen, cid, pid);
+    if (pres) partes.push(pres);
     if (notas.length) {
         partes.push("Memoria guardada del dueño (correcciones y decisiones de trabajos anteriores):\n" +
             notas.slice(-80).map((x) => `- ${String(x.texto).slice(0, 400)}`).join("\n"));
@@ -182,13 +202,14 @@ async function textoInicial(almacen, cid, pid) {
 }
 
 async function reintentar(almacen, b, uid) {
-    const hist = leerHistorial(await almacen.leer(`${RAIZ(b.cid, b.pid)}/conversacion/api`));
+    const RC = raizConv(b.cid, b.pid, b.conv);
+    const hist = leerHistorial(await almacen.leer(`${RC}/conversacion/api`));
     if (!hist.length) throw new ErrorPedido("No hay nada para reintentar.");
     const turno = almacen.nuevaClave();
-    if (!(await tomarTurno(almacen, b.cid, b.pid, turno))) throw new ErrorPedido("El agente está trabajando.", 409);
+    if (!(await tomarTurno(almacen, b.cid, b.pid, turno, b.conv))) throw new ErrorPedido("El agente está trabajando.", 409);
     if (hist.filter((m) => m.role !== "system").pop().role !== "user") {   // terminó bien: se le pide que siga
         agregarUsuario(hist, [{ type: "text", text: "[El dueño tocó \"Seguir\": continuá desde donde quedaste.]" }]);
-        await almacen.escribir(`${RAIZ(b.cid, b.pid)}/conversacion/api`, JSON.stringify(hist));
+        await almacen.escribir(`${RC}/conversacion/api`, JSON.stringify(hist));
     }
     await encolar(almacen, b, uid, turno);
     return { ok: true, turno };
@@ -204,15 +225,49 @@ async function archivo(almacen, b) {
     return { meta, datos: Buffer.from(buf).toString("base64") };
 }
 
+/** Meta de la conversación (para la lista "Conversaciones"): se crea al primer mensaje; título del primer mensaje (luego, del primer ítem). */
+async function anotarConversacion(almacen, cid, pid, conv, texto) {
+    const ruta = `${RAIZ(cid, pid)}/conversaciones_meta/${conv}`;
+    const meta = await almacen.leer(ruta);
+    if (!meta) {
+        // La "principal" que ya existía: su título sale del primer mensaje guardado
+        let titulo = String(texto || "").trim();
+        if (conv === PRINCIPAL) {
+            const msgs = (await almacen.leer(`${RAIZ(cid, pid)}/conversacion/mensajes`)) || {};
+            const primero = Object.keys(msgs).sort().map((k) => msgs[k]).find((m) => m && m.rol === "dueno" && m.texto);
+            if (primero) titulo = primero.texto;
+        }
+        await almacen.escribir(ruta, { titulo: titulo.slice(0, 60) || "Conversación", titulo_auto: true, creada: almacen.ahora() });
+    } else if (meta.titulo_auto && meta.titulo === "Nueva conversación" && texto) {
+        await almacen.actualizar(ruta, { titulo: String(texto).trim().slice(0, 60) });
+    }
+    await almacen.escribir(`${RAIZ(cid, pid)}/actual`, conv);
+}
+
+async function nuevaConversacion(almacen, b) {
+    const { cid, pid } = b;
+    const est = await almacen.leer(`${RAIZ(cid, pid)}/estado`);
+    if (est && (est.fase === "trabajando" || est.fase === "en_cola") && almacen.ahora() - (est.actualizado || 0) < BLOQUEO_MS) throw new ErrorPedido("Esperá a que el agente termine.", 409);
+    // la que ya existía queda en la lista
+    const principal = await almacen.leer(`${RAIZ(cid, pid)}/conversacion/api`);
+    if (principal && !(await almacen.leer(`${RAIZ(cid, pid)}/conversaciones_meta/${PRINCIPAL}`))) await anotarConversacion(almacen, cid, pid, PRINCIPAL, "");
+    const conv = almacen.nuevaClave();
+    await almacen.escribir(`${RAIZ(cid, pid)}/conversaciones_meta/${conv}`, { titulo: "Nueva conversación", titulo_auto: true, creada: almacen.ahora() });
+    await almacen.escribir(`${RAIZ(cid, pid)}/actual`, conv);
+    return { ok: true, conv };
+}
+
 /** Atiende un pedido ya autenticado. Devuelve {status, cuerpo}. */
 async function atender(almacen, cuerpo, uid) {
     const b = cuerpo || {};
     try {
         if (!ID.test(String(b.cid || "")) || !ID.test(String(b.pid || ""))) throw new ErrorPedido("Falta el proyecto (cid/pid).");
+        if (!convValida(b.conv)) throw new ErrorPedido("Conversación inválida.");
         switch (b.accion) {
             case "adjuntar": { const r = await adjuntar(almacen, b); return { status: 200, cuerpo: { ok: true, id: r.id, meta: r.meta } }; }
             case "enviar": return { status: 200, cuerpo: await enviar(almacen, b, uid) };
             case "reintentar": return { status: 200, cuerpo: await reintentar(almacen, b, uid) };
+            case "nueva": return { status: 200, cuerpo: await nuevaConversacion(almacen, b) };
             case "detener": await almacen.escribir(`${RAIZ(b.cid, b.pid)}/detener`, true); return { status: 200, cuerpo: { ok: true } };
             case "archivo": return { status: 200, cuerpo: await archivo(almacen, b) };
             default: throw new ErrorPedido("Acción desconocida.");
@@ -224,4 +279,4 @@ async function atender(almacen, cuerpo, uid) {
     }
 }
 
-module.exports = { NORMAS_INICIALES, sembrarNormas, atender, adjuntar, enviar, reintentar, tomarTurno, ErrorPedido, N };
+module.exports = { nuevaConversacion, resumenPresupuesto, NORMAS_INICIALES, sembrarNormas, atender, adjuntar, enviar, reintentar, tomarTurno, ErrorPedido, N };
