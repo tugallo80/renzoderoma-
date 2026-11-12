@@ -188,6 +188,15 @@ if (!tras.includes('Bastidor con lona 5×3') || tras.filter((x) => x === 'Mostra
 await page.evaluate(() => document.getElementById('ag-borr').scrollTo(0, 99999));
 await captura('13-aplicado');
 
+// 14) Desde la etiqueta "Agente" del presupuesto: abre el chat con el ítem en foco
+await page.evaluate(() => { window.cerrarAgenteIA(); const it = data.find((x) => x.desc === 'Restauración tótem'); window.abrirAgenteIA(null, { item: it.id, desc: it.desc }); });
+await page.waitForTimeout(900);
+const fo = await page.evaluate(() => ({ txt: document.getElementById('ag-txt').value, borr: document.getElementById('ag-borr').style.display,
+    top: (() => { const el = document.querySelector('#ag-borr .ag-it[data-id]'); const all = [...document.querySelectorAll('#ag-borr .ag-it')]; const t = all.find((x) => x.textContent.includes('Restauración tótem')); return t.getBoundingClientRect().top; })() }));
+console.log('foco', JSON.stringify(fo));
+if (fo.txt !== 'Sobre «Restauración tótem»: ' || fo.borr !== 'block' || fo.top > 400) throw new Error('el foco del ítem no funcionó');
+await captura('14-foco-desde-presupuesto');
+
 console.log(errores.length ? 'ERRORES EN LA PÁGINA:\n' + errores.join('\n') : 'sin errores en la página');
 await browser.close(); srv.close();
 if (errores.length) process.exitCode = 1;
