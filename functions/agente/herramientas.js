@@ -402,6 +402,44 @@ Operaciones (campo "op"):
     },
     {
         def: {
+            name: "resumen_de_lectura",
+            description: "Guarda, por cada adjunto que leíste (PDF, foto, captura, vistas del 3D), un resumen de texto con TODO lo que sirve para cotizar: ítems o renglones, cotas y medidas escritas (tal cual, con página), materiales y acabados, cantidades, notas del cliente, citas con página. Hacelo una vez, antes del primer armar_borrador: después del primer borrador la conversación se compacta para ahorrar y los adjuntos completos se reemplazan por este resumen (quedan guardados; si hace falta, ver_adjunto).",
+            input_schema: {
+                type: "object",
+                properties: {
+                    adjuntos: { type: "array", items: { type: "object", properties: { id: { type: "string" }, resumen: { type: "string", description: "Hasta 3000 caracteres." } }, required: ["id", "resumen"] } },
+                },
+                required: ["adjuntos"],
+            },
+        },
+        progreso: "Anotando lo que leí…",
+        async correr(ctx, e) {
+            const guardados = [];
+            for (const a of e.adjuntos.slice(0, 30)) {
+                if (!/^[A-Za-z0-9_-]{1,64}$/.test(String(a.id || ""))) throw new Error(`adjunto inválido: ${a.id}`);
+                if (!(await ctx.almacen.leer(`${RAIZ(ctx)}/adjuntos/${a.id}`))) throw new Error(`no existe el adjunto ${a.id}`);
+                await ctx.almacen.actualizar(`${RAIZ(ctx)}/adjuntos/${a.id}`, { resumen_lectura: String(a.resumen).slice(0, 3000) });
+                guardados.push(a.id);
+            }
+            return { ok: true, guardados };
+        },
+    },
+    {
+        def: {
+            name: "ver_adjunto",
+            description: "Vuelve a mostrarte un adjunto completo (PDF, foto con sus anotaciones o vistas del 3D) cuando la conversación ya está compactada y el resumen no alcanza. Usalo solo si hace falta: cada vez cuesta como leerlo de nuevo.",
+            input_schema: { type: "object", properties: { id: { type: "string", description: "Id del adjunto (aparece en el resumen de la conversación)." } }, required: ["id"] },
+        },
+        progreso: "Mirando el adjunto…",
+        async correr(ctx, e) {
+            if (!/^[A-Za-z0-9_-]{1,64}$/.test(String(e.id || ""))) throw new Error("id inválido");
+            if (!(await ctx.almacen.leer(`${RAIZ(ctx)}/adjuntos/${e.id}`))) throw new Error(`no existe el adjunto ${e.id}`);
+            // el marcador se expande al llamar (como en el mensaje del dueño) y se va en la próxima compactación
+            return { contenido: [{ type: "adjunto", id: e.id }] };
+        },
+    },
+    {
+        def: {
             name: "preguntar_al_dueno",
             description: "UNA SOLA RONDA de preguntas por cotización: después de leer todo, medir y buscar en la base, mandá juntas (numeradas, hasta 10) TODAS las preguntas que cambian el costo; lo obvio va como supuesto declarado, no como pregunta. TERMINA el turno hasta que el dueño responda. Una segunda ronda solo si el dueño cambió algo (con \"motivo\"). Nada de opciones múltiples genéricas.",
             input_schema: {
@@ -458,7 +496,9 @@ async function ejecutar(ctx, bloque) {
     if (errores.length) return res({ INVALID_INPUT: errores.slice(0, 10) }, true);
     try {
         if (ctx.progreso && h.progreso) await ctx.progreso(typeof h.progreso === "function" ? h.progreso(bloque.input) : h.progreso);
-        return res(await h.correr(ctx, bloque.input));
+        const r = await h.correr(ctx, bloque.input);
+        if (r && Array.isArray(r.contenido)) return { type: "tool_result", tool_use_id: bloque.id, content: r.contenido };
+        return res(r);
     } catch (e) {
         return res(`Error: ${e.message}`, true);
     }

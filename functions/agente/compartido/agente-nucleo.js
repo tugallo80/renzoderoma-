@@ -27,6 +27,8 @@
         modelo: 'claude-opus-5-5',
         effort: 'high',
         effort_correcciones: 'medium',   // turnos después del primer borrador (effort por mensaje: no rompe la caché)
+        modelo_correcciones: 'igual',    // modelo de los turnos después del primer borrador ("igual" = el principal)
+        cache_ttl: '1h',                 // el dueño tarda más de 5 min entre turnos: con 5 min la caché vencía y se reescribía todo
         max_tokens: 32000,
         tope_mensual_usd: 30,     // frena al pasarlo (con opción de seguir)
         aviso_pct: 80,            // avisa al llegar a este % del tope
@@ -48,6 +50,8 @@
         if (typeof g.modelo === 'string' && /^claude-[a-z0-9-]+$/.test(g.modelo)) c.modelo = g.modelo;
         if (EFFORTS.indexOf(g.effort) >= 0) c.effort = g.effort;
         if (EFFORTS.indexOf(g.effort_correcciones) >= 0 || g.effort_correcciones === 'igual') c.effort_correcciones = g.effort_correcciones;
+        if (g.modelo_correcciones === 'igual' || (typeof g.modelo_correcciones === 'string' && /^claude-[a-z0-9-]+$/.test(g.modelo_correcciones))) c.modelo_correcciones = g.modelo_correcciones;
+        if (g.cache_ttl === '5m' || g.cache_ttl === '1h') c.cache_ttl = g.cache_ttl;
         ['max_tokens', 'tope_mensual_usd', 'aviso_pct', 'max_llamadas_turno'].forEach(function (k) {
             if (g[k] != null && num(g[k]) > 0) c[k] = num(g[k]);
         });
@@ -118,6 +122,16 @@
         if (!(tope > 0)) return { nivel: 'ok', pct: 0, gasto: g, tope: 0 };
         var pct = g / tope * 100;
         return { nivel: pct >= 100 ? 'tope' : pct >= num(c.aviso_pct || 80) ? 'aviso' : 'ok', pct: redondear(pct, 1), gasto: redondear(g, 4), tope: tope };
+    }
+
+    /**
+     * Costo aproximado de una corrección chica con la conversación ya compactada (para mostrar en ⚙):
+     * 2 llamadas, prefijo de ~15.000 tokens leído de la caché, ~2.000 de entrada nueva y ~1.500 de salida (con pensamiento) cada una.
+     */
+    function costoCorreccionEstimado(modelo, precios) {
+        var p = (precios || PRECIOS_DEFECTO)[modelo];
+        if (!p) return null;
+        return redondear(2 * (15000 * p.cache_leida + 2000 * p.entrada + 1500 * p.salida) / 1e6, 4);
     }
 
     function usd(x) {
@@ -234,7 +248,7 @@
     }
 
     var api = {
-        PRECIOS_DEFECTO: PRECIOS_DEFECTO, CONFIG_DEFECTO: CONFIG_DEFECTO, EFFORTS: EFFORTS, MODELOS_CON_FALLBACK: MODELOS_CON_FALLBACK, MODELOS_EFFORT_POR_MENSAJE: MODELOS_EFFORT_POR_MENSAJE, pctCache: pctCache,
+        PRECIOS_DEFECTO: PRECIOS_DEFECTO, CONFIG_DEFECTO: CONFIG_DEFECTO, EFFORTS: EFFORTS, MODELOS_CON_FALLBACK: MODELOS_CON_FALLBACK, MODELOS_EFFORT_POR_MENSAJE: MODELOS_EFFORT_POR_MENSAJE, pctCache: pctCache, costoCorreccionEstimado: costoCorreccionEstimado,
         configEfectiva: configEfectiva, costoDeUso: costoDeUso, sumarCosto: sumarCosto, mesClave: mesClave, estadoTope: estadoTope, usd: usd,
         TIPOS_ORIGEN: TIPOS_ORIGEN, parsearOrigen: parsearOrigen,
         escalarMedicion: escalarMedicion, resumenMedicion: resumenMedicion, idPieza: idPieza,

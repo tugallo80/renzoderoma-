@@ -5,6 +5,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 const require = createRequire(import.meta.url);
+process.env.AGENTE_LOG = '0';
 
 const N = require('../../public/js/agente-nucleo.js');
 const { crearAlmacenMemoria } = require('./almacen-memoria.cjs');
@@ -204,8 +205,9 @@ prueba('pedido a la API: Opus 5.5, thinking adaptativo, effort high, caché y fa
     assert.equal(p.model, 'claude-opus-5-5');
     assert.deepEqual(p.thinking, { type: 'adaptive' });
     assert.deepEqual(p.output_config, { effort: 'high' });
-    assert.deepEqual(p.system[0].cache_control, { type: 'ephemeral' });
-    assert.deepEqual(p.cache_control, { type: 'ephemeral' });
+    assert.deepEqual(p.system[0].cache_control, { type: 'ephemeral', ttl: '1h' }, 'caché de 1 h: el dueño tarda más de 5 min entre turnos');
+    assert.deepEqual(p.cache_control, { type: 'ephemeral', ttl: '1h' });
+    assert.deepEqual(armarPedido(N.configEfectiva({ cache_ttl: '5m' }), []).cache_control, { type: 'ephemeral' });
     assert.deepEqual(p.betas, ['server-side-fallback-2026-07-01']); assert.equal(p.fallbacks, 'default');
     assert.ok(p.tools.every((t) => t.eager_input_streaming === true));
     assert.equal(armarPedido(N.configEfectiva({ modelo: 'claude-haiku-5-5' }), []).fallbacks, undefined, 'Haiku no tiene fallback del servidor');
@@ -612,7 +614,7 @@ prueba('foto anotada: al agente le llegan la original, la anotada y el JSON de l
 });
 
 prueba('herramientas: orden fijo para la caché', () => {
-    assert.deepEqual(H.definiciones().map((d) => d.name), ['medicion_3d', 'buscar_base', 'armar_borrador', 'escala_3d', 'guardar_en_base', 'memoria', 'preguntar_al_dueno']);
+    assert.deepEqual(H.definiciones().map((d) => d.name), ['medicion_3d', 'buscar_base', 'armar_borrador', 'escala_3d', 'guardar_en_base', 'memoria', 'resumen_de_lectura', 'ver_adjunto', 'preguntar_al_dueno']);
 });
 
 // ------------------------------------------------------------------ entrega 4: aplicar y memoria
@@ -884,12 +886,12 @@ prueba('correcciones con effort "medium" por mensaje (no se toca el effort del p
     assert.deepEqual(req.output_config, { effort: 'high' }, 'el effort del pedido no cambia (no rompe la caché)');
     assert.deepEqual(req.messages.at(-1), { role: 'system', content: [], output_config: { effort: 'medium' } });
     assert.ok(req.betas.includes('mid-conversation-output-config-2026-07-01')); assert.ok(req.betas.includes('server-side-fallback-2026-07-01'));
-    // el prefijo de la llamada anterior se repite igual, byte a byte (los adjuntos pesados quedan antes del último punto de caché)
-    const previo = c1.pedidos[1].messages;
-    assert.equal(JSON.stringify(req.messages.slice(0, previo.length)), JSON.stringify(previo));
-    const iDoc = req.messages.findIndex((m) => Array.isArray(m.content) && m.content.some((b) => b.type === 'document'));
-    assert.equal(iDoc, 0, 'el PDF va en el primer mensaje');
-    assert.deepEqual(req.cache_control, { type: 'ephemeral' });
+    // dentro del turno de lectura, cada llamada repite la anterior byte a byte (el PDF va en el primer mensaje)
+    assert.equal(JSON.stringify(c1.pedidos[1].messages.slice(0, c1.pedidos[0].messages.length)), JSON.stringify(c1.pedidos[0].messages));
+    assert.equal(c1.pedidos[0].messages[0].content.some((b) => b.type === 'document'), true);
+    // la primera corrección compacta: ya no va el PDF, va su resumen
+    assert.equal(JSON.stringify(req.messages).includes('"type":"document"'), false);
+    assert.deepEqual(req.cache_control, { type: 'ephemeral', ttl: '1h' });
     // otra corrección: no se repite el mensaje de effort
     await api.atender(alm, { accion: 'enviar', cid: CID, pid: PID, texto: 'Y sacá el canto' }, 'renzo').catch(() => {});
     await alm.escribir(`${RAIZ}/estado`, { fase: 'listo' });
@@ -897,6 +899,12 @@ prueba('correcciones con effort "medium" por mensaje (no se toca el effort del p
     assert.equal(r3.status, 200);
     const h = JSON.parse(alm.datos.proyectos[CID][PID].agente.conversacion.api);
     assert.equal(h.filter((m) => m.role === 'system').length, 1);
+    // entre correcciones (ya compactado) el prefijo es idéntico: la caché se lee
+    const cola3 = alm.datos.agente_cola; const k3 = Object.keys(cola3)[0]; const p3 = cola3[k3]; delete cola3[k3];
+    const c3 = clienteFalso([texto('Hecho.')]);
+    await ejecutarTurno({ almacen: alm, cliente: c3 }, p3);
+    const antes = c2.pedidos[0].messages;
+    assert.equal(JSON.stringify(c3.pedidos[0].messages.slice(0, antes.length)), JSON.stringify(antes), 'prefijo idéntico entre turnos');
     // con "igual" en la configuración, no se cambia
     const alm2 = nuevoAlmacen({ config: { agente: { effort_correcciones: 'igual' } } });
     alm2.datos.proyectos = { [CID]: { [PID]: { agente: { borrador: { total: 10, capitulos: [{ id: 'c' }] } } } } };
@@ -1009,6 +1017,102 @@ prueba('conversaciones: "＋ Nueva" empieza de cero (sin historial ni adjuntos) 
     assert.equal(re.data.find((x) => x.desc === 'Copa grande').agente.conv, 'principal');
     // conversación inválida
     assert.equal((await api.atender(alm, { accion: 'enviar', cid: CID, pid: PID, conv: '../x', texto: 'x' }, 'renzo')).status, 400);
+});
+
+// ------------------------------------------------------------------ costo de una corrección: compactación, caché 1 h, ver_adjunto, modelo, edición a mano
+const tokensDe = (pedido) => Math.round(JSON.stringify({ s: pedido.system, t: pedido.tools, m: pedido.messages }).length / 4);   // aprox. 4 caracteres por token
+async function cotizacionConAdjuntos(alm) {
+    // un PDF "grande" (~240 KB ≈ 80.000 tokens en base64) y una foto: lo típico de una cotización real
+    const pdfGrande = Buffer.concat([Buffer.from('%PDF-1.4\n'), Buffer.alloc(240000, 65)]);
+    const pdf = (await api.atender(alm, { accion: 'adjuntar', cid: CID, pid: PID, tipo: 'pdf', nombre: 'planos.pdf', datos: pdfGrande.toString('base64') }, 'renzo')).cuerpo.id;
+    const foto = (await api.atender(alm, { accion: 'adjuntar', cid: CID, pid: PID, tipo: 'imagen', nombre: 'copa.jpg', datos: Buffer.concat([JPG, Buffer.alloc(60000, 1)]).toString('base64') }, 'renzo')).cuerpo.id;
+    const p1 = await turnoListo(alm, 'Trofeo según el plano', [pdf, foto]);
+    const m1 = Object.keys(alm.datos.proyectos[CID][PID].agente.conversacion.mensajes)[0];
+    const c1 = clienteFalso([
+        herramienta('resumen_de_lectura', { adjuntos: [{ id: pdf, resumen: 'Plano p.1: Trofeo Paceña, alto total 45 cm ("450"), copa de acero, base de MDF 18 mm laqueada negra.' }, { id: foto, resumen: 'Foto de la copa de referencia, acabado espejo.' }] }, 'r1'),
+        herramienta('armar_borrador', { operaciones: [{ op: 'item', capitulo: 'Trofeos', desc: 'Trofeo Paceña', caracteristicas: [{ texto: 'Alto total 45 cm', origen: `cota_plano:${pdf} p.1 "450"` }] },
+            { op: 'fila', item: 'Trofeo Paceña', tipo: 'mat', d: 'MDF', origen_q: `dueño:${m1}`, q: 1, clave: 'MDF_18' }] }, 'r2'),
+        texto('Borrador listo.')]);
+    await ejecutarTurno({ almacen: alm, cliente: c1 }, p1);
+    return { pdf, foto, c1 };
+}
+
+prueba('corrección "agregá las características": antes vs después (compactación + caché 1 h)', async () => {
+    const alm = await proyectoConBase();
+    const { pdf, c1 } = await cotizacionConAdjuntos(alm);
+    const precios = N.PRECIOS_DEFECTO;
+    // ANTES: la corrección mandaba todo el historial con el PDF y la foto; con caché de 5 min vencida → se reescribía todo
+    const tokAntes = tokensDe(c1.pedidos.at(-1)) + 300;
+    const antes = N.costoDeUso({ input_tokens: 300, cache_creation_input_tokens: tokAntes - 300, cache_read_input_tokens: 0, output_tokens: 1500 }, 'claude-opus-5-5', precios).usd;
+    // DESPUÉS: la primera corrección compacta (los adjuntos → su resumen de lectura)
+    const p2 = await turnoListo(alm, 'Agregá las características');
+    const c2 = clienteFalso([texto('Agregadas.')]);
+    await ejecutarTurno({ almacen: alm, cliente: c2 }, p2);
+    const req = c2.pedidos[0];
+    const j = JSON.stringify(req.messages);
+    assert.equal(j.includes('"type":"document"') || j.includes('"type":"image"'), false, 'sin PDF ni imágenes');
+    assert.match(j, /alto total 45 cm/); assert.match(j, /Trofeo Paceña/); assert.match(j, /ver_adjunto/);
+    assert.ok(alm.datos.proyectos[CID][PID].agente.conversacion.api_antes_de_compactar, 'el historial completo queda guardado');
+    const tokDespues = tokensDe(req);
+    // la compactación escribe una vez el prefijo chico (1 h); las correcciones siguientes lo leen
+    const despuesPrimera = N.costoDeUso({ input_tokens: 300, cache_creation: { ephemeral_1h_input_tokens: tokDespues - 300 }, cache_creation_input_tokens: tokDespues - 300, output_tokens: 1500 }, 'claude-opus-5-5', precios).usd;
+    const despues = N.costoDeUso({ input_tokens: 300, cache_read_input_tokens: tokDespues - 300, output_tokens: 1500 }, 'claude-opus-5-5', precios).usd;
+    const sonnet = N.costoDeUso({ input_tokens: 300, cache_read_input_tokens: tokDespues - 300, output_tokens: 1500 }, 'claude-sonnet-5-5', precios).usd;
+    console.log(`      tokens por llamada: antes ≈ ${tokAntes}, después ≈ ${tokDespues}`);
+    console.log(`      corrección (1 llamada): antes ${N.usd(antes)} · primera tras compactar ${N.usd(despuesPrimera)} · siguientes ${N.usd(despues)} (Sonnet 5.5: ${N.usd(sonnet)})`);
+    assert.ok(tokDespues < tokAntes / 5, 'el contexto se achica mucho');
+    assert.ok(despues < antes / 5 && despues < 0.05, 'la corrección baja a centavos');
+});
+
+prueba('ver_adjunto: el adjunto vuelve solo en ese turno; la próxima corrección lo vuelve a compactar', async () => {
+    const alm = await proyectoConBase();
+    const { pdf } = await cotizacionConAdjuntos(alm);
+    const p2 = await turnoListo(alm, 'Revisá la cota del plano');
+    const c2 = clienteFalso([herramienta('ver_adjunto', { id: pdf }, 'v1'), texto('Visto.')]);
+    await ejecutarTurno({ almacen: alm, cliente: c2 }, p2);
+    const tr = c2.pedidos[1].messages.at(-1).content[0];
+    assert.equal(tr.type, 'tool_result'); assert.ok(tr.content.some((b) => b.type === 'document'), 'el PDF vuelve dentro del resultado');
+    const p3 = await turnoListo(alm, 'Ok, sumá 2');
+    const c3 = clienteFalso([texto('Listo.')]);
+    await ejecutarTurno({ almacen: alm, cliente: c3 }, p3);
+    assert.equal(JSON.stringify(c3.pedidos[0].messages).includes('"type":"document"'), false);
+});
+
+prueba('modelo de las correcciones configurable: el primer borrador con el principal, después el elegido', async () => {
+    const alm = await proyectoConBase({ config: { agente: { modelo_correcciones: 'claude-sonnet-5-5' } } });
+    const { c1 } = await cotizacionConAdjuntos(alm);
+    assert.equal(c1.pedidos[0].model, 'claude-opus-5-5');
+    const p2 = await turnoListo(alm, 'Cambiá el nombre');
+    const c2 = clienteFalso([texto('Hecho.')]);
+    await ejecutarTurno({ almacen: alm, cliente: c2 }, p2);
+    assert.equal(c2.pedidos[0].model, 'claude-sonnet-5-5');
+    assert.equal(N.configEfectiva({}).modelo_correcciones, 'igual', 'por defecto, el mismo modelo principal');
+    assert.ok(N.costoCorreccionEstimado('claude-haiku-5-5') < N.costoCorreccionEstimado('claude-sonnet-5-5'));
+    assert.ok(N.costoCorreccionEstimado('claude-sonnet-5-5') < N.costoCorreccionEstimado('claude-opus-5-5'));
+});
+
+prueba('edición a mano sin IA: nombre, cantidad, características y borrar fila; el agente se entera en el próximo turno', async () => {
+    const alm = await proyectoConBase();
+    await cotizacionConAdjuntos(alm);
+    const ag = () => alm.datos.proyectos[CID][PID].agente;
+    const it = ag().borrador.capitulos[0].items[0];
+    const r = B.editarManual(ag().borrador, { item: it.id, desc: 'Trofeo Paceña 2026', cant: 3, caracteristicas: 'Alto 45 cm\nCopa de acero espejo\nBase MDF laqueada negra' }, 'MSG1');
+    assert.equal(r.error, undefined, r.error);
+    const it2 = r.borrador.capitulos[0].items[0];
+    assert.equal(it2.desc, 'Trofeo Paceña 2026'); assert.equal(it2.cant, 3); assert.equal(it2.cant_origen, 'dueño:MSG1');
+    assert.equal(it2.caracteristicas[0].origen, 'dueño:MSG1'); assert.equal(it2.total, Math.round(it2.pu * 3 * 100) / 100);
+    assert.match(r.texto, /cantidad 1 → 3/);
+    assert.match(B.editarManual(ag().borrador, { item: it.id, caracteristicas: 'Precio 300 Bs' }, 'M').error, /datos internos/);
+    const sinFila = B.editarManual(r.borrador, { item: it.id, quitar: { tipo: 'mat', n: 1 } }, 'MSG2');
+    assert.equal(sinFila.borrador.capitulos[0].items[0].apu.mat.length, 0); assert.match(sinFila.texto, /borró la fila "MDF/);
+    // el chat lo registra y el próximo turno lo recibe
+    await alm.escribir(`${RAIZ}/borrador`, sinFila.borrador);
+    await alm.agregar(`${RAIZ}/conversacion/ediciones`, { texto: r.texto });
+    await alm.agregar(`${RAIZ}/conversacion/ediciones`, { texto: sinFila.texto });
+    await api.atender(alm, { accion: 'enviar', cid: CID, pid: PID, texto: 'Revisá' }, 'renzo');
+    const h = JSON.parse(ag().conversacion.api);
+    assert.match(JSON.stringify(h), /Cambios que hizo el dueño a mano[\s\S]*cantidad 1 → 3[\s\S]*borró la fila/);
+    assert.equal(ag().conversacion.ediciones, undefined, 'se consumen');
 });
 
 // ------------------------------------------------------------------ correr

@@ -24,42 +24,54 @@ function etiquetaAdjunto(id, a, n) {
 async function expandirMensajes(mensajes, cargar) {
     const salida = [];
     let n = 0;   // numeración de adjuntos en toda la conversación (determinista: no rompe la caché)
+    async function expandir(b) {
+        const out = [];
+        let datos;
+        try { datos = await cargar(b.id); } catch (e) { datos = null; }
+        if (!datos || !datos.meta) return [{ type: "text", text: `[Adjunto ${b.id}: ya no está disponible]` }];
+        const a = datos.meta;
+        out.push({ type: "text", text: etiquetaAdjunto(b.id, a, ++n) });
+        if (a.tipo === "pdf" && datos.base64) {
+            out.push({ type: "document", source: { type: "base64", media_type: "application/pdf", data: datos.base64 }, title: String(a.nombre || "documento.pdf").slice(0, 200) });
+        } else if (a.tipo === "imagen" && datos.base64) {
+            out.push({ type: "image", source: { type: "base64", media_type: a.mime || "image/jpeg", data: datos.base64 } });
+            if (datos.anotada_base64) {
+                out.push({ type: "text", text: `[Misma foto con las anotaciones del dueño dibujadas encima]` });
+                out.push({ type: "image", source: { type: "base64", media_type: "image/jpeg", data: datos.anotada_base64 } });
+            }
+            if (datos.anotaciones && datos.anotaciones.length) {
+                out.push({ type: "text", text: "Anotaciones del dueño sobre la foto (coordenadas en píxeles de la foto original; los valores de las cotas los escribió el dueño, citá el origen como dueño:" + b.id + "):\n" + JSON.stringify(datos.anotaciones) });
+            }
+        } else if (a.tipo === "3d") {
+            out.push({ type: "text", text: `El navegador ya midió este 3D (${a.resumen || "sin resumen"}). Consultá piezas, medidas, áreas y perímetros con la herramienta medicion_3d (adjunto "${b.id}").` });
+            (datos.vistas_base64 || []).forEach((v, i) => {
+                out.push({ type: "text", text: `[Vista ${i + 1} del 3D (${(a.vistas_nombres || [])[i] || "vista"}) con el número de cada pieza (p1, p2…) — solo para ubicarte: las medidas salen de medicion_3d]` });
+                out.push({ type: "image", source: { type: "base64", media_type: "image/jpeg", data: v } });
+            });
+        }
+        return out;
+    }
     for (const m of mensajes) {
         if (!Array.isArray(m.content) || m.role === "system") { salida.push(m); continue; }
         const content = [];
         for (const b of m.content) {
-            if (!b || b.type !== "adjunto") { content.push(b); continue; }
-            let datos;
-            try { datos = await cargar(b.id); } catch (e) { datos = null; }
-            if (!datos || !datos.meta) {
-                content.push({ type: "text", text: `[Adjunto ${b.id}: ya no está disponible]` });
+            if (b && b.type === "adjunto") { content.push(...(await expandir(b))); continue; }
+            // ver_adjunto: el adjunto vuelve dentro del resultado de la herramienta (solo hasta la próxima compactación)
+            if (b && b.type === "tool_result" && Array.isArray(b.content) && b.content.some((x) => x && x.type === "adjunto")) {
+                const interno = [];
+                for (const x of b.content) { if (x && x.type === "adjunto") interno.push(...(await expandir(x))); else interno.push(x); }
+                content.push(Object.assign({}, b, { content: interno }));
                 continue;
             }
-            const a = datos.meta;
-            content.push({ type: "text", text: etiquetaAdjunto(b.id, a, ++n) });
-            if (a.tipo === "pdf" && datos.base64) {
-                content.push({ type: "document", source: { type: "base64", media_type: "application/pdf", data: datos.base64 }, title: String(a.nombre || "documento.pdf").slice(0, 200) });
-            } else if (a.tipo === "imagen" && datos.base64) {
-                content.push({ type: "image", source: { type: "base64", media_type: a.mime || "image/jpeg", data: datos.base64 } });
-                if (datos.anotada_base64) {
-                    content.push({ type: "text", text: `[Misma foto con las anotaciones del dueño dibujadas encima]` });
-                    content.push({ type: "image", source: { type: "base64", media_type: "image/jpeg", data: datos.anotada_base64 } });
-                }
-                if (datos.anotaciones && datos.anotaciones.length) {
-                    content.push({ type: "text", text: "Anotaciones del dueño sobre la foto (coordenadas en píxeles de la foto original; los valores de las cotas los escribió el dueño, citá el origen como dueño:" + b.id + "):\n" + JSON.stringify(datos.anotaciones) });
-                }
-            } else if (a.tipo === "3d") {
-                content.push({ type: "text", text: `El navegador ya midió este 3D (${a.resumen || "sin resumen"}). Consultá piezas, medidas, áreas y perímetros con la herramienta medicion_3d (adjunto "${b.id}").` });
-                (datos.vistas_base64 || []).forEach((v, i) => {
-                    content.push({ type: "text", text: `[Vista ${i + 1} del 3D (${(a.vistas_nombres || [])[i] || "vista"}) con el número de cada pieza (p1, p2…) — solo para ubicarte: las medidas salen de medicion_3d]` });
-                    content.push({ type: "image", source: { type: "base64", media_type: "image/jpeg", data: v } });
-                });
-            }
+            content.push(b);
         }
         salida.push(Object.assign({}, m, { content }));
     }
     return salida;
 }
+
+/** ¿El historial todavía lleva adjuntos completos (PDF, fotos, vistas del 3D)? */
+function tieneAdjuntos(mensajes) { return JSON.stringify(mensajes).includes('"type":"adjunto"'); }
 
 /**
  * Contenido de la respuesta tal como se guarda para la próxima llamada.
@@ -108,4 +120,4 @@ function leerHistorial(texto) {
     try { const v = JSON.parse(texto); return Array.isArray(v) ? v : []; } catch (e) { return []; }
 }
 
-module.exports = { effortVigente, claseAdjunto, expandirMensajes, contenidoParaHistorial, agregarUsuario, cerrarHerramientasPendientes, leerHistorial, etiquetaAdjunto };
+module.exports = { tieneAdjuntos, effortVigente, claseAdjunto, expandirMensajes, contenidoParaHistorial, agregarUsuario, cerrarHerramientasPendientes, leerHistorial, etiquetaAdjunto };

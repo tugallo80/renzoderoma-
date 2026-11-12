@@ -8,7 +8,8 @@
  * El turno corre en el trigger de /agente_cola: si el celular se bloquea, el trabajo sigue.
  */
 const N = require("./compartido/agente-nucleo.js");
-const { agregarUsuario, leerHistorial, effortVigente } = require("./historial");
+const { agregarUsuario, leerHistorial, effortVigente, tieneAdjuntos, claseAdjunto } = require("./historial");
+const B = require("./compartido/agente-borrador.js");
 
 const ID = /^[A-Za-z0-9_-]{1,64}$/;
 const MAX = { pdf: 20 * 1024 * 1024, imagen: 5 * 1024 * 1024, medicion: 8 * 1024 * 1024 };
@@ -127,10 +128,26 @@ async function enviar(almacen, b, uid) {
     if (!(await tomarTurno(almacen, cid, pid, turno, b.conv))) throw new ErrorPedido("El agente todavía está trabajando en el mensaje anterior.", 409);
     await anotarConversacion(almacen, cid, pid, b.conv || PRINCIPAL, texto);
     const msgId = await almacen.agregar(`${RC}/conversacion/mensajes`, { rol: "dueno", texto, adjuntos: metas.length ? metas : null, fecha: almacen.ahora(), turno, uid });
-    const hist = leerHistorial(await almacen.leer(`${RC}/conversacion/api`));
+    let hist = leerHistorial(await almacen.leer(`${RC}/conversacion/api`));
     const bloques = [];
     if (!hist.length) {
         bloques.push({ type: "text", text: await textoInicial(almacen, cid, pid) });
+    } else {
+        // Después del primer borrador: la conversación se compacta una vez (adjuntos → su resumen de lectura)
+        const borr = await almacen.leer(`${RC}/borrador`);
+        if (borr && borr.total != null && tieneAdjuntos(hist)) {
+            await almacen.escribir(`${RC}/conversacion/api_antes_de_compactar`, JSON.stringify(hist));
+            hist = [];
+            bloques.push({ type: "text", text: await textoCompactado(almacen, cid, pid, RC, borr, msgId) });
+            await almacen.actualizar(`${RC}/conversacion`, { compactada: almacen.ahora() });
+        }
+    }
+    // Cambios que el dueño hizo a mano en el borrador (sin IA) desde el último turno
+    const ediciones = (await almacen.leer(`${RC}/conversacion/ediciones`)) || {};
+    const lineasEd = Object.keys(ediciones).sort().map((k) => ediciones[k] && ediciones[k].texto).filter(Boolean);
+    if (lineasEd.length) {
+        bloques.push({ type: "text", text: "[Cambios que hizo el dueño a mano en el borrador desde tu último turno (ya están aplicados):\n- " + lineasEd.join("\n- ") + "]" });
+        await almacen.borrar(`${RC}/conversacion/ediciones`);
     }
     ids.forEach((id) => bloques.push({ type: "adjunto", id }));
     bloques.push({ type: "text", text: `[Mensaje ${msgId} del dueño · ${fechaBolivia(almacen.ahora())}]\n${texto || "(sin texto: mirá los adjuntos)"}` });
@@ -181,6 +198,35 @@ async function resumenPresupuesto(almacen, cid, pid) {
         lineas.push(`- ${String(x.desc || "(sin nombre)").slice(0, 70)} · ${cant} ${x.und || ""} · Bs ${(Math.round(pu * cant * 100) / 100)}${x.origen === "agente" ? " (del agente)" : ""}`);
     });
     return `Presupuesto actual de este proyecto (${lista.filter((x) => x.type !== "chapter").length} ítems, Bs ${Math.round(total * 100) / 100} sin impuestos). Es otra conversación: no dupliques estos ítems; ubicá lo nuevo con respecto a ellos:\n` + lineas.join("\n");
+}
+
+/**
+ * Texto de una conversación compactada: contexto del proyecto, resumen de lectura de cada adjunto (los completos quedan en
+ * Storage; ver_adjunto los vuelve a mostrar), el borrador actual y los últimos mensajes. Sin thinking ni resultados viejos.
+ */
+async function textoCompactado(almacen, cid, pid, RC, borr, msgActual) {
+    const partes = [await textoInicial(almacen, cid, pid)];
+    partes.push("[Conversación compactada para ahorrar: ya existe un borrador. Los adjuntos completos están guardados; abajo va su resumen. Si necesitás mirar uno de nuevo, usá ver_adjunto.]");
+    const adj = (await almacen.leer(`${RAIZ(cid, pid)}/adjuntos`)) || {};
+    const ids = Object.keys(adj).sort();
+    if (ids.length) {
+        partes.push("Adjuntos:\n" + ids.map((id, i) => {
+            const a = adj[id];
+            let t = `- Adjunto ${i + 1} · ${claseAdjunto(a)} · ${a.nombre || ""} (id ${id})`;
+            if (a.tipo === "3d") t += `: medido por la app (${a.resumen || ""})${a.escala ? `, escala ${a.escala.texto || a.escala.factor}` : ""}; medidas con medicion_3d.`;
+            if (a.resumen_lectura) t += `\n  ${String(a.resumen_lectura).replace(/\n/g, "\n  ")}`;
+            else if (a.tipo !== "3d") t += ": sin resumen de lectura (si hace falta, ver_adjunto).";
+            if (a.anotaciones) t += `\n  Anotaciones del dueño (origen dueño:${id}): ${JSON.stringify(a.anotaciones).slice(0, 1500)}`;
+            return t;
+        }).join("\n"));
+    }
+    partes.push("Borrador actual (lo calculó la herramienta):\n" + JSON.stringify(B.resumen(B.normalizar(borr))));
+    const msgs = (await almacen.leer(`${RAIZ(cid, pid)}${RC.slice(RAIZ(cid, pid).length)}/conversacion/mensajes`)) || {};
+    const ult = Object.keys(msgs).sort().filter((k) => k !== msgActual).slice(-8).map((k) => msgs[k]).filter((m) => m && m.texto);
+    if (ult.length) partes.push("Últimos mensajes:\n" + ult.map((m) => `- ${m.rol === "dueno" ? "Dueño" : m.rol === "agente" ? "Vos" : "Aviso"}: ${String(m.texto).slice(0, 600)}`).join("\n"));
+    const rond = await almacen.leer(`${RC}/rondas_preguntas`);
+    if (rond) partes.push("Ya hiciste la ronda de preguntas de esta cotización.");
+    return partes.join("\n\n");
 }
 
 async function textoInicial(almacen, cid, pid) {
@@ -279,4 +325,4 @@ async function atender(almacen, cuerpo, uid) {
     }
 }
 
-module.exports = { nuevaConversacion, resumenPresupuesto, NORMAS_INICIALES, sembrarNormas, atender, adjuntar, enviar, reintentar, tomarTurno, ErrorPedido, N };
+module.exports = { textoCompactado, nuevaConversacion, resumenPresupuesto, NORMAS_INICIALES, sembrarNormas, atender, adjuntar, enviar, reintentar, tomarTurno, ErrorPedido, N };

@@ -607,7 +607,48 @@
         return { data: salida, agregados: agregados, actualizados: actualizados };
     }
 
-    var api = { textoCaracteristicas: textoCaracteristicas, fijarCaracteristicas: fijarCaracteristicas, itemSospechoso: itemSospechoso, AVISO_COMPONENTE: AVISO_COMPONENTE, normalizar: normalizar, confirmarSupuestos: confirmarSupuestos, confirmarItem: confirmarItem, supuestosPendientes: supuestosPendientes, cantidadGeometria: cantidadGeometria, aplicarAlPresupuesto: aplicarAlPresupuesto, vacio: vacio, validarOrigen: validarOrigen, armarFila: armarFila, aplicarOperaciones: aplicarOperaciones,
+    /**
+     * Edición A MANO del dueño en el borrador (sin IA, costo 0): nombre, cantidad, características o borrar una fila.
+     * El origen de lo editado es el mensaje "editado por el dueño" que registra el chat (msgId).
+     * Devuelve { borrador, texto } (texto = resumen para el chat y para el próximo turno del agente) o { error }.
+     */
+    function editarManual(borrador, cambio, msgId) {
+        var b = normalizar(borrador), o = 'dueño:' + msgId, partes = [];
+        var en = buscarItem(b, cambio.item);
+        if (!en) return { error: 'no existe el ítem' };
+        var it = en.item, antes = it.desc;
+        if (cambio.desc != null) {
+            var d = txt(cambio.desc, 200);
+            if (!d) return { error: 'el nombre no puede quedar vacío' };
+            if (d.length > 80) return { error: 'el nombre es largo: el detalle va en las características' };
+            if (d !== it.desc) { partes.push('nombre "' + it.desc + '" → "' + d + '"'); it.desc = d; }
+        }
+        if (cambio.cant != null) {
+            var c = num(cambio.cant);
+            if (!(c > 0)) return { error: 'cantidad inválida' };
+            if (c !== it.cant) { partes.push('cantidad ' + it.cant + ' → ' + c); it.cant = c; if (c !== 1) it.cant_origen = o; else delete it.cant_origen; delete it.cant_confirmada; }
+        }
+        if (cambio.caracteristicas != null) {
+            var lineas = (Array.isArray(cambio.caracteristicas) ? cambio.caracteristicas : String(cambio.caracteristicas).split('\n'))
+                .map(function (t) { return txt(t, 200).replace(/^[•\-*]\s*/, ''); }).filter(Boolean);
+            var e = fijarCaracteristicas(it, lineas.map(function (t) { return { texto: t, origen: /\d/.test(t) ? o : undefined }; }), { mensajesDueno: (function () { var m = {}; m[msgId] = true; return m; })() });
+            if (e) return { error: e };
+            partes.push('características: ' + lineas.join(' / '));
+        }
+        if (cambio.quitar) {
+            var fs = it.apu[cambio.quitar.tipo], k = parseInt(cambio.quitar.n, 10);
+            if (!fs || !(k >= 1 && k <= fs.length)) return { error: 'no existe esa fila' };
+            partes.push('borró la fila "' + fs[k - 1].d + '" (' + TIT_FILA[cambio.quitar.tipo] + ')');
+            fs.splice(k - 1, 1);
+        }
+        if (!partes.length) return { error: 'no hay cambios' };
+        b.version = (b.version || 0) + 1;
+        calcularTotales(b, null);
+        return { borrador: b, texto: '«' + antes + '»: ' + partes.join('; ') };
+    }
+    var TIT_FILA = { mat: 'materiales', mo: 'mano de obra', eq: 'equipo', sub: 'subcontratos' };
+
+    var api = { editarManual: editarManual, textoCaracteristicas: textoCaracteristicas, fijarCaracteristicas: fijarCaracteristicas, itemSospechoso: itemSospechoso, AVISO_COMPONENTE: AVISO_COMPONENTE, normalizar: normalizar, confirmarSupuestos: confirmarSupuestos, confirmarItem: confirmarItem, supuestosPendientes: supuestosPendientes, cantidadGeometria: cantidadGeometria, aplicarAlPresupuesto: aplicarAlPresupuesto, vacio: vacio, validarOrigen: validarOrigen, armarFila: armarFila, aplicarOperaciones: aplicarOperaciones,
         calcularTotales: calcularTotales, resumen: resumen, aItemsPresupuesto: aItemsPresupuesto, MEDIDAS: MEDIDAS, TIPOS_FILA: TIPOS_FILA };
     if (typeof module !== 'undefined' && module.exports) module.exports = api;
     else global.AgenteBorrador = api;

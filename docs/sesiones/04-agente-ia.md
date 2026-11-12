@@ -251,9 +251,39 @@ Para cotizar **otro ítem en el mismo proyecto** sin arrastrar el contexto (ni s
 - **Costos:** arriba, "Conv." (la abierta) y "Proy." (todas las conversaciones), además del mes; el detalle muestra los dos.
   Si el agente trabaja en otra conversación del proyecto, el chat lo avisa con "Ver".
 
+## Correcciones a centavos (una corrección de 3 líneas costaba ~US$ 0,57)
+
+**Diagnóstico con los logs de `agenteTurno` (12 nov):** 16:03 → 0,55 · 16:11 → 0,61 · **16:16 → 0,18** · 16:23 → 0,54 · 16:35 → 0,57.
+El único barato fue el que llegó a menos de 5 min del anterior: la **caché de 5 min vencía** entre turno y turno (el dueño tarda
+más en responder) y cada corrección reescribía toda la conversación con el PDF y las fotos (~100.000 tokens). Además, entre 16:23
+y 16:35 hubo dos deploys que cambiaron el prompt y las herramientas, lo que invalida la caché una vez. El effort por mensaje no era la
+causa (ya no se toca el effort del pedido).
+
+**Cambios:**
+- **Caché de 1 h** en el sistema y en la conversación (`ttl: "1h"`, `/config/agente/cache_ttl`). La escritura cuesta 2× la entrada,
+  pero se lee durante una hora.
+- **Compactación después del primer borrador:** el agente guarda con **`resumen_de_lectura`** lo relevante de cada adjunto (renglones,
+  cotas con página, materiales, citas). En el primer mensaje del dueño con borrador hecho, el historial se reemplaza por: contexto
+  del proyecto + resumen de cada adjunto + borrador actual + últimos mensajes (el historial completo queda en
+  `conversacion/api_antes_de_compactar`; los adjuntos, en Storage). No quedan thinking ni resultados viejos, así que no hay problema
+  con el historial editado.
+- **`ver_adjunto(id)`:** vuelve a mostrar un adjunto completo dentro del resultado, solo hasta la próxima compactación.
+- **Modelo en las correcciones** en ⚙ (por defecto, el mismo principal), con el costo estimado de una corrección con cada uno
+  (`costoCorreccionEstimado`: ≈ US$ 0,08 Opus 5.5 · 0,04 Sonnet 5.5 · 0,004 Haiku 5.5, 2 llamadas con contexto compactado).
+- **Edición a mano sin IA (costo 0):** ✎ en cada ítem (nombre, cantidad, características) y 🗑 en cada fila. Se guarda sin llamar al
+  agente, queda en el chat como "✎ Editado a mano" (origen `dueño:` de ese mensaje) y el agente lo recibe en su próximo turno como
+  "Cambios que hizo el dueño a mano".
+- **Detalle de costos:** entrada nueva, caché leída, caché escrita y salida (con pensamiento) por llamada. La Function también deja
+  en el log los tokens de cada llamada (sin datos del cliente), para diagnosticar.
+
+**Estimado (prueba con `usage` simulado del tamaño real del pedido):** la misma corrección pasa de **~US$ 0,56** (≈ 105.000 tokens
+reescritos) a **~US$ 0,07** la primera vez (la que compacta) y **~US$ 0,03** las siguientes con Opus 5.5 (≈ 5.000 tokens leídos de
+la caché + salida); con Sonnet 5.5, ~US$ 0,02. El piso son el prompt y las herramientas (~5.000 tokens, leídos de la caché).
+
 ### Pruebas (sin gastar plata)
 
-- `cd tools/agente && npm test` — 57 pruebas (conversaciones: nueva de cero con el resumen del presupuesto, borrador y costos por
+- `cd tools/agente && npm test` — 61 pruebas (costo de una corrección antes y después, ver_adjunto, modelo de correcciones,
+  edición a mano). 57 pruebas (conversaciones: nueva de cero con el resumen del presupuesto, borrador y costos por
   conversación, título automático, un turno a la vez por proyecto, aplicar sin pisar la otra). 56 pruebas (características: origen en números, sin datos internos, desc larga rechazada, supuesto
   que no sale hasta confirmar, feat al aplicar y al reaplicar). 55 pruebas (costo: segunda ronda rechazada sin motivo, effort medium por mensaje sin tocar el del
   pedido, prefijo idéntico entre llamadas, % de caché, resultados compactos). 51 pruebas (estructura: avisos de ítems-componente, trofeo de 3 piezas = 1 ítem, norma inicial
