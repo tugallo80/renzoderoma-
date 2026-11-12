@@ -378,6 +378,7 @@
         el.innerHTML = pendientes.length ? '<div style="padding:6px 0 2px;">' + pendientes.map(function (p) {
             var ico = p.estado === 'procesando' ? '<span class="ag-spin" style="width:11px;height:11px;"></span>' : p.estado === 'error' ? '⚠' : (p.miniatura ? '<img src="' + p.miniatura + '" alt="">' : iconoTipo(p.tipo));
             return '<span class="ag-chip' + (p.estado === 'error' ? ' error' : '') + '" title="' + esc(p.error || p.nombre) + '">' + ico + ' ' + esc(p.estado === 'error' ? p.nombre + ': ' + p.error : (p.nota || p.nombre)) +
+                (p.anotable && p.estado === 'listo' && window.AgenteAnotador ? '<button onclick="_agAnotar(\'' + p.clave + '\')" aria-label="Anotar la foto" title="Dibujar cotas, marcas y notas">✏️</button>' : '') +
                 (p.estado !== 'procesando' ? '<button onclick="_agQuitar(\'' + p.clave + '\')" aria-label="Quitar">×</button>' : '') + '</span>';
         }).join('') + '</div>' : '';
         pintarEstado();
@@ -425,19 +426,25 @@
         var p = agregarPendiente(f.name, 'imagen');
         try {
             var red = await reducirImagen(f);
-            marcar(p, { miniatura: red.canvas.toDataURL('image/jpeg', 0.5) });
-            // Editor de anotaciones (entrega 3): si está cargado, deja dibujar cotas, marcas y notas antes de mandar.
-            var anot = window.AgenteAnotador ? await window.AgenteAnotador.editar(red, f.name) : null;
-            if (anot && anot.cancelado) { window._agQuitar(p.clave); return; }
-            var cuerpo = { accion: 'adjuntar', tipo: 'imagen', nombre: f.name, datos: await aBase64(red.blob), ancho: red.ancho, alto: red.alto };
-            if (anot && anot.anotaciones && anot.anotaciones.length) {
-                cuerpo.anotaciones = anot.anotaciones; cuerpo.anotada = await aBase64(anot.blob);
-                marcar(p, { miniatura: anot.miniatura || p.miniatura, nota: f.name + ' · ' + anot.anotaciones.length + ' anotaciones' });
-            }
-            var r = await llamar(cuerpo);
-            marcar(p, { estado: 'listo', id: r.id });
+            marcar(p, { miniatura: red.canvas.toDataURL('image/jpeg', 0.5), red: red });
+            var r = await llamar({ accion: 'adjuntar', tipo: 'imagen', nombre: f.name, datos: await aBase64(red.blob), ancho: red.ancho, alto: red.alto });
+            marcar(p, { estado: 'listo', id: r.id, anotable: true });
         } catch (e) { marcar(p, { estado: 'error', error: e.message }); }
     }
+
+    /** ✏️ en el chip de una foto: editor de anotaciones; se sube de nuevo con la anotada y el JSON (reemplaza a la anterior). */
+    window._agAnotar = async function (clave) {
+        var p = pendientes.find(function (x) { return x.clave === clave; });
+        if (!p || !p.red || !window.AgenteAnotador) return;
+        var r = await window.AgenteAnotador.editar(p.red, p.nombre, p.anotacionesEditor);
+        if (!r || r.cancelado || !r.anotaciones || !r.anotaciones.length) return;
+        marcar(p, { estado: 'procesando', nota: 'Subiendo la foto anotada…' });
+        try {
+            var res = await llamar({ accion: 'adjuntar', tipo: 'imagen', nombre: p.nombre, datos: await aBase64(p.red.blob), ancho: p.red.ancho, alto: p.red.alto,
+                anotada: await aBase64(r.blob), anotaciones: r.anotaciones });
+            marcar(p, { estado: 'listo', id: res.id, miniatura: r.miniatura, anotacionesEditor: r.editor, nota: p.nombre + ' · ' + r.anotaciones.length + ' anotación' + (r.anotaciones.length > 1 ? 'es' : '') });
+        } catch (e) { marcar(p, { estado: 'error', error: e.message }); }
+    };
 
     window._agArchivos = async function (lista) {
         var originales = Array.from(lista || []);

@@ -588,6 +588,26 @@ prueba('escala_3d: con una cota del plano escala todas las piezas; con un supues
     assert.equal(med.piezas[0].largo_mm, 3600); assert.equal(med.piezas[0].area_cara_m2, 4.32);
 });
 
+prueba('foto anotada: al agente le llegan la original, la anotada y el JSON de las anotaciones', async () => {
+    const alm = nuevoAlmacen();
+    const anotaciones = [{ tipo: 'cota', n: 1, valor: '2,40 m', de: [840, 250], a: [840, 1400], extremos: 'flechas', nota: 'alto total' }, { tipo: 'nota', n: 2, texto: 'restaurar', en: [300, 880] }];
+    const r = await api.atender(alm, { accion: 'adjuntar', cid: CID, pid: PID, tipo: 'imagen', nombre: 'totem.jpg', datos: JPG.toString('base64'), anotada: JPG.toString('base64'), anotaciones, ancho: 1200, alto: 1600 }, 'renzo');
+    assert.equal(r.status, 200);
+    assert.match(r.cuerpo.meta.anotada_ruta, /anotada\.jpg$/);
+    const pedido = await turnoListo(alm, 'Mirá la foto', [r.cuerpo.id]);
+    const cliente = clienteFalso([texto('Veo la cota de 2,40 m.')]);
+    await ejecutarTurno({ almacen: alm, cliente }, pedido);
+    const c = cliente.pedidos[0].messages[0].content;
+    assert.equal(c.filter((b) => b.type === 'image').length, 2, 'original + anotada');
+    const j = c.find((b) => b.type === 'text' && /Anotaciones del dueño/.test(b.text));
+    assert.ok(j); assert.match(j.text, /"valor":"2,40 m"/); assert.match(j.text, new RegExp('dueño:' + r.cuerpo.id));
+    // la cota dibujada por el dueño vale como origen dueño:<adjunto>
+    const v = await H.contexto({ almacen: alm, cid: CID, pid: PID });
+    assert.equal(B.validarOrigen('dueño:' + r.cuerpo.id, v).ok, true);
+    const muchas = await api.atender(alm, { accion: 'adjuntar', cid: CID, pid: PID, tipo: 'imagen', nombre: 'x.jpg', datos: JPG.toString('base64'), anotaciones: Array.from({ length: 300 }, () => ({ tipo: 'nota', texto: 'x'.repeat(700) })) }, 'renzo');
+    assert.equal(muchas.status, 400);
+});
+
 prueba('herramientas: orden fijo para la caché', () => {
     assert.deepEqual(H.definiciones().map((d) => d.name), ['medicion_3d', 'buscar_base', 'armar_borrador', 'escala_3d', 'guardar_en_base', 'preguntar_al_dueno']);
 });
