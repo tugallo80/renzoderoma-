@@ -14,6 +14,7 @@ corregí y reintentá; si falta un dato, preguntalo.
   (n o id), el APU con el origen de cada fila y las características.
 
 ## Cotizar
+<<<<<<< HEAD
 - **`listar_cotizaciones`** `{cid, pid}` → las conversaciones del Agente IA del proyecto (de la app y de Claude): título, fecha,
   costo de la API, versión y total del borrador, si se aplicó, de qué versión salió (`basada_en`) y los ítems del presupuesto que
   aplicó cada una. `principal` es la primera del chat de la app (ahí están las cotizaciones viejas).
@@ -21,6 +22,10 @@ corregí y reintentá; si falta un dato, preguntalo.
   del proyecto. Con `{conv}` (también `"principal"`) o con `{item}` (n o id de un ítem del presupuesto que aplicó el agente)
   retoma la conversación que lo creó: borrador, últimos mensajes, `item_en_foco` e ítems que ya están en el presupuesto.
   **Una por chat.** Si el Agente IA de la app está trabajando en esa conversación, las herramientas que escriben esperan.
+=======
+- **`abrir_cotizacion`** `{cid, pid, titulo?}` → `conv` nueva + contexto (normas, memoria, presupuesto actual) + adjuntos
+  del proyecto. Con `{conv}` retoma: borrador y últimos mensajes. **Una por chat.**
+>>>>>>> origin/claude/rubik-conector-mcp
 - **`registrar_mensaje_del_dueno`** `{cid, pid, conv, texto}` → `dueño:<id>`. Lo que dijo el dueño, textual. Queda en la
   conversación de la app.
 - **`registrar_lectura_de_archivo`** `{cid, pid, conv, nombre, tipo: pdf|imagen, resumen}` → id del adjunto para
@@ -43,6 +48,7 @@ corregí y reintentá; si falta un dato, preguntalo.
   - `quitar {item} | {item, tipo, fila} | {capitulo}`
   - `recargos {cs, ind, util, origen}` — **solo si el dueño da los porcentajes**.
 - **`ver_borrador`** `{cid, pid, conv, items?}` → totales, avisos; con `items` (ids), sus filas y características.
+<<<<<<< HEAD
 - **`nueva_version`** `{cid, pid, conv, titulo, renombrar_capitulos?}` → copia el borrador de `conv` a una conversación nueva
   (ej. "Versión 2 – económica") con ids nuevos: al aplicarla, sus ítems entran **aparte** y la versión anterior queda intacta.
   Los capítulos se renombran con el título. Devuelve la `conv` nueva: usala en el resto del chat.
@@ -53,6 +59,11 @@ corregí y reintentá; si falta un dato, preguntalo.
   **propuesta** con la lista exacta y devuelve su id. Apagar = el ojo del presupuesto: no suma ni sale en el PDF, **no se borra**.
 - **`confirmar_propuesta`** `{cid, pid, conv, propuesta, confirmacion: "dueño:<id>"}` → paso 2: solo con la respuesta del dueño
   registrada **después** de la propuesta. Verifica que el presupuesto no haya cambiado, guarda respaldo y avisa en la app.
+=======
+- **`aplicar_al_presupuesto`** `{cid, pid, conv, confirmacion: "dueño:<id>", con_capitulos?}` → misma lógica del botón de la
+  app: lo nuevo al final, lo ya aplicado se actualiza en su lugar sin reordenar (las licitaciones apuntan por posición),
+  alternativas y "por confirmar" apagadas, supuestos sin confirmar no pasan. Deja una copia en `/respaldos_agente`.
+>>>>>>> origin/claude/rubik-conector-mcp
 - **`guardar_en_base`** `{cid, pid, conv, nodo, clave, datos, confirmacion}` → material, mano de obra, oficio, rendimiento o
   receta nuevos o corregidos, con historial. Solo con la confirmación del dueño.
 - **`memoria`** `{accion: anotar|leer, tipo: nota|norma, texto?}` → notas del dueño y normas del taller, compartidas entre
