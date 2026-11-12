@@ -26,6 +26,7 @@
     var CONFIG_DEFECTO = {
         modelo: 'claude-opus-5-5',
         effort: 'high',
+        effort_correcciones: 'medium',   // turnos después del primer borrador (effort por mensaje: no rompe la caché)
         max_tokens: 32000,
         tope_mensual_usd: 30,     // frena al pasarlo (con opción de seguir)
         aviso_pct: 80,            // avisa al llegar a este % del tope
@@ -34,6 +35,8 @@
     };
 
     var EFFORTS = ['low', 'medium', 'high', 'xhigh', 'max'];
+    // Effort por mensaje (beta mid-conversation-output-config-2026-07-01), con thinking adaptativo
+    var MODELOS_EFFORT_POR_MENSAJE = ['claude-opus-5-5', 'claude-sonnet-5-5', 'claude-haiku-5-5', 'claude-opus-5', 'claude-fable-5-2', 'claude-fable-5-1'];
     var MODELOS_CON_FALLBACK = ['claude-opus-5-5', 'claude-sonnet-5-5', 'claude-fable-5-2', 'claude-fable-5-1', 'claude-opus-5'];
 
     function num(x) { var n = parseFloat(x); return isFinite(n) ? n : 0; }
@@ -44,6 +47,7 @@
         var g = guardada || {}, c = Object.assign({}, CONFIG_DEFECTO);
         if (typeof g.modelo === 'string' && /^claude-[a-z0-9-]+$/.test(g.modelo)) c.modelo = g.modelo;
         if (EFFORTS.indexOf(g.effort) >= 0) c.effort = g.effort;
+        if (EFFORTS.indexOf(g.effort_correcciones) >= 0 || g.effort_correcciones === 'igual') c.effort_correcciones = g.effort_correcciones;
         ['max_tokens', 'tope_mensual_usd', 'aviso_pct', 'max_llamadas_turno'].forEach(function (k) {
             if (g[k] != null && num(g[k]) > 0) c[k] = num(g[k]);
         });
@@ -83,6 +87,12 @@
         });
         tot.usd = redondear(tot.usd, 6);
         return tot;
+    }
+
+    /** % de la entrada que vino de la caché (leída) en una llamada: para ver si la caché funciona. */
+    function pctCache(c) {
+        var tot = num(c.entrada) + num(c.cache_escrita) + num(c.cache_leida);
+        return tot > 0 ? Math.round(num(c.cache_leida) / tot * 100) : 0;
     }
 
     /** Suma un costo a un acumulado (para las transacciones de RTDB). */
@@ -224,7 +234,7 @@
     }
 
     var api = {
-        PRECIOS_DEFECTO: PRECIOS_DEFECTO, CONFIG_DEFECTO: CONFIG_DEFECTO, EFFORTS: EFFORTS, MODELOS_CON_FALLBACK: MODELOS_CON_FALLBACK,
+        PRECIOS_DEFECTO: PRECIOS_DEFECTO, CONFIG_DEFECTO: CONFIG_DEFECTO, EFFORTS: EFFORTS, MODELOS_CON_FALLBACK: MODELOS_CON_FALLBACK, MODELOS_EFFORT_POR_MENSAJE: MODELOS_EFFORT_POR_MENSAJE, pctCache: pctCache,
         configEfectiva: configEfectiva, costoDeUso: costoDeUso, sumarCosto: sumarCosto, mesClave: mesClave, estadoTope: estadoTope, usd: usd,
         TIPOS_ORIGEN: TIPOS_ORIGEN, parsearOrigen: parsearOrigen,
         escalarMedicion: escalarMedicion, resumenMedicion: resumenMedicion, idPieza: idPieza,

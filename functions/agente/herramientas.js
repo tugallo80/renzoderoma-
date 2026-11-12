@@ -92,32 +92,60 @@ function espesorDe(m, clave) {
 function precioDe(m) { const p = parseFloat(m && (m.p != null ? m.p : m.pu)); return p > 0 ? Math.round(p * 100) / 100 : null; }
 
 function entrada(nodo, clave, m) {
-    const o = { origen: `base:${nodo}/${clave}`, clave };
-    if (nodo === "materiales") {
-        Object.assign(o, { nombre: m.n || m.desc || clave, unidad: m.u || m.und || null, precio: precioDe(m) });
-        const e = espesorDe(m, clave); if (e) o.espesor_mm = e;
-        if (m.plancha_largo || m.largo) o.plancha = [m.plancha_largo || m.largo, m.plancha_ancho || m.ancho];
-        if (m.barra_largo) o.barra_largo = m.barra_largo;
-        if (m.mo_receta) o.receta_mo = m.mo_receta; else if (m.mo_receta_ninguna) o.receta_mo = "no lleva";
-        if (o.precio == null) o.aviso = "sin precio en la base";
-    } else if (nodo === "mano_obra") {
-        Object.assign(o, { nombre: m.n || m.desc || clave, unidad: m.u || m.und || null, precio: precioDe(m) });
-        if (o.precio == null) o.aviso = "sin precio en la base";
+    // Compacto: solo lo que sirve para el borrador (sin campos vacíos)
+    const o = { origen: `base:${nodo}/${clave}` };
+    const pon = (k, v) => { if (v !== null && v !== undefined && v !== "") o[k] = v; };
+    if (nodo === "materiales" || nodo === "mano_obra") {
+        pon("n", m.n || m.desc || clave); pon("u", m.u || m.und || null);
+        const p = precioDe(m); o.p = p == null ? "sin precio" : p;
+        if (nodo === "materiales") {
+            pon("esp_mm", espesorDe(m, clave));
+            if (m.plancha_largo || m.largo) o.plancha = [m.plancha_largo || m.largo, m.plancha_ancho || m.ancho];
+            pon("barra", m.barra_largo || null);
+            if (m.mo_receta) o.receta = (Array.isArray(m.mo_receta) ? m.mo_receta : Object.values(m.mo_receta)).map((x) => `${x.mo}:${x.medida}${x.factor && x.factor !== 1 ? "×" + x.factor : ""}`).join(", ");
+            else if (m.mo_receta_ninguna) o.receta = "no lleva";
+        }
     } else if (nodo === "oficios") {
-        Object.assign(o, { nombre: m.nombre || clave, costo_jornal: parseFloat(m.costo_jornal) > 0 ? parseFloat(m.costo_jornal) : null });
+        pon("n", m.nombre || clave); pon("jornal", parseFloat(m.costo_jornal) > 0 ? parseFloat(m.costo_jornal) : "sin costo");
     } else if (nodo === "rendimientos") {
-        Object.assign(o, { oficio: m.oficio, indicador: m.indicador, por_jornal: m.por_jornal != null ? m.por_jornal : null, trabajo: m.trabajo || "", tramos: m.tramos || null });
+        pon("oficio", m.oficio); pon("indicador", m.indicador); pon("por_jornal", m.por_jornal != null ? m.por_jornal : "falta"); pon("trabajo", m.trabajo || null);
+        if (m.tramos) o.tramos = m.tramos;
     } else if (nodo === "equivalencias_vw") {
-        Object.assign(o, { texto: m.vw, material: m.material, tipo: m.tipo || null });
+        pon("texto", m.vw); pon("material", m.material);
     }
     return o;
+}
+
+/**
+ * Resultado compacto de medicion_3d: una fila por pieza (columnas fijas) en vez de objetos con nombres de campo repetidos.
+ * Menos tokens en cada vuelta del loop (el resultado queda en el historial).
+ */
+const COLUMNAS_3D = ["id", "item", "pieza", "cant", "largo_mm", "ancho_mm", "espesor_mm", "tipo", "m2_cara", "m2_total", "ml_perimetro", "m3", "material_base", "material_archivo"];
+function compactarMedicion(r) {
+    const avisos = {};
+    const filas = r.piezas.map((p) => {
+        const av = [].concat(p.avisos || [], p.partes_sueltas ? [`${p.partes_sueltas} partes sueltas`] : [], (p.acabados || []).map((a) => `acabado ${a.material_base || a.en_archivo || "?"} ${a.area_m2} m²`));
+        if (av.length) avisos[p.id] = av;
+        return [p.id, p.item, p.pieza, p.cant, p.largo_mm, p.ancho_mm, p.espesor_mm, p.tipo === "plancha" ? "pl" : "vol",
+            p.area_cara_m2 != null ? p.area_cara_m2 : null, p.area_m2, p.perimetro_ml != null ? p.perimetro_ml : null,
+            p.tipo === "plancha" ? null : (p.volumen_m3 != null ? p.volumen_m3 : null), p.material_base || null, p.material_en_archivo || null];
+    });
+    const out = { adjunto: r.adjunto, columnas: COLUMNAS_3D, piezas: filas,
+        items: r.items.map((x) => Object.assign({ item: x.item }, x.indicadores_ruta_b)) };
+    if (Object.keys(avisos).length) out.avisos = avisos;
+    if (r.tamano_total_mm) out.tamano_total_mm = r.tamano_total_mm;
+    if (r.escala) out.escala = r.escala.texto || r.escala.factor;
+    if (r.sin_equivalencia && r.sin_equivalencia.length) out.sin_equivalencia = r.sin_equivalencia;
+    if (r.aviso) out.aviso = r.aviso;
+    if (r.aviso_escala) out.aviso_escala = r.aviso_escala;
+    return out;
 }
 
 const HERRAMIENTAS = [
     {
         def: {
             name: "medicion_3d",
-            description: "Consulta lo que la app midió de un modelo 3D adjunto (formato rubik/1): piezas con largo, ancho y espesor en mm, cantidad, tipo (plancha o volumen), área total y de una cara en m², perímetro en ml, volumen en m³, material del archivo o de la base, acabados, avisos, y por ítem los indicadores de la ruta B (m² de tablero, ml de canto, m² de superficie, piezas, m³). Es la ÚNICA fuente de medidas y cantidades del 3D. Usá el id de pieza (p1, p2…) como origen: pieza3d:<adjunto>/<id>. Podés filtrar por ítem o por ids de pieza.",
+            description: "Consulta lo que la app midió de un modelo 3D adjunto (formato rubik/1): piezas con largo, ancho y espesor en mm, cantidad, tipo (plancha o volumen), área total y de una cara en m², perímetro en ml, volumen en m³, material del archivo o de la base, acabados, avisos, y por ítem los indicadores de la ruta B (m² de tablero, ml de canto, m² de superficie, piezas, m³). Es la ÚNICA fuente de medidas y cantidades del 3D. Devuelve una tabla compacta (columnas + una fila por pieza; pl = plancha, vol = volumen). Usá el id de pieza (p1, p2…) como origen: pieza3d:<adjunto>/<id>. Podés filtrar por ítem o por ids de pieza. Consultalo una vez y reusá lo que ya leíste.",
             input_schema: {
                 type: "object",
                 properties: {
@@ -137,7 +165,7 @@ const HERRAMIENTAS = [
             if (e.piezas && e.piezas.length) r.piezas = r.piezas.filter((p) => e.piezas.includes(p.id));
             if (!r.piezas.length) r.aviso = "Ninguna pieza coincide con el filtro. Ítems del 3D: " + N.resumenMedicion(med).items.map((x) => x.item).join(", ");
             if (!meta.escala) r.aviso_escala = "Escala tal como vino en el archivo (" + (meta.unidad || "?") + "). Si el plano da una medida total distinta, puede no estar a escala: preguntalo o usá la cota del plano.";
-            return r;
+            return compactarMedicion(r);
         },
     },
     {
@@ -151,7 +179,7 @@ const HERRAMIENTAS = [
                     nodo: { type: "string", enum: ["materiales", "mano_obra", "oficios", "rendimientos", "equivalencias_vw", "todos"], description: "Dónde buscar (por defecto: todos)." },
                     espesor_mm: { type: "number", description: "Opcional: solo materiales de este espesor (±0,5 mm)." },
                     claves: { type: "array", items: { type: "string" }, description: "Opcional: traer estas claves exactas." },
-                    limite: { type: "integer", description: "Máximo de resultados (por defecto 25, máximo 80)." },
+                    limite: { type: "integer", description: "Máximo de resultados (por defecto 12, máximo 60). Buscá varias cosas en una sola llamada si podés (texto con varias palabras clave no sirve: hacé llamadas en paralelo)." },
                 },
             },
         },
@@ -160,7 +188,7 @@ const HERRAMIENTAS = [
             const bd = await base(ctx);
             const nodos = !e.nodo || e.nodo === "todos" ? NODOS : [e.nodo];
             const palabras = normalizar(e.texto).split(" ").filter((w) => w.length > 1);
-            const limite = Math.min(Math.max(parseInt(e.limite || 25, 10) || 25, 1), 80);
+            const limite = Math.min(Math.max(parseInt(e.limite || 12, 10) || 12, 1), 60);
             const res = [];
             for (const n of nodos) {
                 for (const k of Object.keys(bd[n] || {})) {
@@ -176,7 +204,7 @@ const HERRAMIENTAS = [
             }
             res.sort((a, b) => b.p - a.p);
             const salida = res.slice(0, limite).map((r) => r.x);
-            return { encontrados: res.length, mostrados: salida.length, resultados: salida,
+            return { encontrados: res.length, resultados: salida,
                 ...(salida.length ? {} : { aviso: "No hay nada parecido en la base. No lo inventes: dejalo marcado sin precio o preguntá; si el dueño lo confirma, guardalo con guardar_en_base." }) };
         },
     },
@@ -219,7 +247,7 @@ Operaciones (campo "op"):
             }
             return {
                 aplicadas, rechazadas: r.resultados.filter((x) => !x.ok).map((x) => ({ n: x.n, op: x.op, motivo: x.error })),
-                borrador: B.resumen(r.borrador),
+                borrador: B.resumen(r.borrador, r.resultados.filter((x) => x.ok).map((x) => x.item || x.id).filter(Boolean)),
             };
         },
     },
@@ -366,7 +394,7 @@ Operaciones (campo "op"):
     {
         def: {
             name: "preguntar_al_dueno",
-            description: "Le hace al dueño preguntas concretas de ESTE proyecto que no se pueden sacar del 3D, de los documentos, de la base ni de la memoria, y TERMINA el turno hasta que responda. Juntá todas las preguntas en una sola llamada. Nada de opciones múltiples genéricas.",
+            description: "UNA SOLA RONDA de preguntas por cotización: después de leer todo, medir y buscar en la base, mandá juntas (numeradas, hasta 10) TODAS las preguntas que cambian el costo; lo obvio va como supuesto declarado, no como pregunta. TERMINA el turno hasta que el dueño responda. Una segunda ronda solo si el dueño cambió algo (con \"motivo\"). Nada de opciones múltiples genéricas.",
             input_schema: {
                 type: "object",
                 properties: {
@@ -382,17 +410,23 @@ Operaciones (campo "op"):
                         },
                     },
                     avance: { type: "string", description: "Una o dos líneas de lo que ya quedó hecho (opcional)." },
+                    motivo: { type: "string", description: "Solo para una ronda más después de la primera: qué cambió el dueño que obliga a preguntar de nuevo." },
                 },
                 required: ["preguntas"],
             },
         },
         progreso: "Preparando preguntas…",
         async correr(ctx, e) {
-            const preguntas = e.preguntas.filter((p) => p && String(p.pregunta || "").trim()).slice(0, 8)
+            const rondas = Number(await ctx.almacen.leer(`${RAIZ(ctx)}/rondas_preguntas`)) || 0;
+            if (rondas >= 1 && !String(e.motivo || "").trim()) {
+                throw new Error("Ya hiciste la ronda de preguntas de esta cotización. Avanzá con supuestos declarados; preguntá de nuevo solo si el dueño cambió algo, explicándolo en \"motivo\".");
+            }
+            const preguntas = e.preguntas.filter((p) => p && String(p.pregunta || "").trim()).slice(0, 10)
                 .map((p) => ({ pregunta: String(p.pregunta).trim().slice(0, 500), para_que: p.para_que ? String(p.para_que).slice(0, 200) : null }));
             if (!preguntas.length) throw new Error("No llegó ninguna pregunta.");
             ctx.cortarTurno = true;
-            ctx.mensajesAgente.push({ rol: "agente", texto: (e.avance ? String(e.avance).trim() + "\n\n" : "") + "Necesito que me confirmes:", preguntas });
+            await ctx.almacen.escribir(`${RAIZ(ctx)}/rondas_preguntas`, rondas + 1);
+            ctx.mensajesAgente.push({ rol: "agente", texto: (e.avance ? String(e.avance).trim() + "\n\n" : "") + (rondas ? "Por el cambio, necesito que me confirmes:" : "Antes de armar el borrador, respondeme todo junto (podés contestar por número):"), preguntas });
             return { ok: true, nota: "Preguntas enviadas al dueño. El turno termina acá: no sigas hasta su respuesta." };
         },
     },

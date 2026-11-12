@@ -375,7 +375,7 @@
                     if (!(k >= 1 && k <= filas.length)) throw new Error('no existe la fila ' + op.reemplaza + ' en ' + t);
                     filas[k - 1] = res.fila;
                 } else filas.push(res.fila);
-                r.ok = true; r.fila = res.fila; return;
+                r.ok = true; r.item = en.item.id; return;
             }
             case 'quitar': {
                 if (op.fila != null) {
@@ -481,24 +481,30 @@
     }
 
     /** Resumen compacto para devolverle al modelo después de cada operación. */
-    function resumen(b) {
+    /**
+     * Resumen compacto para devolverle al modelo después de cada operación: totales de todo y filas solo de los ítems tocados
+     * (los demás ya los vio). Sin "tocados", todos los ítems con filas.
+     */
+    function resumen(b, tocados) {
+        var verFilas = function (id) { return !tocados || tocados.indexOf(id) >= 0; };
         return {
-            total: b.total, filas_marcadas: b.filas_marcadas, supuestos_sin_confirmar: b.supuestos_pendientes || 0, recargos: b.recargos,
+            total: b.total, filas_marcadas: b.filas_marcadas, supuestos_sin_confirmar: b.supuestos_pendientes || 0,
+            recargos: [b.recargos && b.recargos.cs, b.recargos && b.recargos.ind, b.recargos && b.recargos.util].join('/') + ' % (cs/ind/util)',
             capitulos: b.capitulos.map(function (c) {
                 return { id: c.id, nombre: c.nombre, total: c.total, items: c.items.map(function (it) {
-                    var o = { id: it.id, desc: it.desc, und: it.und, cant: it.cant, pu: it.pu, total: it.total };
+                    var o = { id: it.id, desc: it.desc, cant: it.cant + ' ' + it.und, pu: it.pu, total: it.total };
                     if (it.supuestos_pendientes) o.supuestos_sin_confirmar = it.supuestos_pendientes;
                     if (it.aviso) o.aviso = it.aviso;
-                    TIPOS_FILA.forEach(function (t) {
+                    if (verFilas(it.id)) TIPOS_FILA.forEach(function (t) {
                         if (it.apu[t].length) o[t] = it.apu[t].map(function (f, i) {
-                            var x = { n: i + 1, d: f.d, u: f.u, q: f.q, p: f.p };
-                            if (f.revisar) x.revisar = f.revisar;
-                            if (f.supuesto) x.supuesto = f.confirmado ? 'confirmado' : 'sin confirmar';
-                            if (f.stock_q) x.stock_propio = f.stock_q;
-                            if (f.cerrado) x.trato_cerrado = true;
+                            // [n, d, "q u", p, marca]
+                            var marca = [f.revisar, f.supuesto ? (f.confirmado ? 'supuesto ok' : 'supuesto sin confirmar') : '', f.stock_q ? 'stock ' + f.stock_q : '', f.cerrado ? 'trato cerrado' : ''].filter(Boolean).join(' · ');
+                            var x = [i + 1, f.d, f.q + ' ' + f.u, f.p];
+                            if (marca) x.push(marca);
                             return x;
                         });
                     });
+                    else if (it.marcadas) o.filas_marcadas = it.marcadas;
                     return o;
                 }) };
             })

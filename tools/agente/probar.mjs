@@ -16,6 +16,8 @@ const L = require('../../public/js/lector-3d.js');
 const B = require('../../public/js/agente-borrador.js');
 
 let ok = 0;
+/** Fila de la tabla compacta de medicion_3d como objeto (columnas → valores). */
+const fila3d = (med, i) => Object.fromEntries(med.columnas.map((c, k) => [c, med.piezas[i][k]]));
 const pruebas = [];
 function prueba(nombre, fn) { pruebas.push([nombre, fn]); }
 
@@ -221,7 +223,8 @@ prueba('turno completo: 3D → medicion_3d → respuesta; costos por llamada en 
     const tr = cliente.pedidos[1].messages.at(-1).content[0];
     assert.equal(tr.type, 'tool_result');
     const med = JSON.parse(tr.content);
-    assert.equal(med.piezas.length, 2); assert.equal(med.piezas[0].largo_mm, 1800);
+    assert.equal(med.piezas.length, 2); assert.equal(fila3d(med, 0).largo_mm, 1800);
+    assert.ok(tr.content.length < 900, 'resultado compacto: ' + tr.content.length + ' caracteres');
     // el 3D va como texto (lo midió la app), sin el archivo
     assert.ok(cliente.pedidos[0].messages[0].content.some((b) => b.type === 'text' && /medicion_3d/.test(b.text)));
     const ag = alm.datos.proyectos[CID][PID].agente;
@@ -528,7 +531,7 @@ prueba('flujo con la API simulada: adjuntar → borrador → corrección (sin or
     ]);
     assert.equal((await ejecutarTurno({ almacen: alm, cliente }, p1)).fin, 'listo');
     const bb = JSON.parse(cliente.pedidos[1].messages.at(-1).content[0].content);
-    assert.equal(bb.resultados[0].origen, 'base:materiales/MDF_18'); assert.equal(bb.resultados[0].precio, 120);
+    assert.equal(bb.resultados[0].origen, 'base:materiales/MDF_18'); assert.equal(bb.resultados[0].p, 120); assert.equal(bb.resultados[0].receta, 'LAQUEADO:m2_sup');
     const ra = JSON.parse(cliente.pedidos[2].messages.at(-1).content[0].content);
     assert.equal(ra.aplicadas, 2); assert.equal(ra.rechazadas.length, 1); assert.match(ra.rechazadas[0].motivo, /origen/);
     let bor = alm.datos.proyectos[CID][PID].agente.borrador;
@@ -585,7 +588,7 @@ prueba('escala_3d: con una cota del plano escala todas las piezas; con un supues
     await ejecutarTurno({ almacen: alm, cliente }, p1);
     assert.equal(cliente.pedidos[1].messages.at(-1).content[0].is_error, true);
     const med = JSON.parse(cliente.pedidos[3].messages.at(-1).content[0].content);
-    assert.equal(med.piezas[0].largo_mm, 3600); assert.equal(med.piezas[0].area_cara_m2, 4.32);
+    assert.equal(fila3d(med, 0).largo_mm, 3600); assert.equal(fila3d(med, 0).m2_cara, 4.32);
 });
 
 prueba('foto anotada: al agente le llegan la original, la anotada y el JSON de las anotaciones', async () => {
@@ -841,6 +844,82 @@ prueba('norma inicial "un ítem = lo que se entrega": se siembra una vez y, si e
     assert.equal((alm.datos.agente_memoria.normas || {}).inicial_estructura_items, undefined);
     const { SISTEMA } = require('../../functions/agente/prompt.js');
     assert.match(SISTEMA, /Un ítem es lo que el cliente compra y se le entrega/);
+});
+
+// ------------------------------------------------------------------ costo: una sola ronda, effort de correcciones, caché, resultados compactos
+prueba('una sola ronda de preguntas: la segunda sin "motivo" se rechaza', async () => {
+    const alm = nuevoAlmacen();
+    const p1 = await turnoListo(alm, 'Trofeo');
+    await ejecutarTurno({ almacen: alm, cliente: clienteFalso([herramienta('preguntar_al_dueno', { preguntas: [{ pregunta: '1. ¿Alto total?' }, { pregunta: '2. ¿Base de mármol o MDF?' }] })]) }, p1);
+    assert.equal(alm.datos.proyectos[CID][PID].agente.rondas_preguntas, 1);
+    const p2 = await turnoListo(alm, '1. 40 cm 2. MDF');
+    const cliente = clienteFalso([herramienta('preguntar_al_dueno', { preguntas: [{ pregunta: '¿Color?' }] }, 't2'), texto('Armo el borrador con supuestos.')]);
+    const r = await ejecutarTurno({ almacen: alm, cliente }, p2);
+    assert.equal(r.fin, 'listo');
+    const tr = cliente.pedidos[1].messages.at(-1).content[0];
+    assert.equal(tr.is_error, true); assert.match(tr.content, /Ya hiciste la ronda/);
+    const p3 = await turnoListo(alm, 'Cambió: ahora son 3 trofeos distintos');
+    const c3 = clienteFalso([herramienta('preguntar_al_dueno', { preguntas: [{ pregunta: '¿Los 3 del mismo alto?' }], motivo: 'el dueño cambió a 3 trofeos' }, 't3')]);
+    assert.equal((await ejecutarTurno({ almacen: alm, cliente: c3 }, p3)).fin, 'pregunta');
+});
+
+prueba('correcciones con effort "medium" por mensaje (no se toca el effort del pedido) y prefijo de caché estable', async () => {
+    const alm = await proyectoConBase();
+    const pdf = (await api.atender(alm, { accion: 'adjuntar', cid: CID, pid: PID, tipo: 'pdf', nombre: 'planos.pdf', datos: PDF.toString('base64') }, 'renzo')).cuerpo.id;
+    const p1 = await turnoListo(alm, 'Mostrador según el plano', [pdf]);
+    const msg1 = Object.keys(alm.datos.proyectos[CID][PID].agente.conversacion.mensajes)[0];
+    const c1 = clienteFalso([
+        herramienta('armar_borrador', { operaciones: [{ op: 'item', capitulo: 'S', desc: 'Mostrador' }, { op: 'fila', item: 'Mostrador', tipo: 'mat', d: 'MDF', origen_q: `dueño:${msg1}`, q: 2, clave: 'MDF_18' }] }, 't1'),
+        texto('Borrador listo.')]);
+    await ejecutarTurno({ almacen: alm, cliente: c1 }, p1);
+    assert.equal(c1.pedidos[0].messages.some((m) => m.role === 'system'), false, 'el primer turno va con el effort normal');
+    assert.equal((c1.pedidos[0].betas || []).includes('mid-conversation-output-config-2026-07-01'), false);
+    // corrección
+    const r2 = await api.atender(alm, { accion: 'enviar', cid: CID, pid: PID, texto: 'Eran 3 planchas' }, 'renzo');
+    assert.equal(r2.cuerpo.effort, 'medium');
+    const cola = alm.datos.agente_cola; const k = Object.keys(cola)[0]; const p2 = cola[k]; delete cola[k];
+    const c2 = clienteFalso([texto('Corregido.')]);
+    await ejecutarTurno({ almacen: alm, cliente: c2 }, p2);
+    const req = c2.pedidos[0];
+    assert.deepEqual(req.output_config, { effort: 'high' }, 'el effort del pedido no cambia (no rompe la caché)');
+    assert.deepEqual(req.messages.at(-1), { role: 'system', content: [], output_config: { effort: 'medium' } });
+    assert.ok(req.betas.includes('mid-conversation-output-config-2026-07-01')); assert.ok(req.betas.includes('server-side-fallback-2026-07-01'));
+    // el prefijo de la llamada anterior se repite igual, byte a byte (los adjuntos pesados quedan antes del último punto de caché)
+    const previo = c1.pedidos[1].messages;
+    assert.equal(JSON.stringify(req.messages.slice(0, previo.length)), JSON.stringify(previo));
+    const iDoc = req.messages.findIndex((m) => Array.isArray(m.content) && m.content.some((b) => b.type === 'document'));
+    assert.equal(iDoc, 0, 'el PDF va en el primer mensaje');
+    assert.deepEqual(req.cache_control, { type: 'ephemeral' });
+    // otra corrección: no se repite el mensaje de effort
+    await api.atender(alm, { accion: 'enviar', cid: CID, pid: PID, texto: 'Y sacá el canto' }, 'renzo').catch(() => {});
+    await alm.escribir(`${RAIZ}/estado`, { fase: 'listo' });
+    const r3 = await api.atender(alm, { accion: 'enviar', cid: CID, pid: PID, texto: 'Y sacá el canto' }, 'renzo');
+    assert.equal(r3.status, 200);
+    const h = JSON.parse(alm.datos.proyectos[CID][PID].agente.conversacion.api);
+    assert.equal(h.filter((m) => m.role === 'system').length, 1);
+    // con "igual" en la configuración, no se cambia
+    const alm2 = nuevoAlmacen({ config: { agente: { effort_correcciones: 'igual' } } });
+    alm2.datos.proyectos = { [CID]: { [PID]: { agente: { borrador: { total: 10, capitulos: [{ id: 'c' }] } } } } };
+    const r4 = await api.atender(alm2, { accion: 'enviar', cid: CID, pid: PID, texto: 'x' }, 'renzo');
+    assert.equal(r4.cuerpo.effort, 'high');
+});
+
+prueba('medidor: % de la entrada que vino de la caché en cada llamada', async () => {
+    assert.equal(N.pctCache({ entrada: 1000, cache_escrita: 0, cache_leida: 9000 }), 90);
+    assert.equal(N.pctCache({ entrada: 0, cache_escrita: 0, cache_leida: 0 }), 0);
+    const alm = nuevoAlmacen();
+    const p = await turnoListo(alm, 'Hola');
+    await ejecutarTurno({ almacen: alm, cliente: clienteFalso([texto('Hola.', uso(500, 100, 0, 4500))]) }, p);
+    assert.equal(Object.values(alm.datos.proyectos[CID][PID].agente.costos.llamadas)[0].pct_cache, 90);
+});
+
+prueba('resultados compactos: buscar_base sin campos vacíos ni repetidos', async () => {
+    const alm = await proyectoConBase();
+    const ctx = { almacen: alm, cid: CID, pid: PID, mensajesAgente: [] };
+    const r = await H.ejecutar(ctx, { type: 'tool_use', id: 'x', name: 'buscar_base', input: { texto: 'acrilico' } });
+    const j = JSON.parse(r.content);
+    assert.deepEqual(j.resultados[0], { origen: 'base:materiales/ACRILICO_3', n: 'Acrílico 3 mm', u: 'm2', p: 'sin precio', esp_mm: 3 });
+    assert.ok(r.content.length < 200, r.content);
 });
 
 // ------------------------------------------------------------------ correr

@@ -23,16 +23,19 @@ function armarPedido(config, mensajes) {
         messages: mensajes,
         cache_control: { type: "ephemeral" },   // caché automática del último bloque (la conversación)
     };
+    const betas = [];
     if (config.fallbacks && N.MODELOS_CON_FALLBACK.includes(config.modelo)) {
-        p.betas = ["server-side-fallback-2026-07-01"];
+        betas.push("server-side-fallback-2026-07-01");
         p.fallbacks = "default";
     }
+    if (mensajes.some((m) => m.role === "system" && m.output_config)) betas.push("mid-conversation-output-config-2026-07-01");
+    if (betas.length) p.betas = betas;
     return p;
 }
 
 async function registrarCosto(almacen, { cid, pid, mes, costo, modelo, turno, fecha }) {
     const fila = { fecha, modelo, turno: turno || null, entrada: costo.entrada, salida: costo.salida,
-        cache_escrita: costo.cache_escrita, cache_leida: costo.cache_leida, usd: costo.usd };
+        cache_escrita: costo.cache_escrita, cache_leida: costo.cache_leida, usd: costo.usd, pct_cache: N.pctCache(costo) };
     if (Object.keys(costo.modelos || {}).length > 1) fila.por_modelo = costo.modelos;
     await Promise.all([
         almacen.transaccion(`agente_costos/${mes}/${cid}_${pid}`, (acc) => Object.assign(N.sumarCosto(acc, costo), { cid, pid, actualizado: fecha })),
@@ -92,7 +95,8 @@ async function ejecutarTurno(deps, pedido) {
     const guardar = (hist) => almacen.escribir(`${raiz}/conversacion/api`, JSON.stringify(hist));
 
     let historial = cerrarHerramientasPendientes(leerHistorial(await almacen.leer(`${raiz}/conversacion/api`)));
-    if (!historial.length || historial[historial.length - 1].role !== "user") {
+    const ultimo = historial.filter((m) => m.role !== "system").pop();   // los mensajes de effort pueden ir al final
+    if (!ultimo || ultimo.role !== "user") {
         await estado("listo", "");
         return { fin: "nada_que_hacer" };
     }

@@ -336,12 +336,12 @@
                 (t.nivel === 'tope' ? 'Se llegó al tope mensual: el agente frena antes de cada llamada (podés seguir igual).' : 'Ya se usó el ' + Math.round(t.pct) + ' % del tope mensual.') + '</div>' : '') +
                 '<div style="margin-bottom:6px;">Esta cotización: <b>' + N.usd(costoProyecto.usd || 0) + '</b> en ' + (costoProyecto.llamadas || 0) + ' llamadas · Mes: <b>' +
                 N.usd(costoMes.usd || 0) + '</b> (' + (costoMes.llamadas || 0) + ' llamadas, todos los proyectos)</div>' +
-                (filas.length ? '<table><tr><th>Hora</th><th>Modelo</th><th>Entrada</th><th>Salida</th><th>Caché esc.</th><th>Caché leída</th><th>USD</th></tr>' +
+                (filas.length ? '<table><tr><th>Hora</th><th>Modelo</th><th>Entrada</th><th>Salida</th><th>Caché esc.</th><th>Caché leída</th><th title="% de la entrada que vino de la caché">De caché</th><th>USD</th></tr>' +
                     filas.map(function (f) {
                         return '<tr><td>' + hora(f.fecha) + '</td><td>' + esc(String(f.modelo || '').replace('claude-', '')) + '</td><td>' + (f.entrada || 0) +
-                            '</td><td>' + (f.salida || 0) + '</td><td>' + (f.cache_escrita || 0) + '</td><td>' + (f.cache_leida || 0) + '</td><td>' + N.usd(f.usd) + '</td></tr>';
+                            '</td><td>' + (f.salida || 0) + '</td><td>' + (f.cache_escrita || 0) + '</td><td>' + (f.cache_leida || 0) + '</td><td>' + (f.pct_cache != null ? f.pct_cache : N.pctCache(f)) + ' %</td><td>' + N.usd(f.usd) + '</td></tr>';
                     }).join('') + '</table>' : '<div>Todavía no hubo llamadas en este proyecto.</div>') +
-                '<div style="margin-top:6px;color:var(--gray);">Precio por millón de tokens según la configuración (Opus 5.5: 4 entrada / 20 salida / 0,20 caché leída).</div>';
+                '<div style="margin-top:6px;color:var(--gray);">Precio por millón de tokens según la configuración (Opus 5.5: 4 entrada / 20 salida / 0,20 caché leída). "De caché" alto (70 % o más desde la segunda llamada) = la caché funciona.</div>';
         }).catch(function (e) { p.innerHTML = 'No se pudo leer el detalle: ' + esc(e.message); });
     }
 
@@ -351,6 +351,7 @@
         p.innerHTML = '<b>Configuración del agente</b> <span style="color:var(--gray);">(vale para todos los proyectos)</span>' +
             '<label>Modelo<select id="ag-c-modelo">' + opc([['claude-opus-5-5', 'Claude Opus 5.5 (recomendado)'], ['claude-sonnet-5-5', 'Claude Sonnet 5.5 (más barato)'], ['claude-haiku-5-5', 'Claude Haiku 5.5 (el más barato)']], c.modelo) + '</select></label>' +
             '<label>Esfuerzo<select id="ag-c-effort">' + opc([['low', 'Bajo'], ['medium', 'Medio'], ['high', 'Alto (recomendado)'], ['xhigh', 'Muy alto'], ['max', 'Máximo']], c.effort) + '</select></label>' +
+            '<label>Esfuerzo en las correcciones (después del primer borrador)<select id="ag-c-effort2">' + opc([['low', 'Bajo'], ['medium', 'Medio (recomendado: más barato)'], ['high', 'Alto'], ['igual', 'Igual que el primero']], c.effort_correcciones) + '</select></label>' +
             '<label>Tope mensual (US$)<input id="ag-c-tope" type="number" min="1" step="1" inputmode="decimal" value="' + c.tope_mensual_usd + '"></label>' +
             '<label>Avisar al llegar al (%)<input id="ag-c-aviso" type="number" min="10" max="100" step="5" value="' + c.aviso_pct + '"></label>' +
             '<div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;"><button class="ag-btn prim" onclick="_agGuardarConfig()">Guardar</button>' +
@@ -372,7 +373,7 @@
         db.ref('agente_memoria/' + nodo + '/' + k).remove().then(pintarConfig).catch(function (e) { alert(e.message); });
     };
     window._agGuardarConfig = function () {
-        var v = { modelo: $('ag-c-modelo').value, effort: $('ag-c-effort').value,
+        var v = { modelo: $('ag-c-modelo').value, effort: $('ag-c-effort').value, effort_correcciones: $('ag-c-effort2').value,
             tope_mensual_usd: parseFloat($('ag-c-tope').value) || N.CONFIG_DEFECTO.tope_mensual_usd,
             aviso_pct: parseFloat($('ag-c-aviso').value) || N.CONFIG_DEFECTO.aviso_pct,
             actualizado: firebase.database.ServerValue.TIMESTAMP };
