@@ -236,6 +236,10 @@
                             '<div class="ag-it-sub">' + (it.cant != null ? it.cant : 1) + ' ' + esc(it.und || 'glb') + (it.cant_origen ? ' ' + chipOrigen(it.cant_origen) : '') +
                             ' × Bs ' + bs(it.pu) + ' (precio unitario con recargos)' + (it.desde3d ? ' · del 3D, ruta ' + esc(it.desde3d.ruta || 'A') : '') +
                             (it.marcadas ? ' · <b style="color:var(--red);">' + it.marcadas + (it.marcadas > 1 ? ' marcadas' : ' marcada') + '</b>' : '') + '</div>' +
+                            ((it.caracteristicas || []).length ? '<div style="font-size:12px;margin:4px 0 2px;line-height:1.4;">' + lista(it.caracteristicas).map(function (c) {
+                                var pend = c.supuesto && !c.confirmado;
+                                return '<div' + (pend ? ' style="color:#0b6e99;"' : '') + '>• ' + esc(c.texto) + ' ' + chipOrigen(c.origen) + (pend ? ' <i>(supuesto: sale al presupuesto cuando lo confirmes)</i>' : '') + '</div>';
+                            }).join('') + '</div>' : '<div class="ag-it-sub" style="color:var(--orange);">Sin características para el cliente: pedíselas al agente.</div>') +
                             (it.nota ? '<div class="ag-it-sub">' + esc(it.nota) + '</div>' : '') +
                             (it.aviso ? '<div class="ag-it-sub" style="color:var(--orange);font-weight:700;">⚠ ' + esc(it.aviso) + '</div>' : '') + filas +
                             (it.supuestos_pendientes ? '<div class="ag-sup"><span style="flex:1;">' + it.supuestos_pendientes + ' supuesto' + (it.supuestos_pendientes > 1 ? 's' : '') +

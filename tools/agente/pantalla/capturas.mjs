@@ -95,7 +95,9 @@ await page.evaluate(() => {
             mano_obra: { LAQUEADO: { n: 'Laqueado', u: 'm2', p: 35 } }, oficios: {}, rendimientos: {} } };
     let n = 0;
     const r = window.AgenteBorrador.aplicarOperaciones(null, [
-        { op: 'item_desde_3d', capitulo: 'Stand demo', adjunto: 'A3D', item3d: 'Mostrador', desc: 'Mostrador recepción' },
+        { op: 'item_desde_3d', capitulo: 'Stand demo', adjunto: 'A3D', item3d: 'Mostrador', desc: 'Mostrador recepción', caracteristicas: [
+            { texto: 'Frente de 1,80 m × 0,60 m', origen: 'pieza3d:A3D/p1' }, { texto: 'MDF 18 mm laqueado blanco', origen: 'base:materiales/MDF_18' },
+            { texto: 'Logo en vinil de 40 cm', origen: 'supuesto:logo proporcional al frente' }, { texto: 'Incluye traslado e instalación; no incluye diseño' }] },
         { op: 'fila', item: 'Mostrador recepción', tipo: 'mat', d: 'Adhesivo lateral', u: 'und', q: 3, origen_q: 'dueño:M1', p: 50, origen_p: 'dueño:M1' },
         { op: 'item_desde_3d', capitulo: 'Stand demo', adjunto: 'A3D', item3d: 'Totem', desc: 'Restauración tótem', materiales: { p3: 'ACRILICO_3' } },
         { op: 'fila', item: 'Restauración tótem', tipo: 'mat', d: 'Vinil frente', origen_q: 'cota_plano:PDF1 p.2 "0,80 x 2,40"', q: 1.92, clave: 'VINIL' },
@@ -110,6 +112,9 @@ await page.evaluate(() => {
 });
 await page.click('#ag-tab');
 await captura('7-borrador');
+const feat = await page.evaluate(() => window.AgenteBorrador.aItemsPresupuesto(window._fbFalso.get('proyectos/cliDemo/proyDemo/agente/borrador')).find((x) => x.desc === 'Mostrador recepción').feat);
+console.log('feat', JSON.stringify(feat));
+if (!/MDF 18 mm/.test(feat) || /Logo/.test(feat)) throw new Error('características mal');
 await page.evaluate(() => document.getElementById('ag-borr').scrollTo(0, 99999));
 await captura('8-borrador-total');
 await page.evaluate(() => { const its = document.querySelectorAll('#ag-borr .ag-it'); its[its.length - 1].scrollIntoView({ block: 'start' }); });
