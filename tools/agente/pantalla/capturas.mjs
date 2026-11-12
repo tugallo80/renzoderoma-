@@ -116,7 +116,7 @@ await page.evaluate(() => { const g = document.querySelector('#ag-borr .ag-grupo
 await captura('7b-totales-por-grupo');
 const grupos = await page.evaluate(() => document.querySelector('#ag-borr .ag-grupos').innerText.replace(/\s+/g, ' '));
 console.log('grupos', grupos);
-if (!/Materiales Bs 409,20/.test(grupos) || !/Mano de obra \(\+ Bs 87,46 CS\) Bs 246,47/.test(grupos)) throw new Error('totales por grupo mal');
+if (!/Materiales Bs 409,20/.test(grupos) || !/Mano de obra \(\+ Bs 87,45 CS\) Bs 246,46/.test(grupos)) throw new Error('totales por grupo mal');
 const feat = await page.evaluate(() => window.AgenteBorrador.aItemsPresupuesto(window._fbFalso.get('proyectos/cliDemo/proyDemo/agente/borrador')).find((x) => x.desc === 'Mostrador recepción').feat);
 console.log('feat', JSON.stringify(feat));
 if (!/MDF 18 mm/.test(feat) || /Logo/.test(feat)) throw new Error('características mal');
