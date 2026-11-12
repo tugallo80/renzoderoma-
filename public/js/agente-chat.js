@@ -85,6 +85,9 @@
             '#mod-agente .ag-f{display:grid;grid-template-columns:1fr auto;gap:2px 8px;font-size:12px;padding:6px 0;border-top:1px dashed var(--border);}',
             '#mod-agente .ag-f .num{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums;}',
             '#mod-agente .ag-f .ori{grid-column:1/-1;color:var(--gray);font-size:11px;}',
+            '#mod-agente .ag-grupos{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;}',
+            '#mod-agente .ag-g{background:var(--bg);border-radius:8px;padding:5px 8px;font-size:12px;font-weight:800;font-variant-numeric:tabular-nums;}',
+            '#mod-agente .ag-g i{display:block;font-style:normal;font-weight:600;font-size:10px;color:var(--gray);}',
             '#mod-agente .ag-f.marcada{background:rgba(255,59,48,.06);} #mod-agente .ag-f.marcada .rev{grid-column:1/-1;color:var(--red);font-size:11px;font-weight:700;}',
             '#mod-agente .ag-o{display:inline-block;padding:0 5px;border-radius:6px;font-size:10px;font-weight:800;margin-right:3px;background:rgba(0,0,0,.07);}',
             '#mod-agente .ag-o.pieza3d{background:rgba(52,199,89,.15);color:#1e7f3a;} #mod-agente .ag-o.base{background:rgba(0,122,255,.12);color:#0a58c2;}',
@@ -309,7 +312,20 @@
         var t = (/^([a-zñ_0-9]+):/i.exec(o) || [])[1] || '';
         return '<span class="ag-o ' + esc(t) + '" title="' + esc(o) + '">' + esc(NOMBRE_ORIGEN[t] || t || '?') + '</span>';
     }
-    var TIT = { mat: 'Materiales', mo: 'Mano de obra', eq: 'Equipo', sub: 'Subcontratos' };
+    var TIT = { mat: 'Materiales', mo: 'Mano de obra', eq: 'Otros gastos (equipo, logística)', sub: 'Sub-ítems y subcontratos' };
+    /** Totales por grupo del APU de un ítem: costo directo por unidad, sin indirectos ni utilidad (como el APU del presupuesto). */
+    function totalesGrupo(it) {
+        // se calculan acá (en el navegador) para no tocar functions/: así este cambio no dispara un deploy de Functions
+        var apu = it.apu || {}, cs = parseFloat((borrador.recargos || {}).cs) || 0;
+        var sg = function (t) { return lista(apu[t]).reduce(function (s, f) { return s + (parseFloat(f.q) || 0) * (parseFloat(f.p) || 0); }, 0); };
+        var g = { mat: sg('mat'), mo: sg('mo'), eq: sg('eq'), sub: sg('sub') };
+        g.cs = g.mo * cs / 100;
+        var caja = function (lbl, v) { return '<span class="ag-g"><i>' + lbl + '</i>Bs ' + bs(v) + '</span>'; };
+        var h = caja('Materiales', g.mat) + caja('Mano de obra' + (g.cs ? ' (+ Bs ' + bs(g.cs) + ' CS)' : ''), g.mo + (g.cs || 0));
+        if (g.sub) h += caja('Sub-ítems', g.sub);
+        if (g.eq) h += caja('Otros gastos', g.eq);
+        return '<div class="ag-grupos" title="Costo directo' + ((it.cant || 1) !== 1 ? ' por unidad' : '') + ', sin indirectos ni utilidad">' + h + '</div>';
+    }
     function pintarBorrador() {
         var tab = $('ag-tab'), el = $('ag-borr');
         if (!tab || !el) return;
@@ -351,7 +367,7 @@
                                 return '<div' + (pend ? ' style="color:#0b6e99;"' : '') + '>• ' + esc(c.texto) + ' ' + chipOrigen(c.origen) + (pend ? ' <i>(supuesto: sale al presupuesto cuando lo confirmes)</i>' : '') + '</div>';
                             }).join('') + '</div>' : '<div class="ag-it-sub" style="color:var(--orange);">Sin características para el cliente: pedíselas al agente.</div>') +
                             (it.nota ? '<div class="ag-it-sub">' + esc(it.nota) + '</div>' : '') +
-                            (it.aviso ? '<div class="ag-it-sub" style="color:var(--orange);font-weight:700;">⚠ ' + esc(it.aviso) + '</div>' : '') + filas +
+                            (it.aviso ? '<div class="ag-it-sub" style="color:var(--orange);font-weight:700;">⚠ ' + esc(it.aviso) + '</div>' : '') + filas + totalesGrupo(it) +
                             (it.supuestos_pendientes ? '<div class="ag-sup"><span style="flex:1;">' + it.supuestos_pendientes + ' supuesto' + (it.supuestos_pendientes > 1 ? 's' : '') +
                                 ' del agente sin confirmar: este ítem no se aplica al presupuesto hasta que los confirmes (o corregilos por el chat).</span>' +
                                 '<button class="ag-btn prim" onclick="_agConfirmarSup(\'' + it.id + '\')">Confirmar supuestos</button></div>' : '') + '</div>';

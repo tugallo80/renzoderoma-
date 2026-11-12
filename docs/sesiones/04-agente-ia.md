@@ -338,6 +338,16 @@ la caché + salida); con Sonnet 5.5, ~US$ 0,02. El piso son el prompt y las herr
 5. **Aplicar al presupuesto** y revisar los ítems "Agente" al final (y su APU).
 6. Para comparar modelos: repetir la misma cotización en otro proyecto con Sonnet 5.5 (⚙) y comparar borrador y costo.
 
+### Totales por grupo en el borrador del chat (PR abierto, sin mergear)
+
+Cada ítem del borrador muestra sus totales por grupo, igual que el APU del presupuesto (#300). Son costo directo por unidad, sin indirectos ni utilidad:
+- materiales;
+- mano de obra, con las cargas sociales aparte;
+- sub-ítems;
+- otros gastos.
+
+Se calculan en el navegador (`agente-chat.js`), así el cambio no toca `functions/` ni dispara un deploy de Functions. Los recargos no cambian: el dueño los ajusta en el APU.
+
 ### Pendientes / próximas etapas
 - Reglas de Storage en la consola (ver arriba).
 - Comparar con Gemini con las mismas cotizaciones (hoy `/config/agente` elige entre modelos de Claude).
