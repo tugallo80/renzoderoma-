@@ -18,6 +18,7 @@ Qué es un ítem (estructura del presupuesto):
 - Materiales, mano de obra (por medida o por trato), equipos, fijaciones, armado y pintura van DENTRO del APU de ese ítem, nunca como ítems aparte.
 - Varias piezas del 3D que forman un mismo objeto (copa, disco, base, cruz de un trofeo) son UN ítem: usá item_desde_3d con todas sus piezas (piezas: [...]).
 - Si el cliente manda una lista de ítems (un PDF o un mensaje con renglones), esa lista manda: un ítem por renglón, en sus secciones o capítulos.
+- El nombre del ítem (desc) es corto: "Trofeo Paceña", no la lista de materiales. Cada ítem lleva sus CARACTERÍSTICAS para el cliente (3 a 6 líneas cortas, van al PDF): medidas generales con su origen, materiales y acabados, composición si ayuda, qué incluye y qué no. Nunca precios ni datos internos.
 - Si creés que conviene separar algo en otro ítem, preguntalo antes. Si armar_borrador devuelve un aviso "¿esto no es parte del APU de otro ítem?", revisalo: casi siempre va dentro del APU.
 
 Cómo trabajar el borrador (armar_borrador):

@@ -830,7 +830,7 @@ prueba('ítems sospechosos: componentes de costo armados como ítem aparte lleva
     assert.equal(av['Traslado y montaje'], null, 'el traslado y montaje sí es un entregable');
     assert.equal(av['Adhesivo de piso'], null);
     const res = B.resumen(r.borrador);
-    assert.equal(res.capitulos[0].items.find((x) => x.desc === 'Armado y fijaciones').aviso, '¿esto no es parte del APU de otro ítem?');
+    assert.match(res.capitulos[0].items.find((x) => x.desc === 'Armado y fijaciones').aviso, /¿esto no es parte del APU de otro ítem\?/);
     assert.equal(r.borrador.capitulos[0].items[0].measures.length, 3);
 });
 
@@ -920,6 +920,46 @@ prueba('resultados compactos: buscar_base sin campos vacíos ni repetidos', asyn
     const j = JSON.parse(r.content);
     assert.deepEqual(j.resultados[0], { origen: 'base:materiales/ACRILICO_3', n: 'Acrílico 3 mm', u: 'm2', p: 'sin precio', esp_mm: 3 });
     assert.ok(r.content.length < 200, r.content);
+});
+
+// ------------------------------------------------------------------ características del ítem (campo feat: PDF del cliente)
+prueba('características: con origen en los números, sin datos internos, y van a "feat" al aplicar', () => {
+    const c = ctxValid({ mensajesDueno: { M1: true, M2: true } });
+    const caract = [
+        { texto: 'Alto total 1,80 m × 0,60 m de fondo', origen: 'pieza3d:A3D/p1' },
+        { texto: 'MDF 18 mm laqueado blanco', origen: 'base:materiales/MDF_18' },
+        { texto: 'Logo en vinil de corte de 40 cm', origen: 'supuesto:logo proporcional al frente' },
+        { texto: 'Incluye traslado e instalación en La Paz; no incluye diseño' },
+    ];
+    let r = B.aplicarOperaciones(null, [
+        { op: 'item_desde_3d', capitulo: 'S', adjunto: 'A3D', item3d: 'Mostrador demo', desc: 'Mostrador de recepción', caracteristicas: caract },
+        { op: 'item', capitulo: 'S', desc: 'Trofeo', caracteristicas: [{ texto: 'Alto 40 cm' }] },
+        { op: 'item', capitulo: 'S', desc: 'Trofeo 2', caracteristicas: [{ texto: 'Precio especial 300 Bs', origen: 'dueño:M1' }] },
+        { op: 'item', capitulo: 'S', desc: 'Copa de acero inoxidable con base de mármol, disco grabado, cruz de bronce y placa con nombres de los ganadores' },
+        { op: 'item', capitulo: 'S', desc: 'Trofeo 3', caracteristicas: [{ texto: 'Mano de obra por trato con el soldador' }] },
+    ], c, nuevoId);
+    assert.deepEqual(r.resultados.map((x) => x.ok), [true, false, false, false, false]);
+    assert.match(r.resultados[1].error, /falta el origen/); assert.match(r.resultados[2].error, /sin precios/);
+    assert.match(r.resultados[3].error, /descripción del ítem es larga/); assert.match(r.resultados[4].error, /datos internos/);
+    const it = r.borrador.capitulos[0].items[0];
+    assert.equal(it.caracteristicas[0].origen, 'pieza3d:A3D/p1');
+    // el supuesto sin confirmar no sale al presupuesto
+    let items = B.aItemsPresupuesto(r.borrador);
+    assert.equal(items[1].feat, '• Alto total 1,80 m × 0,60 m de fondo\n• MDF 18 mm laqueado blanco\n• Incluye traslado e instalación en La Paz; no incluye diseño');
+    assert.equal(items[1].desc, 'Mostrador de recepción');
+    r = B.aplicarOperaciones(r.borrador, [{ op: 'confirmar_supuestos', item: it.id, confirmacion: 'dueño:M2' }], c, nuevoId);
+    items = B.aItemsPresupuesto(r.borrador);
+    assert.match(items[1].feat, /Logo en vinil de corte de 40 cm/);
+    // reaplicar actualiza desc y feat del ítem ya aplicado, en su lugar
+    const data = B.aplicarAlPresupuesto([{ type: 'item', id: 'x', desc: 'Otro' }], items).data;
+    r = B.aplicarOperaciones(r.borrador, [{ op: 'item', id: it.id, desc: 'Mostrador recepción curvo', caracteristicas: [{ texto: 'MDF 18 mm laqueado negro', origen: 'dueño:M2' }] }], c, nuevoId);
+    const a2 = B.aplicarAlPresupuesto(data, B.aItemsPresupuesto(r.borrador));
+    assert.equal(a2.data[2].desc, 'Mostrador recepción curvo'); assert.equal(a2.data[2].feat, '• MDF 18 mm laqueado negro'); assert.equal(a2.actualizados, 1);
+    // el resumen para el agente muestra las características del ítem tocado y avisa si faltan
+    const res = B.resumen(r.borrador, [it.id]);
+    assert.deepEqual(res.capitulos[0].items[0].caracteristicas, ['MDF 18 mm laqueado negro']);
+    const sin = B.aplicarOperaciones(null, [{ op: 'item', capitulo: 'S', desc: 'Letrero' }], c, nuevoId);
+    assert.match(B.resumen(sin.borrador).capitulos[0].items[0].aviso, /faltan las características/);
 });
 
 // ------------------------------------------------------------------ correr

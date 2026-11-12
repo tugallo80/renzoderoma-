@@ -304,6 +304,40 @@
         return { borrador: b, resultados: resultados };
     }
 
+    /**
+     * CARACTERÍSTICAS del ítem (campo "feat" del presupuesto: va al PDF del cliente y a licitaciones). 3 a 6 líneas cortas:
+     * medidas generales, materiales y acabados, composición, qué incluye y qué no. Sin precios ni datos internos.
+     * Cada línea con números necesita origen (validado); una línea con supuesto sin confirmar no sale al presupuesto.
+     */
+    var RE_INTERNO = /\bBs\b|\$|precio|costo|trato|stock|recargo|utilidad|jornal|cargas sociales|indirectos|margen/i;
+    function fijarCaracteristicas(it, lineas, ctx) {
+        if (!Array.isArray(lineas)) return 'caracteristicas: lista de líneas [{texto, origen?}]';
+        if (lineas.length > 8) return 'caracteristicas: hasta 8 líneas (mejor 3 a 6)';
+        var salida = [];
+        for (var i = 0; i < lineas.length; i++) {
+            var l = typeof lineas[i] === 'string' ? { texto: lineas[i] } : (lineas[i] || {});
+            var t = txt(l.texto, 200).replace(/^[•\-*]\s*/, '');
+            if (!t) continue;
+            if (t.length > 160) return 'característica ' + (i + 1) + ': más de 160 caracteres (que sea corta)';
+            if (RE_INTERNO.test(t)) return 'característica ' + (i + 1) + ': sin precios ni datos internos (trato, stock, recargos): "' + t.slice(0, 60) + '"';
+            var c = { texto: t };
+            if (l.origen || /\d/.test(t)) {
+                var v = validarOrigen(l.origen, ctx, 'caracteristica');
+                if (!v.ok) return 'característica ' + (i + 1) + ' ("' + t.slice(0, 40) + '"): ' + v.error;
+                if (v.origen.tipo === 'base' && /^\d/.test(t)) return 'característica ' + (i + 1) + ': base: no da medidas';
+                c.origen = v.origen.texto;
+                if (v.origen.tipo === 'supuesto') { c.supuesto = true; c.confirmado = false; }
+            }
+            salida.push(c);
+        }
+        it.caracteristicas = salida;
+        return null;
+    }
+    /** Texto limpio para el presupuesto (sin orígenes; sin los supuestos sin confirmar). */
+    function textoCaracteristicas(it) {
+        return (it.caracteristicas || []).filter(function (c) { return !c.supuesto || c.confirmado; }).map(function (c) { return '• ' + c.texto; }).join('\n');
+    }
+
     function itemNuevo(op, nuevoId) {
         return { id: nuevoId(), desc: txt(op.desc, 200), und: txt(op.und, 20) || 'glb', cant: 1, apu: { mat: [], mo: [], eq: [], sub: [] } };
     }
@@ -354,6 +388,8 @@
                 }
                 if (op.desc) it.desc = txt(op.desc, 200);
                 if (!it.desc) throw new Error('falta la descripción del ítem');
+                if (it.desc.length > 80) throw new Error('la descripción del ítem es larga (' + it.desc.length + ' caracteres): que sea un nombre claro ("Trofeo Paceña"); el detalle va en caracteristicas');
+                if (op.caracteristicas) { var ec = fijarCaracteristicas(it, op.caracteristicas, ctx); if (ec) throw new Error(ec); }
                 if (op.und) it.und = txt(op.und, 20);
                 var e = fijarCant(it, op, ctx); if (e) throw new Error(e);
                 if (op.nota != null) it.nota = txt(op.nota, 400);
@@ -426,6 +462,7 @@
         var n = 0;
         TIPOS_FILA.forEach(function (t) { (it.apu[t] || []).forEach(function (f) { if (f.supuesto && !f.confirmado) { f.confirmado = true; f.confirmacion = confirmacion; n++; } }); });
         if (it.cant_confirmada === false) { it.cant_confirmada = true; n++; }
+        (it.caracteristicas || []).forEach(function (c) { if (c.supuesto && !c.confirmado) { c.confirmado = true; c.confirmacion = confirmacion; } });
         return n;
     }
     function supuestosPendientes(it) {
@@ -495,6 +532,8 @@
                     var o = { id: it.id, desc: it.desc, cant: it.cant + ' ' + it.und, pu: it.pu, total: it.total };
                     if (it.supuestos_pendientes) o.supuestos_sin_confirmar = it.supuestos_pendientes;
                     if (it.aviso) o.aviso = it.aviso;
+                    if (!(it.caracteristicas || []).length) o.aviso = (o.aviso ? o.aviso + ' · ' : '') + 'faltan las características para el cliente';
+                    else if (verFilas(it.id)) o.caracteristicas = it.caracteristicas.map(function (c) { return c.texto + (c.supuesto && !c.confirmado ? ' (supuesto sin confirmar)' : ''); });
                     if (verFilas(it.id)) TIPOS_FILA.forEach(function (t) {
                         if (it.apu[t].length) o[t] = it.apu[t].map(function (f, i) {
                             // [n, d, "q u", p, marca]
@@ -531,7 +570,7 @@
                     return x;
                 };
                 var item = {
-                    type: 'item', id: it.id, origen: 'agente', desc: it.desc, und: it.und || 'glb', cant: it.cant, feat: it.nota || '',
+                    type: 'item', id: it.id, origen: 'agente', desc: it.desc, und: it.und || 'glb', cant: it.cant, feat: textoCaracteristicas(it),
                     apu: { mat: it.apu.mat.map(limpia), mo: it.apu.mo.map(limpia), eq: it.apu.eq.map(limpia), sub: it.apu.sub.map(limpia), cs: rc.cs, ind: rc.ind, util: rc.util },
                     agente: { version: b.version, cant_origen: it.cant_origen || null, desde3d: it.desde3d || null, filas_a_revisar: it.marcadas || 0, aplicado: opciones.fecha || null }
                 };
@@ -568,7 +607,7 @@
         return { data: salida, agregados: agregados, actualizados: actualizados };
     }
 
-    var api = { itemSospechoso: itemSospechoso, AVISO_COMPONENTE: AVISO_COMPONENTE, normalizar: normalizar, confirmarSupuestos: confirmarSupuestos, confirmarItem: confirmarItem, supuestosPendientes: supuestosPendientes, cantidadGeometria: cantidadGeometria, aplicarAlPresupuesto: aplicarAlPresupuesto, vacio: vacio, validarOrigen: validarOrigen, armarFila: armarFila, aplicarOperaciones: aplicarOperaciones,
+    var api = { textoCaracteristicas: textoCaracteristicas, fijarCaracteristicas: fijarCaracteristicas, itemSospechoso: itemSospechoso, AVISO_COMPONENTE: AVISO_COMPONENTE, normalizar: normalizar, confirmarSupuestos: confirmarSupuestos, confirmarItem: confirmarItem, supuestosPendientes: supuestosPendientes, cantidadGeometria: cantidadGeometria, aplicarAlPresupuesto: aplicarAlPresupuesto, vacio: vacio, validarOrigen: validarOrigen, armarFila: armarFila, aplicarOperaciones: aplicarOperaciones,
         calcularTotales: calcularTotales, resumen: resumen, aItemsPresupuesto: aItemsPresupuesto, MEDIDAS: MEDIDAS, TIPOS_FILA: TIPOS_FILA };
     if (typeof module !== 'undefined' && module.exports) module.exports = api;
     else global.AgenteBorrador = api;

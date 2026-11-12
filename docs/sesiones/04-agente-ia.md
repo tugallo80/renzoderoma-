@@ -216,9 +216,22 @@ rolado, soldadura…"); el dueño quería **un solo ítem: el trofeo**.
   ítems que tocó**.
 - El costo de cada turno se sigue mostrando junto a la respuesta.
 
+## Características del ítem (campo CARACTERÍSTICAS / `feat`, va al PDF del cliente y a licitaciones)
+
+En el primer borrador aplicado (Trofeo Paceña) el campo quedó vacío. Ahora:
+- `item` e `item_desde_3d` llevan **`caracteristicas`**: 3 a 6 líneas cortas para el cliente (medidas generales, materiales y
+  acabados, composición, qué incluye y qué no). Cada línea con números lleva **origen** validado; las que mencionan precios o datos
+  internos (Bs, precio, costo, trato, stock, recargos, utilidad, jornal…) **se rechazan**; máximo 160 caracteres por línea.
+- **`desc` corta** (un nombre claro, hasta 80 caracteres): una descripción larga se rechaza con "el detalle va en caracteristicas".
+- Al **aplicar**, `feat` = el texto limpio ("• línea" por renglón, sin orígenes). Una línea con **supuesto sin confirmar no sale**
+  hasta que se confirma (no bloquea el ítem). Al **reaplicar**, `desc` y `feat` se actualizan en su lugar.
+- En el chat se ven debajo del nombre del ítem, con su origen; si faltan, aviso naranja. El agente recibe "faltan las características
+  para el cliente" en el resumen. Se corrigen por chat.
+
 ### Pruebas (sin gastar plata)
 
-- `cd tools/agente && npm test` — 55 pruebas (costo: segunda ronda rechazada sin motivo, effort medium por mensaje sin tocar el del
+- `cd tools/agente && npm test` — 56 pruebas (características: origen en números, sin datos internos, desc larga rechazada, supuesto
+  que no sale hasta confirmar, feat al aplicar y al reaplicar). 55 pruebas (costo: segunda ronda rechazada sin motivo, effort medium por mensaje sin tocar el del
   pedido, prefijo idéntico entre llamadas, % de caché, resultados compactos). 51 pruebas (estructura: avisos de ítems-componente, trofeo de 3 piezas = 1 ítem, norma inicial
   sembrada una vez). 49 pruebas (2b: geometría supuesta calculada por la herramienta y precio de la base, supuestos
   que no se aplican hasta confirmar, stock a costo 0, trato cerrado que reemplaza la referencia, adjuntos numerados y vistas del 3D,
