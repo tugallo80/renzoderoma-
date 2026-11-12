@@ -325,4 +325,4 @@ async function atender(almacen, cuerpo, uid) {
     }
 }
 
-module.exports = { textoCompactado, nuevaConversacion, resumenPresupuesto, NORMAS_INICIALES, sembrarNormas, atender, adjuntar, enviar, reintentar, tomarTurno, ErrorPedido, N };
+module.exports = { textoInicial, textoCompactado, nuevaConversacion, resumenPresupuesto, NORMAS_INICIALES, sembrarNormas, atender, adjuntar, enviar, reintentar, tomarTurno, ErrorPedido, N };

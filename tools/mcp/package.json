@@ -1,0 +1,11 @@
+{
+  "name": "probar-mcp",
+  "private": true,
+  "type": "module",
+  "description": "Pruebas del conector MCP \"Rubik\" (OAuth + herramientas) contra Firebase SIMULADO. No gasta plata. Necesita `npm install` en functions/.",
+  "scripts": {
+    "test": "node probar.mjs",
+    "cliente": "node cliente.mjs",
+    "skill": "cd ../../skills && rm -f ../public/downloads/cotizar-en-rubik.zip && zip -rqX ../public/downloads/cotizar-en-rubik.zip cotizar-en-rubik"
+  }
+}

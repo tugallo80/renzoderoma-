@@ -18,11 +18,28 @@ const RUTAS_PERMITIDAS = [
 
 function limpiar(ruta) { return String(ruta || "").replace(/^\/+|\/+$/g, ""); }
 
-function verificarRuta(ruta) {
+function verificarRuta(ruta, rutas = RUTAS_PERMITIDAS) {
     const r = limpiar(ruta);
     if (!r || r.split("/").some((s) => !s || /[.#$[\]]/.test(s))) throw new Error(`Ruta inválida: ${ruta}`);
-    if (!RUTAS_PERMITIDAS.some((re) => re.test(r))) throw new Error(`El agente no tiene acceso a ${r}`);
+    if (!rutas.some((re) => re.test(r))) throw new Error(`El agente no tiene acceso a ${r}`);
     return r;
+}
+
+const verificarRutaCon = (r, rutas) => verificarRuta(r, rutas);
+
+/**
+ * Vista acotada de un almacén: cada herramienta solo toca los nodos que le corresponden (además del cerco del almacén).
+ */
+function acotar(almacen, rutas) {
+    const v = (r) => { verificarRuta(r, rutas); return r; };
+    return Object.assign({}, almacen, {
+        leer: async (r) => almacen.leer(v(r)),
+        escribir: async (r, x) => almacen.escribir(v(r), x),
+        actualizar: async (r, x) => almacen.actualizar(v(r), x),
+        agregar: async (r, x) => almacen.agregar(v(r), x),
+        borrar: async (r) => almacen.borrar(v(r)),
+        transaccion: async (r, fn) => almacen.transaccion(v(r), fn),
+    });
 }
 
 function verificarRutaArchivo(ruta) {
@@ -31,9 +48,10 @@ function verificarRutaArchivo(ruta) {
     return r;
 }
 
-/** Almacén real (firebase-admin). */
-function crearAlmacen(admin) {
+/** Almacén real (firebase-admin). `rutas`: otra lista de rutas permitidas (la usa el conector MCP). */
+function crearAlmacen(admin, rutas = RUTAS_PERMITIDAS) {
     const db = admin.database();
+    const verificarRuta = (r) => verificarRutaCon(r, rutas);
     const bucket = () => admin.storage().bucket();
     return {
         async leer(ruta) { return (await db.ref(verificarRuta(ruta)).once("value")).val(); },
@@ -57,4 +75,4 @@ function crearAlmacen(admin) {
     };
 }
 
-module.exports = { crearAlmacen, verificarRuta, verificarRutaArchivo, RUTAS_PERMITIDAS };
+module.exports = { crearAlmacen, acotar, verificarRuta, verificarRutaArchivo, RUTAS_PERMITIDAS };
