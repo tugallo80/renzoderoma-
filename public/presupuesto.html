@@ -45,7 +45,9 @@
     <script src="/js/compartidos-3d.js?v=1"></script>
     <script src="/js/apu-utils.js?v=1"></script>
     <script src="/js/lector-3d.js?v=1"></script>
-    <script src="/js/importar-3d.js?v=1" defer></script>
+    <script src="/js/importar-3d.js?v=2" defer></script>
+    <script src="/js/agente-nucleo.js?v=1"></script>
+    <script src="/js/agente-chat.js?v=1" defer></script>
     <script src="/js/viewmode.js?v=1"></script>
 
     <style>
@@ -281,7 +283,7 @@
         <button class="btn btn-sec" id="btn-copy-mode" style="color:var(--green);border-color:var(--green);" onclick="toggleCopyMode()"><i class="ph-bold ph-copy"></i> Copiar ítems</button>
         <button class="btn btn-sec" style="color:var(--purple); border-color:var(--purple);" onclick="abrirModalIABudget()"><i class="ph-bold ph-magic-wand"></i> Presupuesto IA</button>
         <button class="btn btn-sec" style="color:var(--blue); border-color:var(--blue);" onclick="abrirModalRender3D()"><i class="ph-bold ph-cube"></i> Render</button>
-        <button class="btn btn-sec" style="color:var(--green); border-color:var(--green);" onclick="abrirImportar3D()"><i class="ph-bold ph-cube-transparent"></i> Importar 3D</button>
+        <button class="btn btn-sec" id="btn-agente-ia" style="color:var(--green); border-color:var(--green);" onclick="abrirAgenteIA()"><i class="ph-bold ph-robot"></i> Agente IA</button>
     </div>
 
     <div id="copy-sel-bar" style="display:none;background:var(--green);color:white;padding:10px 14px;border-radius:12px;margin-bottom:10px;align-items:center;justify-content:space-between;gap:10px;">
@@ -4855,7 +4857,7 @@ EJEMPLO SIN CAPÍTULOS (menos de 4 ítems):
     <button class="m-act-btn" onclick="addChapter()"><i class="ph-bold ph-text-t"></i><span>Cap&#237;tulo</span></button>
     <button class="m-act-btn green" onclick="addItem()"><i class="ph-bold ph-plus-circle"></i><span>&#205;tem</span></button>
     <button class="m-act-btn purple" onclick="abrirModalIABudget()"><i class="ph-bold ph-magic-wand"></i><span>IA</span></button>
-    <button class="m-act-btn green" onclick="abrirImportar3D()"><i class="ph-bold ph-cube-transparent"></i><span>3D</span></button>
+    <button class="m-act-btn green" onclick="abrirAgenteIA()"><i class="ph-bold ph-robot"></i><span>Agente IA</span></button>
     <button class="m-act-btn" onclick="abrirModalPDF()"><i class="ph-bold ph-file-pdf"></i><span>PDF</span></button>
     <button class="m-act-btn" style="color:var(--blue);" onclick="abrirModalRender3D()"><i class="ph-bold ph-cube"></i><span>Render</span></button>
     <button class="m-act-btn" style="color:#5ac8fa;" onclick="abrirMailPresupuesto()"><i class="ph-bold ph-envelope"></i><span>Enviar</span></button>

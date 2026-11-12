@@ -38,6 +38,14 @@ for (const r of rutas) {
   }
 }
 await chk('público lee portafolio', get(ref(nadie, 'portafolio')), true);
+// Agente IA: la cola solo la toca la Function; los costos los lee el hub y no los escribe nadie desde la app
+await chk('hub NO lee agente_cola', get(ref(hub, 'agente_cola')), false);
+await chk('hub NO escribe agente_cola', set(ref(hub, 'agente_cola/x'), { cid: 'c1' }), false);
+await chk('hub lee agente_costos', get(ref(hub, 'agente_costos/2026-11/_total')), true);
+await chk('hub NO escribe agente_costos', set(ref(hub, 'agente_costos/2026-11/_total'), { usd: 0 }), false);
+await chk('anónimo NO lee agente_costos', get(ref(anon, 'agente_costos')), false);
+await chk('hub escribe config/agente', set(ref(hub, 'config/agente/tope_mensual_usd'), 30), true);
+await chk('anónimo NO lee la conversación del agente', get(ref(anon, 'proyectos/c1/p1/agente')), false);
 await chk('anónimo escribe portafolio', set(ref(anon, 'portafolio/b'), 1), false);
 await chk('otro-email escribe portafolio', set(ref(otro, 'portafolio/b'), 1), false);
 await chk('hub escribe portafolio', set(ref(hub, 'portafolio/b'), 1), true);
