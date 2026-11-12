@@ -89,6 +89,48 @@
         }
       },
       {
+        "source": "/mcp",
+        "function": {
+          "functionId": "rubikMcp",
+          "region": "us-central1"
+        }
+      },
+      {
+        "source": "/.well-known/oauth-protected-resource",
+        "function": {
+          "functionId": "rubikMcp",
+          "region": "us-central1"
+        }
+      },
+      {
+        "source": "/.well-known/oauth-protected-resource/mcp",
+        "function": {
+          "functionId": "rubikMcp",
+          "region": "us-central1"
+        }
+      },
+      {
+        "source": "/.well-known/oauth-authorization-server",
+        "function": {
+          "functionId": "rubikMcp",
+          "region": "us-central1"
+        }
+      },
+      {
+        "source": "/.well-known/openid-configuration",
+        "function": {
+          "functionId": "rubikMcp",
+          "region": "us-central1"
+        }
+      },
+      {
+        "source": "/oauth/**",
+        "function": {
+          "functionId": "rubikMcp",
+          "region": "us-central1"
+        }
+      },
+      {
         "source": "/api/agente",
         "function": {
           "functionId": "agenteApi",

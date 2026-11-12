@@ -44,6 +44,13 @@ await chk('hub NO escribe agente_cola', set(ref(hub, 'agente_cola/x'), { cid: 'c
 await chk('hub lee agente_costos', get(ref(hub, 'agente_costos/2026-11/_total')), true);
 await chk('hub NO escribe agente_costos', set(ref(hub, 'agente_costos/2026-11/_total'), { usd: 0 }), false);
 await chk('anónimo NO lee agente_costos', get(ref(anon, 'agente_costos')), false);
+// conector MCP: tokens y clientes OAuth solo la Function; respaldos: el hub lee, nadie escribe
+await chk('hub NO lee mcp_oauth', get(ref(hub, 'mcp_oauth/tokens')), false);
+await chk('hub NO escribe mcp_oauth', set(ref(hub, 'mcp_oauth/tokens/x'), { uid: 'renzo' }), false);
+await chk('nadie lee mcp_oauth', get(ref(nadie, 'mcp_oauth')), false);
+await chk('hub lee respaldos_agente', get(ref(hub, 'respaldos_agente/2026-11-12')), true);
+await chk('hub NO escribe respaldos_agente', set(ref(hub, 'respaldos_agente/2026-11-12/x'), { a: 1 }), false);
+await chk('intruso NO lee respaldos_agente', get(ref(otro, 'respaldos_agente')), false);
 await chk('hub escribe config/agente', set(ref(hub, 'config/agente/tope_mensual_usd'), 30), true);
 await chk('anónimo NO lee la conversación del agente', get(ref(anon, 'proyectos/c1/p1/agente')), false);
 await chk('anónimo escribe portafolio', set(ref(anon, 'portafolio/b'), 1), false);

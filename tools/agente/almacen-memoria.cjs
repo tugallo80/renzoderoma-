@@ -1,7 +1,8 @@
 // Almacén en memoria con la misma interfaz que functions/agente/almacen.js (y sus mismas rutas permitidas).
-const { verificarRuta, verificarRutaArchivo } = require("../../functions/agente/almacen.js");
+const { verificarRuta: verificarRutaBase, verificarRutaArchivo } = require("../../functions/agente/almacen.js");
 
-function crearAlmacenMemoria(inicial) {
+function crearAlmacenMemoria(inicial, rutas) {
+    const verificarRuta = (r) => verificarRutaBase(r, rutas);
     const raiz = JSON.parse(JSON.stringify(inicial || {}));
     const archivos = new Map();
     let reloj = 1762900000000, n = 0;

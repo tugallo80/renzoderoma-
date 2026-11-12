@@ -26,6 +26,7 @@ llave, y reabrir las apps antes de la salida a la venta (ver `docs/plan-sesiones
 | `01-cerrar-api-imagen.md` | Cerrar `/api/imagen` (proxy abierto) | ✅ Cerrada |
 | `02-cotizacion.md` | Cotización: Vectorworks → Blender → app; IA solo para fotos y referencias | 🟡 2.2 y 2.3 hechos (script de Blender + botón "Importar 3D" que lee .glb/.fbx en la app, con calibración de escala y PDF del cliente leído por IA que solo propone) · 2.1 falta validar con el modelo real · sigue 2.4 (depende de la Sesión B) |
 | `04-agente-ia.md` | Agente IA cotizador (chat con Claude que arma el borrador del presupuesto y del APU) | ✅ Etapa 1 completa (4 entregas: chat con voz y costos; borrador con validación de origen; anotaciones de fotos; aplicar y memoria) · falta la prueba real del dueño |
+| `05-rubik-agente-app.md` | RUBIK AGENTE APP: conector MCP "Rubik" + skill para cotizar desde claude.ai con la suscripción | 🟡 Etapa 1 (OAuth, lectura, crear cliente/proyecto, borrador y aplicar, skill, guía) · siguen base (2) y cronograma/producción/licitaciones (3) |
 | `03-fotos-pdf-rendicion.md` | Fotos repetidas o faltantes en el PDF de rendición de contratistas | ✅ Cerrada |
 | *(sin ficha)* PR #266 | Código del cliente en vez de su nombre (Consolidado de Contratistas) | ✅ Cerrada |
 | *(sin ficha)* PR #267 | Pagos a trabajadores que no aparecían sin recargar (Compras / Tesorería) | ✅ Cerrada |

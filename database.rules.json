@@ -45,6 +45,18 @@
       ".write": false
     },
 
+    // ─── CONECTOR MCP "Rubik" (docs/sesiones/05-rubik-agente-app.md) ─
+    // Clientes OAuth, códigos y tokens (solo hashes): solo la Function.
+    // Respaldos que deja el conector antes de cambiar algo: el hub los lee, nadie escribe desde la app.
+    "mcp_oauth": {
+      ".read":  false,
+      ".write": false
+    },
+    "respaldos_agente": {
+      ".read":  "auth != null && root.child('acceso').child('hub').child(auth.uid).val() === true",
+      ".write": false
+    },
+
     // ─── TODO LO DEMÁS: SOLO HUB ──────────────────────────────────
     // proyectos (pagos, compras, licitaciones), clientes, personal,
     // supervisores, caja_chica, ingresos, cobros, base_datos, config_ia,
