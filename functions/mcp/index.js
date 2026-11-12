@@ -34,6 +34,7 @@ const INSTRUCCIONES = `Conector de la app de Rubik Bolivia (taller de stands, mo
 - Una sola ronda de preguntas, concretas y del proyecto. Alternativas y "por confirmar" fuera del total. Características para el cliente sin datos internos.
 - Los recargos (cargas sociales, indirectos, utilidad) los decide el dueño: no los cambies por tu cuenta.
 Flujo: listar_clientes → listar_proyectos (o crear_cliente / crear_proyecto) → abrir_cotizacion (una por chat; guardá cid, pid y conv) → registrar_mensaje_del_dueno y registrar_lectura_de_archivo para tener orígenes → buscar_base / medicion_3d → armar_borrador → ver_borrador → aplicar_al_presupuesto (con la confirmación del dueño).
+Para ajustar una cotización existente: listar_cotizaciones o abrir_cotizacion con item; para no perder la anterior, nueva_version. Apagar ítems solo con proponer_apagar_items → sí del dueño → confirmar_propuesta (nunca se borra).
 Si está el skill "cotizar-en-rubik", seguilo. Respondé en español de Bolivia, corto.`;
 
 function dependencias(admin, esHub) {
