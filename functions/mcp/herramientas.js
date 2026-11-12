@@ -57,15 +57,55 @@ function conProyecto(schema, conConv) {
     return s;
 }
 
-/** Revisa cid/pid/conv y que el proyecto exista. */
-async function proyecto(almacen, e, conConv) {
+/**
+ * ¿Existe la conversación? Las nuevas tienen conversaciones_meta; la "principal" (la primera del chat de la app, donde viven
+ * las cotizaciones viejas) existe si tiene meta, borrador o mensajes.
+ */
+async function existeConv(almacen, cid, pid, conv) {
+    const raiz = R.RAIZ(cid, pid);
+    if (await almacen.leer(`${raiz}/conversaciones_meta/${conv}`)) return true;
+    if (conv !== R.PRINCIPAL) return false;
+    return (await almacen.leer(`${raiz}/borrador/version`)) != null || (await almacen.leer(`${raiz}/conversacion/mensajes`)) != null;
+}
+
+const BLOQUEO_MS = 10 * 60 * 1000;
+/** Si el Agente IA de la app está trabajando en ESA conversación, no se escribe desde Claude (se pisarían). */
+async function agenteLibre(almacen, cid, pid, conv) {
+    const est = await almacen.leer(`${R.RAIZ(cid, pid)}/estado`);
+    if (est && (est.fase === "trabajando" || est.fase === "en_cola") && almacen.ahora() - (est.actualizado || 0) < BLOQUEO_MS && (est.conv || R.PRINCIPAL) === conv) {
+        falla("el Agente IA de la app está trabajando en esta conversación ahora mismo: esperá a que termine y volvé a intentar");
+    }
+}
+
+/** Revisa cid/pid/conv y que el proyecto exista; si la herramienta escribe, que el agente de la app no esté en esa conversación. */
+async function proyecto(almacen, e, conConv, escribe) {
     if (!ID.test(String(e.cid || "")) || !ID.test(String(e.pid || ""))) falla("cid/pid inválidos");
-    if (conConv && (!e.conv || !ID.test(String(e.conv)) || e.conv === R.PRINCIPAL)) falla("conv inválida: abrí la cotización con abrir_cotizacion y usá su id");
+    if (conConv && (!e.conv || !ID.test(String(e.conv)))) falla("conv inválida: abrí la cotización con abrir_cotizacion y usá su id");
     const al = acotar(almacen, RUTAS.presupuesto(e.cid, e.pid));
     const p = (await al.leer(`proyectos/${e.cid}/${e.pid}/nombre`)) || ((await al.leer(`proyectos/${e.cid}/${e.pid}/estado`)) != null ? "(sin nombre)" : null);
     if (p == null) falla(`no existe el proyecto ${e.pid} del cliente ${e.cid}`);
-    if (conConv && !(await almacen.leer(`proyectos/${e.cid}/${e.pid}/agente/conversaciones_meta/${e.conv}`))) falla(`no existe la conversación ${e.conv} en este proyecto: abrila con abrir_cotizacion`);
+    if (conConv) {
+        const alA = acotar(almacen, RUTAS.agente(e.cid, e.pid));
+        if (!(await existeConv(alA, e.cid, e.pid, e.conv))) falla(`no existe la conversación ${e.conv} en este proyecto: mirá listar_cotizaciones o abrí una con abrir_cotizacion`);
+        if (escribe !== false) await agenteLibre(alA, e.cid, e.pid, e.conv);
+    }
     return p;
+}
+
+/** Ítems del presupuesto que aplicó cada conversación del agente: { conv: [{n, id, desc, activo}] }. */
+function itemsPorConv(items) {
+    const r = {};
+    lista(items).forEach((x, n) => {
+        if (!x || x.type === "chapter" || x.origen !== "agente") return;
+        const c = (x.agente && x.agente.conv) || R.PRINCIPAL;
+        (r[c] = r[c] || []).push({ n, id: x.id || undefined, desc: x.desc, activo: x.activo !== false, condicion: (x.agente && x.agente.condicion) || undefined });
+    });
+    return r;
+}
+
+/** Para que el Agente IA de la app se entere en su próximo turno de lo que se cambió desde Claude (como las ediciones a mano). */
+async function anotarParaLaApp(al, cid, pid, conv, texto) {
+    await al.agregar(`${R.raizConv(cid, pid, conv)}/conversacion/ediciones`, { texto: `Desde Claude: ${texto}`.slice(0, 600), fecha: al.ahora() });
 }
 
 /** Corre una herramienta del agente de la app con el contexto de este proyecto y conversación. */
@@ -249,19 +289,69 @@ const HERRAMIENTAS = [
     // ---------- cotizar: abrir, registrar lo del chat, borrador
     {
         def: {
+            name: "listar_cotizaciones",
+            title: "Listar cotizaciones de un proyecto",
+            description: "Lista las conversaciones del Agente IA de un proyecto (las de la app y las de Claude): título, fecha, costo de la API (si se hizo en la app), versión y total del borrador, si se aplicó, de qué versión salió y los ítems del presupuesto que aplicó cada una (n, id, nombre, si está apagado). Sirve para encontrar cuál retomar con abrir_cotizacion. \"principal\" es la primera conversación del chat de la app.",
+            inputSchema: { type: "object", properties: { cid: P_CID, pid: P_PID }, required: ["cid", "pid"] },
+            annotations: { readOnlyHint: true },
+        },
+        async correr(almacen, uid, e) {
+            const nombre = await proyecto(almacen, e, false);
+            const al = acotar(almacen, RUTAS.agente(e.cid, e.pid));
+            const raiz = R.RAIZ(e.cid, e.pid);
+            const metas = Object.assign({}, (await al.leer(`${raiz}/conversaciones_meta`)) || {});
+            if (!metas[R.PRINCIPAL] && (await existeConv(al, e.cid, e.pid, R.PRINCIPAL))) metas[R.PRINCIPAL] = { titulo: "Primera conversación del chat de la app" };
+            const aplicados = itemsPorConv(await al.leer(`proyectos/${e.cid}/${e.pid}/presupuesto/items`));
+            const actual = await al.leer(`${raiz}/actual`);
+            const dia = (ms) => (ms ? new Date(ms - 4 * 3600 * 1000).toISOString().slice(0, 10) : undefined);
+            const salida = [];
+            for (const conv of Object.keys(metas)) {
+                if (!ID.test(conv)) continue;
+                const m = metas[conv] || {};
+                const RC = R.raizConv(e.cid, e.pid, conv);
+                const b = await al.leer(`${RC}/borrador`);
+                const costo = await al.leer(`${RC}/costos/total`).catch(() => null);
+                const o = { conv, titulo: m.titulo || "(sin título)", creada: dia(m.creada), origen: m.origen === "claude" ? "Claude" : "app", abierta_en_la_app: actual === conv || undefined };
+                if (m.basada_en) o.basada_en = m.basada_en;
+                if (costo && (costo.usd || costo.usd === 0)) o.costo_api_usd = r2(costo.usd);
+                if (b) {
+                    const nb = B.normalizar(b);
+                    o.borrador = { version: nb.version, total: nb.total, items: nb.capitulos.reduce((a, c) => a + c.items.length, 0) };
+                    if (b.aplicado) o.aplicado = { version: b.aplicado.version, fecha: dia(b.aplicado.fecha) };
+                }
+                if (aplicados[conv]) o.items_en_presupuesto = aplicados[conv];
+                salida.push(o);
+            }
+            salida.sort((a, b) => String(b.creada || "").localeCompare(String(a.creada || "")));
+            return { proyecto: nombre, cotizaciones: salida };
+        },
+    },
+    {
+        def: {
             name: "abrir_cotizacion",
             title: "Abrir cotización",
-            description: "Empieza una cotización en un proyecto: crea una conversación NUEVA del Agente IA de la app (sin historial, con su propio borrador) y devuelve su id (conv), las normas del taller, la memoria del dueño, el presupuesto actual (para no duplicar) y los adjuntos del proyecto (3D medidos en la app, PDF y fotos con su resumen). Usá UNA conversación por chat de Claude: si ya la abriste en este chat, pasá su conv para retomarla (devuelve el borrador y los últimos mensajes).",
-            inputSchema: { type: "object", properties: { cid: P_CID, pid: P_PID, conv: { type: "string", description: "Opcional: para retomar una conversación ya abierta." }, titulo: { type: "string", maxLength: 60, description: "Opcional: título corto (ej. \"Stand feria\")." } }, required: ["cid", "pid"] },
+            description: "Empieza o retoma una cotización en un proyecto. Sin conv ni item: crea una conversación NUEVA del Agente IA de la app (sin historial, con su propio borrador). Con conv (de listar_cotizaciones; \"principal\" es la primera del chat de la app, donde están las cotizaciones viejas) o con item (n o id de un ítem del presupuesto que aplicó el agente): retoma la conversación que lo creó y devuelve su borrador y los últimos mensajes. Siempre devuelve el id (conv), las normas del taller, la memoria del dueño, el presupuesto actual (para no duplicar) y los adjuntos del proyecto. Usá UNA conversación por chat de Claude.",
+            inputSchema: { type: "object", properties: { cid: P_CID, pid: P_PID, conv: { type: "string", description: "Opcional: retomar esta conversación." }, item: { type: "string", description: "Opcional: n (posición) o id de un ítem del presupuesto: retoma la conversación que lo creó." }, titulo: { type: "string", maxLength: 60, description: "Opcional, solo para una nueva: título corto (ej. \"Stand feria\")." } }, required: ["cid", "pid"] },
             annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false },
         },
         async correr(almacen, uid, e) {
             const nombre = await proyecto(almacen, e, false);
             const al = acotar(almacen, RUTAS.agente(e.cid, e.pid));
             const raiz = R.RAIZ(e.cid, e.pid);
-            let conv = e.conv, nueva = false;
+            let conv = e.conv, nueva = false, foco = null;
+            if (e.item != null && e.item !== "") {
+                const items = lista(await acotar(almacen, RUTAS.presupuesto(e.cid, e.pid)).leer(`proyectos/${e.cid}/${e.pid}/presupuesto/items`));
+                const k = items.findIndex((x, i) => String(i) === String(e.item) || (x.id && x.id === e.item));
+                const it = items[k];
+                if (!it || it.type === "chapter") falla(`no hay un ítem ${e.item} en el presupuesto`);
+                if (it.origen !== "agente") falla(`el ítem «${it.desc}» no lo creó el Agente IA (se cargó a mano): para ajustarlo, abrí una cotización nueva`);
+                const delItem = (it.agente && it.agente.conv) || R.PRINCIPAL;
+                if (conv && conv !== delItem) falla(`ese ítem es de la conversación ${delItem}, no de ${conv}`);
+                conv = delItem;
+                foco = { n: k, id: it.id || undefined, desc: it.desc, version_aplicada: (it.agente && it.agente.version) || undefined, nota: "En el borrador el ítem tiene el mismo id." };
+            }
             if (conv) {
-                if (!ID.test(String(conv)) || conv === R.PRINCIPAL || !(await al.leer(`${raiz}/conversaciones_meta/${conv}`))) falla(`no existe la conversación ${conv} en este proyecto`);
+                if (!ID.test(String(conv)) || !(await existeConv(al, e.cid, e.pid, conv))) falla(`no existe la conversación ${conv} en este proyecto (mirá listar_cotizaciones)`);
             } else {
                 try { conv = (await API.nuevaConversacion(al, { cid: e.cid, pid: e.pid })).conv; } catch (err) { falla(err.message); }
                 nueva = true;
@@ -277,6 +367,7 @@ const HERRAMIENTAS = [
                 return o;
             });
             const salida = { conv, nueva, proyecto: nombre, cid: e.cid, pid: e.pid, adjuntos };
+            if (foco) salida.item_en_foco = foco;
             if (nueva) salida.contexto = await API.textoInicial(al, e.cid, e.pid);
             else {
                 const RC = R.raizConv(e.cid, e.pid, conv);
@@ -284,6 +375,11 @@ const HERRAMIENTAS = [
                 if (b) salida.borrador = B.resumen(B.normalizar(b));
                 const msgs = (await al.leer(`${RC}/conversacion/mensajes`)) || {};
                 salida.ultimos_mensajes = Object.keys(msgs).sort().slice(-10).map((k) => ({ id: k, rol: msgs[k].rol, texto: String(msgs[k].texto || "").slice(0, 500) }));
+                const meta = await al.leer(`${raiz}/conversaciones_meta/${conv}`);
+                if (meta && meta.titulo) salida.titulo = meta.titulo;
+                if (meta && meta.basada_en) salida.basada_en = meta.basada_en;
+                salida.items_en_presupuesto = itemsPorConv(await acotar(almacen, RUTAS.presupuesto(e.cid, e.pid)).leer(`proyectos/${e.cid}/${e.pid}/presupuesto/items`))[conv] || [];
+                salida.para_ajustar = "Para cambiar la cotización sin perder esta versión, usá nueva_version (copia el borrador a otra conversación). Para corregirla en el lugar, armar_borrador sobre esta conv y después aplicar_al_presupuesto (actualiza los mismos ítems).";
                 salida.contexto = await API.textoInicial(al, e.cid, e.pid);
             }
             salida.recordatorio = "Guardá cid, pid y conv y usalos en todo el chat. Registrá cada dato del dueño con registrar_mensaje_del_dueno antes de citarlo.";
@@ -345,7 +441,17 @@ const HERRAMIENTAS = [
     {
         def: Object.assign({}, defAgente("armar_borrador"), { title: "Armar el borrador", inputSchema: conProyecto(defAgente("armar_borrador").input_schema, true), description: defAgente("armar_borrador").description + NOTA_ORIGEN }),
         annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false },
-        async correr(almacen, uid, e) { await proyecto(almacen, e, true); return correrDelAgente("armar_borrador", almacen, uid, e, sinProyecto(e)); },
+        async correr(almacen, uid, e) {
+            await proyecto(almacen, e, true);
+            const r = await correrDelAgente("armar_borrador", almacen, uid, e, sinProyecto(e));
+            if (r.aplicadas) {
+                const ops = e.operaciones.slice(0, 80).map((o) => o && o.op).filter(Boolean);
+                const cuenta = {};
+                ops.forEach((o) => { cuenta[o] = (cuenta[o] || 0) + 1; });
+                await anotarParaLaApp(acotar(almacen, RUTAS.agente(e.cid, e.pid)), e.cid, e.pid, e.conv, `${r.aplicadas} cambios en el borrador (${Object.keys(cuenta).map((k) => `${cuenta[k]} ${k}`).join(", ")}); total Bs ${r.borrador.total}.`);
+            }
+            return r;
+        },
     },
     {
         def: {
@@ -356,7 +462,7 @@ const HERRAMIENTAS = [
             annotations: { readOnlyHint: true },
         },
         async correr(almacen, uid, e) {
-            await proyecto(almacen, e, true);
+            await proyecto(almacen, e, true, false);
             const b = await acotar(almacen, RUTAS.agente(e.cid, e.pid)).leer(`${R.raizConv(e.cid, e.pid, e.conv)}/borrador`);
             if (!b) return { vacio: true, aviso: "Todavía no hay borrador en esta cotización." };
             const nb = B.normalizar(b);
@@ -364,6 +470,53 @@ const HERRAMIENTAS = [
             out.version = nb.version;
             if (b.aplicado) out.aplicado = { version: b.aplicado.version, fecha: b.aplicado.fecha };
             return out;
+        },
+    },
+    {
+        def: {
+            name: "nueva_version",
+            title: "Nueva versión de una cotización",
+            description: "Copia el borrador de una conversación a una conversación NUEVA (por ejemplo \"Versión 2 – económica\"), para ajustarla sin perder la anterior. La copia tiene ids nuevos: al aplicarla, sus ítems entran APARTE en el presupuesto (no pisan los de la versión anterior). Los capítulos se renombran con el título (para que el cliente vea las dos versiones separadas), salvo renombrar_capitulos: false. Se copian los mensajes del dueño, así sus orígenes dueño:<id> siguen valiendo. Después: armar_borrador sobre la conv nueva y, al aplicar, proponé apagar los ítems de la versión anterior.",
+            inputSchema: conProyecto({ type: "object", properties: {
+                titulo: { type: "string", maxLength: 60, description: "Ej. \"Versión 2 – económica\"." },
+                renombrar_capitulos: { type: "boolean", description: "Por defecto true." },
+            }, required: ["titulo"] }, true),
+            annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false },
+        },
+        async correr(almacen, uid, e) {
+            await proyecto(almacen, e, true, false);
+            const al = acotar(almacen, RUTAS.agente(e.cid, e.pid));
+            const raiz = R.RAIZ(e.cid, e.pid);
+            const RCb = R.raizConv(e.cid, e.pid, e.conv);
+            const base = await al.leer(`${RCb}/borrador`);
+            if (!base) falla("esa conversación no tiene borrador para copiar");
+            const titulo = String(e.titulo).trim().slice(0, 60);
+            if (!titulo) falla("falta el título de la versión");
+            let conv;
+            try { conv = (await API.nuevaConversacion(al, { cid: e.cid, pid: e.pid })).conv; } catch (err) { falla(err.message); }
+            const nb = B.normalizar(JSON.parse(JSON.stringify(base)));
+            const versionBase = nb.version || 0;
+            nb.capitulos.forEach((c) => {
+                c.id = al.nuevaClave();
+                if (e.renombrar_capitulos !== false) c.nombre = `${String(c.nombre).replace(/\s*\([^)]*\)\s*$/, "")} (${titulo})`.slice(0, 80);
+                c.items.forEach((it) => { it.id = al.nuevaClave(); });
+            });
+            delete nb.aplicado;
+            nb.version = 1;
+            nb.basado_en = { conv: e.conv, version: versionBase };
+            B.calcularTotales(nb, null);
+            nb.actualizado = al.ahora();
+            const RC = R.raizConv(e.cid, e.pid, conv);
+            // mensajes del dueño con las mismas claves: sus orígenes dueño:<id> siguen siendo válidos en la versión nueva
+            const msgs = (await al.leer(`${RCb}/conversacion/mensajes`)) || {};
+            const delDueno = {};
+            Object.keys(msgs).forEach((k) => { if (msgs[k] && msgs[k].rol === "dueno") delDueno[k] = Object.assign({}, msgs[k], { copiado_de: e.conv }); });
+            if (Object.keys(delDueno).length) await al.actualizar(`${RC}/conversacion/mensajes`, delDueno);
+            await al.agregar(`${RC}/conversacion/mensajes`, { rol: "aviso", fecha: al.ahora(), texto: `📄 «${titulo}»: copia del borrador v${versionBase} de otra conversación, hecha desde Claude. Al aplicarla, sus ítems entran aparte.` });
+            await al.escribir(`${RC}/borrador`, JSON.parse(JSON.stringify(nb)));
+            await al.actualizar(`${raiz}/conversaciones_meta/${conv}`, { titulo, titulo_auto: false, origen: "claude", basada_en: e.conv, version_base: versionBase });
+            return { conv, titulo, basada_en: e.conv, version_base: versionBase, borrador: B.resumen(nb),
+                siguiente: "Usá esta conv en el resto del chat. Ajustá con armar_borrador (los ids de ítems son nuevos: están en el borrador). Cuando el dueño diga \"aplicalo\", aplicar_al_presupuesto y después proponé apagar los ítems de la versión anterior (proponer_apagar_items)." };
         },
     },
     {
@@ -385,6 +538,7 @@ const HERRAMIENTAS = [
             const msgs = (await al.leer(`${RC}/conversacion/mensajes`)) || {};
             const ref = o && o.tipo === "dueño" ? String(o.ref).split(/\s/)[0] : null;
             if (!ref || !msgs[ref] || msgs[ref].rol !== "dueno") falla("hace falta la confirmación del dueño: registrá su mensaje (\"aplicalo\") con registrar_mensaje_del_dueno y pasá dueño:<id>");
+            if (msgs[ref].copiado_de) falla("esa confirmación es de la versión anterior: el dueño tiene que confirmar de nuevo en esta (registrá su \"aplicalo\")");
             const borr = await al.leer(`${RC}/borrador`);
             if (!borr) falla("no hay borrador en esta cotización");
             const nb = B.normalizar(borr);
@@ -402,9 +556,111 @@ const HERRAMIENTAS = [
             await al.escribir(`${rutaPres}/items`, JSON.parse(JSON.stringify(r.data)));
             await al.escribir(`${RC}/borrador/aplicado`, { fecha: ahora, version: nb.version, agregados: r.agregados, actualizados: r.actualizados, por: uid, via: "claude" });
             await al.agregar(`${RC}/conversacion/mensajes`, { rol: "aviso", fecha: ahora, texto: `✅ Borrador v${nb.version} aplicado al presupuesto desde Claude: ${r.agregados} ítems nuevos${r.actualizados ? `, ${r.actualizados} actualizados` : ""} (Bs ${nb.total}).` });
-            return { ok: true, agregados: r.agregados, actualizados: r.actualizados, total_borrador: nb.total, respaldo: `respaldos_agente/${dia}/${respaldo}`,
+            const meta = await al.leer(`${R.RAIZ(e.cid, e.pid)}/conversaciones_meta/${e.conv}`);
+            let anterior;
+            if (meta && meta.basada_en) {
+                const prendidos = (itemsPorConv(r.data)[meta.basada_en] || []).filter((x) => x.activo);
+                if (prendidos.length) {
+                    anterior = { conv: meta.basada_en, items_prendidos: prendidos,
+                        siguiente: "Los ítems de la versión anterior siguen sumando al total. Preguntale al dueño si los apaga (el ojo: no se borran) y, si dice que sí, proponer_apagar_items con sus ids → confirmar_propuesta." };
+                }
+            }
+            return { ok: true, agregados: r.agregados, actualizados: r.actualizados, total_borrador: nb.total, respaldo: `respaldos_agente/${dia}/${respaldo}`, version_anterior: anterior,
                 no_aplicados_por_supuestos: pendientes.length ? pendientes : undefined,
                 aviso: "Si el dueño tiene el presupuesto abierto en la app, que lo recargue antes de editarlo (si no, su pantalla vieja puede pisar estos cambios)." };
+        },
+    },
+    {
+        def: {
+            name: "proponer_apagar_items",
+            title: "Proponer apagar o prender ítems",
+            description: "Paso 1 de 2 para apagar (o volver a prender) ítems del presupuesto con el ojo: un ítem apagado no suma al total ni sale en el PDF, pero NO se borra. No cambia nada: guarda una PROPUESTA con la lista exacta (n, nombre, estado actual) y devuelve su id. Mostrale la lista al dueño; si dice que sí, registrá su mensaje y llamá confirmar_propuesta con el id. Vence en 24 h.",
+            inputSchema: { type: "object", properties: {
+                cid: P_CID, pid: P_PID,
+                items: { type: "array", items: { type: "string" }, description: "n (posición) o id de cada ítem del presupuesto (hasta 100)." },
+                accion: { type: "string", enum: ["apagar", "prender"], description: "Por defecto apagar." },
+                motivo: { type: "string", maxLength: 300, description: "Ej. \"reemplazados por la Versión 2 – económica\"." },
+            }, required: ["cid", "pid", "items", "motivo"] },
+            annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false },
+        },
+        async correr(almacen, uid, e) {
+            await proyecto(almacen, e, false);
+            const al = acotar(almacen, RUTAS.aplicar(e.cid, e.pid));
+            const prender = e.accion === "prender";
+            if (!e.items.length || e.items.length > 100) falla("items: de 1 a 100");
+            const items = lista(await al.leer(`proyectos/${e.cid}/${e.pid}/presupuesto/items`));
+            const cambios = [], sinCambio = [];
+            const vistos = {};
+            e.items.forEach((ref) => {
+                const k = items.findIndex((x, i) => String(i) === String(ref) || (x && x.id && x.id === ref));
+                const it = items[k];
+                if (!it || it.type === "chapter") falla(`no hay un ítem ${ref} en el presupuesto`);
+                if (vistos[k]) return;
+                vistos[k] = true;
+                const activo = it.activo !== false;
+                const fila = { n: k, id: it.id || null, desc: it.desc || "", total: r2((parseFloat(it.pu) || 0) * (parseFloat(it.cant) || 0)) };
+                if (activo === !prender) cambios.push(fila); else sinCambio.push(fila);
+            });
+            if (!cambios.length) return { propuesta: null, aviso: `Esos ítems ya están ${prender ? "prendidos" : "apagados"}: no hay nada que proponer.` };
+            const ahora = almacen.ahora();
+            const id = await al.agregar(`proyectos/${e.cid}/${e.pid}/agente/propuestas`, { tipo: prender ? "prender_items" : "apagar_items", items: cambios, motivo: String(e.motivo).slice(0, 300), creada: ahora, vence: ahora + 24 * 3600 * 1000, estado: "pendiente", uid });
+            const verbo = prender ? "Prender" : "Apagar";
+            return { propuesta: id, cambios: cambios.map((x) => `${verbo} n ${x.n} «${x.desc}» (Bs ${x.total})`), ya_estaban: sinCambio.length ? sinCambio.map((x) => `n ${x.n} «${x.desc}»`) : undefined,
+                efecto_en_total: r2(cambios.reduce((a, x) => a + x.total, 0) * (prender ? 1 : -1)),
+                como_confirmar: `Mostrale esta lista al dueño (propuesta ${id}). Si dice que sí, registrá su respuesta con registrar_mensaje_del_dueno y llamá confirmar_propuesta {propuesta: "${id}", confirmacion: "dueño:<id>"}. Nada cambió todavía.` };
+        },
+    },
+    {
+        def: {
+            name: "confirmar_propuesta",
+            title: "Confirmar una propuesta",
+            description: "Paso 2 de 2: aplica una propuesta (de proponer_apagar_items) SOLO con la confirmación explícita del dueño: su mensaje registrado DESPUÉS de la propuesta (dueño:<id>), que no haya confirmado otra. Verifica que el presupuesto no haya cambiado desde la propuesta, guarda una copia en /respaldos_agente y deja aviso en la conversación. Un solo uso.",
+            inputSchema: conProyecto({ type: "object", properties: {
+                propuesta: { type: "string", description: "Id de la propuesta." },
+                confirmacion: { type: "string", description: "dueño:<id del mensaje donde el dueño dice que sí>." },
+            }, required: ["propuesta", "confirmacion"] }, true),
+            annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true },
+        },
+        async correr(almacen, uid, e) {
+            await proyecto(almacen, e, true);
+            if (!ID.test(String(e.propuesta || ""))) falla("propuesta inválida");
+            const al = acotar(almacen, RUTAS.aplicar(e.cid, e.pid));
+            const RC = R.raizConv(e.cid, e.pid, e.conv);
+            const rutaP = `proyectos/${e.cid}/${e.pid}/agente/propuestas/${e.propuesta}`;
+            const prop = await al.leer(rutaP);
+            if (!prop) falla(`no existe la propuesta ${e.propuesta}`);
+            if (prop.estado !== "pendiente") falla(`la propuesta ya está ${prop.estado}`);
+            const ahora = almacen.ahora();
+            if (prop.vence < ahora) { await al.actualizar(rutaP, { estado: "vencida" }); falla("la propuesta venció (24 h): volvé a proponer"); }
+            const o = N.parsearOrigen(e.confirmacion);
+            const ref = o && o.tipo === "dueño" ? String(o.ref).split(/\s/)[0] : null;
+            const msg = ref && ID.test(ref) ? await al.leer(`${RC}/conversacion/mensajes/${ref}`) : null;
+            if (!msg || msg.rol !== "dueno") falla("hace falta la confirmación del dueño: registrá su respuesta con registrar_mensaje_del_dueno y pasá dueño:<id>");
+            if (!(msg.fecha > prop.creada) || msg.copiado_de) falla("la confirmación tiene que ser un mensaje del dueño posterior a la propuesta (mostrale la lista y esperá su respuesta)");
+            // la misma respuesta no confirma dos propuestas, y la propuesta se usa una sola vez
+            const usada = await al.transaccion(`proyectos/${e.cid}/${e.pid}/agente/confirmaciones/${ref}`, (cur) => (cur == null ? e.propuesta : cur === e.propuesta ? cur : undefined));
+            if (!usada.ok || usada.valor !== e.propuesta) falla("ese mensaje del dueño ya confirmó otra propuesta");
+            const tomada = await al.transaccion(rutaP, (cur) => (cur == null ? null : cur.estado === "pendiente" ? Object.assign({}, cur, { estado: "aplicando" }) : undefined));
+            if (!tomada.ok || !tomada.valor || tomada.valor.estado !== "aplicando") falla("la propuesta ya se está aplicando o se aplicó");
+            const rutaItems = `proyectos/${e.cid}/${e.pid}/presupuesto/items`;
+            const crudo = await al.leer(rutaItems);
+            const items = lista(crudo);
+            const distinto = prop.items.filter((x) => { const it = items[x.n]; return !it || (it.desc || "") !== x.desc || (it.id || null) !== x.id; });
+            if (distinto.length) {
+                await al.actualizar(rutaP, { estado: "vencida", motivo_vencida: "el presupuesto cambió" });
+                falla(`el presupuesto cambió desde la propuesta (${distinto.map((x) => "n " + x.n).join(", ")}): volvé a proponer`);
+            }
+            const dia = new Date(ahora - 4 * 3600 * 1000).toISOString().slice(0, 10);
+            const respaldo = await al.agregar(`respaldos_agente/${dia}`, { ruta: rutaItems, antes: JSON.stringify(crudo), motivo: `confirmar_propuesta ${e.propuesta} (${prop.tipo})`, fecha: ahora, uid });
+            const activo = prop.tipo === "prender_items";
+            const nuevos = items.map((x, i) => (prop.items.some((p) => p.n === i) ? Object.assign({}, x, { activo }) : x));
+            await al.escribir(rutaItems, JSON.parse(JSON.stringify(nuevos)));
+            await al.actualizar(rutaP, { estado: "aplicada", aplicada: ahora, confirmacion: `dueño:${ref}`, respaldo: `respaldos_agente/${dia}/${respaldo}` });
+            const texto = `${activo ? "Prendidos" : "Apagados"} ${prop.items.length} ítems del presupuesto (${prop.motivo}): ${prop.items.map((x) => `«${x.desc}»`).join(", ")}.`;
+            await al.agregar(`${RC}/conversacion/mensajes`, { rol: "aviso", fecha: ahora, texto: `👁 ${texto}` });
+            await anotarParaLaApp(al, e.cid, e.pid, e.conv, texto);
+            return { ok: true, cambiados: prop.items.length, respaldo: `respaldos_agente/${dia}/${respaldo}`, ...totalItems(nuevos),
+                aviso: "Si el dueño tiene el presupuesto abierto en la app, que lo recargue antes de editarlo." };
         },
     },
     {

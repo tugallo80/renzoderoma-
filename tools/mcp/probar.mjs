@@ -10,6 +10,27 @@ const require = createRequire(import.meta.url);
 const OA = require('../../functions/mcp/oauth.js');
 const H = require('../../functions/mcp/herramientas.js');
 const { acotar } = require('../../functions/agente/almacen.js');
+const AG = require('../../functions/agente/herramientas.js');
+
+/** Una cotización vieja hecha en el chat de la app (conversación "principal") y aplicada al presupuesto. */
+async function cotizacionViejaDeLaApp(ent) {
+    const raiz = 'proyectos/cliDemo/proyDemo/agente';
+    await ent.almacen.escribir(`${raiz}/conversacion/mensajes/-Kapp1`, { rol: 'dueno', texto: 'Stand con mostrador de melamina 18 mm, 2 planchas, con masillado y pintura', fecha: ent.almacen.ahora() });
+    const ctx = { almacen: acotar(ent.almacen, H.RUTAS.agente('cliDemo', 'proyDemo')), cid: 'cliDemo', pid: 'proyDemo', uid: 'renzo', mensajesAgente: [] };
+    const armar = AG.HERRAMIENTAS.find((h) => h.def.name === 'armar_borrador');
+    const r = await armar.correr(ctx, { operaciones: [
+        { op: 'capitulo', nombre: 'Stand' },
+        { op: 'item', capitulo: 'Stand', desc: 'Mostrador', und: 'pza', caracteristicas: [{ texto: 'Mostrador con acabado pintado' }] },
+        { op: 'fila', item: 'Mostrador', tipo: 'mat', d: 'Melamina 18', clave: 'MDF_18', q: 2, origen_q: 'dueño:-Kapp1' },
+        { op: 'fila', item: 'Mostrador', tipo: 'mo', d: 'Masillado y pintura', clave: 'CARPINTERIA', q: 2, origen_q: 'dueño:-Kapp1' },
+    ] });
+    assert.equal(r.rechazadas.length, 0, JSON.stringify(r.rechazadas));
+    const conf = await ok(ent, 'registrar_mensaje_del_dueno', { cid: 'cliDemo', pid: 'proyDemo', conv: 'principal', texto: 'aplicalo' });
+    const ap = await ok(ent, 'aplicar_al_presupuesto', { cid: 'cliDemo', pid: 'proyDemo', conv: 'principal', confirmacion: conf.origen });
+    assert.equal(ap.agregados, 1);
+    const items = ent.almacen.datos.proyectos.cliDemo.proyDemo.presupuesto.items;
+    return { n: items.findIndex((x) => x.desc === 'Mostrador'), item: items.find((x) => x.desc === 'Mostrador') };
+}
 
 const pruebas = [];
 const prueba = (n, fn) => pruebas.push([n, fn]);
@@ -18,6 +39,7 @@ const llamar = async (ent, nombre, entrada, uid = 'renzo') => {
     const t = r.content[0].text;
     return { error: !!r.isError, texto: t, json: (() => { try { return JSON.parse(t); } catch (e) { return null; } })() };
 };
+const r2 = (x) => Math.round(x * 100) / 100;
 const ok = async (ent, nombre, entrada) => { const r = await llamar(ent, nombre, entrada); assert.ok(!r.error, `${nombre}: ${r.texto}`); return r.json; };
 
 // ------------------------------------------------------------------ OAuth
@@ -232,7 +254,7 @@ prueba('cada herramienta toca solo lo suyo: otro proyecto, otra conversación y 
     const { conv } = await ok(ent, 'abrir_cotizacion', { cid: 'cliDemo', pid: 'proyDemo' });
     // la conversación es de otro proyecto
     assert.equal((await llamar(ent, 'ver_borrador', { cid: 'cliDemo', pid: 'proyOtro', conv })).error, true);
-    // la conversación "principal" (la del chat de la app) no se toca desde Claude
+    // "principal" solo existe si el chat de la app tiene algo (acá no)
     assert.equal((await llamar(ent, 'ver_borrador', { cid: 'cliDemo', pid: 'proyDemo', conv: 'principal' })).error, true);
     // ids con caracteres raros
     assert.equal((await llamar(ent, 'ver_presupuesto', { cid: 'cliDemo/../x', pid: 'proyDemo' })).error, true);
@@ -261,6 +283,120 @@ prueba('buscar_base y guardar_en_base: lo mismo que el agente, con la confirmaci
     const g = await ok(ent, 'guardar_en_base', { ...C, nodo: 'materiales', clave: 'LONA_DEMO', datos: { n: 'Lona demo', u: 'm2', p: 30 }, confirmacion: m.origen });
     assert.equal(g.origen, 'base:materiales/LONA_DEMO');
     assert.ok(Object.values(ent.almacen.datos.base_datos.historial_cambios).some((h) => h.ruta === 'base_datos/materiales/LONA_DEMO'));
+});
+
+prueba('ajustar una cotización vieja: listar_cotizaciones y retomar la conversación principal desde un ítem', async () => {
+    const ent = crearEntorno();
+    const { n, item } = await cotizacionViejaDeLaApp(ent);
+    assert.equal(item.agente.conv, 'principal');
+    const nueva = await ok(ent, 'abrir_cotizacion', { cid: 'cliDemo', pid: 'proyDemo', titulo: 'Otra cosa' });
+    const l = await ok(ent, 'listar_cotizaciones', { cid: 'cliDemo', pid: 'proyDemo' });
+    const pr = l.cotizaciones.find((c) => c.conv === 'principal');
+    assert.ok(pr, 'la principal aparece aunque no tenga meta');
+    assert.equal(pr.items_en_presupuesto[0].desc, 'Mostrador');
+    assert.equal(pr.aplicado.version, pr.borrador.version);
+    assert.equal(l.cotizaciones.find((c) => c.conv === nueva.conv).origen, 'Claude');
+    // retomar desde el ítem del presupuesto (por posición y por id)
+    const ab = await ok(ent, 'abrir_cotizacion', { cid: 'cliDemo', pid: 'proyDemo', item: String(n) });
+    assert.equal(ab.conv, 'principal');
+    assert.equal(ab.nueva, false);
+    assert.equal(ab.item_en_foco.desc, 'Mostrador');
+    assert.equal((await ok(ent, 'abrir_cotizacion', { cid: 'cliDemo', pid: 'proyDemo', item: item.id })).conv, 'principal');
+    assert.ok(ab.ultimos_mensajes.some((m) => m.id === '-Kapp1'));
+    // un ítem cargado a mano no tiene conversación
+    assert.match((await llamar(ent, 'abrir_cotizacion', { cid: 'cliDemo', pid: 'proyDemo', item: 'itExistente' })).texto, /no lo creó el Agente/);
+    // corregir en el lugar: el agente de la app se entera en su próximo turno
+    const m = await ok(ent, 'registrar_mensaje_del_dueno', { cid: 'cliDemo', pid: 'proyDemo', conv: 'principal', texto: 'sin masillado ni pintura' });
+    const b = await ok(ent, 'armar_borrador', { cid: 'cliDemo', pid: 'proyDemo', conv: 'principal', operaciones: [{ op: 'quitar', item: item.id, tipo: 'mo', fila: 1 }] });
+    assert.equal(b.aplicadas, 1);
+    const ed = Object.values(ent.almacen.datos.proyectos.cliDemo.proyDemo.agente.conversacion.ediciones);
+    assert.match(ed[0].texto, /^Desde Claude: 1 cambios/);
+    // y una conversación que no existe sigue rechazada
+    assert.equal((await llamar(ent, 'ver_borrador', { cid: 'cliDemo', pid: 'proyOtro', conv: 'principal' })).error, true);
+    void m;
+});
+
+prueba('versión económica: copia aparte, aplicar entra aparte y apagar la anterior solo con propuesta → confirmación', async () => {
+    const ent = crearEntorno();
+    const { item } = await cotizacionViejaDeLaApp(ent);
+    const P = { cid: 'cliDemo', pid: 'proyDemo' };
+    const totalAntes = (await ok(ent, 'ver_presupuesto', P)).total;
+    const v = await ok(ent, 'nueva_version', { ...P, conv: 'principal', titulo: 'Versión 2 – económica' });
+    assert.notEqual(v.conv, 'principal');
+    const it2 = v.borrador.capitulos[0].items[0];
+    assert.notEqual(it2.id, item.id, 'ids nuevos: al aplicar entra aparte');
+    assert.equal(v.borrador.capitulos[0].nombre, 'Stand (Versión 2 – económica)');
+    const C = { ...P, conv: v.conv };
+    // la versión anterior quedó intacta
+    assert.equal(ent.almacen.datos.proyectos.cliDemo.proyDemo.agente.borrador.capitulos[0].items[0].id, item.id);
+    // los orígenes dueño: de la versión anterior siguen valiendo en la copia
+    const b = await ok(ent, 'armar_borrador', { ...C, operaciones: [{ op: 'fila', item: it2.id, tipo: 'mat', d: 'MDF 18', clave: 'MDF_18', q: 2, origen_q: 'dueño:-Kapp1', reemplaza: 1 }, { op: 'quitar', item: it2.id, tipo: 'mo', fila: 1 }] });
+    assert.equal(b.rechazadas.length, 0, JSON.stringify(b.rechazadas));
+    // el "aplicalo" copiado de la versión anterior no sirve: hay que confirmar de nuevo
+    const copiado = Object.entries(ent.almacen.datos.proyectos.cliDemo.proyDemo.agente.conversaciones[v.conv].conversacion.mensajes).find(([, m]) => m.texto === 'aplicalo')[0];
+    assert.match((await llamar(ent, 'aplicar_al_presupuesto', { ...C, confirmacion: `dueño:${copiado}` })).texto, /versión anterior/);
+    const si = await ok(ent, 'registrar_mensaje_del_dueno', { ...C, texto: 'aplicá la económica' });
+    const ap = await ok(ent, 'aplicar_al_presupuesto', { ...C, confirmacion: si.origen });
+    assert.equal(ap.agregados, 1);
+    assert.equal(ap.version_anterior.conv, 'principal');
+    assert.deepEqual(ap.version_anterior.items_prendidos.map((x) => x.desc), ['Mostrador']);
+    const items = () => ent.almacen.datos.proyectos.cliDemo.proyDemo.presupuesto.items;
+    assert.equal(items().filter((x) => x.desc === 'Mostrador').length, 2, 'las dos versiones en el presupuesto');
+    // paso 1: propuesta, no cambia nada
+    const vieja = items().find((x) => x.id === item.id);
+    const pr = await ok(ent, 'proponer_apagar_items', { ...P, items: [item.id], motivo: 'reemplazado por la Versión 2 – económica' });
+    assert.ok(pr.propuesta);
+    assert.equal(items().find((x) => x.id === item.id).activo, undefined, 'la propuesta no cambia nada');
+    assert.ok(pr.efecto_en_total < 0);
+    // una respuesta anterior a la propuesta no la confirma
+    assert.match((await llamar(ent, 'confirmar_propuesta', { ...C, propuesta: pr.propuesta, confirmacion: si.origen })).texto, /posterior a la propuesta/);
+    assert.match((await llamar(ent, 'confirmar_propuesta', { ...C, propuesta: pr.propuesta, confirmacion: 'dueño:-Kinventado' })).texto, /confirmación del dueño/);
+    // paso 2: con el sí del dueño
+    const dale = await ok(ent, 'registrar_mensaje_del_dueno', { ...C, texto: 'sí, apagá la versión anterior' });
+    const cf = await ok(ent, 'confirmar_propuesta', { ...C, propuesta: pr.propuesta, confirmacion: dale.origen });
+    assert.equal(cf.cambiados, 1);
+    assert.equal(items().find((x) => x.id === item.id).activo, false, 'apagado, no borrado');
+    assert.ok(items().some((x) => x.id === item.id));
+    const nueva = items().find((x) => x.agente && x.agente.conv === v.conv && x.type === 'item');
+    assert.equal(cf.total, r2(totalAntes - vieja.pu * vieja.cant + nueva.pu * nueva.cant), 'el total ya no suma la versión anterior');
+    // respaldo del presupuesto antes de apagar
+    const resp = Object.values(Object.values(ent.almacen.datos.respaldos_agente).pop()).find((x) => /confirmar_propuesta/.test(x.motivo));
+    assert.ok(JSON.parse(resp.antes).find((x) => x.id === item.id).activo !== false);
+    // un solo uso; y el mismo sí no confirma otra propuesta
+    assert.match((await llamar(ent, 'confirmar_propuesta', { ...C, propuesta: pr.propuesta, confirmacion: dale.origen })).texto, /ya está aplicada/);
+    const pr2 = await ok(ent, 'proponer_apagar_items', { ...P, items: [item.id], accion: 'prender', motivo: 'volver atrás' });
+    assert.match((await llamar(ent, 'confirmar_propuesta', { ...C, propuesta: pr2.propuesta, confirmacion: dale.origen })).texto, /posterior|ya confirmó/);
+    // se puede volver a prender, con otra confirmación
+    const otra = await ok(ent, 'registrar_mensaje_del_dueno', { ...C, texto: 'prendela de nuevo' });
+    await ok(ent, 'confirmar_propuesta', { ...C, propuesta: pr2.propuesta, confirmacion: otra.origen });
+    assert.equal(items().find((x) => x.id === item.id).activo, true);
+    // listar_cotizaciones muestra de qué versión salió
+    const l = await ok(ent, 'listar_cotizaciones', P);
+    assert.equal(l.cotizaciones.find((c) => c.conv === v.conv).basada_en, 'principal');
+});
+
+prueba('propuesta: si el presupuesto cambió desde la propuesta, no se aplica', async () => {
+    const ent = crearEntorno();
+    const { conv } = await ok(ent, 'abrir_cotizacion', { cid: 'cliDemo', pid: 'proyDemo' });
+    const C = { cid: 'cliDemo', pid: 'proyDemo', conv };
+    const pr = await ok(ent, 'proponer_apagar_items', { cid: 'cliDemo', pid: 'proyDemo', items: ['1'], motivo: 'prueba' });
+    assert.equal((await ok(ent, 'proponer_apagar_items', { cid: 'cliDemo', pid: 'proyDemo', items: ['2'], motivo: 'ya apagado' })).propuesta, null);
+    // el dueño movió ítems en la app
+    ent.almacen.datos.proyectos.cliDemo.proyDemo.presupuesto.items.splice(1, 0, { type: 'item', desc: 'Nuevo a mano', cant: 1, pu: 10 });
+    const si = await ok(ent, 'registrar_mensaje_del_dueno', { ...C, texto: 'sí' });
+    assert.match((await llamar(ent, 'confirmar_propuesta', { ...C, propuesta: pr.propuesta, confirmacion: si.origen })).texto, /cambió/);
+    assert.equal(ent.almacen.datos.proyectos.cliDemo.proyDemo.presupuesto.items[2].activo, undefined, 'nada se apagó');
+});
+
+prueba('si el Agente IA de la app está trabajando en esa conversación, Claude no escribe', async () => {
+    const ent = crearEntorno();
+    const { conv } = await ok(ent, 'abrir_cotizacion', { cid: 'cliDemo', pid: 'proyDemo' });
+    const C = { cid: 'cliDemo', pid: 'proyDemo', conv };
+    ent.almacen.datos.proyectos.cliDemo.proyDemo.agente.estado = { fase: 'trabajando', actualizado: ent.almacen.ahora(), conv };
+    assert.match((await llamar(ent, 'registrar_mensaje_del_dueno', { ...C, texto: 'hola' })).texto, /trabajando/);
+    assert.equal((await llamar(ent, 'ver_borrador', C)).error, false, 'leer sí');
+    ent.almacen.avanzar(11 * 60 * 1000);   // un turno colgado más de 10 min no bloquea
+    assert.equal((await llamar(ent, 'registrar_mensaje_del_dueno', { ...C, texto: 'hola' })).error, false);
 });
 
 prueba('las definiciones: nombres únicos, esquemas de objeto y anotaciones de solo lectura', async () => {

@@ -57,6 +57,29 @@ Te escribe desde el celular o la PC. Cada chat de este proyecto es **una cotizac
 8. **Aplicar**: cuando el dueño diga "aplicalo", registrá ese mensaje y llamá `aplicar_al_presupuesto` con `dueño:<id>`.
    Avisale que si tiene el presupuesto abierto en la app, lo recargue.
 
+## Ajustar una cotización que ya existe
+
+Ej.: "entrá a STAND NEXCORP y bajá la cotización: MDF en vez de melamina, sin masillado ni pintura".
+1. `listar_proyectos` → `listar_cotizaciones` del proyecto. Si el dueño nombra un ítem del presupuesto, `abrir_cotizacion`
+   con `item` abre la conversación que lo creó (puede ser `principal`, la del chat de la app).
+2. Preguntá una sola cosa si hace falta: **¿corrijo esta versión o hago una versión nueva y dejo la anterior?**
+   - **Corregir en el lugar:** `armar_borrador` sobre esa `conv` y, cuando diga "aplicalo", `aplicar_al_presupuesto`
+     (actualiza los mismos ítems, en su lugar).
+   - **Versión nueva** (lo normal si el cliente ya vio la anterior): ver abajo.
+3. Registrá cada pedido del dueño ("sin masillado ni pintura") con `registrar_mensaje_del_dueno` y citá ese id en los cambios.
+   Para cambiar un material: `buscar_base` del nuevo y `fila` con `reemplaza` (o `quitar` la fila vieja). Nada de bajar
+   precios a mano ni tocar los recargos: el ahorro tiene que salir de cambios reales del APU.
+4. Contale en pocas líneas qué cambió y cuánto bajó el total (los dos totales los da la herramienta).
+
+## Versión económica (o cualquier versión nueva)
+
+1. `nueva_version {conv: <la que se ajusta>, titulo: "Versión 2 – económica"}` → `conv` nueva. Usala en el resto del chat.
+2. Ajustá con `armar_borrador` (los ids de los ítems son nuevos; están en el borrador que devuelve).
+3. "Aplicalo" → `aplicar_al_presupuesto`: los ítems nuevos entran aparte, con su capítulo "(Versión 2 – económica)".
+4. Si la respuesta trae `version_anterior` (ítems de la versión anterior que siguen sumando), **preguntale si los apaga**
+   (el ojo: no se borran, se pueden volver a prender). Si dice que sí: `proponer_apagar_items` con esos ids → mostrale la lista
+   → registrá su "sí" → `confirmar_propuesta`. Nunca apagues ni borres nada sin ese sí.
+
 Detalle de cada herramienta y ejemplos: `referencias/herramientas.md`. Formatos de origen: `referencias/origenes.md`.
 Cronograma, producción, impresiones y licitaciones: `referencias/despues-de-cotizar.md`.
 
