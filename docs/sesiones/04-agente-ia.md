@@ -280,6 +280,14 @@ causa (ya no se toca el effort del pedido).
 reescritos) a **~US$ 0,07** la primera vez (la que compacta) y **~US$ 0,03** las siguientes con Opus 5.5 (≈ 5.000 tokens leídos de
 la caché + salida); con Sonnet 5.5, ~US$ 0,02. El piso son el prompt y las herramientas (~5.000 tokens, leídos de la caché).
 
+## Arrastrar y soltar, y pegar
+
+- **Arrastrar y soltar (PC):** se pueden soltar archivos sobre todo el panel del chat. Mientras se arrastra, aparece la zona
+  "📎 Soltá acá los archivos". Van por el mismo camino que el 📎 (detección por contenido, 3D medido en el navegador, ZIP, PDF, fotos).
+- **Pegar (PC y celular):** Ctrl+V o "Pegar" en el cuadro de texto adjunta las imágenes y los archivos del portapapeles. Una imagen sin
+  nombre propio queda como `captura-AAAA-MM-DD-HHMM.png` (se puede anotar con ✏️ y el agente la ve como "captura"). El texto pegado
+  no se toca. En Android funciona si el navegador expone el pegado de imágenes; si no, no pasa nada.
+
 ### Pruebas (sin gastar plata)
 
 - `cd tools/agente && npm test` — 61 pruebas (costo de una corrección antes y después, ver_adjunto, modelo de correcciones,
@@ -300,7 +308,7 @@ la caché + salida); con Sonnet 5.5, ~US$ 0,02. El piso son el prompt y las herr
   preguntas que cortan el turno, tope y "Seguir igual", rechazo, `max_tokens` con herramienta cortada, entrada inválida,
   continuación por tiempo, detener, error y reintento. También verifica que `functions/agente/compartido/` sea copia exacta
   de `public/js/` (`npm run sincronizar` la actualiza).
-- `node pantalla/capturas.mjs` — capturas (entrega 3: dibuja 2 cotas, un círculo y una nota con el mouse sobre una foto inventada,
+- `node pantalla/capturas.mjs` — capturas (también simula `drop` de una imagen y un PDF, y `paste` de una captura con texto) — capturas (entrega 3: dibuja 2 cotas, un círculo y una nota con el mouse sobre una foto inventada,
   deshace/rehace y verifica el JSON y la imagen anotada) — capturas en tamaño celular (Pixel 7) con Firebase y `/api/agente` simulados; mide un GLB
   de ejemplo de verdad con el lector 3D.
 - `tools/probar-reglas` — 170 OK, con las reglas nuevas de `agente_cola` y `agente_costos`.

@@ -92,6 +92,8 @@
             '#mod-agente .ag-o.supuesto{background:rgba(90,200,250,.22);color:#0b6e99;}',
             '#mod-agente .ag-f.supuesto{background:rgba(90,200,250,.10);border-left:3px solid #5ac8fa;padding-left:6px;}',
             '#mod-agente .ag-f.supuesto.ok{border-left-color:var(--green);background:none;}',
+            '#mod-agente .ag-soltar{position:absolute;inset:8px;z-index:5;border:3px dashed var(--blue);border-radius:16px;background:rgba(0,122,255,.10);display:none;flex-direction:column;gap:6px;align-items:center;justify-content:center;font-size:20px;font-weight:800;color:var(--blue);pointer-events:none;text-align:center;padding:20px;}',
+            '#mod-agente .ag-box{position:relative;}',
             '#mod-agente .ag-ed{background:none;border:1px solid var(--border);border-radius:6px;padding:0 5px;font-size:12px;cursor:pointer;color:var(--gray);margin-left:4px;}',
             '#ag-edit{position:fixed;inset:0;z-index:9960;background:rgba(0,0,0,.5);display:none;align-items:flex-end;justify-content:center;}',
             '#ag-edit .box{background:var(--card);color:var(--text);width:100%;max-width:560px;border-radius:16px 16px 0 0;padding:16px;padding-bottom:max(16px,env(safe-area-inset-bottom));}',
@@ -125,9 +127,44 @@
             '    <button class="ag-red" id="ag-mic" onclick="_agMic()" title="Dictar" aria-label="Dictar">🎤</button>' +
             '    <button class="ag-red enviar" id="ag-env" onclick="_agEnviar()" title="Enviar" aria-label="Enviar">➤</button>' +
             '  </div>' +
+            '  <div class="ag-soltar" id="ag-soltar">📎 Soltá acá los archivos<span style="font-size:13px;font-weight:600;">3D, ZIP, PDF, fotos o capturas</span></div>' +
             '  <input type="file" id="ag-file" multiple style="display:none" onchange="_agArchivos(this.files); this.value=\'\';">' +
             '</div>';
         document.body.appendChild(div);
+        activarSoltarYPegar(div.querySelector('.ag-box'));
+    }
+
+    // ------------------------------------------------------------------ arrastrar y soltar (PC) y pegar (PC y celular)
+    function hayArchivos(dt) { return !!dt && Array.prototype.indexOf.call(dt.types || [], 'Files') >= 0; }
+    function activarSoltarYPegar(caja) {
+        var nivel = 0, zona = function (v) { var z = $('ag-soltar'); if (z) z.style.display = v ? 'flex' : 'none'; };
+        caja.addEventListener('dragenter', function (e) { if (!hayArchivos(e.dataTransfer)) return; e.preventDefault(); nivel++; zona(true); });
+        caja.addEventListener('dragover', function (e) { if (!hayArchivos(e.dataTransfer)) return; e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; });
+        caja.addEventListener('dragleave', function (e) { if (!hayArchivos(e.dataTransfer)) return; nivel = Math.max(0, nivel - 1); if (!nivel) zona(false); });
+        caja.addEventListener('drop', function (e) {
+            if (!hayArchivos(e.dataTransfer)) return;
+            e.preventDefault(); nivel = 0; zona(false);
+            var fs = Array.from(e.dataTransfer.files || []);
+            if (fs.length) window._agArchivos(fs);
+        });
+        // Pegar: imágenes y archivos del portapapeles van como adjuntos; el texto pegado queda como siempre
+        caja.querySelector('#ag-txt').addEventListener('paste', function (e) {
+            var cd = e.clipboardData; if (!cd) return;
+            var fs = [];
+            Array.from(cd.items || []).forEach(function (it) { if (it.kind === 'file') { var f = it.getAsFile(); if (f) fs.push(f); } });
+            if (!fs.length && cd.files && cd.files.length) fs = Array.from(cd.files);
+            if (!fs.length) return;
+            var hayTexto = Array.from(cd.types || []).some(function (t) { return t === 'text/plain'; }) && (cd.getData('text/plain') || '').trim();
+            if (!hayTexto) e.preventDefault();
+            window._agArchivos(fs.map(nombrarPegado));
+        });
+    }
+    /** Imagen pegada sin nombre propio (image.png, blob…) → "captura-2026-11-12-1630.png". */
+    function nombrarPegado(f, i) {
+        if (!/^image\//.test(f.type || '') || (f.name && !/^(image|blob|imagen|clipboard|pasted)[^/]*\.(png|jpe?g|webp|gif)$|^$/i.test(f.name))) return f;
+        var d = new Date(), z = function (n) { return ('0' + n).slice(-2); };
+        var nombre = 'captura-' + d.getFullYear() + '-' + z(d.getMonth() + 1) + '-' + z(d.getDate()) + '-' + z(d.getHours()) + z(d.getMinutes()) + (i ? '-' + (i + 1) : '') + '.' + ((f.type.split('/')[1] || 'png').replace('jpeg', 'jpg'));
+        try { return new File([f], nombre, { type: f.type }); } catch (e) { return f; }
     }
 
     // ------------------------------------------------------------------ abrir / cerrar y escuchas en RTDB
