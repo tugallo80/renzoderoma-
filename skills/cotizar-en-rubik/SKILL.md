@@ -57,7 +57,6 @@ Te escribe desde el celular o la PC. Cada chat de este proyecto es **una cotizac
 8. **Aplicar**: cuando el dueño diga "aplicalo", registrá ese mensaje y llamá `aplicar_al_presupuesto` con `dueño:<id>`.
    Avisale que si tiene el presupuesto abierto en la app, lo recargue.
 
-<<<<<<< HEAD
 ## Ajustar una cotización que ya existe
 
 Ej.: "entrá a STAND NEXCORP y bajá la cotización: MDF en vez de melamina, sin masillado ni pintura".
@@ -81,8 +80,6 @@ Ej.: "entrá a STAND NEXCORP y bajá la cotización: MDF en vez de melamina, sin
    (el ojo: no se borran, se pueden volver a prender). Si dice que sí: `proponer_apagar_items` con esos ids → mostrale la lista
    → registrá su "sí" → `confirmar_propuesta`. Nunca apagues ni borres nada sin ese sí.
 
-=======
->>>>>>> origin/claude/rubik-conector-mcp
 Detalle de cada herramienta y ejemplos: `referencias/herramientas.md`. Formatos de origen: `referencias/origenes.md`.
 Cronograma, producción, impresiones y licitaciones: `referencias/despues-de-cotizar.md`.
 
