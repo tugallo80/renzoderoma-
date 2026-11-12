@@ -385,7 +385,7 @@ const BASE = {
 };
 function ctxValid(extra) {
     return Object.assign({ adjuntos: { A3D: { tipo: '3d' }, PDF1: { tipo: 'pdf' }, FOTO: { tipo: 'imagen' } }, mediciones: { A3D: MEDICION },
-        mensajesDueno: { M1: true }, base: BASE, recargosPresupuesto: { cs_planilla: 55, ind: 10, util: 30, desde: "Ítem demo" } }, extra || {});
+        mensajesDueno: { M1: true }, base: BASE, recargosPresupuesto: { cs: 55, ind: 10, util: 30 } }, extra || {});
 }
 let idn = 0; const nuevoId = () => 'id' + (++idn);
 
@@ -458,94 +458,14 @@ prueba('borrador: los totales los calcula la herramienta con la lógica del APU 
         { op: 'fila', item: 'Adhesivos', tipo: 'mo', d: 'Instalación', origen_q: 'dueño:M1', q: 1, clave: 'INSTALACION' },
     ], ctxValid(), nuevoId);
     const it = r.borrador.capitulos[0].items[0];
-    // la instalación no es personal en planilla: sin cargas sociales. directo = 3×45 + 300 = 435 ; × 1,10 × 1,30 = 622,05
-    assert.equal(it.pu, 622.05); assert.equal(it.pu, L.calcPu({ mat: it.apu.mat, mo: it.apu.mo, eq: [], sub: [], cs: 0, ind: 10, util: 30 }));
-    assert.equal(it.total, 1244.1); assert.equal(r.borrador.capitulos[0].total, 1244.1); assert.equal(r.borrador.total, 1244.1);
-    assert.deepEqual(it.grupos, { mat: 135, mo: 300, mo_planilla: 0, cs: 0, eq: 0, sub: 0, directo: 435 });
+    // directo = 3×45 + 300 + 300×55 % = 600 ; × 1,10 × 1,30 = 858
+    assert.equal(it.pu, 858); assert.equal(it.pu, L.calcPu({ mat: it.apu.mat, mo: it.apu.mo, eq: [], sub: [], cs: 55, ind: 10, util: 30 }));
+    assert.equal(it.total, 1716); assert.equal(r.borrador.capitulos[0].total, 1716); assert.equal(r.borrador.total, 1716);
+    // totales por grupo para la vista del borrador (costo directo, sin indirectos ni utilidad)
+    assert.deepEqual(it.grupos, { mat: 135, mo: 300, cs: 165, eq: 0, sub: 0 });
     assert.equal(r.borrador.recargos.origen, 'base:presupuesto/recargos');
     const sinOrigen = B.aplicarOperaciones(null, [{ op: 'item', capitulo: 'X', desc: 'Y', cant: 3 }], ctxValid(), nuevoId);
     assert.equal(sinOrigen.resultados[0].ok, false, 'cantidad del ítem distinta de 1 sin origen');
-});
-
-prueba('recargos: cargas sociales solo sobre la MO en planilla; al aplicar, la otra MO pasa a "otros gastos" sin CS y el precio es el mismo', () => {
-    const r = B.aplicarOperaciones(null, [
-        { op: 'item', capitulo: 'Stand', desc: 'Stand ferial', cant: 1 },
-        { op: 'fila', item: 'Stand ferial', tipo: 'mat', d: 'Vinil', origen_q: 'dueño:M1', q: 2, clave: 'VINIL_CORTE' },
-        { op: 'fila', item: 'Stand ferial', tipo: 'mo', d: 'Armado (jornales)', u: 'jornal', origen_q: 'dueño:M1', q: 2, p: 200, origen_p: 'dueño:M1', planilla: true, origen_planilla: 'dueño:M1' },
-        { op: 'fila', item: 'Stand ferial', tipo: 'mo', d: 'Laqueado por m²', origen_q: 'dueño:M1', q: 4, clave: 'LAQUEADO' },
-        { op: 'fila', item: 'Stand ferial', tipo: 'mo', d: 'Pintor', cerrado: true, p: 500, origen_p: 'dueño:M1', origen_q: 'dueño:M1' },
-        { op: 'fila', item: 'Stand ferial', tipo: 'sub', d: 'Corte láser (terceros)', origen_q: 'dueño:M1', q: 1, p: 250, origen_p: 'dueño:M1' },
-        { op: 'fila', item: 'Stand ferial', tipo: 'mo', d: 'Supuesta', origen_q: 'dueño:M1', q: 1, p: 100, origen_p: 'dueño:M1', planilla: true, origen_planilla: 'supuesto:creo que sí' },
-        { op: 'fila', item: 'Stand ferial', tipo: 'mo', d: 'Trato en planilla', cerrado: true, p: 100, origen_p: 'dueño:M1', origen_q: 'dueño:M1', planilla: true, origen_planilla: 'dueño:M1' },
-        { op: 'fila', item: 'Stand ferial', tipo: 'mat', d: 'X', origen_q: 'dueño:M1', q: 1, clave: 'VINIL_CORTE', planilla: true, origen_planilla: 'dueño:M1' },
-    ], ctxValid(), nuevoId);
-    assert.deepEqual(r.resultados.slice(6).map(x => x.ok), [false, false, false]);
-    assert.match(r.resultados[6].error, /no se supone/); assert.match(r.resultados[7].error, /trato/); assert.match(r.resultados[8].error, /solo para mano de obra/);
-    const it = r.borrador.capitulos[0].items[0];
-    // CS 55 % solo sobre los 400 de planilla (220); laqueado 140 y trato 500 sin CS
-    assert.deepEqual(it.grupos, { mat: 90, mo: 1040, mo_planilla: 400, cs: 220, eq: 0, sub: 250, directo: 1600 });
-    assert.equal(it.pu, 2288);   // 1600 × 1,10 × 1,30
-    const items = B.aItemsPresupuesto(r.borrador, {});
-    const ap = items.find(x => x.type === 'item');
-    assert.equal(ap.apu.cs, 55); assert.equal(ap.apu.mo.length, 1); assert.equal(ap.apu.mo[0].planilla, true);
-    assert.deepEqual(ap.apu.eq.map(f => f.d), ['MO sin CS · Laqueado por m²', 'MO sin CS · Pintor']);
-    assert.equal(ap.pu, it.pu, 'el presupuesto calcula el mismo precio con su única cs por ítem');
-    // ítem sin planilla: cs 0 y la MO queda en mano de obra
-    const r2 = B.aplicarOperaciones(r.borrador, [{ op: 'item', capitulo: 'Stand', desc: 'Letrero' }, { op: 'fila', item: 'Letrero', tipo: 'mo', d: 'Instalación', origen_q: 'dueño:M1', q: 1, clave: 'INSTALACION' }], ctxValid(), nuevoId);
-    const ap2 = B.aItemsPresupuesto(r2.borrador, {}).find(x => x.desc === 'Letrero');
-    assert.equal(ap2.apu.cs, 0); assert.equal(ap2.apu.mo.length, 1); assert.equal(ap2.pu, 429);   // 300 × 1,10 × 1,30
-});
-
-prueba('recargos: nada inventado — sin datos del dueño quedan los por defecto del APU (10/15, CS 0) sin confirmar, y la planilla sin % queda marcada', () => {
-    const c = ctxValid({ recargosPresupuesto: null });
-    const r = B.aplicarOperaciones(null, [
-        { op: 'item', capitulo: 'Stand', desc: 'Panel' },
-        { op: 'fila', item: 'Panel', tipo: 'mo', d: 'Armado', u: 'jornal', origen_q: 'dueño:M1', q: 1, p: 200, origen_p: 'dueño:M1', planilla: true, origen_planilla: 'dueño:M1' },
-        { op: 'recargos', ind: 10, util: 50, origen: 'supuesto:lo normal' },
-        { op: 'recargos', ind: 10, util: 50, origen: 'base:presupuesto/recargos' },
-    ], c, nuevoId);
-    assert.equal(r.resultados[2].ok, false); assert.match(r.resultados[2].error, /no se suponen/);
-    assert.equal(r.resultados[3].ok, false);
-    const b = r.borrador;
-    assert.equal(b.recargos.pendiente, true); assert.equal(b.recargos.ind, 10); assert.equal(b.recargos.util, 15); assert.equal(b.recargos.cs_planilla, null);
-    const it = b.capitulos[0].items[0];
-    assert.equal(it.pu, 253);   // 200 × 1,10 × 1,15, sin CS porque no hay %
-    assert.match(it.apu.mo[0].revisar, /cargas sociales/);
-    assert.match(B.resumen(b).recargos, /SIN CONFIRMAR/);
-    // el dueño los dice: se cargan, deja de estar pendiente y la fila se desmarca
-    const r2 = B.aplicarOperaciones(b, [{ op: 'recargos', ind: 12, util: 20, cs_planilla: 55, origen: 'dueño:M1' }], c, nuevoId);
-    assert.equal(r2.resultados[0].ok, true);
-    assert.equal(r2.borrador.recargos.pendiente, undefined);
-    const it2 = r2.borrador.capitulos[0].items[0];
-    assert.equal(it2.apu.mo[0].revisar, undefined);
-    assert.equal(it2.pu, 416.64);   // 200 × 1,55 × 1,12 × 1,20
-});
-
-prueba('recargos: un borrador viejo con 55/10/50 por defecto se rehace con los del presupuesto', () => {
-    const viejo = { capitulos: [{ id: 'c', nombre: 'S', items: [{ id: 'i', desc: 'A', cant: 1, und: 'glb', apu: { mat: [], mo: [{ d: 'MO', u: 'glb', q: 1, p: 100 }], eq: [], sub: [] } }] }],
-        recargos: { cs: 55, ind: 10, util: 50, origen: 'apu-utils (por defecto)' }, version: 3 };
-    const b = B.calcularTotales(B.normalizar(viejo), ctxValid());
-    assert.equal(b.recargos.origen, 'base:presupuesto/recargos'); assert.equal(b.recargos.util, 30);
-    assert.equal(b.capitulos[0].items[0].pu, 143);   // 100 × 1,10 × 1,30, sin CS
-    const sinPres = B.calcularTotales(B.normalizar(viejo), ctxValid({ recargosPresupuesto: null }));
-    assert.equal(sinPres.recargos.pendiente, true); assert.equal(sinPres.recargos.util, 15);
-});
-
-prueba('recargos del presupuesto: solo ítems del dueño (los aplicados por el agente no cuentan), sin valores por defecto', async () => {
-    const alm = nuevoAlmacen();
-    const pres = (items) => { alm.datos.proyectos = { [CID]: { [PID]: { presupuesto: { items } } } }; };
-    const ctx = { almacen: alm, cid: CID, pid: PID };
-    pres([]); assert.equal(await H.recargosPresupuesto(ctx), null);
-    pres([{ type: 'item', desc: 'Del agente', origen: 'agente', agente: {}, apu: { cs: 55, ind: 10, util: 50 } }]);
-    assert.equal(await H.recargosPresupuesto(ctx), null, 'lo que aplicó el agente no realimenta los recargos');
-    pres([
-        { type: 'item', desc: 'Mueble con planilla', apu: { cs: 55, ind: 10, util: 15 } },
-        { type: 'item', desc: 'Tarifa m²', apu: { cs: 0, ind: 8, util: 20 } },
-        { type: 'item', desc: 'Del agente', origen: 'agente', agente: {}, apu: { cs: 55, ind: 10, util: 50 } },
-    ]);
-    assert.deepEqual(await H.recargosPresupuesto(ctx), { ind: 8, util: 20, cs_planilla: 55, desde: 'Tarifa m²' });
-    pres([{ type: 'item', desc: 'Solo util', apu: { util: 15 } }]);
-    assert.equal(await H.recargosPresupuesto(ctx), null, 'sin indirectos y utilidad juntos no hay recargos (no se completa con defaults)');
 });
 
 prueba('borrador: item_desde_3d usa el algoritmo de Importar 3D (materiales, receta de MO, ruta B)', () => {
@@ -620,9 +540,7 @@ prueba('flujo con la API simulada: adjuntar → borrador → corrección (sin or
     assert.equal(ra.aplicadas, 2); assert.equal(ra.rechazadas.length, 1); assert.match(ra.rechazadas[0].motivo, /origen/);
     let bor = alm.datos.proyectos[CID][PID].agente.borrador;
     const it = bor.capitulos[0].items[0];
-    // la MO no es de planilla: sin cargas sociales aunque el presupuesto tenga un ítem con 55 %
-    assert.equal(it.pu, L.calcPu({ mat: it.apu.mat, mo: it.apu.mo, eq: [], sub: [], cs: 0, ind: 10, util: 30 }));
-    assert.equal(bor.recargos.cs_planilla, 55); assert.equal(bor.recargos.origen, 'base:presupuesto/recargos');
+    assert.equal(it.pu, L.calcPu({ mat: it.apu.mat, mo: it.apu.mo, eq: [], sub: [], cs: 55, ind: 10, util: 30 }));
     assert.equal(bor.total, it.total);
     const total1 = bor.total;
     // corrección del dueño

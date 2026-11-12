@@ -338,31 +338,15 @@ la caché + salida); con Sonnet 5.5, ~US$ 0,02. El piso son el prompt y las herr
 5. **Aplicar al presupuesto** y revisar los ítems "Agente" al final (y su APU).
 6. Para comparar modelos: repetir la misma cotización en otro proyecto con Sonnet 5.5 (⚙) y comparar borrador y costo.
 
-### Recargos: cargas sociales solo sobre la planilla (PR abierto, sin mergear)
+### Totales por grupo en el borrador del chat (PR abierto, sin mergear)
 
-**Problema.** El agente aplicaba 55 / 10 / 50 (CS / indirectos / utilidad) a todo, incluidos tarifas por m², tratos y servicios de terceros.
-El modal del APU, en cambio, usa por defecto CS 0 (tarifas por m²) y utilidad 15.
+Cada ítem del borrador muestra sus totales por grupo, igual que el APU del presupuesto (#300). Son costo directo por unidad, sin indirectos ni utilidad:
+- materiales;
+- mano de obra, con las cargas sociales aparte;
+- sub-ítems;
+- otros gastos.
 
-**De dónde salía:**
-1. `recargosPresupuesto` (servidor) tomaba el último ítem del presupuesto y completaba lo que faltaba con 55 / 10 / 50. También contaba los ítems que había aplicado el propio agente, así que se realimentaba.
-2. `calcularTotales` usaba 55 / 10 / 50 cuando el presupuesto no tenía recargos.
-3. `apu-utils.normalizeApu` (presupuesto.html) pone util 50, ind 10 y cs 55 a los ítems que no los tienen, al cargar y al abrir el APU. Así se guardan en ítems del dueño. **Esto no se cambió en este PR**: afecta precios de presupuestos existentes y queda para decidir.
-
-**Ahora:**
-- Recargos del borrador: `{ind, util, cs_planilla, origen}`.
-  - Salen del dueño (`dueño:`) o de los ítems del dueño en el presupuesto (`base:presupuesto/recargos`). Los ítems con origen "agente" no cuentan.
-  - `cs_planilla` se toma del último ítem con CS > 0.
-  - Si no hay recargos, se calcula con los defaults del modal del APU (10 / 15, CS 0) marcados **sin confirmar**, y el agente los pregunta en la ronda de preguntas.
-  - El primer mensaje le dice al agente cuáles hay.
-- Cargas sociales: solo sobre filas de MO con `planilla: true`, que exige `origen_planilla dueño:`. No se puede suponer ni aplicar a un trato.
-  - Si falta el % de planilla, la fila queda marcada.
-  - Tarifas por m², tratos y terceros van sin CS.
-- Al aplicar al presupuesto (una sola `cs` por ítem):
-  - Sin planilla: `cs` 0.
-  - Con planilla: `cs` = % de planilla, y la otra MO pasa a **otros gastos** con el prefijo "MO sin CS · ".
-  - En los dos casos el precio del presupuesto es el mismo que el del borrador (probado).
-- Borradores viejos con 55 / 10 / 50 por defecto se recalculan con los del presupuesto.
-- Vista del borrador: totales por grupo en cada ítem (materiales, mano de obra + CS, sub-ítems, otros gastos), como en el APU del presupuesto (#300). También salen la marca PLANILLA +CS en la fila y los recargos con su origen.
+Los calcula `AgenteBorrador.calcularTotales` (`it.grupos`). Los recargos no cambian: el dueño los ajusta en el APU.
 
 ### Pendientes / próximas etapas
 - Reglas de Storage en la consola (ver arriba).

@@ -333,9 +333,8 @@
         tab.classList.toggle('on', verBorrador);
         if (!caps.length) { if (verBorrador) window._agVerBorrador(false); return; }
         var rc = borrador.recargos || {};
-        el.innerHTML = '<div class="ag-it-sub" style="margin-bottom:8px;">Borrador v' + (borrador.version || 1) + ' · recargos: indirectos ' +
-            (rc.ind != null ? rc.ind : '?') + ' %, utilidad ' + (rc.util != null ? rc.util : '?') + ' %, cargas sociales ' + (rc.cs_planilla != null ? rc.cs_planilla + ' %' : '—') + ' solo sobre la MO en planilla ' +
-            (rc.pendiente ? '<b style="color:var(--orange);">(por defecto del APU, sin confirmar: decíselos al agente)</b>' : chipOrigen(rc.origen)) +
+        el.innerHTML = '<div class="ag-it-sub" style="margin-bottom:8px;">Borrador v' + (borrador.version || 1) + ' · recargos: cargas sociales ' + (rc.cs != null ? rc.cs : '?') + ' %, indirectos ' +
+            (rc.ind != null ? rc.ind : '?') + ' %, utilidad ' + (rc.util != null ? rc.util : '?') + ' % ' + chipOrigen(rc.origen) +
             (borrador.filas_marcadas ? ' · <b style="color:var(--red);">' + borrador.filas_marcadas + ' fila' + (borrador.filas_marcadas > 1 ? 's marcadas' : ' marcada') + '</b>' : '') + '</div>' +
             caps.map(function (c) {
                 return '<div class="ag-cap"><h3><span>' + esc(String(c.nombre || '').toUpperCase()) + '</span><span>Bs ' + bs(c.total) + '</span></h3>' +
@@ -346,7 +345,7 @@
                             if (!fs.length) return '';
                             return '<div class="ag-it-sub" style="margin-top:6px;font-weight:700;">' + TIT[t] + '</div>' + fs.map(function (f, fi) {
                                 return '<div class="ag-f' + (f.revisar ? ' marcada' : '') + (f.supuesto ? ' supuesto' + (f.confirmado ? ' ok' : '') : '') + '"><span>' + esc(f.d) +
-                                    (f.cerrado ? ' <b style="color:var(--orange);font-size:10px;">TRATO CERRADO</b>' : '') + (f.planilla ? ' <b style="color:var(--blue);font-size:10px;" title="Personal en planilla: lleva cargas sociales">PLANILLA +CS</b> ' + chipOrigen(f.origen_planilla) : '') + (f.supuesto ? ' <span style="font-size:10px;font-weight:700;color:' + (f.confirmado ? 'var(--green)' : '#0b6e99') + ';">' + (f.confirmado ? '✓ confirmado' : 'supuesto sin confirmar') + '</span>' : '') +
+                                    (f.cerrado ? ' <b style="color:var(--orange);font-size:10px;">TRATO CERRADO</b>' : '') + (f.supuesto ? ' <span style="font-size:10px;font-weight:700;color:' + (f.confirmado ? 'var(--green)' : '#0b6e99') + ';">' + (f.confirmado ? '✓ confirmado' : 'supuesto sin confirmar') + '</span>' : '') +
                                     '</span><span class="num">' + bs(f.q * f.p) + ' <button class="ag-ed" onclick="_agBorrarFila(\'' + esc(it.id) + '\',\'' + t + '\',' + (fi + 1) + ')" title="Borrar la fila (sin IA)" aria-label="Borrar fila">🗑</button></span>' +
                                     '<span class="ori">' + chipOrigen(f.origen_q) + (f.stock_q ? f.q_total + ' ' + esc(f.u) + ' − stock propio ' + chipOrigen(f.origen_stock) + f.stock_q + ' = ' : '') + f.q + ' ' + esc(f.u) + ' × ' + (f.p ? chipOrigen(f.origen_p) + bs(f.p) : '—') +
                                     (f.factor ? ' · factor ' + f.factor + ' ' + chipOrigen(f.origen_factor) : '') + (f.nota ? ' · ' + esc(f.nota) : '') + '</span>' +

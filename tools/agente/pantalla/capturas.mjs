@@ -90,7 +90,7 @@ await page.evaluate(() => {
         { item: 'Mostrador', pieza: 'Lateral', material: 'MDF_18', cant: 2, largo: 0.9, ancho: 0.6, espesor: 0.018, tipo: 'plancha', area_m2: 1.1448, area_cara_m2: 0.54, perimetro_ml: 3.0, volumen_m3: 0.0097, acabados: [] },
         { item: 'Totem', pieza: 'Cuerpo', material: null, origen_vw: 'Acrilico', cant: 1, largo: 2.4, ancho: 0.8, espesor: 0.3, tipo: 'volumen', area_m2: 5.76, volumen_m3: 0.576, acabados: [] }] };
     const ctx = { adjuntos: { A3D: { tipo: '3d' }, PDF1: { tipo: 'pdf' } }, mediciones: { A3D: med }, mensajesDueno: { M1: true },
-        recargosPresupuesto: { cs_planilla: 55, ind: 10, util: 15, desde: 'Ítem demo' },
+        recargosPresupuesto: { cs: 55, ind: 10, util: 30 },
         base: { materiales: { MDF_18: { n: 'MDF 18 mm blanco', u: 'm2', p: 120, mo_receta: [{ mo: 'LAQUEADO', medida: 'm2_sup' }] }, ACRILICO_3: { n: 'Acrílico 3 mm', u: 'm2', p: 0 }, VINIL: { n: 'Vinil de corte', u: 'm2', p: 45 }, TUBO: { n: 'Tubo 20×40', u: 'ml', p: 18 }, TUBO20: { n: 'Tubo 20×20', u: 'und', p: 60 }, LONA: { n: 'Lona front 13 oz', u: 'm2', p: 40 } },
             mano_obra: { LAQUEADO: { n: 'Laqueado', u: 'm2', p: 35 } }, oficios: {}, rendimientos: {} } };
     let n = 0;
@@ -99,8 +99,6 @@ await page.evaluate(() => {
             { texto: 'Frente de 1,80 m × 0,60 m', origen: 'pieza3d:A3D/p1' }, { texto: 'MDF 18 mm laqueado blanco', origen: 'base:materiales/MDF_18' },
             { texto: 'Logo en vinil de 40 cm', origen: 'supuesto:logo proporcional al frente' }, { texto: 'Incluye traslado e instalación; no incluye diseño' }] },
         { op: 'fila', item: 'Mostrador recepción', tipo: 'mat', d: 'Adhesivo lateral', u: 'und', q: 3, origen_q: 'dueño:M1', p: 50, origen_p: 'dueño:M1' },
-        { op: 'fila', item: 'Mostrador recepción', tipo: 'mo', d: 'Armado en taller', u: 'jornal', q: 2, origen_q: 'dueño:M1', p: 200, origen_p: 'dueño:M1', planilla: true, origen_planilla: 'dueño:M1' },
-        { op: 'fila', item: 'Mostrador recepción', tipo: 'sub', d: 'Corte láser del logo (terceros)', u: 'glb', q: 1, origen_q: 'dueño:M1', p: 180, origen_p: 'dueño:M1' },
         { op: 'item_desde_3d', capitulo: 'Stand demo', adjunto: 'A3D', item3d: 'Totem', desc: 'Restauración tótem', materiales: { p3: 'ACRILICO_3' } },
         { op: 'fila', item: 'Restauración tótem', tipo: 'mat', d: 'Vinil frente', origen_q: 'cota_plano:PDF1 p.2 "0,80 x 2,40"', q: 1.92, clave: 'VINIL' },
         { op: 'fila', item: 'Restauración tótem', tipo: 'mo', d: '', origen_q: 'dueño:M1', cerrado: true, p: 1000, origen_p: 'dueño:M1', oficio: 'Don Pedro' },
@@ -116,9 +114,6 @@ await page.click('#ag-tab');
 await captura('7-borrador');
 await page.evaluate(() => { const g = document.querySelector('#ag-borr .ag-grupos'); g && g.scrollIntoView({ block: 'center' }); });
 await captura('7b-totales-por-grupo');
-const ap = await page.evaluate(() => window.AgenteBorrador.aItemsPresupuesto(window._fbFalso.get('proyectos/cliDemo/proyDemo/agente/borrador')).find((x) => x.desc === 'Mostrador recepción'));
-console.log('aplicado: cs', ap.apu.cs, 'mo', ap.apu.mo.map((f) => f.d), 'eq', ap.apu.eq.map((f) => f.d));
-if (ap.apu.cs !== 55 || ap.apu.mo.length !== 1 || !ap.apu.eq.some((f) => /^MO sin CS/.test(f.d))) throw new Error('recargos mal al aplicar');
 const feat = await page.evaluate(() => window.AgenteBorrador.aItemsPresupuesto(window._fbFalso.get('proyectos/cliDemo/proyDemo/agente/borrador')).find((x) => x.desc === 'Mostrador recepción').feat);
 console.log('feat', JSON.stringify(feat));
 if (!/MDF 18 mm/.test(feat) || /Logo/.test(feat)) throw new Error('características mal');
