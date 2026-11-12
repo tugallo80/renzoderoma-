@@ -234,6 +234,47 @@ const vuelta = await page.evaluate(() => document.querySelectorAll('#ag-msgs .ag
 console.log('mensajes al volver a la primera', vuelta);
 if (vuelta < 2) throw new Error('no volvió a la primera conversación');
 
+// 17) Arrastrar y soltar sobre el panel, y pegar del portapapeles
+await page.evaluate(() => { window._agNueva(); });
+await page.waitForTimeout(400);
+const antesDrop = await page.evaluate(() => window._pedidosAgente.filter((p) => p.accion === 'adjuntar').length);
+await page.evaluate(async () => {
+    const png = await new Promise((r) => { const c = document.createElement('canvas'); c.width = 320; c.height = 200; const x = c.getContext('2d'); x.fillStyle = '#e53935'; x.fillRect(0, 0, 320, 200); c.toBlob(r, 'image/png'); });
+    const dt = new DataTransfer();
+    dt.items.add(new File([png], 'foto-del-cliente.png', { type: 'image/png' }));
+    dt.items.add(new File(['%PDF-1.4\n% inventado'], 'lista-de-items.pdf', { type: 'application/pdf' }));
+    const caja = document.querySelector('#mod-agente .ag-box');
+    caja.dispatchEvent(new DragEvent('dragenter', { dataTransfer: dt, bubbles: true, cancelable: true }));
+    caja.dispatchEvent(new DragEvent('dragover', { dataTransfer: dt, bubbles: true, cancelable: true }));
+    window._zonaVisible = document.getElementById('ag-soltar').style.display;
+    caja.dispatchEvent(new DragEvent('drop', { dataTransfer: dt, bubbles: true, cancelable: true }));
+});
+await page.waitForFunction((n) => window._pedidosAgente.filter((p) => p.accion === 'adjuntar').length >= n + 2, antesDrop, { timeout: 15000 });
+const drop = await page.evaluate((n) => ({ zona: window._zonaVisible, zonaDespues: document.getElementById('ag-soltar').style.display,
+    nuevos: window._pedidosAgente.filter((p) => p.accion === 'adjuntar').slice(n).map((p) => p.tipo + ':' + p.nombre) }), antesDrop);
+console.log('drop', JSON.stringify(drop));
+if (drop.zona !== 'flex' || drop.zonaDespues !== 'none' || !drop.nuevos.includes('imagen:foto-del-cliente.png') || !drop.nuevos.includes('pdf:lista-de-items.pdf')) throw new Error('arrastrar y soltar falló');
+// pegar: una captura sin nombre (como la de Ctrl+V) junto con texto → el texto queda, la imagen va como adjunto "captura-…"
+await page.fill('#ag-txt', 'Mirá esto: ');
+await page.evaluate(async () => {
+    const png = await new Promise((r) => { const c = document.createElement('canvas'); c.width = 400; c.height = 300; c.getContext('2d').fillRect(0, 0, 400, 300); c.toBlob(r, 'image/png'); });
+    const dt = new DataTransfer();
+    dt.items.add(new File([png], 'image.png', { type: 'image/png' }));
+    dt.setData('text/plain', 'texto copiado del mail');
+    const ev = new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true });
+    document.getElementById('ag-txt').dispatchEvent(ev);
+    window._pegadoCancelado = ev.defaultPrevented;
+});
+await page.waitForFunction((n) => window._pedidosAgente.filter((p) => p.accion === 'adjuntar').length >= n + 3, antesDrop, { timeout: 15000 });
+const pegado = await page.evaluate(() => ({ ultimo: window._pedidosAgente.filter((p) => p.accion === 'adjuntar').at(-1).nombre, cancelado: window._pegadoCancelado }));
+console.log('pegado', JSON.stringify(pegado));
+if (!/^captura-\d{4}-\d{2}-\d{2}-\d{4}\.png$/.test(pegado.ultimo) || pegado.cancelado) throw new Error('pegar falló');
+await page.waitForTimeout(300);
+await captura('17-soltar-y-pegar');
+// la zona resaltada mientras se arrastra
+await page.evaluate(() => { const dt = new DataTransfer(); dt.items.add(new File(['x'], 'x.pdf', { type: 'application/pdf' })); document.querySelector('#mod-agente .ag-box').dispatchEvent(new DragEvent('dragenter', { dataTransfer: dt, bubbles: true, cancelable: true })); });
+await captura('18-zona-soltar');
+
 console.log(errores.length ? 'ERRORES EN LA PÁGINA:\n' + errores.join('\n') : 'sin errores en la página');
 await browser.close(); srv.close();
 if (errores.length) process.exitCode = 1;
