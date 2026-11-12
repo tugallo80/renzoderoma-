@@ -13,7 +13,7 @@
 
     var N = window.AgenteNucleo;
     var MAX_PDF_MB = 20, MAX_IMG_LADO = 2000;
-    var abierto = false, escuchas = [], mensajes = {}, estado = {}, costoProyecto = {}, costoMes = {}, config = {};
+    var abierto = false, escuchas = [], mensajes = {}, estado = {}, costoProyecto = {}, costoMes = {}, config = {}, borrador = null, verBorrador = false;
     var pendientes = [];   // adjuntos del próximo mensaje: {clave, nombre, tipo, estado: 'procesando'|'listo'|'error', id, error, miniatura}
     var audioActual = null, reconocimiento = null, grabador = null;
 
@@ -32,6 +32,7 @@
             '@media(min-width:800px){#mod-agente .ag-box{height:calc(100% - 40px);margin-top:20px;border-radius:14px;overflow:hidden;}}',
             '#mod-agente .ag-top{display:flex;align-items:center;gap:8px;padding:10px 12px;background:var(--card);border-bottom:1px solid var(--border);}',
             '#mod-agente .ag-top b{font-size:16px;white-space:nowrap;}',
+            '@media(max-width:480px){#mod-agente .ag-top.con-borrador .ag-tit{display:none;}}',
             '#mod-agente .ag-ico{background:none;border:none;font-size:22px;line-height:1;color:var(--gray);cursor:pointer;padding:4px 6px;}',
             '#mod-agente .ag-costo{flex:1;min-width:0;text-align:right;font-size:11px;line-height:1.25;color:var(--gray);cursor:pointer;background:none;border:none;font-family:inherit;}',
             '#mod-agente .ag-costo b{font-size:12px;color:var(--text);}',
@@ -61,13 +62,28 @@
             '#mod-agente .ag-btn.prim{background:var(--blue);border-color:var(--blue);color:#fff;}',
             '#mod-agente .ag-adj{padding:0 12px;background:var(--card);}',
             '#mod-agente .ag-comp{display:flex;align-items:flex-end;gap:6px;padding:8px 10px;padding-bottom:max(8px,env(safe-area-inset-bottom));background:var(--card);border-top:1px solid var(--border);}',
-            '#mod-agente .ag-comp textarea{flex:1;min-height:42px;max-height:140px;resize:none;border:1px solid var(--border);border-radius:20px;padding:10px 14px;font-size:16px;font-family:inherit;background:var(--bg);color:var(--text);}',
+            '#mod-agente .ag-comp textarea{flex:1;box-sizing:border-box;height:42px;min-height:42px;max-height:140px;resize:none;border:1px solid var(--border);border-radius:20px;padding:10px 14px;font-size:16px;font-family:inherit;background:var(--bg);color:var(--text);}',
             '#mod-agente .ag-red{width:42px;height:42px;flex:none;border-radius:50%;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:19px;cursor:pointer;display:flex;align-items:center;justify-content:center;}',
             '#mod-agente .ag-red.enviar{background:var(--blue);border-color:var(--blue);color:#fff;} #mod-agente .ag-red:disabled{opacity:.45;}',
             '#mod-agente .ag-red.grabando{background:var(--red);border-color:var(--red);color:#fff;animation:agpulso 1.2s ease-in-out infinite;}',
             '@keyframes agpulso{50%{opacity:.6;}}',
             '#mod-agente .ag-vacio{color:var(--gray);font-size:14px;line-height:1.5;padding:18px 6px;text-align:center;}',
-            '#mod-agente .ag-m code{background:rgba(0,0,0,.07);padding:0 4px;border-radius:4px;font-size:12px;}'
+            '#mod-agente .ag-m code{background:rgba(0,0,0,.07);padding:0 4px;border-radius:4px;font-size:12px;}',
+            '#mod-agente .ag-tab{border:1px solid var(--green);color:var(--green);background:none;border-radius:14px;padding:5px 10px;font-weight:800;font-size:12px;cursor:pointer;white-space:nowrap;}',
+            '#mod-agente .ag-tab.on{background:var(--green);color:#fff;}',
+            '#mod-agente .ag-borr{flex:1;overflow-y:auto;padding:10px 12px;display:none;-webkit-overflow-scrolling:touch;}',
+            '#mod-agente .ag-cap{margin-bottom:14px;} #mod-agente .ag-cap>h3{font-size:13px;letter-spacing:.5px;margin:4px 0 6px;display:flex;justify-content:space-between;}',
+            '#mod-agente .ag-it{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:10px 12px;margin-bottom:8px;}',
+            '#mod-agente .ag-it-cab{display:flex;justify-content:space-between;gap:8px;font-weight:700;font-size:14px;}',
+            '#mod-agente .ag-it-sub{font-size:12px;color:var(--gray);margin-top:2px;}',
+            '#mod-agente .ag-f{display:grid;grid-template-columns:1fr auto;gap:2px 8px;font-size:12px;padding:6px 0;border-top:1px dashed var(--border);}',
+            '#mod-agente .ag-f .num{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums;}',
+            '#mod-agente .ag-f .ori{grid-column:1/-1;color:var(--gray);font-size:11px;}',
+            '#mod-agente .ag-f.marcada{background:rgba(255,59,48,.06);} #mod-agente .ag-f.marcada .rev{grid-column:1/-1;color:var(--red);font-size:11px;font-weight:700;}',
+            '#mod-agente .ag-o{display:inline-block;padding:0 5px;border-radius:6px;font-size:10px;font-weight:800;margin-right:3px;background:rgba(0,0,0,.07);}',
+            '#mod-agente .ag-o.pieza3d{background:rgba(52,199,89,.15);color:#1e7f3a;} #mod-agente .ag-o.base{background:rgba(0,122,255,.12);color:#0a58c2;}',
+            '#mod-agente .ag-o.cota_plano{background:rgba(175,82,222,.14);color:#7a2fa0;} #mod-agente .ag-o.dueño{background:rgba(255,149,0,.16);color:#a35f00;}',
+            '#mod-agente .ag-tot{position:sticky;bottom:0;background:var(--bg);padding:10px 2px;font-weight:800;display:flex;justify-content:space-between;border-top:2px solid var(--text);}'
         ].join('\n');
         document.head.appendChild(css);
         var div = document.createElement('div');
@@ -75,7 +91,8 @@
         div.innerHTML =
             '<div class="ag-box" role="dialog" aria-label="Agente IA">' +
             '  <div class="ag-top">' +
-            '    <b>🤖 Agente IA</b>' +
+            '    <b>🤖<span class="ag-tit"> Agente IA</span></b>' +
+            '    <button class="ag-tab" id="ag-tab" onclick="_agVerBorrador()" style="display:none;">📋 Borrador</button>' +
             '    <button class="ag-costo" id="ag-costo" onclick="_agPanel(\'costos\')" title="Costo de la API">…</button>' +
             '    <button class="ag-ico" onclick="_agPanel(\'config\')" title="Configuración" aria-label="Configuración">⚙</button>' +
             '    <button class="ag-ico" onclick="cerrarAgenteIA()" aria-label="Cerrar" style="font-size:28px;">×</button>' +
@@ -83,6 +100,7 @@
             '  <div class="ag-panel" id="ag-p-costos"></div>' +
             '  <div class="ag-panel" id="ag-p-config"></div>' +
             '  <div class="ag-msgs" id="ag-msgs"></div>' +
+            '  <div class="ag-borr" id="ag-borr"></div>' +
             '  <div class="ag-estado" id="ag-estado"></div>' +
             '  <div class="ag-adj" id="ag-adj"></div>' +
             '  <div class="ag-comp">' +
@@ -102,7 +120,7 @@
         $('mod-agente').style.display = 'block';
         document.body.style.overflow = 'hidden';
         if (!abierto) { abierto = true; escuchar(); }
-        pintarMensajes(); pintarEstado(); pintarCosto(); pintarAdjuntos();
+        pintarMensajes(); pintarEstado(); pintarCosto(); pintarAdjuntos(); pintarBorrador();
         if (archivos && archivos.length) window._agArchivos(archivos);
         setTimeout(function () { var m = $('ag-msgs'); if (m) m.scrollTop = m.scrollHeight; }, 50);
     };
@@ -121,6 +139,7 @@
         var refM = db.ref(raiz() + '/conversacion/mensajes').limitToLast(200);
         on(refM, 'child_added', function (s) { mensajes[s.key] = s.val(); pintarMensajes(true); });
         on(refM, 'child_changed', function (s) { mensajes[s.key] = s.val(); pintarMensajes(); });
+        on(db.ref(raiz() + '/borrador'), 'value', function (s) { borrador = s.val(); pintarBorrador(); });
         on(db.ref(raiz() + '/estado'), 'value', function (s) { estado = s.val() || {}; pintarEstado(); });
         on(db.ref(raiz() + '/costos/total'), 'value', function (s) { costoProyecto = s.val() || {}; pintarCosto(); });
         on(db.ref('agente_costos/' + N.mesClave() + '/_total'), 'value', function (s) { costoMes = s.val() || {}; pintarCosto(); });
@@ -170,6 +189,64 @@
         if (alFinal || cerca) cont.scrollTop = cont.scrollHeight;
     }
 
+    // ------------------------------------------------------------------ borrador (capítulos → ítems → APU, con el origen de cada número)
+    function bs(x) { return (Math.round((parseFloat(x) || 0) * 100) / 100).toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+    function lista(v) { return Array.isArray(v) ? v : v ? Object.keys(v).sort(function (a, b) { return a - b; }).map(function (k) { return v[k]; }) : []; }
+    var NOMBRE_ORIGEN = { pieza3d: '3D', base: 'base', cota_plano: 'plano', 'dueño': 'vos' };
+    function chipOrigen(o) {
+        if (!o) return '';
+        var t = (/^([a-zñ_0-9]+):/i.exec(o) || [])[1] || '';
+        return '<span class="ag-o ' + esc(t) + '" title="' + esc(o) + '">' + esc(NOMBRE_ORIGEN[t] || t || '?') + '</span>';
+    }
+    var TIT = { mat: 'Materiales', mo: 'Mano de obra', eq: 'Equipo', sub: 'Subcontratos' };
+    function pintarBorrador() {
+        var tab = $('ag-tab'), el = $('ag-borr');
+        if (!tab || !el) return;
+        var caps = borrador ? lista(borrador.capitulos) : [];
+        tab.style.display = caps.length ? '' : 'none';
+        tab.parentNode.classList.toggle('con-borrador', !!caps.length);
+        tab.innerHTML = '📋 ' + (caps.length ? 'Bs ' + bs(borrador.total) : 'Borrador');
+        tab.classList.toggle('on', verBorrador);
+        if (!caps.length) { if (verBorrador) window._agVerBorrador(false); return; }
+        var rc = borrador.recargos || {};
+        el.innerHTML = '<div class="ag-it-sub" style="margin-bottom:8px;">Borrador v' + (borrador.version || 1) + ' · recargos: cargas sociales ' + (rc.cs != null ? rc.cs : '?') + ' %, indirectos ' +
+            (rc.ind != null ? rc.ind : '?') + ' %, utilidad ' + (rc.util != null ? rc.util : '?') + ' % ' + chipOrigen(rc.origen) +
+            (borrador.filas_marcadas ? ' · <b style="color:var(--red);">' + borrador.filas_marcadas + ' fila' + (borrador.filas_marcadas > 1 ? 's marcadas' : ' marcada') + '</b>' : '') + '</div>' +
+            caps.map(function (c) {
+                return '<div class="ag-cap"><h3><span>' + esc(String(c.nombre || '').toUpperCase()) + '</span><span>Bs ' + bs(c.total) + '</span></h3>' +
+                    lista(c.items).map(function (it) {
+                        var apu = it.apu || {};
+                        var filas = ['mat', 'mo', 'eq', 'sub'].map(function (t) {
+                            var fs = lista(apu[t]);
+                            if (!fs.length) return '';
+                            return '<div class="ag-it-sub" style="margin-top:6px;font-weight:700;">' + TIT[t] + '</div>' + fs.map(function (f) {
+                                return '<div class="ag-f' + (f.revisar ? ' marcada' : '') + '"><span>' + esc(f.d) + '</span><span class="num">' + bs(f.q * f.p) + '</span>' +
+                                    '<span class="ori">' + chipOrigen(f.origen_q) + f.q + ' ' + esc(f.u) + ' × ' + (f.p ? chipOrigen(f.origen_p) + bs(f.p) : '—') +
+                                    (f.factor ? ' · factor ' + f.factor + ' ' + chipOrigen(f.origen_factor) : '') + (f.nota ? ' · ' + esc(f.nota) : '') + '</span>' +
+                                    (f.revisar ? '<span class="rev">⚠ ' + esc(f.revisar) + '</span>' : '') + '</div>';
+                            }).join('');
+                        }).join('');
+                        return '<div class="ag-it"><div class="ag-it-cab"><span>' + esc(it.desc) + '</span><span>Bs ' + bs(it.total) + '</span></div>' +
+                            '<div class="ag-it-sub">' + (it.cant != null ? it.cant : 1) + ' ' + esc(it.und || 'glb') + (it.cant_origen ? ' ' + chipOrigen(it.cant_origen) : '') +
+                            ' × Bs ' + bs(it.pu) + ' (precio unitario con recargos)' + (it.desde3d ? ' · del 3D, ruta ' + esc(it.desde3d.ruta || 'A') : '') +
+                            (it.marcadas ? ' · <b style="color:var(--red);">' + it.marcadas + (it.marcadas > 1 ? ' marcadas' : ' marcada') + '</b>' : '') + '</div>' +
+                            (it.nota ? '<div class="ag-it-sub">' + esc(it.nota) + '</div>' : '') + filas + '</div>';
+                    }).join('') + '</div>';
+            }).join('') +
+            '<div class="ag-tot"><span>TOTAL BORRADOR</span><span>Bs ' + bs(borrador.total) + '</span></div>' +
+            '<div class="ag-it-sub" style="margin:8px 0 4px;">Los totales los calcula la app (no la IA). Etiquetas: ' + chipOrigen('pieza3d:') + 'medido del 3D · ' +
+            chipOrigen('base:') + 'base de precios · ' + chipOrigen('cota_plano:') + 'cota del plano · ' + chipOrigen('dueño:') + 'lo dijiste vos. Para corregir, escribilo en el chat.</div>' +
+            '<div id="ag-aplicar"></div>';
+        if (window._agPintarAplicar) window._agPintarAplicar();
+    }
+    window._agVerBorrador = function (forzar) {
+        verBorrador = typeof forzar === 'boolean' ? forzar : !verBorrador;
+        $('ag-borr').style.display = verBorrador ? 'block' : 'none';
+        $('ag-msgs').style.display = verBorrador ? 'none' : 'block';
+        $('ag-tab').classList.toggle('on', verBorrador);
+        if (!verBorrador) { var m = $('ag-msgs'); m.scrollTop = m.scrollHeight; }
+    };
+
     // ------------------------------------------------------------------ estado (progreso)
     function trabajando() {
         var viejo = Date.now() - (estado.actualizado || 0) > 10 * 60 * 1000;
@@ -198,7 +275,7 @@
         if (!el) return;
         var c = cfg(), t = N.estadoTope(costoMes.usd || 0, c);
         el.className = 'ag-costo' + (t.nivel !== 'ok' ? ' ' + t.nivel : '');
-        el.innerHTML = 'Esta cotización <b>' + N.usd(costoProyecto.usd || 0) + '</b><br>Mes <b>' + N.usd(costoMes.usd || 0) + '</b> de ' + N.usd(c.tope_mensual_usd) + ' ▾';
+        el.innerHTML = 'Cotización <b>' + N.usd(costoProyecto.usd || 0) + '</b><br>Mes <b>' + N.usd(costoMes.usd || 0) + '</b>/' + Math.round(c.tope_mensual_usd) + ' ▾';
         if ($('ag-p-costos').style.display === 'block') pintarDetalleCostos();
     }
     function pintarDetalleCostos() {
@@ -391,7 +468,7 @@
     };
 
     // ------------------------------------------------------------------ enviar, reintentar, detener
-    window._agAuto = function (t) { t.style.height = 'auto'; t.style.height = Math.min(140, t.scrollHeight) + 'px'; };
+    window._agAuto = function (t) { t.style.height = 'auto'; if (t.value) t.style.height = Math.min(140, t.scrollHeight) + 'px'; else t.style.height = ''; };
     window._agTecla = function (e) {
         if (e.key === 'Enter' && !e.shiftKey && window.matchMedia('(pointer:fine)').matches) { e.preventDefault(); window._agEnviar(); }
     };

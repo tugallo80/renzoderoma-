@@ -5,6 +5,6 @@
   "description": "Pruebas del Agente IA cotizador con la API de Claude SIMULADA (no gasta plata).",
   "scripts": {
     "test": "node probar.mjs",
-    "sincronizar": "cp ../../public/js/agente-nucleo.js ../../public/js/lector-3d.js ../../functions/agente/compartido/"
+    "sincronizar": "cp ../../public/js/agente-nucleo.js ../../public/js/agente-borrador.js ../../public/js/lector-3d.js ../../functions/agente/compartido/"
   }
 }

@@ -16,7 +16,7 @@ Modelo: **Claude Opus 5.5** (`claude-opus-5-5`), configurable en `/config/agente
 | # | Qué | Estado |
 |---|---|---|
 | 1 | Chat + adjuntos + 🎤 + 🔊 + medidor de costos, con herramientas mínimas (`medicion_3d`, `preguntar_al_dueno`) | ✅ 12 nov 2026 |
-| 2 | Herramientas de base y 3D + borrador con validación de origen | ⏳ |
+| 2 | Herramientas de base y 3D + borrador con validación de origen | ✅ 12 nov 2026 |
 | 3 | Editor de anotaciones de fotos | ⏳ |
 | 4 | Aplicar al presupuesto + memoria simple | ⏳ |
 
@@ -99,9 +99,41 @@ Ojo: si en la consola hay una regla general del tipo `match /{allPaths=**} { all
 cualquier usuario con login (también los anónimos de las otras apps) podría leer un archivo si conoce su ruta: en Storage
 las reglas se suman. Hay que revisarla.
 
+## Entrega 2 — borrador con validación de origen
+
+Lógica pura en `public/js/agente-borrador.js` (la usan la Function, vía copia en `functions/agente/compartido/`, y el chat).
+
+**Herramientas nuevas** (orden fijo, para la caché):
+
+| Herramienta | Qué hace |
+|---|---|
+| `buscar_base` | Busca materiales, mano de obra, oficios, rendimientos y equivalencias por palabras (sin acentos) y espesor; cada resultado trae su origen `base:<nodo>/<clave>` |
+| `armar_borrador` | Operaciones `capitulo`, `item`, `item_desde_3d`, `fila`, `quitar`, `recargos`. Aplica las válidas, devuelve las rechazadas con el motivo y el borrador con totales calculados por la herramienta |
+| `escala_3d` | Calibra la escala del 3D con una cota del plano o un dato del dueño (nunca con un supuesto). Escala parejo: largos ×f, áreas ×f², volúmenes ×f³ |
+| `guardar_en_base` | Material, mano de obra, oficio, rendimiento o receta, **solo con la confirmación del dueño** (`dueño:<id de su mensaje>`). Deja historial en `/base_datos/historial_cambios` |
+
+**Cómo se hace cumplir "no inventar números" (en código):**
+- Toda fila necesita `origen_q`; se valida que exista lo citado: la pieza en la medición, la clave en la base, el adjunto
+  PDF/foto con página y una cita que tenga el número, o el id de un mensaje del dueño. `calculo:` y textos libres se rechazan.
+- Con `pieza3d:` la **cantidad la calcula la herramienta** (`medida`: m2_cara, m2_sup, ml_perimetro, ml_largo, und, m3, glb ×
+  `factor`, que a su vez necesita origen). Lo que haya puesto el modelo se ignora y queda anotado.
+- Con `clave`, el **precio sale siempre de la base**. Sin clave, solo con `origen_p` del dueño o de una cota. Sin precio → `p 0`
+  y fila marcada ("sin precio en la base" / "falta precio").
+- `item_desde_3d` usa `Lector3D.armarApu` (el algoritmo de Importar 3D): materiales por unidad, planchas, barras, receta de
+  mano de obra (ruta A) o fila de trato con el oficio (ruta B). Rehacerlo conserva las filas agregadas a mano.
+- Totales (pu con cargas sociales, indirectos y utilidad; total de ítem, capítulo y general) con `Lector3D.calcPu`. Recargos:
+  los del último ítem con APU del presupuesto (`base:presupuesto/recargos`) o los que diga el dueño.
+- Cantidad del ítem distinta de 1 también necesita origen.
+
+**En el chat:** botón verde **📋 Bs total** arriba → capítulos → ítems → APU, con una etiqueta por número: **3D** (medido),
+**base**, **plano** (cota), **vos** (lo dijiste). Filas marcadas en rojo con el motivo.
+
 ### Pruebas (sin gastar plata)
 
-- `cd tools/agente && npm test` — 26 pruebas con la API **simulada**: medidor (Opus, Sonnet, Haiku, caché 1 h, fallback por
+- `cd tools/agente && npm test` — 38 pruebas (entrega 2: orígenes inválidos, fila sin origen rechazada, cantidad calculada
+  desde el 3D ignorando la del modelo, precio de la base, totales = `calcPu`, item_desde_3d con ruta A y B, corrección "eran tres
+  adhesivos", ítems para el presupuesto, flujo completo adjuntar → borrador → corrección con la API simulada, guardar_en_base con
+  y sin confirmación, escala con cota). Entrega 1: 26 pruebas con la API **simulada**: medidor (Opus, Sonnet, Haiku, caché 1 h, fallback por
   modelo, tope), configuración, orígenes, escala de la medición, historial con fallback, validación de entradas, rutas
   prohibidas, adjuntar, enviar (con memoria), turno completo 3D → `medicion_3d` → respuesta con costos, PDF/imagen nativos,
   preguntas que cortan el turno, tope y "Seguir igual", rechazo, `max_tokens` con herramienta cortada, entrada inválida,
