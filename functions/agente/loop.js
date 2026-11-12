@@ -58,6 +58,10 @@ function cargadorDeAdjuntos(almacen, cid, pid) {
         if ((meta.tipo === "pdf" || meta.tipo === "imagen") && meta.ruta) r.base64 = Buffer.from(await almacen.bajarArchivo(meta.ruta)).toString("base64");
         if (meta.tipo === "imagen" && meta.anotada_ruta) r.anotada_base64 = Buffer.from(await almacen.bajarArchivo(meta.anotada_ruta)).toString("base64");
         if (meta.anotaciones) r.anotaciones = meta.anotaciones;
+        if (meta.tipo === "3d" && Array.isArray(meta.vistas_rutas)) {
+            r.vistas_base64 = [];
+            for (const v of meta.vistas_rutas) { try { r.vistas_base64.push(Buffer.from(await almacen.bajarArchivo(v)).toString("base64")); } catch (e) { /* sin vista */ } }
+        }
         cache[id] = r;
         return r;
     };

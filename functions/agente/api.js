@@ -77,6 +77,18 @@ async function adjuntar(almacen, b) {
         if (Array.isArray(b.tamano_m) && b.tamano_m.length === 3) meta.tamano_m = b.tamano_m.map(Number);
         if (b.unidad) meta.unidad = String(b.unidad).slice(0, 80);
         await almacen.subirArchivo(meta.medicion_ruta, buf, "application/json");
+        // Vistas renderizadas en el navegador con el número de cada pieza (para que el agente relacione el 3D con fotos y planos)
+        if (Array.isArray(b.vistas) && b.vistas.length) {
+            meta.vistas_rutas = []; meta.vistas_nombres = [];
+            for (let i = 0; i < Math.min(2, b.vistas.length); i++) {
+                const v = b.vistas[i] || {};
+                const img = b64(v.datos, 2 * 1024 * 1024, "la vista del 3D");
+                if (!(img[0] === 0xff && img[1] === 0xd8)) throw new ErrorPedido("La vista del 3D tiene que ser JPG.");
+                const ruta = `${base}/vista${i + 1}.jpg`;
+                await almacen.subirArchivo(ruta, img, "image/jpeg");
+                meta.vistas_rutas.push(ruta); meta.vistas_nombres.push(String(v.nombre || `vista ${i + 1}`).slice(0, 40));
+            }
+        }
     } else {
         throw new ErrorPedido("Tipo de adjunto no admitido (3D, PDF o imagen).");
     }
@@ -134,8 +146,12 @@ function fechaBolivia(ms) {
 /** Primer mensaje de la conversación: contexto del proyecto y memoria del dueño. */
 async function textoInicial(almacen, cid, pid) {
     const partes = [`[Proyecto ${pid} del cliente ${cid}. Conversación nueva.]`];
-    const mem = await almacen.leer("agente_memoria/notas").catch(() => null);
-    const notas = mem ? Object.keys(mem).map((k) => mem[k]).filter((x) => x && x.texto) : [];
+    const lista = async (n) => { const m = await almacen.leer(`agente_memoria/${n}`).catch(() => null); return m ? Object.keys(m).map((k) => m[k]).filter((x) => x && x.texto) : []; };
+    const normas = await lista("normas"), notas = await lista("notas");
+    if (normas.length) {
+        partes.push("Normas constructivas del taller (cómo construye Rubik; usalas en tus propuestas):\n" +
+            normas.slice(-80).map((x) => `- ${String(x.texto).slice(0, 400)}`).join("\n"));
+    }
     if (notas.length) {
         partes.push("Memoria guardada del dueño (correcciones y decisiones de trabajos anteriores):\n" +
             notas.slice(-80).map((x) => `- ${String(x.texto).slice(0, 400)}`).join("\n"));

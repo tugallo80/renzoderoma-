@@ -48,6 +48,11 @@ await captura('2-adjuntos-listos');
 const pedidos = await page.evaluate(() => window._pedidosAgente.map((p) => ({ accion: p.accion, tipo: p.tipo, piezas: p.medicion ? p.medicion.piezas.length : null })));
 console.log('pedidos', JSON.stringify(pedidos));
 if (!pedidos.some((p) => p.tipo === '3d' && p.piezas > 0)) throw new Error('el 3D no se midió');
+const vistas = await page.evaluate(() => (window._pedidosAgente.find((p) => p.tipo === '3d').vistas || []).map((v) => ({ nombre: v.nombre, datos: v.datos })));
+console.log('vistas del 3D', vistas.map((v) => v.nombre + ' ' + Math.round(v.datos.length * 0.75 / 1024) + ' KB').join(', '));
+if (vistas.length !== 2) throw new Error('faltan las vistas del 3D');
+const { writeFileSync } = await import('node:fs');
+vistas.forEach((v, i) => writeFileSync(join(SALIDA, `2b-vista-3d-${i + 1}.jpg`), Buffer.from(v.datos, 'base64')));
 
 // 3) Enviar → progreso → respuesta con preguntas y costo
 await page.evaluate(() => {
@@ -86,7 +91,7 @@ await page.evaluate(() => {
         { item: 'Totem', pieza: 'Cuerpo', material: null, origen_vw: 'Acrilico', cant: 1, largo: 2.4, ancho: 0.8, espesor: 0.3, tipo: 'volumen', area_m2: 5.76, volumen_m3: 0.576, acabados: [] }] };
     const ctx = { adjuntos: { A3D: { tipo: '3d' }, PDF1: { tipo: 'pdf' } }, mediciones: { A3D: med }, mensajesDueno: { M1: true },
         recargosPresupuesto: { cs: 55, ind: 10, util: 30 },
-        base: { materiales: { MDF_18: { n: 'MDF 18 mm blanco', u: 'm2', p: 120, mo_receta: [{ mo: 'LAQUEADO', medida: 'm2_sup' }] }, ACRILICO_3: { n: 'Acrílico 3 mm', u: 'm2', p: 0 }, VINIL: { n: 'Vinil de corte', u: 'm2', p: 45 } },
+        base: { materiales: { MDF_18: { n: 'MDF 18 mm blanco', u: 'm2', p: 120, mo_receta: [{ mo: 'LAQUEADO', medida: 'm2_sup' }] }, ACRILICO_3: { n: 'Acrílico 3 mm', u: 'm2', p: 0 }, VINIL: { n: 'Vinil de corte', u: 'm2', p: 45 }, TUBO: { n: 'Tubo 20×40', u: 'ml', p: 18 }, TUBO20: { n: 'Tubo 20×20', u: 'und', p: 60 }, LONA: { n: 'Lona front 13 oz', u: 'm2', p: 40 } },
             mano_obra: { LAQUEADO: { n: 'Laqueado', u: 'm2', p: 35 } }, oficios: {}, rendimientos: {} } };
     let n = 0;
     const r = window.AgenteBorrador.aplicarOperaciones(null, [
@@ -94,6 +99,12 @@ await page.evaluate(() => {
         { op: 'fila', item: 'Mostrador recepción', tipo: 'mat', d: 'Adhesivo lateral', u: 'und', q: 3, origen_q: 'dueño:M1', p: 50, origen_p: 'dueño:M1' },
         { op: 'item_desde_3d', capitulo: 'Stand demo', adjunto: 'A3D', item3d: 'Totem', desc: 'Restauración tótem', materiales: { p3: 'ACRILICO_3' } },
         { op: 'fila', item: 'Restauración tótem', tipo: 'mat', d: 'Vinil frente', origen_q: 'cota_plano:PDF1 p.2 "0,80 x 2,40"', q: 1.92, clave: 'VINIL' },
+        { op: 'fila', item: 'Restauración tótem', tipo: 'mo', d: '', origen_q: 'dueño:M1', cerrado: true, p: 1000, origen_p: 'dueño:M1', oficio: 'Don Pedro' },
+        { op: 'item', capitulo: 'Stand demo', desc: 'Bastidor con lona 5×3' },
+        { op: 'fila', item: 'Bastidor con lona 5×3', tipo: 'mat', d: 'Marco y travesaños', origen_q: 'supuesto:marco perimetral + travesaño cada 1 m', medida: 'ml_largo',
+            geometria: [{ desc: 'larguero', cant: 2, largo_m: 5 }, { desc: 'montante', cant: 6, largo_m: 3 }], clave: 'TUBO' },
+        { op: 'fila', item: 'Bastidor con lona 5×3', tipo: 'mat', d: 'Lona', origen_q: 'supuesto:lona tensada del tamaño del marco', medida: 'm2_cara', geometria: [{ cant: 1, largo_m: 5, ancho_m: 3 }], clave: 'LONA' },
+        { op: 'fila', item: 'Bastidor con lona 5×3', tipo: 'mat', d: 'Patas tubo 20×20', u: 'und', q: 8, origen_q: 'dueño:M1', clave: 'TUBO20', stock_q: 5, origen_stock: 'dueño:M1' },
     ], ctx, () => 'id' + (++n));
     window._fbFalso.set('proyectos/cliDemo/proyDemo/agente/borrador', r.borrador);
 });
@@ -101,6 +112,8 @@ await page.click('#ag-tab');
 await captura('7-borrador');
 await page.evaluate(() => document.getElementById('ag-borr').scrollTo(0, 99999));
 await captura('8-borrador-total');
+await page.evaluate(() => { const its = document.querySelectorAll('#ag-borr .ag-it'); its[its.length - 1].scrollIntoView({ block: 'start' }); });
+await captura('8b-supuestos-stock-trato');
 
 // 9) Editor de anotaciones: foto inventada (dibujada en el navegador), cota, círculo y nota
 await page.click('#ag-tab');
@@ -159,6 +172,14 @@ await page.waitForTimeout(300);
 const aplicado = await page.evaluate(() => ({ ids: data.map((x) => x.desc || x.name), origen: data.filter((x) => x.type === 'item').map((x) => x.origen), guardado: window._guardado }));
 console.log('presupuesto', JSON.stringify(aplicado));
 if (aplicado.ids[0] !== 'Ítem que ya estaba' || !aplicado.guardado || aplicado.origen.filter((o) => o === 'agente').length !== 2) throw new Error('aplicar falló');
+if (aplicado.ids.includes('Bastidor con lona 5×3')) throw new Error('se aplicó un ítem con supuestos sin confirmar');
+await page.click('.ag-sup .ag-btn.prim');
+await page.waitForTimeout(300);
+await page.click('#ag-aplicar .ag-btn.prim');
+await page.waitForTimeout(300);
+const tras = await page.evaluate(() => data.map((x) => x.desc || x.name));
+console.log('después de confirmar', JSON.stringify(tras));
+if (!tras.includes('Bastidor con lona 5×3') || tras.filter((x) => x === 'Mostrador recepción').length !== 1) throw new Error('confirmar supuestos / re-aplicar falló');
 await page.evaluate(() => document.getElementById('ag-borr').scrollTo(0, 99999));
 await captura('13-aplicado');
 

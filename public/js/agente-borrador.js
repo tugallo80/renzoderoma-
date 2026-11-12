@@ -6,6 +6,8 @@
  *   base:<nodo>/<clave>          el precio sale de la base (si la fila tiene clave, siempre se toma de ahí)
  *   cota_plano:<adjunto> p.<n> "<cita>"   una cota escrita en un PDF o una foto adjunta (con la cita)
  *   dueño:<id de mensaje>        algo que dijo el dueño en este chat
+ *   supuesto:<explicación>       propuesta constructiva del agente (sin planos): la cantidad sale de la "geometria" que propone,
+ *                                calculada acá; se ve aparte y NO se aplica al presupuesto hasta que el dueño la confirma
  * Los totales (pu del APU, total del ítem, del capítulo y general) los calcula esta herramienta con la misma
  * lógica que "Importar 3D" (Lector3D.calcPu, armarApu con recetas, rutas A/B y recargos).
  */
@@ -17,6 +19,27 @@
     var TIPOS_FILA = ['mat', 'mo', 'eq', 'sub'];
     var NODOS_BASE = ['materiales', 'mano_obra', 'oficios', 'rendimientos', 'equivalencias_vw', 'presupuesto'];
     var MEDIDAS = ['m2_cara', 'm2_sup', 'ml_perimetro', 'ml_largo', 'und', 'm3', 'glb'];
+    var MEDIDAS_GEO = ['ml_largo', 'm2_cara', 'und', 'ml_perimetro'];
+
+    /**
+     * Cantidad desde una geometría propuesta (sin 3D): [{desc, cant, largo_m, ancho_m?}].
+     * ml_largo = Σ cant × largo · m2_cara = Σ cant × largo × ancho · ml_perimetro = Σ cant × 2(largo + ancho) · und = Σ cant.
+     */
+    function cantidadGeometria(geo, medida) {
+        if (!Array.isArray(geo) || !geo.length || geo.length > 60) return { error: 'geometria: lista de piezas [{desc, cant, largo_m, ancho_m?}] (1 a 60)' };
+        if (MEDIDAS_GEO.indexOf(medida) < 0) return { error: 'con geometria, "medida" es ' + MEDIDAS_GEO.join(', ') };
+        var q = 0, partes = [];
+        for (var i = 0; i < geo.length; i++) {
+            var g = geo[i] || {}, c = num(g.cant == null ? 1 : g.cant), l = num(g.largo_m), a = num(g.ancho_m);
+            if (!(c > 0)) return { error: 'geometria[' + i + ']: cant inválida' };
+            if (medida !== 'und' && !(l > 0)) return { error: 'geometria[' + i + ']: falta largo_m' };
+            if ((medida === 'm2_cara' || medida === 'ml_perimetro') && !(a > 0)) return { error: 'geometria[' + i + ']: falta ancho_m' };
+            var v = medida === 'und' ? c : medida === 'ml_largo' ? c * l : medida === 'm2_cara' ? c * l * a : c * 2 * (l + a);
+            q += v;
+            partes.push((txt(g.desc, 60) || 'pieza') + ' ' + c + (medida === 'und' ? '' : ' × ' + l + (medida === 'm2_cara' ? ' × ' + a : medida === 'ml_perimetro' ? ' (perímetro con ' + a + ')' : '')));
+        }
+        return { q: r4(q), nota: 'calculado (' + medida + '): ' + partes.join(' + ') + ' = ' + r4(q) };
+    }
 
     function num(x) { var n = parseFloat(x); return isFinite(n) ? n : NaN; }
     function r2(x) { return Math.round(x * 100) / 100; }
@@ -66,6 +89,10 @@
             if (!/\d/.test(c[3])) return { ok: false, error: 'la cita de la cota tiene que tener el número tal como está escrito' };
             return { ok: true, origen: o };
         }
+        if (o.tipo === 'supuesto') {
+            if (o.ref.length < 8) return { ok: false, error: 'supuesto: explicá la propuesta constructiva (ej. "marco perimetral de tubo 20×40")' };
+            return { ok: true, origen: o };
+        }
         if (o.tipo === 'dueño') {
             var id = o.ref.split(/\s/)[0];
             if (!(ctx.mensajesDueno && ctx.mensajesDueno[id])) {
@@ -102,6 +129,7 @@
 
     /** Arma una fila validada. Devuelve { fila } o { error }. */
     function armarFila(op, tipo, ctx) {
+        if (op.cerrado && op.q == null) op = Object.assign({}, op, { q: 1 });   // un trato cerrado es un global
         var f = { d: txt(op.d, 200), u: txt(op.u, 20) || 'und', q: 0, p: 0 };
         var motivos = [];
         // --- cantidad
@@ -125,12 +153,39 @@
             if (op.q != null && Math.abs(num(op.q) - f.q) > 0.0005 * Math.max(1, f.q)) f.nota += ' (el agente había puesto ' + op.q + '; vale el cálculo)';
         } else if (vq.origen.tipo === 'base') {
             return { error: 'cantidad: base: es para precios, no para cantidades' };
+        } else if (op.geometria) {
+            var cg = cantidadGeometria(op.geometria, op.medida);
+            if (cg.error) return { error: cg.error };
+            f.q = cg.q; f.geometria = clon(op.geometria); f.medida = op.medida; f.nota = cg.nota;
+            if (op.q != null && Math.abs(num(op.q) - f.q) > 0.0005 * Math.max(1, f.q)) f.nota += ' (el agente había puesto ' + op.q + '; vale el cálculo)';
+        } else if (vq.origen.tipo === 'supuesto') {
+            return { error: 'cantidad con supuesto: hace falta "geometria" (las piezas que proponés con sus medidas) y "medida": la cuenta la hace la herramienta' };
         } else {
             var qv = num(op.q);
             if (!(qv >= 0)) return { error: 'cantidad: falta q (número) para el origen ' + vq.origen.tipo };
             f.q = r4(qv);
         }
         f.origen_q = vq.origen.texto;
+        if (vq.origen.tipo === 'supuesto') { f.supuesto = true; f.confirmado = false; }
+        // --- stock propio: la parte en stock va a costo 0, se compra el resto
+        if (op.stock_q != null && num(op.stock_q) > 0) {
+            var vs = validarOrigen(op.origen_stock, ctx, 'stock');
+            if (!vs.ok || vs.origen.tipo !== 'dueño') return { error: 'stock propio: necesita origen_stock dueño:<mensaje> (lo que dijo el dueño que tiene en el taller)' };
+            var sq = num(op.stock_q);
+            f.q_total = f.q; f.stock_q = r4(Math.min(sq, f.q)); f.origen_stock = vs.origen.texto;
+            f.q = r4(Math.max(0, f.q - sq));
+            f.nota = (f.nota ? f.nota + ' · ' : '') + f.stock_q + ' de stock propio (sin costo) + ' + f.q + ' a comprar';
+            if (sq > f.q_total) f.nota += ' (sobra stock: ' + r4(sq - f.q_total) + ')';
+        }
+        // --- trato cerrado por el dueño (ruta B): monto fijo que reemplaza la referencia calculada
+        if (op.cerrado) {
+            if (tipo !== 'mo') return { error: 'cerrado: solo para mano de obra' };
+            var vc = validarOrigen(op.origen_p, ctx, 'p');
+            if (!vc.ok || vc.origen.tipo !== 'dueño' || !(num(op.p) > 0)) return { error: 'trato cerrado: p (monto) con origen_p dueño:<mensaje>' };
+            var quien = txt(op.oficio || op.trabajadores, 80);
+            return { fila: { d: f.d || ('Trato cerrado' + (quien ? ' con ' + quien : '')), u: 'glb', q: 1, p: r2(num(op.p)), origen_q: f.origen_q, origen_p: vc.origen.texto,
+                trato: true, cerrado: true, oficio: quien || null, nota: 'monto cerrado por el dueño' + (quien ? ' (' + quien + ')' : '') } };
+        }
         // --- precio
         if (op.clave) {
             var pb = precioBase(op.clave, tipo, ctx);
@@ -142,7 +197,7 @@
         } else if (op.p != null && num(op.p) > 0) {
             var vp = validarOrigen(op.origen_p, ctx, 'p');
             if (!vp.ok) return { error: 'precio: ' + vp.error };
-            if (vp.origen.tipo === 'pieza3d') return { error: 'precio: pieza3d: no da precios' };
+            if (vp.origen.tipo === 'pieza3d' || vp.origen.tipo === 'supuesto') return { error: 'precio: los precios salen de la base, del dueño o de una cota (no de ' + vp.origen.tipo + ':)' };
             if (vp.origen.tipo === 'base') {
                 var pb2 = precioBase(vp.clave, tipo, ctx);
                 if (!pb2 || !(pb2.p > 0)) return { error: 'precio: ' + vp.origen.texto + ' no tiene precio en la base' };
@@ -218,10 +273,25 @@
      * Aplica operaciones al borrador. Las válidas se aplican; las inválidas se rechazan con su motivo.
      * nuevoId(): id estable (push id en la Function).
      */
-    function aplicarOperaciones(borrador, ops, ctx, nuevoId) {
+    /** Borrador tal como vuelve de RTDB (listas como objetos, listas vacías ausentes) → arreglos. */
+    function normalizar(borrador) {
+        var lista = function (v) { return Array.isArray(v) ? v.filter(function (x) { return x != null; }) : v ? Object.keys(v).sort(function (a, b) { return a - b; }).map(function (k) { return v[k]; }) : []; };
         var b = borrador ? clon(borrador) : vacio();
-        b.capitulos = b.capitulos || [];
-        b.capitulos.forEach(function (c) { c.items = c.items || []; c.items.forEach(function (it) { it.apu = it.apu || {}; TIPOS_FILA.forEach(function (t) { it.apu[t] = it.apu[t] || []; }); }); });
+        b.capitulos = lista(b.capitulos);
+        b.capitulos.forEach(function (c) { c.items = lista(c.items); c.items.forEach(function (it) { it.apu = it.apu || {}; TIPOS_FILA.forEach(function (t) { it.apu[t] = lista(it.apu[t]); }); }); });
+        return b;
+    }
+
+    /** Botón "Confirmar supuestos" del chat: confirma los de un ítem (o todos) y recalcula. */
+    function confirmarSupuestos(borrador, itemId, confirmacion) {
+        var b = normalizar(borrador), n = 0;
+        b.capitulos.forEach(function (c) { c.items.forEach(function (it) { if (!itemId || it.id === itemId) n += confirmarItem(it, confirmacion); }); });
+        calcularTotales(b, null);
+        return { borrador: b, confirmadas: n };
+    }
+
+    function aplicarOperaciones(borrador, ops, ctx, nuevoId) {
+        var b = normalizar(borrador);
         var resultados = [];
         (ops || []).forEach(function (op, i) {
             var r = { n: i + 1, op: op && op.op };
@@ -247,7 +317,8 @@
             if (!v.ok) return 'cant ' + c + ': ' + v.error;
             if (v.origen.tipo === 'base') return 'cant: base: no da cantidades';
             it.cant_origen = v.origen.texto;
-        } else delete it.cant_origen;
+            if (v.origen.tipo === 'supuesto') it.cant_confirmada = false; else delete it.cant_confirmada;
+        } else { delete it.cant_origen; delete it.cant_confirmada; }
         it.cant = c;
         return null;
     }
@@ -275,7 +346,11 @@
                     it.desde3d = { adjunto: op.adjunto, item3d: op.item3d || null, piezas: d3.ids, ruta: d3.ruta, rendimiento: op.rendimiento || null, materiales: op.materiales || null };
                     it.measures = d3.measures; it.measures_modo = d3.measures_modo;
                     // las filas automáticas se rehacen; las agregadas a mano por el agente se conservan
-                    TIPOS_FILA.forEach(function (t) { it.apu[t] = (d3.apu[t] || []).concat((it.apu[t] || []).filter(function (f) { return !f.auto; })); });
+                    var hayCerrado = (it.apu.mo || []).some(function (f) { return f.cerrado; });
+                    TIPOS_FILA.forEach(function (t) {
+                        var nuevas = (d3.apu[t] || []).filter(function (f) { return !(hayCerrado && t === 'mo' && f.trato); });
+                        it.apu[t] = nuevas.concat((it.apu[t] || []).filter(function (f) { return !f.auto; }));
+                    });
                 }
                 if (op.desc) it.desc = txt(op.desc, 200);
                 if (!it.desc) throw new Error('falta la descripción del ítem');
@@ -293,6 +368,7 @@
                 if (!en) throw new Error('no existe el ítem ' + op.item);
                 var res = armarFila(op, t, ctx);
                 if (res.error) throw new Error(res.error);
+                if (res.fila.cerrado) en.item.apu.mo = en.item.apu.mo.filter(function (x) { return !(x.trato && !x.cerrado); });
                 var filas = en.item.apu[t];
                 if (op.reemplaza != null) {
                     var k = parseInt(op.reemplaza, 10);
@@ -320,6 +396,16 @@
                 } else throw new Error('quitar: indicá item, fila o capitulo');
                 r.ok = true; return;
             }
+            case 'confirmar_supuestos': {
+                var vcs = validarOrigen(op.confirmacion, ctx, 'confirmacion');
+                if (!vcs.ok || vcs.origen.tipo !== 'dueño') throw new Error('confirmar_supuestos: necesita confirmacion dueño:<mensaje donde el dueño los confirma>');
+                var objetivo = op.item ? [buscarItem(b, op.item)] : [];
+                if (op.item && !objetivo[0]) throw new Error('no existe el ítem ' + op.item);
+                if (!op.item) b.capitulos.forEach(function (c) { c.items.forEach(function (it) { objetivo.push({ item: it }); }); });
+                var n = 0;
+                objetivo.forEach(function (o) { n += confirmarItem(o.item, vcs.origen.texto); });
+                r.ok = true; r.confirmadas = n; return;
+            }
             case 'recargos': {
                 var v = validarOrigen(op.origen, ctx, 'recargos');
                 if (!v.ok) throw new Error('recargos: ' + v.error);
@@ -335,11 +421,24 @@
         }
     }
 
+    /** Marca como confirmadas las filas con supuesto de un ítem (y su cantidad). Devuelve cuántas. */
+    function confirmarItem(it, confirmacion) {
+        var n = 0;
+        TIPOS_FILA.forEach(function (t) { (it.apu[t] || []).forEach(function (f) { if (f.supuesto && !f.confirmado) { f.confirmado = true; f.confirmacion = confirmacion; n++; } }); });
+        if (it.cant_confirmada === false) { it.cant_confirmada = true; n++; }
+        return n;
+    }
+    function supuestosPendientes(it) {
+        var n = it.cant_confirmada === false ? 1 : 0;
+        TIPOS_FILA.forEach(function (t) { (it.apu[t] || []).forEach(function (f) { if (f.supuesto && !f.confirmado) n++; }); });
+        return n;
+    }
+
     // ------------------------------------------------------------------ totales (los calcula la herramienta)
     function calcularTotales(b, ctx) {
         var rc = b.recargos || (ctx && ctx.recargosPresupuesto ? Object.assign({ origen: 'base:presupuesto/recargos' }, ctx.recargosPresupuesto) : { cs: 55, ind: 10, util: 50, origen: 'apu-utils (por defecto)' });
         if (!b.recargos) b.recargos = rc;
-        var total = 0, marcadas = 0;
+        var total = 0, marcadas = 0, pendientes = 0;
         b.capitulos.forEach(function (c) {
             var tc = 0;
             c.items.forEach(function (it) {
@@ -347,7 +446,8 @@
                 it.pu = L.calcPu(apu);
                 it.total = r2(it.pu * (num(it.cant) || 0));
                 it.marcadas = TIPOS_FILA.reduce(function (s, t) { return s + it.apu[t].filter(function (f) { return f.revisar; }).length; }, 0);
-                marcadas += it.marcadas;
+                it.supuestos_pendientes = supuestosPendientes(it);
+                marcadas += it.marcadas; pendientes += it.supuestos_pendientes;
                 tc += it.total;
             });
             c.total = r2(tc);
@@ -355,20 +455,25 @@
         });
         b.total = r2(total);
         b.filas_marcadas = marcadas;
+        b.supuestos_pendientes = pendientes;
         return b;
     }
 
     /** Resumen compacto para devolverle al modelo después de cada operación. */
     function resumen(b) {
         return {
-            total: b.total, filas_marcadas: b.filas_marcadas, recargos: b.recargos,
+            total: b.total, filas_marcadas: b.filas_marcadas, supuestos_sin_confirmar: b.supuestos_pendientes || 0, recargos: b.recargos,
             capitulos: b.capitulos.map(function (c) {
                 return { id: c.id, nombre: c.nombre, total: c.total, items: c.items.map(function (it) {
                     var o = { id: it.id, desc: it.desc, und: it.und, cant: it.cant, pu: it.pu, total: it.total };
+                    if (it.supuestos_pendientes) o.supuestos_sin_confirmar = it.supuestos_pendientes;
                     TIPOS_FILA.forEach(function (t) {
                         if (it.apu[t].length) o[t] = it.apu[t].map(function (f, i) {
                             var x = { n: i + 1, d: f.d, u: f.u, q: f.q, p: f.p };
                             if (f.revisar) x.revisar = f.revisar;
+                            if (f.supuesto) x.supuesto = f.confirmado ? 'confirmado' : 'sin confirmar';
+                            if (f.stock_q) x.stock_propio = f.stock_q;
+                            if (f.cerrado) x.trato_cerrado = true;
                             return x;
                         });
                     });
@@ -384,15 +489,17 @@
      */
     function aItemsPresupuesto(b, opciones) {
         opciones = opciones || {};
+        b = normalizar(b);
         var rc = b.recargos || {};
         var salida = [];
         b.capitulos.forEach(function (c) {
-            if (!c.items.length) return;
+            var listos = c.items.filter(function (it) { return !supuestosPendientes(it); });
+            if (!listos.length) return;
             if (opciones.capitulos !== false) salida.push({ type: 'chapter', name: String(c.nombre).toUpperCase(), collapsed: false, id: c.id, origen: 'agente' });
-            c.items.forEach(function (it) {
+            listos.forEach(function (it) {
                 var limpia = function (f) {
                     var x = { d: f.d, u: f.u, q: f.q, p: f.p, origen: 'agente', origen_q: f.origen_q || null, origen_p: f.origen_p || null };
-                    ['clave', 'nota', 'revisar', 'trato', 'referencia', 'measures', 'measures_modo'].forEach(function (k) { if (f[k] != null) x[k] = f[k]; });
+                    ['clave', 'nota', 'revisar', 'trato', 'referencia', 'cerrado', 'supuesto', 'confirmacion', 'stock_q', 'q_total', 'origen_stock', 'geometria', 'measures', 'measures_modo'].forEach(function (k) { if (f[k] != null) x[k] = f[k]; });
                     return x;
                 };
                 var item = {
@@ -433,7 +540,7 @@
         return { data: salida, agregados: agregados, actualizados: actualizados };
     }
 
-    var api = { aplicarAlPresupuesto: aplicarAlPresupuesto, vacio: vacio, validarOrigen: validarOrigen, armarFila: armarFila, aplicarOperaciones: aplicarOperaciones,
+    var api = { normalizar: normalizar, confirmarSupuestos: confirmarSupuestos, confirmarItem: confirmarItem, supuestosPendientes: supuestosPendientes, cantidadGeometria: cantidadGeometria, aplicarAlPresupuesto: aplicarAlPresupuesto, vacio: vacio, validarOrigen: validarOrigen, armarFila: armarFila, aplicarOperaciones: aplicarOperaciones,
         calcularTotales: calcularTotales, resumen: resumen, aItemsPresupuesto: aItemsPresupuesto, MEDIDAS: MEDIDAS, TIPOS_FILA: TIPOS_FILA };
     if (typeof module !== 'undefined' && module.exports) module.exports = api;
     else global.AgenteBorrador = api;

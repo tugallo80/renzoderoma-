@@ -118,8 +118,9 @@
     // ---------------------------------------------------------------------
     // Origen de cada número (se valida en la herramienta, no en el prompt)
     //   pieza3d:<adjunto>/<pieza>   base:<nodo>/<clave>   cota_plano:<adjunto> p.<n> "<cita>"   dueño:<mensaje>
+    //   supuesto:<explicación>  (propuesta constructiva del agente: se ve aparte y no se aplica hasta que el dueño la confirma)
     // ---------------------------------------------------------------------
-    var TIPOS_ORIGEN = ['pieza3d', 'base', 'cota_plano', 'dueño', 'calculo'];
+    var TIPOS_ORIGEN = ['pieza3d', 'base', 'cota_plano', 'dueño', 'supuesto', 'calculo'];
 
     function parsearOrigen(texto) {
         var t = String(texto == null ? '' : texto).trim();
@@ -129,6 +130,7 @@
         if (tipo === 'dueno') tipo = 'dueño';
         if (tipo === 'pieza_3d' || tipo === '3d') tipo = 'pieza3d';
         if (tipo === 'cota' || tipo === 'plano') tipo = 'cota_plano';
+        if (tipo === 'supuestos') tipo = 'supuesto';
         if (TIPOS_ORIGEN.indexOf(tipo) < 0) return null;
         var ref = m[2].trim();
         if (!ref) return null;

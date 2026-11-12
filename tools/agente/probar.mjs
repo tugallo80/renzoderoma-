@@ -674,6 +674,136 @@ prueba('flujo completo con la API simulada: adjuntar → borrador → correcció
     assert.ok(it.apu.mat.every((f) => f.origen_q), 'toda fila aplicada conserva su origen');
 });
 
+// ------------------------------------------------------------------ entrega 2b: supuestos, stock propio, trato cerrado, adjuntos numerados, normas
+const BASE_2B = { materiales: { TUBO_20X40: { n: 'Tubo 20×40 (ml)', u: 'ml', p: 18 }, TUBO_20X20: { n: 'Tubo 20×20', u: 'und', p: 60 }, LONA: { n: 'Lona front 13 oz', u: 'm2', p: 40 } },
+    mano_obra: {}, oficios: { SOLDADOR: { nombre: 'Soldador', costo_jornal: 220 } }, rendimientos: {} };
+const ctx2b = () => ctxValid({ base: Object.assign({}, BASE, { materiales: Object.assign({}, BASE.materiales, BASE_2B.materiales) }), mensajesDueno: { M1: true, M2: true } });
+
+prueba('supuesto: la cantidad sale de la geometría propuesta (la calcula la herramienta), el precio de la base', () => {
+    const r = B.aplicarOperaciones(null, [
+        { op: 'item', capitulo: 'Bastidores', desc: 'Bastidor con lona 5×3' },
+        { op: 'fila', item: 'Bastidor con lona 5×3', tipo: 'mat', d: 'Marco perimetral', origen_q: 'supuesto:marco perimetral de tubo 20×40', medida: 'ml_largo', q: 99,
+            geometria: [{ desc: 'larguero', cant: 2, largo_m: 5 }, { desc: 'montante', cant: 2, largo_m: 3 }], clave: 'TUBO_20X40' },
+        { op: 'fila', item: 'Bastidor con lona 5×3', tipo: 'mat', d: 'Lona', origen_q: 'supuesto:lona del tamaño del bastidor', medida: 'm2_cara', geometria: [{ desc: 'lona', cant: 1, largo_m: 5, ancho_m: 3 }], clave: 'LONA' },
+        { op: 'fila', item: 'Bastidor con lona 5×3', tipo: 'mat', d: 'Travesaños', origen_q: 'supuesto:travesaño cada metro', q: 4, clave: 'TUBO_20X40' },
+        { op: 'fila', item: 'Bastidor con lona 5×3', tipo: 'mat', d: 'Pintura', origen_q: 'dueño:M1', q: 1, p: 120, origen_p: 'supuesto:lo que suele salir' },
+        { op: 'fila', item: 'Bastidor con lona 5×3', tipo: 'mat', d: 'X', origen_q: 'supuesto:corto', medida: 'und', geometria: [{ cant: 1 }] },
+    ], ctx2b(), nuevoId);
+    assert.deepEqual(r.resultados.map((x) => x.ok), [true, true, true, false, false, false]);
+    assert.match(r.resultados[3].error, /geometria/); assert.match(r.resultados[4].error, /precios salen de la base/); assert.match(r.resultados[5].error, /explicá/);
+    const it = r.borrador.capitulos[0].items[0];
+    assert.equal(it.apu.mat[0].q, 16); assert.equal(it.apu.mat[0].p, 18); assert.match(it.apu.mat[0].nota, /había puesto 99/);
+    assert.equal(it.apu.mat[1].q, 15);
+    assert.equal(it.apu.mat[0].supuesto, true); assert.equal(it.apu.mat[0].confirmado, false);
+    assert.equal(r.borrador.supuestos_pendientes, 2);
+    // no se aplica hasta confirmar
+    assert.equal(B.aItemsPresupuesto(r.borrador).length, 0);
+    const mal = B.aplicarOperaciones(r.borrador, [{ op: 'confirmar_supuestos', item: it.id, confirmacion: 'me parece bien' }], ctx2b(), nuevoId);
+    assert.equal(mal.resultados[0].ok, false);
+    const ok = B.aplicarOperaciones(r.borrador, [{ op: 'confirmar_supuestos', item: it.id, confirmacion: 'dueño:M2' }], ctx2b(), nuevoId);
+    assert.equal(ok.resultados[0].confirmadas, 2); assert.equal(ok.borrador.supuestos_pendientes, 0);
+    const items = B.aItemsPresupuesto(ok.borrador);
+    assert.equal(items.length, 2); assert.equal(items[1].apu.mat[0].supuesto, true); assert.equal(items[1].apu.mat[0].confirmacion, 'dueño:M2');
+    // botón del chat
+    const boton = B.confirmarSupuestos(JSON.parse(JSON.stringify(r.borrador)), it.id, 'dueño:botón');
+    assert.equal(boton.confirmadas, 2); assert.equal(boton.borrador.supuestos_pendientes, 0);
+});
+
+prueba('supuesto en la cantidad del ítem también espera confirmación', () => {
+    const r = B.aplicarOperaciones(null, [{ op: 'item', capitulo: 'X', desc: 'Bastidor', cant: 2, cant_origen: 'supuesto:uno por cada cara del ingreso' },
+        { op: 'fila', item: 'Bastidor', tipo: 'mat', d: 'Lona', origen_q: 'dueño:M1', q: 15, clave: 'LONA' }], ctx2b(), nuevoId);
+    assert.equal(r.borrador.supuestos_pendientes, 1); assert.equal(B.aItemsPresupuesto(r.borrador).length, 0);
+});
+
+prueba('stock propio: la parte en stock va a costo 0 y se compra el resto', () => {
+    const r = B.aplicarOperaciones(null, [
+        { op: 'item', capitulo: 'X', desc: 'Estructura' },
+        { op: 'fila', item: 'Estructura', tipo: 'mat', d: 'Tubo 20×20', u: 'und', q: 8, origen_q: 'dueño:M1', clave: 'TUBO_20X20', stock_q: 5, origen_stock: 'dueño:M2' },
+        { op: 'fila', item: 'Estructura', tipo: 'mat', d: 'Tubo 20×20', u: 'und', q: 8, origen_q: 'dueño:M1', clave: 'TUBO_20X20', stock_q: 5 },
+    ], ctx2b(), nuevoId);
+    assert.deepEqual(r.resultados.map((x) => x.ok), [true, true, false]);
+    const f = r.borrador.capitulos[0].items[0].apu.mat[0];
+    assert.equal(f.q_total, 8); assert.equal(f.stock_q, 5); assert.equal(f.q, 3); assert.equal(f.p, 60);
+    assert.match(f.nota, /5 de stock propio \(sin costo\) \+ 3 a comprar/);
+    assert.equal(r.borrador.capitulos[0].items[0].pu, L.calcPu({ mat: [{ q: 3, p: 60 }], mo: [], eq: [], sub: [], cs: 55, ind: 10, util: 30 }));
+});
+
+prueba('trato cerrado por el dueño: reemplaza la referencia de la ruta B y sobrevive a rehacer el ítem', () => {
+    let r = B.aplicarOperaciones(null, [{ op: 'item_desde_3d', capitulo: 'S', adjunto: 'A3D', item3d: 'Mostrador demo', ruta: 'B', rendimiento: 'MUEBLE_MEL', desc: 'Mostrador' }], ctxValid(), nuevoId);
+    assert.equal(r.borrador.capitulos[0].items[0].apu.mo[0].p, 144);
+    r = B.aplicarOperaciones(r.borrador, [
+        { op: 'fila', item: 'Mostrador', tipo: 'mo', d: '', origen_q: 'dueño:M1', cerrado: true, p: 1000, origen_p: 'dueño:M1', oficio: 'Don Pedro y su ayudante' },
+        { op: 'fila', item: 'Mostrador', tipo: 'mo', d: 'x', origen_q: 'dueño:M1', cerrado: true, p: 1000, origen_p: 'base:mano_obra/LAQUEADO' },
+    ], ctxValid(), nuevoId);
+    assert.deepEqual(r.resultados.map((x) => x.ok), [true, false]);
+    let mo = r.borrador.capitulos[0].items[0].apu.mo;
+    assert.equal(mo.length, 1); assert.equal(mo[0].cerrado, true); assert.equal(mo[0].p, 1000);
+    assert.equal(mo[0].d, 'Trato cerrado con Don Pedro y su ayudante'); assert.equal(mo[0].nota, 'monto cerrado por el dueño (Don Pedro y su ayudante)');
+    const id = r.borrador.capitulos[0].items[0].id;
+    r = B.aplicarOperaciones(r.borrador, [{ op: 'item_desde_3d', id, adjunto: 'A3D', item3d: 'Mostrador demo', ruta: 'B', rendimiento: 'MUEBLE_MEL' }], ctxValid(), nuevoId);
+    mo = r.borrador.capitulos[0].items[0].apu.mo;
+    assert.equal(mo.length, 1); assert.equal(mo[0].cerrado, true);
+});
+
+prueba('adjuntos numerados en orden (foto / captura / PDF / 3D) y vistas del 3D como imágenes', async () => {
+    const alm = nuevoAlmacen();
+    const PNG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0, 0, 0, 0]);
+    const f = (await api.atender(alm, { accion: 'adjuntar', cid: CID, pid: PID, tipo: 'imagen', nombre: 'IMG_123.jpg', datos: JPG.toString('base64') }, 'renzo')).cuerpo.id;
+    const c = (await api.atender(alm, { accion: 'adjuntar', cid: CID, pid: PID, tipo: 'imagen', nombre: 'chat.png', datos: PNG.toString('base64') }, 'renzo')).cuerpo.id;
+    const d = (await api.atender(alm, { accion: 'adjuntar', cid: CID, pid: PID, tipo: 'pdf', nombre: 'planos.pdf', datos: PDF.toString('base64') }, 'renzo')).cuerpo.id;
+    const r3 = await api.atender(alm, { accion: 'adjuntar', cid: CID, pid: PID, tipo: '3d', nombre: 'stand.fbx', medicion: MEDICION,
+        vistas: [{ nombre: 'isométrica', datos: JPG.toString('base64') }, { nombre: 'frente', datos: JPG.toString('base64') }] }, 'renzo');
+    assert.equal(r3.cuerpo.meta.vistas_rutas.length, 2);
+    const pedido = await turnoListo(alm, 'Te adjunto todo', [f, c, d, r3.cuerpo.id]);
+    const cliente = clienteFalso([texto('Visto.')]);
+    await ejecutarTurno({ almacen: alm, cliente }, pedido);
+    const tx = cliente.pedidos[0].messages[0].content.filter((b) => b.type === 'text').map((b) => b.text).join('\n');
+    assert.match(tx, /Adjunto 1 · foto · IMG_123\.jpg/); assert.match(tx, /Adjunto 2 · captura · chat\.png/);
+    assert.match(tx, /Adjunto 3 · PDF · planos\.pdf/); assert.match(tx, /Adjunto 4 · 3D \(resumen de medición\) · stand\.fbx/);
+    assert.match(tx, /Vista 1 del 3D \(isométrica\)/);
+    assert.equal(cliente.pedidos[0].messages[0].content.filter((b) => b.type === 'image').length, 4);
+    const malo = await api.atender(alm, { accion: 'adjuntar', cid: CID, pid: PID, tipo: '3d', nombre: 'x', medicion: MEDICION, vistas: [{ datos: PDF.toString('base64') }] }, 'renzo');
+    assert.equal(malo.status, 400);
+});
+
+prueba('normas constructivas: memoria tipo norma va a /agente_memoria/normas y se lee al empezar', async () => {
+    const alm = nuevoAlmacen();
+    const ctx = { almacen: alm, cid: CID, pid: PID, mensajesAgente: [] };
+    const r = await H.ejecutar(ctx, { type: 'tool_use', id: 'x', name: 'memoria', input: { accion: 'anotar', tipo: 'norma', texto: 'Los bastidores llevan tubo 20×40 con travesaño cada 1 m.' } });
+    assert.equal(r.is_error, undefined);
+    assert.equal(Object.values(alm.datos.agente_memoria.normas)[0].texto, 'Los bastidores llevan tubo 20×40 con travesaño cada 1 m.');
+    await api.atender(alm, { accion: 'enviar', cid: CID, pid: PID, texto: 'Bastidor 5×3' }, 'renzo');
+    const h = JSON.parse(alm.datos.proyectos[CID][PID].agente.conversacion.api);
+    assert.match(h[0].content[0].text, /Normas constructivas del taller[\s\S]*travesaño cada 1 m/);
+});
+
+prueba('solo texto con la API simulada: despiece supuesto → no se aplica → el dueño confirma por chat → se aplica', async () => {
+    const alm = nuevoAlmacen({ base_datos: { materiales: BASE_2B.materiales, mano_obra: {}, oficios: {}, rendimientos: {} } });
+    const p1 = await turnoListo(alm, 'Bastidor con lona de 5×3 con patitas para pararse, se instala en el local');
+    await ejecutarTurno({ almacen: alm, cliente: clienteFalso([
+        herramienta('armar_borrador', { operaciones: [
+            { op: 'item', capitulo: 'Bastidores', desc: 'Bastidor con lona 5×3 autoportante' },
+            { op: 'fila', item: 'Bastidor con lona 5×3 autoportante', tipo: 'mat', d: 'Marco y travesaños', origen_q: 'supuesto:marco perimetral + 4 travesaños de 3 m (uno por metro)', medida: 'ml_largo',
+                geometria: [{ desc: 'larguero', cant: 2, largo_m: 5 }, { desc: 'montante/travesaño', cant: 6, largo_m: 3 }], clave: 'TUBO_20X40' },
+            { op: 'fila', item: 'Bastidor con lona 5×3 autoportante', tipo: 'mat', d: 'Lona', origen_q: 'supuesto:lona tensada del tamaño del marco', medida: 'm2_cara', geometria: [{ cant: 1, largo_m: 5, ancho_m: 3 }], clave: 'LONA' },
+        ] }, 't1'),
+        texto('Propuse marco de tubo 20×40 con travesaño cada metro y lona tensada. ¿Te sirve?')]) }, p1);
+    let bor = alm.datos.proyectos[CID][PID].agente.borrador;
+    assert.equal(bor.capitulos[0].items[0].apu.mat[0].q, 28);
+    assert.equal(B.aItemsPresupuesto(bor).length, 0, 'sin confirmar no se aplica');
+    const p2 = await turnoListo(alm, 'Sí, así los hacemos siempre');
+    const m2 = Object.entries(alm.datos.proyectos[CID][PID].agente.conversacion.mensajes).filter(([, v]) => v.rol === 'dueno').at(-1)[0];
+    await ejecutarTurno({ almacen: alm, cliente: clienteFalso([
+        herramienta('armar_borrador', { operaciones: [{ op: 'confirmar_supuestos', confirmacion: `dueño:${m2}` }] }, 't2'),
+        herramienta('memoria', { accion: 'anotar', tipo: 'norma', texto: 'Bastidores: tubo 20×40 con travesaño cada 1 m, lona tensada.' }, 't3'),
+        texto('Confirmado y anotado como norma.')]) }, p2);
+    bor = alm.datos.proyectos[CID][PID].agente.borrador;
+    assert.equal(bor.supuestos_pendientes, 0);
+    const items = B.aItemsPresupuesto(bor);
+    assert.equal(items.filter((x) => x.type === 'item').length, 1);
+    assert.ok(alm.datos.agente_memoria.normas);
+});
+
 // ------------------------------------------------------------------ correr
 for (const [nombre, fn] of pruebas) {
     try { await fn(); ok++; console.log('ok  ', nombre); }
