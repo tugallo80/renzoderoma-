@@ -18,6 +18,7 @@
             F.set(R() + '/actual', c);
             return resp({ ok: true, conv: c });
         }
+        if (b.accion === 'adjuntar' && window._fallarAdjuntar > 0 && b.tipo === 'pdf') { window._fallarAdjuntar--; return resp({ error: 'no disponible' }, 503); }
         if (b.accion === 'adjuntar') {
             var id = '-A' + String(++n).padStart(6, '0');
             F.set(R() + '/adjuntos/' + id, { nombre: b.nombre, tipo: b.tipo, anotaciones: b.anotaciones || null });

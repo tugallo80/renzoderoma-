@@ -1115,6 +1115,39 @@ prueba('edición a mano sin IA: nombre, cantidad, características y borrar fila
     assert.equal(ag().conversacion.ediciones, undefined, 'se consumen');
 });
 
+// ------------------------------------------------------------------ alternativas y "por confirmar": se cotizan, no suman
+prueba('alternativas excluyentes y "por confirmar" no suman al total; al aplicar quedan con el ojo apagado', () => {
+    const c = ctxValid();
+    let r = B.aplicarOperaciones(null, [
+        { op: 'item', capitulo: 'Obra', desc: 'Stand completo', caracteristicas: [{ texto: 'Stand de feria' }] },
+        { op: 'fila', item: 'Stand completo', tipo: 'sub', d: 'Stand', u: 'glb', q: 1, origen_q: 'dueño:M1', p: 1000, origen_p: 'dueño:M1' },
+        { op: 'item', capitulo: 'Obra', desc: 'Ventanas opción 1', condicion: 'alternativa', grupo: 'Ventanas' },
+        { op: 'fila', item: 'Ventanas opción 1', tipo: 'sub', d: 'Ventana', u: 'glb', q: 1, origen_q: 'dueño:M1', p: 500, origen_p: 'dueño:M1' },
+        { op: 'item', capitulo: 'Obra', desc: 'Ventanas opción 2', condicion: 'alternativa', grupo: 'Ventanas' },
+        { op: 'fila', item: 'Ventanas opción 2', tipo: 'sub', d: 'Ventana', u: 'glb', q: 1, origen_q: 'dueño:M1', p: 700, origen_p: 'dueño:M1' },
+        { op: 'item', capitulo: 'Obra', desc: 'Señalética exterior', condicion: 'por_confirmar' },
+        { op: 'item', capitulo: 'Obra', desc: 'Otra', condicion: 'opcional' },
+    ], c, nuevoId);
+    assert.equal(r.resultados.at(-1).ok, false);
+    const pu = (p) => L.calcPu({ mat: [], mo: [], eq: [], sub: [{ q: 1, p }], cs: 55, ind: 10, util: 30 });
+    assert.equal(r.borrador.total, pu(1000), 'solo suma el ítem normal');
+    assert.equal(r.borrador.capitulos[0].total, pu(1000));
+    assert.deepEqual(r.borrador.aparte.map((a) => [a.desc, a.condicion]), [['Ventanas opción 1', 'alternativa'], ['Ventanas opción 2', 'alternativa'], ['Señalética exterior', 'por_confirmar']]);
+    const res = B.resumen(r.borrador);
+    assert.equal(res.fuera_del_total.length, 3);
+    assert.match(res.capitulos[0].items[1].condicion, /ALTERNATIVA \(no suma al total\) · Ventanas/);
+    const items = B.aItemsPresupuesto(r.borrador).filter((x) => x.type === 'item');
+    assert.equal(items[0].activo, undefined);
+    assert.equal(items[1].activo, false); assert.equal(items[1].agente.condicion, 'alternativa'); assert.equal(items[1].agente.grupo, 'Ventanas');
+    assert.equal(items[3].activo, false); assert.equal(items[3].agente.condicion, 'por_confirmar');
+    // vuelve al total con "normal"
+    const id = r.borrador.capitulos[0].items[1].id;
+    r = B.aplicarOperaciones(r.borrador, [{ op: 'item', id, condicion: 'normal' }], c, nuevoId);
+    assert.equal(r.borrador.total, Math.round((pu(1000) + pu(500)) * 100) / 100);
+    const { SISTEMA } = require('../../functions/agente/prompt.js');
+    assert.match(SISTEMA, /NUNCA sumes alternativas excluyentes al total/);
+});
+
 // ------------------------------------------------------------------ correr
 for (const [nombre, fn] of pruebas) {
     try { await fn(); ok++; console.log('ok  ', nombre); }

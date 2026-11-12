@@ -97,6 +97,8 @@
             '#mod-agente .ag-ed{background:none;border:1px solid var(--border);border-radius:6px;padding:0 5px;font-size:12px;cursor:pointer;color:var(--gray);margin-left:4px;}',
             '#ag-edit{position:fixed;inset:0;z-index:9960;background:rgba(0,0,0,.5);display:none;align-items:flex-end;justify-content:center;}',
             '#ag-edit .box{background:var(--card);color:var(--text);width:100%;max-width:560px;border-radius:16px 16px 0 0;padding:16px;padding-bottom:max(16px,env(safe-area-inset-bottom));}',
+            '#ag-edit .ag-btn{border:1px solid var(--border);background:var(--bg);color:var(--text);border-radius:10px;padding:7px 12px;font-weight:700;font-size:14px;cursor:pointer;}',
+            '#ag-edit .ag-btn.prim{background:var(--blue);border-color:var(--blue);color:#fff;}',
             '#ag-edit label{display:block;font-size:13px;font-weight:700;margin-top:8px;} #ag-edit input,#ag-edit textarea{width:100%;box-sizing:border-box;font-size:16px;padding:9px;border:1px solid var(--border);border-radius:10px;margin-top:3px;background:var(--bg);color:var(--text);font-family:inherit;}',
             '#mod-agente .ag-sup{margin-top:8px;padding:8px;border-radius:10px;background:rgba(90,200,250,.12);font-size:12px;display:flex;gap:8px;align-items:center;}',
             '#mod-agente .ag-tot{position:sticky;bottom:0;background:var(--bg);padding:10px 2px;font-weight:800;display:flex;justify-content:space-between;border-top:2px solid var(--text);}'
@@ -337,7 +339,9 @@
                                     (f.revisar ? '<span class="rev">⚠ ' + esc(f.revisar) + '</span>' : '') + '</div>';
                             }).join('');
                         }).join('');
-                        return '<div class="ag-it" data-id="' + esc(it.id) + '"><div class="ag-it-cab"><span>' + esc(it.desc) +
+                        return '<div class="ag-it" data-id="' + esc(it.id) + '"' + (it.condicion ? ' style="border-style:dashed;opacity:.92;"' : '') + '>' +
+                            (it.condicion ? '<div style="font-size:11px;font-weight:800;color:var(--purple);margin-bottom:3px;">' + esc(AgenteBorrador.NOMBRE_CONDICION[it.condicion] || it.condicion) + (it.grupo ? ' · ' + esc(it.grupo) : '') + ' — no suma al total</div>' : '') +
+                            '<div class="ag-it-cab"><span>' + esc(it.desc) +
                             ' <button class="ag-ed" onclick="_agEditar(\'' + esc(it.id) + '\')" title="Editar a mano (sin IA, gratis)" aria-label="Editar">✎</button></span><span>Bs ' + bs(it.total) + '</span></div>' +
                             '<div class="ag-it-sub">' + (it.cant != null ? it.cant : 1) + ' ' + esc(it.und || 'glb') + (it.cant_origen ? ' ' + chipOrigen(it.cant_origen) : '') +
                             ' × Bs ' + bs(it.pu) + ' (precio unitario con recargos)' + (it.desde3d ? ' · del 3D, ruta ' + esc(it.desde3d.ruta || 'A') : '') +
@@ -354,6 +358,9 @@
                     }).join('') + '</div>';
             }).join('') +
             '<div class="ag-tot"><span>TOTAL BORRADOR</span><span>Bs ' + bs(borrador.total) + '</span></div>' +
+            (lista(borrador.aparte).length ? '<div class="ag-it-sub" style="margin-top:6px;"><b style="color:var(--purple);">Aparte, fuera del total:</b> ' + lista(borrador.aparte).map(function (a) {
+                return esc(a.desc) + ' (' + esc(AgenteBorrador.NOMBRE_CONDICION[a.condicion] || a.condicion) + ') Bs ' + bs(a.total);
+            }).join(' · ') + '. Al aplicar quedan en el presupuesto con el ojo apagado (no suman ni salen en el PDF).</div>' : '') +
             '<div class="ag-it-sub" style="margin:8px 0 4px;">Los totales los calcula la app (no la IA). Etiquetas: ' + chipOrigen('pieza3d:') + 'medido del 3D · ' +
             chipOrigen('base:') + 'base de precios · ' + chipOrigen('cota_plano:') + 'cota del plano · ' + chipOrigen('dueño:') + 'lo dijiste vos · ' + chipOrigen('supuesto:') + 'propuesta del agente (hay que confirmarla). Para corregir, escribilo en el chat.</div>' +
             '<div id="ag-aplicar"></div>';
@@ -570,15 +577,28 @@
     };
 
     // ------------------------------------------------------------------ llamar a /api/agente
+    /**
+     * POST a /api/agente. Los 502/503/504 y los cortes de red (típicos mientras se despliega una versión nueva) se reintentan
+     * solos hasta 3 veces; "enviar" solo con 503, que no llegó a la Function (así no se duplica el mensaje).
+     */
     async function llamar(cuerpo) {
         var u = firebase.auth().currentUser;
         if (!u) throw new Error('Sesión vencida: recargá la página.');
-        var r = await fetch('/api/agente', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + await u.getIdToken() },
-            body: JSON.stringify(Object.assign({ cid: cid, pid: pid, conv: conv }, cuerpo)) });
-        var j = {};
-        try { j = await r.json(); } catch (e) { j = {}; }
-        if (!r.ok) throw new Error(j.error || ('El agente respondió ' + r.status + (r.status === 413 ? ' (archivo muy pesado)' : '')));
-        return j;
+        var body = JSON.stringify(Object.assign({ cid: cid, pid: pid, conv: conv }, cuerpo));
+        var reintentable = cuerpo.accion === 'enviar' ? [503] : [502, 503, 504];
+        for (var intento = 0; ; intento++) {
+            var r = null, red = null;
+            try {
+                r = await fetch('/api/agente', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + await u.getIdToken() }, body: body });
+            } catch (e) { red = e; }
+            var transitorio = red ? cuerpo.accion !== 'enviar' : reintentable.indexOf(r.status) >= 0;
+            if (transitorio && intento < 3) { await new Promise(function (ok) { setTimeout(ok, 1500 * (intento + 1)); }); continue; }
+            if (red) throw new Error('Sin conexión con el agente (' + (red.message || 'red') + ').');
+            var j = {};
+            try { j = await r.json(); } catch (e) { j = {}; }
+            if (!r.ok) throw new Error(j.error || ('El agente respondió ' + r.status + (r.status === 413 ? ' (archivo muy pesado)' : r.status === 503 ? ' (servicio no disponible un momento; reintentá)' : '')));
+            return j;
+        }
     }
 
     // ------------------------------------------------------------------ adjuntos (un solo botón para todo)
@@ -610,8 +630,8 @@
         return { blob: blob, ancho: w, alto: h, canvas: cv };
     }
 
-    function agregarPendiente(nombre, tipo) {
-        var p = { clave: Math.random().toString(36).slice(2), nombre: nombre, tipo: tipo, estado: 'procesando' };
+    function agregarPendiente(nombre, tipo, reintentar) {
+        var p = { clave: Math.random().toString(36).slice(2), nombre: nombre, tipo: tipo, estado: 'procesando', reintentar: reintentar || null };
         pendientes.push(p); pintarAdjuntos();
         return p;
     }
@@ -623,10 +643,15 @@
             var ico = p.estado === 'procesando' ? '<span class="ag-spin" style="width:11px;height:11px;"></span>' : p.estado === 'error' ? '⚠' : (p.miniatura ? '<img src="' + p.miniatura + '" alt="">' : iconoTipo(p.tipo));
             return '<span class="ag-chip' + (p.estado === 'error' ? ' error' : '') + '" title="' + esc(p.error || p.nombre) + '">' + ico + ' ' + esc(p.estado === 'error' ? p.nombre + ': ' + p.error : (p.nota || p.nombre)) +
                 (p.anotable && p.estado === 'listo' && window.AgenteAnotador ? '<button onclick="_agAnotar(\'' + p.clave + '\')" aria-label="Anotar la foto" title="Dibujar cotas, marcas y notas">✏️</button>' : '') +
+                (p.estado === 'error' && p.reintentar ? '<button onclick="_agReintentarAdj(\'' + p.clave + '\')" aria-label="Reintentar" title="Reintentar">↻</button>' : '') +
                 (p.estado !== 'procesando' ? '<button onclick="_agQuitar(\'' + p.clave + '\')" aria-label="Quitar">×</button>' : '') + '</span>';
         }).join('') + '</div>' : '';
         pintarEstado();
     }
+    window._agReintentarAdj = function (clave) {
+        var p = pendientes.find(function (x) { return x.clave === clave; });
+        if (p && p.reintentar) return p.reintentar(p);
+    };
     window._agQuitar = function (clave) { pendientes = pendientes.filter(function (p) { return p.clave !== clave; }); pintarAdjuntos(); };
 
     /**
@@ -699,8 +724,9 @@
         return salida;
     }
 
-    async function adjuntar3D(modelo, archivos, json) {
-        var p = agregarPendiente((json || modelo).name, '3d');
+    async function adjuntar3D(modelo, archivos, json, previo) {
+        var p = previo || agregarPendiente((json || modelo).name, '3d', function (pp) { return adjuntar3D(modelo, archivos, json, pp); });
+        marcar(p, { estado: 'procesando', error: null });
         var urls = [];
         try {
             if (!window.Importar3D) throw new Error('No cargó el lector 3D.');
@@ -734,8 +760,9 @@
         } finally { urls.forEach(function (u) { URL.revokeObjectURL(u); }); }
     }
 
-    async function adjuntarPDF(f) {
-        var p = agregarPendiente(f.name, 'pdf');
+    async function adjuntarPDF(f, previo) {
+        var p = previo || agregarPendiente(f.name, 'pdf', function (pp) { return adjuntarPDF(f, pp); });
+        marcar(p, { estado: 'procesando', error: null });
         try {
             if (f.size > MAX_PDF_MB * 1048576) throw new Error('pesa ' + (f.size / 1048576).toFixed(1) + ' MB (máximo ' + MAX_PDF_MB + ' MB)');
             var r = await llamar({ accion: 'adjuntar', tipo: 'pdf', nombre: f.name, datos: await aBase64(f) });
@@ -743,8 +770,9 @@
         } catch (e) { marcar(p, { estado: 'error', error: e.message }); }
     }
 
-    async function adjuntarImagen(f) {
-        var p = agregarPendiente(f.name, 'imagen');
+    async function adjuntarImagen(f, previo) {
+        var p = previo || agregarPendiente(f.name, 'imagen', function (pp) { return adjuntarImagen(f, pp); });
+        marcar(p, { estado: 'procesando', error: null });
         try {
             var red = await reducirImagen(f);
             marcar(p, { miniatura: red.canvas.toDataURL('image/jpeg', 0.5), red: red });
@@ -804,17 +832,45 @@
         var t = $('ag-txt'), texto = t.value.trim();
         var listos = pendientes.filter(function (p) { return p.estado === 'listo'; });
         if (pendientes.some(function (p) { return p.estado === 'procesando'; })) return alert('Esperá a que terminen de procesarse los adjuntos.');
+        var fallidos = pendientes.filter(function (p) { return p.estado === 'error'; });
+        if (fallidos.length) {
+            var q = await preguntarFallidos(fallidos);
+            if (q === 'cancelar') return;
+            if (q === 'reintentar') {
+                await Promise.all(fallidos.filter(function (p) { return p.reintentar; }).map(function (p) { return p.reintentar(p); }));
+                if (pendientes.some(function (p) { return p.estado === 'error'; })) return alert('Todavía hay adjuntos que no se cargaron. Reintentá o quitalos con ×.');
+                listos = pendientes.filter(function (p) { return p.estado === 'listo'; });
+            }
+        }
         if (!texto && !listos.length) return;
         pararMic();
         var btn = $('ag-env'); btn.disabled = true;
         try {
             await llamar({ accion: 'enviar', texto: texto, adjuntos: listos.map(function (p) { return p.id; }) });
             t.value = ''; window._agAuto(t);
-            pendientes = pendientes.filter(function (p) { return p.estado === 'error' ? false : listos.indexOf(p) < 0; });
+            pendientes = pendientes.filter(function (p) { return p.estado === 'error' ? false : listos.indexOf(p) < 0; });   // los fallidos se mandaron "sin ellos"
             pintarAdjuntos();
         } catch (e) { alert(e.message); }
         finally { btn.disabled = false; pintarEstado(); }
     };
+    /** "1 adjunto no se cargó: ¿reintentar o enviar sin él?" — para que el agente no trabaje sin la lista del cliente sin que nadie lo sepa. */
+    function preguntarFallidos(fallidos) {
+        return new Promise(function (ok) {
+            var d = $('ag-edit');
+            if (!d) { d = document.createElement('div'); d.id = 'ag-edit'; document.body.appendChild(d); }
+            var n = fallidos.length;
+            d.innerHTML = '<div class="box"><b>' + n + (n > 1 ? ' adjuntos no se cargaron' : ' adjunto no se cargó') + '</b>' +
+                '<div style="margin:6px 0 10px;font-size:13px;">' + fallidos.map(function (p) { return '• ' + esc(p.nombre) + ': ' + esc(p.error || 'error'); }).join('<br>') + '</div>' +
+                '<div style="display:flex;gap:8px;flex-wrap:wrap;"><button class="ag-btn prim" style="flex:1;padding:12px;" id="ag-f-re">Reintentar</button>' +
+                '<button class="ag-btn" style="flex:1;padding:12px;" id="ag-f-sin">Enviar sin ' + (n > 1 ? 'ellos' : 'él') + '</button>' +
+                '<button class="ag-btn" style="flex:1;padding:12px;" id="ag-f-no">Cancelar</button></div></div>';
+            d.style.display = 'flex';
+            var fin = function (v) { d.style.display = 'none'; ok(v); };
+            $('ag-f-re').onclick = function () { fin('reintentar'); };
+            $('ag-f-sin').onclick = function () { fin('sin'); };
+            $('ag-f-no').onclick = function () { fin('cancelar'); };
+        });
+    }
     window._agReintentar = async function (pasarTope) {
         try { await llamar({ accion: 'reintentar', pasar_tope: !!pasarTope }); } catch (e) { alert(e.message); }
     };

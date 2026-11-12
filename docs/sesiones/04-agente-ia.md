@@ -288,9 +288,25 @@ la caché + salida); con Sonnet 5.5, ~US$ 0,02. El piso son el prompt y las herr
   nombre propio queda como `captura-AAAA-MM-DD-HHMM.png` (se puede anotar con ✏️ y el agente la ve como "captura"). El texto pegado
   no se toca. En Android funciona si el navegador expone el pegado de imágenes; si no, no pasa nada.
 
+## Alternativas, "por confirmar" y adjuntos que fallan
+
+- **Conflictos entre el dueño y los documentos** (regla en el prompt): si la lista del cliente trae alternativas excluyentes ("ventanas
+  opción 1 y 2, cotizar por separado") o renglones "por confirmar", el agente lo detecta y lo resuelve en la única ronda de preguntas
+  (citando el documento) o lo toma como supuesto si es obvio. **Nunca suma alternativas excluyentes al total**, aunque le pidan un solo ítem.
+- `armar_borrador`: `condicion: "alternativa"` (con `grupo`, ej. "Ventanas") o `"por_confirmar"` en `item` / `item_desde_3d`; `"normal"`
+  la vuelve al total. Esos ítems **se cotizan pero no suman** (capítulo y total); el borrador los lista en `aparte` y el chat los muestra
+  con borde punteado, "ALTERNATIVA · Ventanas — no suma al total" y una línea "Aparte, fuera del total" debajo del total.
+- **Al aplicar** se reutiliza lo que ya tenía el presupuesto: el **ojo apagado** (`activo: false`), que no suma al total ni sale en el
+  PDF, más la etiqueta **ALTERNATIVA / POR CONFIRMAR** junto a "🤖 Agente" (`agente.condicion`, `agente.grupo`).
+  *Pendiente a decidir:* si las alternativas deberían salir en el PDF del cliente como "opcionales" (hoy el PDF omite los ítems apagados).
+- **Adjunto que falla:** el 503 de un PDF de ~90 KB no llegó a la Function (en los logs de `agenteapi` todas las subidas dieron 200);
+  coincidió con un deploy (16:58–16:59), cuando Hosting no tiene la revisión lista. Ahora el chat **reintenta solo** los 502/503/504 y
+  los cortes de red (hasta 3 veces; "enviar", solo el 503, para no duplicar el mensaje). El chip con error tiene **↻**, y si al tocar
+  Enviar queda algún adjunto fallido aparece **"1 adjunto no se cargó: Reintentar / Enviar sin él / Cancelar"**.
+
 ### Pruebas (sin gastar plata)
 
-- `cd tools/agente && npm test` — 61 pruebas (costo de una corrección antes y después, ver_adjunto, modelo de correcciones,
+- `cd tools/agente && npm test` — 62 pruebas (alternativas y por confirmar fuera del total, ojo apagado al aplicar). 61 pruebas (costo de una corrección antes y después, ver_adjunto, modelo de correcciones,
   edición a mano). 57 pruebas (conversaciones: nueva de cero con el resumen del presupuesto, borrador y costos por
   conversación, título automático, un turno a la vez por proyecto, aplicar sin pisar la otra). 56 pruebas (características: origen en números, sin datos internos, desc larga rechazada, supuesto
   que no sale hasta confirmar, feat al aplicar y al reaplicar). 55 pruebas (costo: segunda ronda rechazada sin motivo, effort medium por mensaje sin tocar el del
