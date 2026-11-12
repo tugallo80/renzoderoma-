@@ -13,13 +13,16 @@
 
     var N = window.AgenteNucleo;
     var MAX_PDF_MB = 20, MAX_IMG_LADO = 2000;
-    var abierto = false, escuchas = [], mensajes = {}, estado = {}, costoProyecto = {}, costoMes = {}, config = {}, borrador = null, verBorrador = false;
+    var abierto = false, escuchas = [], escuchasConv = [], mensajes = {}, estado = {}, costoProyecto = {}, costoMes = {}, config = {}, borrador = null, verBorrador = false;
+    // Varias conversaciones por proyecto: "principal" = la que ya existía (rutas de siempre); las nuevas en agente/conversaciones/{id}
+    var conv = 'principal', metas = {}, costoPrincipal = {};
     var pendientes = [];   // adjuntos del próximo mensaje: {clave, nombre, tipo, estado: 'procesando'|'listo'|'error', id, error, miniatura}
     var audioActual = null, reconocimiento = null, grabador = null;
 
     function $(id) { return document.getElementById(id); }
     function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
     function raiz() { return 'proyectos/' + cid + '/' + pid + '/agente'; }
+    function raizConv() { return conv === 'principal' ? raiz() : raiz() + '/conversaciones/' + conv; }
     function cfg() { return N.configEfectiva(config); }
 
     // ------------------------------------------------------------------ estilos y estructura
@@ -40,6 +43,9 @@
             '#mod-agente .ag-panel{background:var(--card);border-bottom:1px solid var(--border);padding:10px 14px;font-size:12px;max-height:45vh;overflow-y:auto;display:none;}',
             '#mod-agente .ag-panel table{width:100%;border-collapse:collapse;font-size:11px;} #mod-agente .ag-panel td,#mod-agente .ag-panel th{padding:3px 4px;border-bottom:1px solid var(--border);text-align:right;} #mod-agente .ag-panel td:first-child,#mod-agente .ag-panel th:first-child{text-align:left;}',
             '#mod-agente .ag-panel label{display:block;font-weight:700;margin-top:8px;} #mod-agente .ag-panel select,#mod-agente .ag-panel input{width:100%;padding:8px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text);font-size:14px;margin-top:3px;}',
+            '#mod-agente .ag-convbar{display:flex;gap:8px;align-items:center;padding:6px 12px;background:var(--card);border-bottom:1px solid var(--border);}',
+            '#mod-agente .ag-convsel{flex:1;min-width:0;text-align:left;background:none;border:none;color:var(--text);font-size:13px;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-family:inherit;padding:4px 0;}',
+            '#mod-agente .ag-convsel span{color:var(--gray);}',
             '#mod-agente .ag-msgs{flex:1;overflow-y:auto;padding:12px 12px 6px;-webkit-overflow-scrolling:touch;}',
             '#mod-agente .ag-m{max-width:88%;margin:0 0 10px;padding:9px 12px;border-radius:14px;font-size:14px;line-height:1.45;word-wrap:break-word;white-space:normal;}',
             '#mod-agente .ag-m.dueno{margin-left:auto;background:var(--blue);color:#fff;border-bottom-right-radius:4px;}',
@@ -101,6 +107,8 @@
             '    <button class="ag-ico" onclick="_agPanel(\'config\')" title="Configuración" aria-label="Configuración">⚙</button>' +
             '    <button class="ag-ico" onclick="cerrarAgenteIA()" aria-label="Cerrar" style="font-size:28px;">×</button>' +
             '  </div>' +
+            '  <div class="ag-convbar" id="ag-convbar"></div>' +
+            '  <div class="ag-panel" id="ag-p-convs"></div>' +
             '  <div class="ag-panel" id="ag-p-costos"></div>' +
             '  <div class="ag-panel" id="ag-p-config"></div>' +
             '  <div class="ag-msgs" id="ag-msgs"></div>' +
@@ -126,6 +134,9 @@
         $('mod-agente').style.display = 'block';
         document.body.style.overflow = 'hidden';
         if (!abierto) { abierto = true; escuchar(); }
+        var elegir = foco && foco.conv ? Promise.resolve(foco.conv) : (escuchasConv.length ? Promise.resolve(conv) :
+            db.ref(raiz() + '/actual').once('value').then(function (s) { return s.val() || 'principal'; }).catch(function () { return 'principal'; }));
+        elegir.then(function (c) { if (c !== conv || !escuchasConv.length) { conv = c; escucharConv(); } if (foco) enfocarItem(); });
         pintarMensajes(); pintarEstado(); pintarCosto(); pintarAdjuntos(); pintarBorrador();
         if (archivos && archivos.length) window._agArchivos(archivos);
         setTimeout(function () { var m = $('ag-msgs'); if (m) m.scrollTop = m.scrollHeight; }, 50);
@@ -142,21 +153,66 @@
         document.body.style.overflow = '';
         pararAudio(); pararMic();
         escuchas.forEach(function (f) { f(); }); escuchas = []; abierto = false;
+        escuchasConv.forEach(function (f) { f(); }); escuchasConv = [];
     };
 
     function on(ref, evento, fn) { ref.on(evento, fn, function (e) { console.warn('[agente]', e && e.message); }); escuchas.push(function () { ref.off(evento, fn); }); }
 
     function escuchar() {
-        mensajes = {};
-        var refM = db.ref(raiz() + '/conversacion/mensajes').limitToLast(200);
-        on(refM, 'child_added', function (s) { mensajes[s.key] = s.val(); pintarMensajes(true); });
-        on(refM, 'child_changed', function (s) { mensajes[s.key] = s.val(); pintarMensajes(); });
-        on(db.ref(raiz() + '/borrador'), 'value', function (s) { borrador = s.val(); pintarBorrador(); });
         on(db.ref(raiz() + '/estado'), 'value', function (s) { estado = s.val() || {}; pintarEstado(); });
-        on(db.ref(raiz() + '/costos/total'), 'value', function (s) { costoProyecto = s.val() || {}; pintarCosto(); });
+        on(db.ref(raiz() + '/conversaciones_meta'), 'value', function (s) { metas = s.val() || {}; pintarConvs(); pintarCosto(); });
+        on(db.ref(raiz() + '/costos/total'), 'value', function (s) { costoPrincipal = s.val() || {}; pintarConvs(); pintarCosto(); });
         on(db.ref('agente_costos/' + N.mesClave() + '/_total'), 'value', function (s) { costoMes = s.val() || {}; pintarCosto(); });
         on(db.ref('config/agente'), 'value', function (s) { config = s.val() || {}; pintarCosto(); if ($('ag-p-config').style.display === 'block') pintarConfig(); });
     }
+    /** Escuchas de la conversación abierta (se rehacen al cambiar de conversación). */
+    function escucharConv() {
+        escuchasConv.forEach(function (f) { f(); }); escuchasConv = [];
+        mensajes = {}; borrador = null; costoProyecto = {};
+        var onC = function (ref, ev, fn) { ref.on(ev, fn, function (e) { console.warn('[agente]', e && e.message); }); escuchasConv.push(function () { ref.off(ev, fn); }); };
+        var refM = db.ref(raizConv() + '/conversacion/mensajes').limitToLast(200);
+        onC(refM, 'child_added', function (s) { mensajes[s.key] = s.val(); pintarMensajes(true); });
+        onC(refM, 'child_changed', function (s) { mensajes[s.key] = s.val(); pintarMensajes(); });
+        onC(db.ref(raizConv() + '/borrador'), 'value', function (s) { borrador = s.val(); pintarBorrador(); });
+        onC(db.ref(raizConv() + '/costos/total'), 'value', function (s) { costoProyecto = s.val() || {}; pintarCosto(); });
+        pintarMensajes(true); pintarBorrador(); pintarConvs(); pintarCosto();
+    }
+    function cambiarConv(nueva) {
+        if (nueva === conv && escuchasConv.length) return;
+        conv = nueva || 'principal';
+        pendientes = []; pintarAdjuntos();
+        if (foco && foco.conv !== conv) { foco = null; var t = $('ag-txt'); if (t && /^Sobre «[^»]*»: $/.test(t.value)) { t.value = ''; window._agAuto(t); } }
+        if (verBorrador) window._agVerBorrador(false);
+        $('ag-p-convs').style.display = 'none';
+        escucharConv();
+    }
+
+    // ------------------------------------------------------------------ conversaciones del proyecto
+    function listaConvs() {
+        var l = Object.keys(metas).map(function (k) { return Object.assign({ id: k }, metas[k]); });
+        if (!metas.principal && (costoPrincipal.llamadas || conv === 'principal')) l.push({ id: 'principal', titulo: 'Primera conversación', creada: 0 });
+        l.forEach(function (c) { if (c.id === 'principal') c.costo_usd = costoPrincipal.usd || 0; });
+        return l.sort(function (a, b) { return (b.creada || 0) - (a.creada || 0); });
+    }
+    function costoTotalProyecto() { return listaConvs().reduce(function (s, c) { return s + (Number(c.costo_usd) || 0); }, 0); }
+    function pintarConvs() {
+        var bar = $('ag-convbar'); if (!bar) return;
+        var l = listaConvs(), act = l.find(function (c) { return c.id === conv; }) || { titulo: conv === 'principal' ? 'Primera conversación' : 'Nueva conversación' };
+        bar.innerHTML = '<button class="ag-convsel" onclick="_agPanel(\'convs\')">💬 <b>' + esc(act.titulo || 'Conversación') + '</b>' + (l.length > 1 ? ' <span>(' + l.length + ') ▾</span>' : ' ▾') + '</button>' +
+            '<button class="ag-btn" onclick="_agNueva()" title="Empezar otra conversación en este proyecto (otro ítem)">＋ Nueva</button>';
+        var p = $('ag-p-convs');
+        if (p.style.display === 'block') p.innerHTML = '<b>Conversaciones de este proyecto</b><div style="color:var(--gray);margin:2px 0 6px;">Cada una tiene su propio chat, adjuntos y borrador. Total del proyecto: <b>' + N.usd(costoTotalProyecto()) + '</b></div>' +
+            l.map(function (c) {
+                return '<div style="display:flex;gap:8px;align-items:center;padding:7px 0;border-bottom:1px solid var(--border);' + (c.id === conv ? 'font-weight:800;' : '') + '"><span style="flex:1;cursor:pointer;" onclick="_agAbrirConv(\'' + esc(c.id) + '\')">' +
+                    (c.id === conv ? '▶ ' : '') + esc(c.titulo || 'Conversación') + '</span><span style="color:var(--gray);">' + (c.creada ? new Date(c.creada).toLocaleDateString('es-BO') + ' · ' : '') + N.usd(c.costo_usd || 0) + '</span></div>';
+            }).join('');
+    }
+    window._agAbrirConv = function (id) { cambiarConv(id); db.ref(raiz() + '/actual').set(id).catch(function () {}); };
+    window._agNueva = async function () {
+        if (trabajando()) return alert('Esperá a que el agente termine.');
+        try { var r = await llamar({ accion: 'nueva' }); cambiarConv(r.conv); }
+        catch (e) { alert(e.message); }
+    };
 
     // ------------------------------------------------------------------ mensajes
     function formato(t) {
@@ -278,7 +334,7 @@
     };
     window._agAplicar = function () {
         if (!borrador || typeof data === 'undefined' || !window.AgenteBorrador) return alert('No se pudo leer el presupuesto.');
-        var items = AgenteBorrador.aItemsPresupuesto(borrador, { capitulos: $('ag-con-cap') ? $('ag-con-cap').checked : true, fecha: Date.now() });
+        var items = AgenteBorrador.aItemsPresupuesto(borrador, { conv: conv, capitulos: $('ag-con-cap') ? $('ag-con-cap').checked : true, fecha: Date.now() });
         var n = items.filter(function (x) { return x.type === 'item'; }).length;
         if (!n) return alert(borrador.supuestos_pendientes ? 'Todos los ítems tienen supuestos sin confirmar: confirmalos primero.' : 'El borrador no tiene ítems.');
         if (!confirm('¿Agregar ' + n + ' ítem' + (n > 1 ? 's' : '') + ' del borrador al presupuesto (Bs ' + bs(borrador.total) + ')?' +
@@ -288,8 +344,8 @@
         if (typeof saveDB === 'function') saveDB(true);
         if (typeof render === 'function') render();
         var ap = { fecha: firebase.database.ServerValue.TIMESTAMP, version: borrador.version, agregados: r.agregados, actualizados: r.actualizados, por: (firebase.auth().currentUser || {}).uid || null };
-        db.ref(raiz() + '/borrador/aplicado').set(ap).catch(function (e) { console.warn('[agente] aplicado', e); });
-        db.ref(raiz() + '/conversacion/mensajes').push({ rol: 'aviso', fecha: firebase.database.ServerValue.TIMESTAMP,
+        db.ref(raizConv() + '/borrador/aplicado').set(ap).catch(function (e) { console.warn('[agente] aplicado', e); });
+        db.ref(raizConv() + '/conversacion/mensajes').push({ rol: 'aviso', fecha: firebase.database.ServerValue.TIMESTAMP,
             texto: '✅ Borrador v' + borrador.version + ' aplicado al presupuesto: ' + r.agregados + ' ítems nuevos' + (r.actualizados ? ', ' + r.actualizados + ' actualizados' : '') + ' (Bs ' + bs(borrador.total) + ').' });
         alert('✅ Listo: ' + r.agregados + ' ítems agregados al final' + (r.actualizados ? ' y ' + r.actualizados + ' actualizados en su lugar' : '') + '.');
     };
@@ -297,7 +353,7 @@
     window._agConfirmarSup = function (itemId) {
         if (trabajando()) return alert('Esperá a que el agente termine para confirmar.');
         var r = AgenteBorrador.confirmarSupuestos(borrador, itemId, 'dueño:botón "Confirmar supuestos"');
-        db.ref(raiz() + '/borrador').set(JSON.parse(JSON.stringify(r.borrador))).catch(function (e) { alert('No se pudo guardar: ' + e.message); });
+        db.ref(raizConv() + '/borrador').set(JSON.parse(JSON.stringify(r.borrador))).catch(function (e) { alert('No se pudo guardar: ' + e.message); });
     };
     /** Lleva el borrador al ítem en foco y lo resalta (si el borrador ya cargó; si no, se reintenta al llegar). */
     function enfocarItem() {
@@ -327,7 +383,12 @@
         var el = $('ag-estado');
         if (!el) return;
         var h = '';
-        if (trabajando()) {
+        var otra = estado.conv && estado.conv !== conv;
+        if (trabajando() && otra) {
+            h = '<div class="ag-spin"></div><span style="flex:1;">El agente está trabajando en otra conversación de este proyecto.</span><button class="ag-btn" onclick="_agAbrirConv(\'' + esc(estado.conv) + '\')">Ver</button>';
+        } else if (otra && (estado.fase === 'error' || estado.fase === 'tope')) {
+            h = '';
+        } else if (trabajando()) {
             h = '<div class="ag-spin"></div><span style="flex:1;">' + esc(estado.texto || 'Trabajando…') + '</span>' +
                 '<button class="ag-btn" onclick="_agDetener()">Detener</button>';
         } else if ((estado.fase === 'trabajando' || estado.fase === 'en_cola')) {
@@ -337,6 +398,7 @@
         }
         el.innerHTML = h;
         el.style.display = h ? 'flex' : 'none';
+        if (estado.conv && estado.conv === conv && estado.fase !== 'trabajando' && estado.fase !== 'en_cola') pintarConvs();
         var env = $('ag-env'); if (env) env.disabled = trabajando() || pendientes.some(function (p) { return p.estado === 'procesando'; });
     }
 
@@ -346,19 +408,19 @@
         if (!el) return;
         var c = cfg(), t = N.estadoTope(costoMes.usd || 0, c);
         el.className = 'ag-costo' + (t.nivel !== 'ok' ? ' ' + t.nivel : '');
-        el.innerHTML = 'Cotización <b>' + N.usd(costoProyecto.usd || 0) + '</b><br>Mes <b>' + N.usd(costoMes.usd || 0) + '</b>/' + Math.round(c.tope_mensual_usd) + ' ▾';
+        el.innerHTML = 'Conv. <b>' + N.usd(costoProyecto.usd || 0) + '</b> · Proy. ' + N.usd(costoTotalProyecto()) + '<br>Mes <b>' + N.usd(costoMes.usd || 0) + '</b>/' + Math.round(c.tope_mensual_usd) + ' ▾';
         if ($('ag-p-costos').style.display === 'block') pintarDetalleCostos();
     }
     function pintarDetalleCostos() {
         var p = $('ag-p-costos'), c = cfg(), t = N.estadoTope(costoMes.usd || 0, c);
         p.innerHTML = '<div>Cargando…</div>';
-        db.ref(raiz() + '/costos/llamadas').limitToLast(60).once('value').then(function (s) {
+        db.ref(raizConv() + '/costos/llamadas').limitToLast(60).once('value').then(function (s) {
             var filas = [];
             s.forEach(function (ch) { filas.push(ch.val()); });
             filas.reverse();
             p.innerHTML = (t.nivel !== 'ok' ? '<div style="color:var(' + (t.nivel === 'tope' ? '--red' : '--orange') + ');font-weight:700;margin-bottom:6px;">' +
                 (t.nivel === 'tope' ? 'Se llegó al tope mensual: el agente frena antes de cada llamada (podés seguir igual).' : 'Ya se usó el ' + Math.round(t.pct) + ' % del tope mensual.') + '</div>' : '') +
-                '<div style="margin-bottom:6px;">Esta cotización: <b>' + N.usd(costoProyecto.usd || 0) + '</b> en ' + (costoProyecto.llamadas || 0) + ' llamadas · Mes: <b>' +
+                '<div style="margin-bottom:6px;">Esta conversación: <b>' + N.usd(costoProyecto.usd || 0) + '</b> en ' + (costoProyecto.llamadas || 0) + ' llamadas · Proyecto (todas las conversaciones): <b>' + N.usd(costoTotalProyecto()) + '</b> · Mes: <b>' +
                 N.usd(costoMes.usd || 0) + '</b> (' + (costoMes.llamadas || 0) + ' llamadas, todos los proyectos)</div>' +
                 (filas.length ? '<table><tr><th>Hora</th><th>Modelo</th><th>Entrada</th><th>Salida</th><th>Caché esc.</th><th>Caché leída</th><th title="% de la entrada que vino de la caché">De caché</th><th>USD</th></tr>' +
                     filas.map(function (f) {
@@ -405,10 +467,10 @@
             .catch(function (e) { alert('No se pudo guardar: ' + e.message); });
     };
     window._agPanel = function (cual) {
-        ['costos', 'config'].forEach(function (x) {
+        ['convs', 'costos', 'config'].forEach(function (x) {
             var p = $('ag-p-' + x), ver = x === cual && p.style.display !== 'block';
             p.style.display = ver ? 'block' : 'none';
-            if (ver) { if (x === 'costos') pintarDetalleCostos(); else pintarConfig(); }
+            if (ver) { if (x === 'costos') pintarDetalleCostos(); else if (x === 'convs') pintarConvs(); else pintarConfig(); }
         });
     };
 
@@ -417,7 +479,7 @@
         var u = firebase.auth().currentUser;
         if (!u) throw new Error('Sesión vencida: recargá la página.');
         var r = await fetch('/api/agente', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + await u.getIdToken() },
-            body: JSON.stringify(Object.assign({ cid: cid, pid: pid }, cuerpo)) });
+            body: JSON.stringify(Object.assign({ cid: cid, pid: pid, conv: conv }, cuerpo)) });
         var j = {};
         try { j = await r.json(); } catch (e) { j = {}; }
         if (!r.ok) throw new Error(j.error || ('El agente respondió ' + r.status + (r.status === 413 ? ' (archivo muy pesado)' : '')));

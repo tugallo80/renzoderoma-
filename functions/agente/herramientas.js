@@ -6,7 +6,9 @@
 const N = require("./compartido/agente-nucleo.js");
 const B = require("./compartido/agente-borrador.js");
 
-const RAIZ = (ctx) => `proyectos/${ctx.cid}/${ctx.pid}/agente`;
+const R = require("./rutas");
+const RAIZ = (ctx) => R.RAIZ(ctx.cid, ctx.pid);                 // proyecto: adjuntos
+const RC = (ctx) => R.raizConv(ctx.cid, ctx.pid, ctx.conv);      // conversación: mensajes, borrador, rondas
 
 // ---------------------------------------------------------------- validación de entrada
 function validar(schema, valor, camino = "entrada") {
@@ -74,7 +76,7 @@ async function contexto(ctx) {
     for (const id of Object.keys(adjuntos)) {
         if (adjuntos[id].tipo === "3d") { try { mediciones[id] = (await cargarMedicion(ctx, id)).med; } catch (e) { /* sin medición */ } }
     }
-    const msgs = (await ctx.almacen.leer(`${RAIZ(ctx)}/conversacion/mensajes`)) || {};
+    const msgs = (await ctx.almacen.leer(`${RC(ctx)}/conversacion/mensajes`)) || {};
     const mensajesDueno = {};
     Object.keys(msgs).forEach((k) => { if (msgs[k] && msgs[k].rol === "dueno") mensajesDueno[k] = true; });
     return { adjuntos, mediciones, mensajesDueno, base: await base(ctx), recargosPresupuesto: await recargosPresupuesto(ctx) };
@@ -240,12 +242,17 @@ Operaciones (campo "op"):
         progreso: "Armando el borrador…",
         async correr(ctx, e) {
             const v = await contexto(ctx);
-            const actual = await ctx.almacen.leer(`${RAIZ(ctx)}/borrador`);
+            const actual = await ctx.almacen.leer(`${RC(ctx)}/borrador`);
             const r = B.aplicarOperaciones(actual, e.operaciones.slice(0, 80), v, () => ctx.almacen.nuevaClave());
             const aplicadas = r.resultados.filter((x) => x.ok).length;
             if (aplicadas) {
                 r.borrador.actualizado = ctx.almacen.ahora();
-                await ctx.almacen.escribir(`${RAIZ(ctx)}/borrador`, JSON.parse(JSON.stringify(r.borrador)));
+                await ctx.almacen.escribir(`${RC(ctx)}/borrador`, JSON.parse(JSON.stringify(r.borrador)));
+                // título automático de la conversación: el primer ítem
+                const rutaMeta = `${RAIZ(ctx)}/conversaciones_meta/${ctx.conv || R.PRINCIPAL}`;
+                const meta = await ctx.almacen.leer(rutaMeta).catch(() => null);
+                const primero = r.borrador.capitulos.reduce((a, c) => a || (c.items[0] && c.items[0].desc), null);
+                if (meta && meta.titulo_auto && primero) await ctx.almacen.actualizar(rutaMeta, { titulo: primero.slice(0, 60), titulo_auto: false });
             }
             return {
                 aplicadas, rechazadas: r.resultados.filter((x) => !x.ok).map((x) => ({ n: x.n, op: x.op, motivo: x.error })),
@@ -419,7 +426,7 @@ Operaciones (campo "op"):
         },
         progreso: "Preparando preguntas…",
         async correr(ctx, e) {
-            const rondas = Number(await ctx.almacen.leer(`${RAIZ(ctx)}/rondas_preguntas`)) || 0;
+            const rondas = Number(await ctx.almacen.leer(`${RC(ctx)}/rondas_preguntas`)) || 0;
             if (rondas >= 1 && !String(e.motivo || "").trim()) {
                 throw new Error("Ya hiciste la ronda de preguntas de esta cotización. Avanzá con supuestos declarados; preguntá de nuevo solo si el dueño cambió algo, explicándolo en \"motivo\".");
             }
@@ -427,7 +434,7 @@ Operaciones (campo "op"):
                 .map((p) => ({ pregunta: String(p.pregunta).trim().slice(0, 500), para_que: p.para_que ? String(p.para_que).slice(0, 200) : null }));
             if (!preguntas.length) throw new Error("No llegó ninguna pregunta.");
             ctx.cortarTurno = true;
-            await ctx.almacen.escribir(`${RAIZ(ctx)}/rondas_preguntas`, rondas + 1);
+            await ctx.almacen.escribir(`${RC(ctx)}/rondas_preguntas`, rondas + 1);
             ctx.mensajesAgente.push({ rol: "agente", texto: (e.avance ? String(e.avance).trim() + "\n\n" : "") + (rondas ? "Por el cambio, necesito que me confirmes:" : "Antes de armar el borrador, respondeme todo junto (podés contestar por número):"), preguntas });
             return { ok: true, nota: "Preguntas enviadas al dueño. El turno termina acá: no sigas hasta su respuesta." };
         },

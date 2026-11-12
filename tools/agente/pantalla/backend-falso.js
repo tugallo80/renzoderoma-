@@ -10,6 +10,14 @@
         if (url === '/api/tts') return resp({ error: 'sin audio en la prueba' }, 500);
         if (url !== '/api/agente') return fetchReal.apply(this, arguments);
         var b = JSON.parse(op.body); window._pedidosAgente.push(b);
+        var RC = function () { return !b.conv || b.conv === 'principal' ? R() : R() + '/conversaciones/' + b.conv; };
+        if (b.accion === 'nueva') {
+            var c = '-C' + String(++n).padStart(6, '0');
+            if (!F.get(R() + '/conversaciones_meta/principal')) F.set(R() + '/conversaciones_meta/principal', { titulo: 'Stand para el cliente demo', creada: Date.now() - 3600000, costo_usd: 0.1843 });
+            F.set(R() + '/conversaciones_meta/' + c, { titulo: 'Nueva conversación', creada: Date.now() });
+            F.set(R() + '/actual', c);
+            return resp({ ok: true, conv: c });
+        }
         if (b.accion === 'adjuntar') {
             var id = '-A' + String(++n).padStart(6, '0');
             F.set(R() + '/adjuntos/' + id, { nombre: b.nombre, tipo: b.tipo, anotaciones: b.anotaciones || null });
@@ -17,7 +25,7 @@
         }
         if (b.accion === 'enviar') {
             var adj = (b.adjuntos || []).map(function (id) { var m = F.get(R() + '/adjuntos/' + id); return { id: id, nombre: m.nombre, tipo: m.tipo }; });
-            agregar(R() + '/conversacion/mensajes', { rol: 'dueno', texto: b.texto, adjuntos: adj.length ? adj : null, fecha: Date.now() });
+            agregar(RC() + '/conversacion/mensajes', { rol: 'dueno', texto: b.texto, adjuntos: adj.length ? adj : null, fecha: Date.now() });
             F.set(R() + '/estado', { fase: 'trabajando', texto: 'Midiendo el 3D…', actualizado: Date.now() });
             (window._guionAgente || []).forEach(function (paso, i) {
                 setTimeout(function () { paso(F, R(), agregar); }, 300 * (i + 1));
