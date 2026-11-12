@@ -64,9 +64,17 @@
         b.title = 'Rubik Agente App (Claude) · mantener apretado para cambiar el enlace';
         b.setAttribute('aria-label', 'Abrir Rubik Agente App en Claude');
         b.innerHTML = '<svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path fill="#fff" d="M12 2l1.6 6.2L20 6l-4.4 4.6L22 12l-6.4 1.4L20 18l-6.4-2.2L12 22l-1.6-6.2L4 18l4.4-4.6L2 12l6.4-1.4L4 6l6.4 2.2z"/></svg>';
-        b.style.cssText = 'position:fixed;left:14px;bottom:' + (esCelular() ? '84px' : '20px') + ';z-index:900;' +
-            'width:48px;height:48px;border-radius:50%;border:none;cursor:pointer;background:#d97757;' +
+        // Simétrico al botón de configuración del inicio (bottom/right 20px, 45×45): acá bottom/left 20px.
+        b.style.cssText = 'position:fixed;left:20px;bottom:20px;z-index:900;' +
+            'width:45px;height:45px;border-radius:50%;border:none;cursor:pointer;background:#d97757;' +
             'box-shadow:0 4px 14px rgba(0,0,0,.25);display:flex;align-items:center;justify-content:center;padding:0;';
+        // Si la página tiene una barra fija abajo (barra de acciones del celular en Presupuesto), subir por encima
+        function ubicar() {
+            var barra = document.getElementById('mobile-action-bar');
+            var alto = (barra && getComputedStyle(barra).display !== 'none') ? barra.offsetHeight : 0;
+            b.style.bottom = (alto ? alto + 14 : 20) + 'px';
+        }
+        ubicar(); window.addEventListener('resize', ubicar); setTimeout(ubicar, 1500);
 
         var timer = null, largo = false;
         b.addEventListener('pointerdown', function () { largo = false; timer = setTimeout(function () { largo = true; pedirEnlace(); }, 700); });
