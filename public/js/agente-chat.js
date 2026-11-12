@@ -236,7 +236,8 @@
                             '<div class="ag-it-sub">' + (it.cant != null ? it.cant : 1) + ' ' + esc(it.und || 'glb') + (it.cant_origen ? ' ' + chipOrigen(it.cant_origen) : '') +
                             ' × Bs ' + bs(it.pu) + ' (precio unitario con recargos)' + (it.desde3d ? ' · del 3D, ruta ' + esc(it.desde3d.ruta || 'A') : '') +
                             (it.marcadas ? ' · <b style="color:var(--red);">' + it.marcadas + (it.marcadas > 1 ? ' marcadas' : ' marcada') + '</b>' : '') + '</div>' +
-                            (it.nota ? '<div class="ag-it-sub">' + esc(it.nota) + '</div>' : '') + filas +
+                            (it.nota ? '<div class="ag-it-sub">' + esc(it.nota) + '</div>' : '') +
+                            (it.aviso ? '<div class="ag-it-sub" style="color:var(--orange);font-weight:700;">⚠ ' + esc(it.aviso) + '</div>' : '') + filas +
                             (it.supuestos_pendientes ? '<div class="ag-sup"><span style="flex:1;">' + it.supuestos_pendientes + ' supuesto' + (it.supuestos_pendientes > 1 ? 's' : '') +
                                 ' del agente sin confirmar: este ítem no se aplica al presupuesto hasta que los confirmes (o corregilos por el chat).</span>' +
                                 '<button class="ag-btn prim" onclick="_agConfirmarSup(\'' + it.id + '\')">Confirmar supuestos</button></div>' : '') + '</div>';

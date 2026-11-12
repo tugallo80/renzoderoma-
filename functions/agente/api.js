@@ -144,8 +144,22 @@ function fechaBolivia(ms) {
 }
 
 /** Primer mensaje de la conversación: contexto del proyecto y memoria del dueño. */
+/**
+ * Normas iniciales dichas por el dueño (se siembran UNA vez en /agente_memoria/normas; si las borra en ⚙ no vuelven).
+ */
+const NORMAS_INICIALES = {
+    inicial_estructura_items: "Un ítem es lo que el cliente compra y se le entrega (el trofeo, el mostrador, el letrero, el adhesivo de piso, el traslado y montaje), con su cantidad y unidad. Materiales, mano de obra, equipos, fijaciones, armado y pintura van dentro del APU de ese ítem, nunca como ítems aparte. Las piezas del 3D que forman un mismo objeto son un solo ítem. Si el cliente manda una lista de ítems, esa lista manda. Si conviene separar algo, preguntarlo antes.",
+};
+async function sembrarNormas(almacen) {
+    for (const k of Object.keys(NORMAS_INICIALES)) {
+        const r = await almacen.transaccion(`agente_memoria/sembradas/${k}`, (cur) => (cur ? undefined : almacen.ahora()));
+        if (r.ok) await almacen.escribir(`agente_memoria/normas/${k}`, { texto: NORMAS_INICIALES[k], fecha: almacen.ahora(), por: "dueño (pedido tras la cotización del trofeo, 12 nov 2026)" });
+    }
+}
+
 async function textoInicial(almacen, cid, pid) {
     const partes = [`[Proyecto ${pid} del cliente ${cid}. Conversación nueva.]`];
+    await sembrarNormas(almacen).catch((e) => console.warn("[agente] normas iniciales", e.message));
     const lista = async (n) => { const m = await almacen.leer(`agente_memoria/${n}`).catch(() => null); return m ? Object.keys(m).map((k) => m[k]).filter((x) => x && x.texto) : []; };
     const normas = await lista("normas"), notas = await lista("notas");
     if (normas.length) {
@@ -202,4 +216,4 @@ async function atender(almacen, cuerpo, uid) {
     }
 }
 
-module.exports = { atender, adjuntar, enviar, reintentar, tomarTurno, ErrorPedido, N };
+module.exports = { NORMAS_INICIALES, sembrarNormas, atender, adjuntar, enviar, reintentar, tomarTurno, ErrorPedido, N };

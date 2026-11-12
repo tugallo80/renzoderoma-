@@ -434,6 +434,25 @@
         return n;
     }
 
+    /**
+     * Un ítem es lo que el cliente compra y se le entrega (el trofeo, el mostrador, el letrero, el traslado y montaje).
+     * Materiales, mano de obra, equipos, fijaciones y pintura van DENTRO de su APU. Aviso si un ítem parece ser solo un
+     * componente de costo de otro: solo mano de obra, o solo un material genérico ("armado", "fijaciones"…), o con ese nombre.
+     */
+    var RE_COMPONENTE = /^(armado|ensamblado|ensamble|fijaci[oó]n|fijaciones|torniller[ií]a|mano de obra|m\.?\s?o\.?\b|pintura|soldadura|corte|rolado|lijado|accesorios|insumos|materiales)\b/i;
+    var RE_ENTREGABLE_SERVICIO = /traslado|montaje|instalaci[oó]n|transporte|flete|desmontaje|log[ií]stica|dise[ñn]o|restauraci[oó]n|mantenimiento/i;
+    var AVISO_COMPONENTE = '¿esto no es parte del APU de otro ítem?';
+    function itemSospechoso(it) {
+        if (it.desde3d) return null;
+        var desc = String(it.desc || '').trim();
+        if (RE_ENTREGABLE_SERVICIO.test(desc)) return null;
+        if (RE_COMPONENTE.test(desc)) return AVISO_COMPONENTE;
+        var mat = it.apu.mat || [], mo = it.apu.mo || [], eq = it.apu.eq || [], sub = it.apu.sub || [];
+        if (mo.length && !mat.length && !eq.length && !sub.length) return AVISO_COMPONENTE;
+        if (!mo.length && !eq.length && !sub.length && mat.length === 1 && RE_COMPONENTE.test(String(mat[0].d || ''))) return AVISO_COMPONENTE;
+        return null;
+    }
+
     // ------------------------------------------------------------------ totales (los calcula la herramienta)
     function calcularTotales(b, ctx) {
         var rc = b.recargos || (ctx && ctx.recargosPresupuesto ? Object.assign({ origen: 'base:presupuesto/recargos' }, ctx.recargosPresupuesto) : { cs: 55, ind: 10, util: 50, origen: 'apu-utils (por defecto)' });
@@ -447,6 +466,8 @@
                 it.total = r2(it.pu * (num(it.cant) || 0));
                 it.marcadas = TIPOS_FILA.reduce(function (s, t) { return s + it.apu[t].filter(function (f) { return f.revisar; }).length; }, 0);
                 it.supuestos_pendientes = supuestosPendientes(it);
+                var sos = itemSospechoso(it);
+                if (sos) it.aviso = sos; else delete it.aviso;
                 marcadas += it.marcadas; pendientes += it.supuestos_pendientes;
                 tc += it.total;
             });
@@ -467,6 +488,7 @@
                 return { id: c.id, nombre: c.nombre, total: c.total, items: c.items.map(function (it) {
                     var o = { id: it.id, desc: it.desc, und: it.und, cant: it.cant, pu: it.pu, total: it.total };
                     if (it.supuestos_pendientes) o.supuestos_sin_confirmar = it.supuestos_pendientes;
+                    if (it.aviso) o.aviso = it.aviso;
                     TIPOS_FILA.forEach(function (t) {
                         if (it.apu[t].length) o[t] = it.apu[t].map(function (f, i) {
                             var x = { n: i + 1, d: f.d, u: f.u, q: f.q, p: f.p };
@@ -540,7 +562,7 @@
         return { data: salida, agregados: agregados, actualizados: actualizados };
     }
 
-    var api = { normalizar: normalizar, confirmarSupuestos: confirmarSupuestos, confirmarItem: confirmarItem, supuestosPendientes: supuestosPendientes, cantidadGeometria: cantidadGeometria, aplicarAlPresupuesto: aplicarAlPresupuesto, vacio: vacio, validarOrigen: validarOrigen, armarFila: armarFila, aplicarOperaciones: aplicarOperaciones,
+    var api = { itemSospechoso: itemSospechoso, AVISO_COMPONENTE: AVISO_COMPONENTE, normalizar: normalizar, confirmarSupuestos: confirmarSupuestos, confirmarItem: confirmarItem, supuestosPendientes: supuestosPendientes, cantidadGeometria: cantidadGeometria, aplicarAlPresupuesto: aplicarAlPresupuesto, vacio: vacio, validarOrigen: validarOrigen, armarFila: armarFila, aplicarOperaciones: aplicarOperaciones,
         calcularTotales: calcularTotales, resumen: resumen, aItemsPresupuesto: aItemsPresupuesto, MEDIDAS: MEDIDAS, TIPOS_FILA: TIPOS_FILA };
     if (typeof module !== 'undefined' && module.exports) module.exports = api;
     else global.AgenteBorrador = api;

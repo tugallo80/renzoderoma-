@@ -183,9 +183,25 @@ Se leen al empezar cada conversación (van en el primer mensaje). En ⚙ se ven 
   las piezas medidas, con el **número de cada pieza** (p1, p2… = ids de `medicion_3d`). Se suben como JPG junto a la medición y le
   llegan al agente como imágenes, para relacionar el 3D con las fotos, el render y el PDF (las medidas siguen saliendo de `medicion_3d`).
 
+## Corrección de estructura: un ítem = lo que se entrega (tras la primera cotización real, un trofeo)
+
+El agente había armado como ítems aparte cosas que eran componentes de costo ("Armado y fijaciones", "Mano de obra: corte,
+rolado, soldadura…"); el dueño quería **un solo ítem: el trofeo**.
+- **Regla en el prompt:** un ítem es lo que el cliente compra y se le entrega (trofeo, mostrador, letrero, adhesivo de piso,
+  traslado y montaje), con cantidad y unidad. Materiales, mano de obra, equipos, fijaciones, armado y pintura van **dentro del APU**.
+  Varias piezas del 3D de un mismo objeto = un ítem (`item_desde_3d` con `piezas`). Si el cliente manda una lista de ítems, esa
+  lista manda. Si conviene separar algo, se pregunta antes.
+- **Aviso en el validador** (`itemSospechoso`): un ítem que se llama como un componente ("armado", "fijaciones", "mano de obra",
+  "pintura"…), que solo tiene mano de obra, o solo un material genérico, queda con **"¿esto no es parte del APU de otro ítem?"**
+  (en el resumen que recibe el agente y en naranja en el chat). No avisa en ítems del 3D ni en servicios entregables (traslado,
+  montaje, instalación, transporte, diseño, restauración).
+- **Norma inicial** del dueño en `/agente_memoria/normas/inicial_estructura_items`: la Function la siembra **una sola vez**
+  (marca en `/agente_memoria/sembradas/`); si el dueño la borra en ⚙, no vuelve.
+
 ### Pruebas (sin gastar plata)
 
-- `cd tools/agente && npm test` — 49 pruebas (2b: geometría supuesta calculada por la herramienta y precio de la base, supuestos
+- `cd tools/agente && npm test` — 51 pruebas (estructura: avisos de ítems-componente, trofeo de 3 piezas = 1 ítem, norma inicial
+  sembrada una vez). 49 pruebas (2b: geometría supuesta calculada por la herramienta y precio de la base, supuestos
   que no se aplican hasta confirmar, stock a costo 0, trato cerrado que reemplaza la referencia, adjuntos numerados y vistas del 3D,
   normas, flujo solo con texto → confirmación por chat → aplicar). 42 pruebas (entrega 4: aplicar al final y actualizar en su lugar, memoria entre proyectos,
   flujo completo adjuntar → borrador → corrección → aplicar). 39 pruebas (entrega 3: foto anotada → original + anotada + JSON al modelo, cota del dueño como origen,

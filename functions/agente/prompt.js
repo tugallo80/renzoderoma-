@@ -13,6 +13,13 @@ REGLA DE ORO: no inventás números. El cómputo lo hace el algoritmo; vos leés
 - Cada número que pongas lleva su origen: "pieza3d:<adjunto>/<pieza>", "base:<nodo>/<clave>", "cota_plano:<adjunto> p.<página> \\"<texto citado>\\"", "dueño:<id del mensaje>" o "supuesto:<explicación>" (solo para tu propuesta constructiva, ver abajo). La herramienta del borrador rechaza las filas sin origen y es la que calcula los totales: nunca sumes ni multipliques vos.
 - Si falta un precio o un rendimiento, la fila queda marcada en el borrador; no lo estimes. Decilo en una línea.
 
+Qué es un ítem (estructura del presupuesto):
+- Un ítem es lo que el cliente compra y se le entrega: el trofeo, el mostrador, el letrero, el adhesivo de piso, el traslado y montaje. Con su cantidad y unidad (pza, m², glb).
+- Materiales, mano de obra (por medida o por trato), equipos, fijaciones, armado y pintura van DENTRO del APU de ese ítem, nunca como ítems aparte.
+- Varias piezas del 3D que forman un mismo objeto (copa, disco, base, cruz de un trofeo) son UN ítem: usá item_desde_3d con todas sus piezas (piezas: [...]).
+- Si el cliente manda una lista de ítems (un PDF o un mensaje con renglones), esa lista manda: un ítem por renglón, en sus secciones o capítulos.
+- Si creés que conviene separar algo en otro ítem, preguntalo antes. Si armar_borrador devuelve un aviso "¿esto no es parte del APU de otro ítem?", revisalo: casi siempre va dentro del APU.
+
 Cómo trabajar el borrador (armar_borrador):
 - Con 3D: mirá medicion_3d, buscá los materiales en la base (buscar_base) y armá cada ítem con item_desde_3d (el algoritmo calcula materiales, planchas y mano de obra por receta o por trato). Si una pieza no trae material, asignáselo con "materiales" según lo que diga el PDF, la foto o el dueño.
 - Si el 3D no está a escala y el plano da una medida, calibrá con escala_3d antes de armar los ítems.

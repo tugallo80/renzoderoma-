@@ -804,6 +804,45 @@ prueba('solo texto con la API simulada: despiece supuesto → no se aplica → e
     assert.ok(alm.datos.agente_memoria.normas);
 });
 
+// ------------------------------------------------------------------ estructura: un ítem = lo que se entrega (pedido del dueño tras el trofeo)
+prueba('ítems sospechosos: componentes de costo armados como ítem aparte llevan aviso', () => {
+    const r = B.aplicarOperaciones(null, [
+        { op: 'item_desde_3d', capitulo: 'Trofeo', adjunto: 'A3D', piezas: ['p1', 'p2', 'p3'], desc: 'Trofeo demo' },
+        { op: 'item', capitulo: 'Trofeo', desc: 'Armado y fijaciones' },
+        { op: 'fila', item: 'Armado y fijaciones', tipo: 'mat', d: 'Tornillería', u: 'glb', q: 1, origen_q: 'dueño:M1' },
+        { op: 'item', capitulo: 'Trofeo', desc: 'Mano de obra: corte, rolado, soldadura' },
+        { op: 'fila', item: 'Mano de obra: corte, rolado, soldadura', tipo: 'mo', d: 'Soldador', u: 'glb', q: 1, origen_q: 'dueño:M1', clave: 'INSTALACION' },
+        { op: 'item', capitulo: 'Trofeo', desc: 'Base decorativa' },
+        { op: 'fila', item: 'Base decorativa', tipo: 'mo', d: 'Pulido', u: 'glb', q: 1, origen_q: 'dueño:M1', clave: 'INSTALACION' },
+        { op: 'item', capitulo: 'Trofeo', desc: 'Traslado y montaje' },
+        { op: 'fila', item: 'Traslado y montaje', tipo: 'mo', d: 'Instalación', u: 'glb', q: 1, origen_q: 'dueño:M1', clave: 'INSTALACION' },
+        { op: 'item', capitulo: 'Trofeo', desc: 'Adhesivo de piso' },
+        { op: 'fila', item: 'Adhesivo de piso', tipo: 'mat', d: 'Vinil', origen_q: 'dueño:M1', q: 2, clave: 'VINIL_CORTE' },
+    ], ctxValid(), nuevoId);
+    const av = Object.fromEntries(r.borrador.capitulos[0].items.map((it) => [it.desc, it.aviso || null]));
+    assert.equal(av['Trofeo demo'], null, 'varias piezas del 3D = un ítem, sin aviso');
+    assert.equal(av['Armado y fijaciones'], B.AVISO_COMPONENTE);
+    assert.equal(av['Mano de obra: corte, rolado, soldadura'], B.AVISO_COMPONENTE);
+    assert.equal(av['Base decorativa'], B.AVISO_COMPONENTE, 'solo mano de obra');
+    assert.equal(av['Traslado y montaje'], null, 'el traslado y montaje sí es un entregable');
+    assert.equal(av['Adhesivo de piso'], null);
+    const res = B.resumen(r.borrador);
+    assert.equal(res.capitulos[0].items.find((x) => x.desc === 'Armado y fijaciones').aviso, '¿esto no es parte del APU de otro ítem?');
+    assert.equal(r.borrador.capitulos[0].items[0].measures.length, 3);
+});
+
+prueba('norma inicial "un ítem = lo que se entrega": se siembra una vez y, si el dueño la borra, no vuelve', async () => {
+    const alm = nuevoAlmacen();
+    await api.atender(alm, { accion: 'enviar', cid: CID, pid: PID, texto: 'Trofeo' }, 'renzo');
+    assert.match(alm.datos.agente_memoria.normas.inicial_estructura_items.texto, /Un ítem es lo que el cliente compra/);
+    assert.match(JSON.parse(alm.datos.proyectos[CID][PID].agente.conversacion.api)[0].content[0].text, /Normas constructivas del taller[\s\S]*Un ítem es lo que el cliente compra/);
+    delete alm.datos.agente_memoria.normas.inicial_estructura_items;
+    await api.atender(alm, { accion: 'enviar', cid: CID, pid: 'otroProyecto', texto: 'Otro' }, 'renzo');
+    assert.equal((alm.datos.agente_memoria.normas || {}).inicial_estructura_items, undefined);
+    const { SISTEMA } = require('../../functions/agente/prompt.js');
+    assert.match(SISTEMA, /Un ítem es lo que el cliente compra y se le entrega/);
+});
+
 // ------------------------------------------------------------------ correr
 for (const [nombre, fn] of pruebas) {
     try { await fn(); ok++; console.log('ok  ', nombre); }
