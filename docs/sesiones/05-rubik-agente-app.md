@@ -8,6 +8,7 @@ por uso (el Agente IA de la app sigue funcionando igual, con su medidor de costo
 | Etapa | Qué | Estado |
 |---|---|---|
 | 1 | Login (OAuth) + leer clientes, proyectos, presupuesto y base + crear cliente y proyecto + cotizar hasta el borrador y aplicarlo + skill + esta guía | ✅ PR de esta etapa |
+| 1b | Ajustar cotizaciones existentes: listar cotizaciones, retomar desde un ítem (también las viejas del chat de la app), nueva versión y apagar la anterior con propuesta → confirmación (pedido de la sesión maestra, caso STAND NEXCORP) | ✅ PR de esta entrega |
 | 2 | Mantenimiento de la base: precios, materiales nuevos, duplicados (propuesta → confirmación → respaldo) | pendiente |
 | 3 | Cronograma, producción, impresiones y licitaciones desde los ítems aplicados | pendiente |
 
@@ -79,6 +80,23 @@ Respondé en español de Bolivia, corto, pensado para leer en el celular.
 **3D:** los modelos 3D (FBX, GLB, ZIP) se siguen adjuntando en la app (Agente IA del proyecto → 📎), porque la medición la hace
 el navegador. Después, en el chat de Claude, decí "usá el 3D que subí": aparece en la cotización.
 
+### 4b. Ajustar una cotización que ya existe (ej. "el cliente la vio alta")
+1. Chat nuevo en el proyecto: *"Entrá a STAND NEXCORP y ajustá el mostrador: MDF en vez de melamina, sin masillado ni pintura."*
+2. Claude busca el proyecto y sus cotizaciones (también las que hiciste en el chat de la app) y abre la que creó ese ítem.
+3. Te pregunta una sola cosa: **¿corrijo esa versión o hago una versión nueva?**
+   - **Corregir:** cambia el borrador y, cuando digas "aplicalo", actualiza los mismos ítems del presupuesto en su lugar.
+   - **Versión nueva** (lo mejor si el cliente ya vio la anterior): ver 4c.
+4. El ahorro sale de cambios reales del APU (material, mano de obra que se saca). Claude no toca los recargos ni baja precios a mano.
+
+### 4c. Versión económica
+1. *"Hacé una versión económica"* → Claude copia la cotización a una conversación nueva ("Versión 2 – económica"); la anterior
+   queda igual.
+2. Ajusta lo que pidas y te muestra los dos totales.
+3. *"Aplicalo"* → los ítems nuevos entran **aparte** en el presupuesto, con su capítulo "(Versión 2 – económica)".
+4. Claude te pregunta si **apaga los ítems de la versión anterior** (el ojo del presupuesto: no suman ni salen en el PDF, pero
+   **no se borran**). Te muestra la lista; solo si decís que sí, los apaga. Los podés volver a prender cuando quieras (desde la app
+   o pidiéndoselo a Claude).
+
 ### 5. Límites de uso de la suscripción
 - Cada plan tiene un **límite por sesión** (se reinicia 5 horas después de tu primer mensaje) y un **límite semanal**. No hay
   un número fijo de mensajes: depende del largo de la conversación, los archivos, el modelo y el esfuerzo. El plan **Max** da 5 veces
@@ -149,10 +167,19 @@ misma validación de origen, recetas, rutas A/B, alternativas y "por confirmar",
 | `registrar_lectura_de_archivo` | `…/agente/adjuntos` | `{sin_archivo: true, resumen_lectura}` → vale para `cota_plano:` |
 | `buscar_base`, `medicion_3d`, `escala_3d`, `armar_borrador`, `guardar_en_base`, `memoria` | lo mismo que en la app | las del agente, con `cid/pid/conv`; `memoria` sin borrar |
 | `ver_borrador` | lee el borrador | `B.resumen` |
-| `aplicar_al_presupuesto` | `…/presupuesto/items`, `…/borrador/aplicado`, `/respaldos_agente/{fecha}` | `B.aItemsPresupuesto` + `B.aplicarAlPresupuesto`; solo con `dueño:<id>` |
+| `aplicar_al_presupuesto` | `…/presupuesto/items`, `…/borrador/aplicado`, `/respaldos_agente/{fecha}` | `B.aItemsPresupuesto` + `B.aplicarAlPresupuesto`; solo con `dueño:<id>` (no vale uno copiado de otra versión); si la conversación es una versión nueva, devuelve `version_anterior` con los ítems que siguen prendidos |
+| `listar_cotizaciones` | lee `…/agente/conversaciones_meta`, borradores, costos y `…/presupuesto/items` | incluye `principal` si tiene algo; ítems aplicados por conversación (`agente.conv`) |
+| `abrir_cotizacion` con `item` o `conv: "principal"` | lee `…/presupuesto/items` | retoma la conversación que creó el ítem (`agente.conv`, o `principal` si no tiene) |
+| `nueva_version` | `…/agente/conversaciones/{nueva}` | copia el borrador con ids nuevos de capítulos e ítems (al aplicar entra aparte), capítulos renombrados con el título, mensajes del dueño copiados con las mismas claves (`copiado_de`) para que sus orígenes sigan valiendo; meta `basada_en` |
+| `proponer_apagar_items` | `…/agente/propuestas/{id}` | paso 1: guarda la lista exacta (n, id, nombre); no cambia nada; vence en 24 h |
+| `confirmar_propuesta` | `…/presupuesto/items`, `…/agente/propuestas`, `…/agente/confirmaciones/{msg}`, `/respaldos_agente` | paso 2: mensaje del dueño posterior a la propuesta y no copiado, que no haya confirmado otra; verifica que el presupuesto no cambió; respaldo; `activo: false/true` (el ojo), nunca borra |
 
 - **Cerco por herramienta:** `almacen.acotar(almacen, rutas)` — cada herramienta corre con un almacén que solo deja tocar sus nodos
   (además del cerco general de la Function, `RUTAS_MCP`). La conversación `principal` (la del chat de la app) no se toca desde Claude.
+- **Conversación `principal`** (la primera del chat de la app): se puede retomar desde Claude. Para no pisarse con la app, las
+  herramientas que escriben **esperan si el Agente IA de la app está trabajando en esa conversación** (`agente/estado`, menos de
+  10 min). Lo que cambia `armar_borrador` o `confirmar_propuesta` queda en `conversacion/ediciones` ("Desde Claude: …"): el agente
+  de la app lo recibe en su próximo turno, igual que las ediciones a mano.
 - La conversación de Claude es una conversación más del Agente IA (`conversaciones_meta/{conv}.origen = "claude"`): el dueño la ve,
   la puede seguir en la app y la aplica con el mismo botón. Su `conversacion/api` queda vacía (no hay historial de la API): si se
   sigue en la app, el agente de la app arranca con el contexto inicial y el borrador.
@@ -172,7 +199,12 @@ misma validación de origen, recetas, rutas A/B, alternativas y "por confirmar",
   `curl -si -X POST https://rubikbolivia.com/mcp` (tiene que dar 401 con `WWW-Authenticate`).
 
 ### Pruebas (sin gastar plata, Firebase simulado, datos inventados)
-- `cd tools/mcp && npm test` — 15 pruebas: metadatos; registro dinámico (redirect ajena rechazada); login completo con PKCE y un
+- `cd tools/mcp && npm test` — 19 pruebas. Entrega 1b: listar cotizaciones con la `principal` y sus ítems aplicados, retomar
+  desde un ítem (n o id), ítem cargado a mano rechazado, corrección en el lugar avisada a la app; versión económica (ids nuevos,
+  orígenes copiados válidos, confirmación copiada rechazada, entra aparte, `version_anterior`), propuesta que no cambia nada,
+  confirmación anterior a la propuesta o inventada rechazada, apagar con respaldo y total que baja, un solo uso, el mismo "sí" no
+  confirma otra, volver a prender; presupuesto cambiado → no se aplica; agente de la app trabajando → Claude no escribe.
+  Entrega 1 (15): metadatos; registro dinámico (redirect ajena rechazada); login completo con PKCE y un
   solo uso; **rechazo sin token, con token inventado, vencido y fuera de la lista blanca**; authorize con redirect ajena, sin PKCE o
   con otro `resource`; CIMD (host ajeno ni se va a buscar); refresh rotativo, reuso → conexión revocada, `revoke`; clientes y
   proyectos sin duplicar; presupuesto con APU; **flujo abrir → registrar → borrador con origen → aplicar solo con confirmación
