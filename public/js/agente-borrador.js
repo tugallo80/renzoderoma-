@@ -509,9 +509,6 @@
             c.items.forEach(function (it) {
                 var apu = { mat: it.apu.mat, mo: it.apu.mo, eq: it.apu.eq, sub: it.apu.sub, cs: rc.cs, ind: rc.ind, util: rc.util };
                 it.pu = L.calcPu(apu);
-                // totales por grupo (costo directo por unidad, sin indirectos ni utilidad), como el APU del presupuesto
-                var sg = function (fs) { return r2((fs || []).reduce(function (s, f) { return s + (num(f.q) || 0) * (num(f.p) || 0); }, 0)); };
-                it.grupos = { mat: sg(it.apu.mat), mo: sg(it.apu.mo), cs: r2(sg(it.apu.mo) * (num(rc.cs) || 0) / 100), eq: sg(it.apu.eq), sub: sg(it.apu.sub) };
                 it.total = r2(it.pu * (num(it.cant) || 0));
                 it.marcadas = TIPOS_FILA.reduce(function (s, t) { return s + it.apu[t].filter(function (f) { return f.revisar; }).length; }, 0);
                 it.supuestos_pendientes = supuestosPendientes(it);

@@ -313,10 +313,13 @@
         return '<span class="ag-o ' + esc(t) + '" title="' + esc(o) + '">' + esc(NOMBRE_ORIGEN[t] || t || '?') + '</span>';
     }
     var TIT = { mat: 'Materiales', mo: 'Mano de obra', eq: 'Otros gastos (equipo, logística)', sub: 'Sub-ítems y subcontratos' };
-    /** Totales por grupo del APU de un ítem (los calcula AgenteBorrador: costo directo por unidad, sin indirectos ni utilidad). */
+    /** Totales por grupo del APU de un ítem: costo directo por unidad, sin indirectos ni utilidad (como el APU del presupuesto). */
     function totalesGrupo(it) {
-        var g = it.grupos;
-        if (!g) return '';
+        // se calculan acá (en el navegador) para no tocar functions/: así este cambio no dispara un deploy de Functions
+        var apu = it.apu || {}, cs = parseFloat((borrador.recargos || {}).cs) || 0;
+        var sg = function (t) { return lista(apu[t]).reduce(function (s, f) { return s + (parseFloat(f.q) || 0) * (parseFloat(f.p) || 0); }, 0); };
+        var g = { mat: sg('mat'), mo: sg('mo'), eq: sg('eq'), sub: sg('sub') };
+        g.cs = g.mo * cs / 100;
         var caja = function (lbl, v) { return '<span class="ag-g"><i>' + lbl + '</i>Bs ' + bs(v) + '</span>'; };
         var h = caja('Materiales', g.mat) + caja('Mano de obra' + (g.cs ? ' (+ Bs ' + bs(g.cs) + ' CS)' : ''), g.mo + (g.cs || 0));
         if (g.sub) h += caja('Sub-ítems', g.sub);

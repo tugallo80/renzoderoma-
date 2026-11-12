@@ -346,7 +346,7 @@ Cada ítem del borrador muestra sus totales por grupo, igual que el APU del pres
 - sub-ítems;
 - otros gastos.
 
-Los calcula `AgenteBorrador.calcularTotales` (`it.grupos`). Los recargos no cambian: el dueño los ajusta en el APU.
+Se calculan en el navegador (`agente-chat.js`), así el cambio no toca `functions/` ni dispara un deploy de Functions. Los recargos no cambian: el dueño los ajusta en el APU.
 
 ### Pendientes / próximas etapas
 - Reglas de Storage en la consola (ver arriba).

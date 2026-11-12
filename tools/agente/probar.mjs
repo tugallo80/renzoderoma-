@@ -461,8 +461,6 @@ prueba('borrador: los totales los calcula la herramienta con la lógica del APU 
     // directo = 3×45 + 300 + 300×55 % = 600 ; × 1,10 × 1,30 = 858
     assert.equal(it.pu, 858); assert.equal(it.pu, L.calcPu({ mat: it.apu.mat, mo: it.apu.mo, eq: [], sub: [], cs: 55, ind: 10, util: 30 }));
     assert.equal(it.total, 1716); assert.equal(r.borrador.capitulos[0].total, 1716); assert.equal(r.borrador.total, 1716);
-    // totales por grupo para la vista del borrador (costo directo, sin indirectos ni utilidad)
-    assert.deepEqual(it.grupos, { mat: 135, mo: 300, cs: 165, eq: 0, sub: 0 });
     assert.equal(r.borrador.recargos.origen, 'base:presupuesto/recargos');
     const sinOrigen = B.aplicarOperaciones(null, [{ op: 'item', capitulo: 'X', desc: 'Y', cant: 3 }], ctxValid(), nuevoId);
     assert.equal(sinOrigen.resultados[0].ok, false, 'cantidad del ítem distinta de 1 sin origen');
