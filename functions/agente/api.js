@@ -229,6 +229,15 @@ async function textoCompactado(almacen, cid, pid, RC, borr, msgActual) {
     return partes.join("\n\n");
 }
 
+/** Recargos para la fase de lectura: los que el dueño ya usa en el presupuesto, o el aviso de que hay que preguntarlos. */
+async function textoRecargos(almacen, cid, pid) {
+    const rc = await require("./herramientas").recargosPresupuesto({ almacen, cid, pid }).catch(() => null);
+    const cs = "Cargas sociales: solo sobre la mano de obra de personal en planilla (filas con planilla: true); tarifas por m², tratos y servicios de terceros van sin cargas sociales.";
+    if (!rc) return "Recargos: el presupuesto no tiene recargos cargados por el dueño. No los supongas: preguntá indirectos y utilidad (y el % de cargas sociales si hay personal en planilla) en la ronda de preguntas. " + cs;
+    return `Recargos que el dueño usa en este presupuesto (base:presupuesto/recargos, del ítem «${rc.desde}»): indirectos ${rc.ind} %, utilidad ${rc.util} %` +
+        (rc.cs_planilla != null ? `, cargas sociales de planilla ${rc.cs_planilla} %. ` : ". Sin dato de cargas sociales de planilla: si hay personal en planilla, preguntá el %. ") + cs;
+}
+
 async function textoInicial(almacen, cid, pid) {
     const partes = [`[Proyecto ${pid} del cliente ${cid}. Conversación nueva.]`];
     await sembrarNormas(almacen).catch((e) => console.warn("[agente] normas iniciales", e.message));
@@ -240,6 +249,7 @@ async function textoInicial(almacen, cid, pid) {
     }
     const pres = await resumenPresupuesto(almacen, cid, pid);
     if (pres) partes.push(pres);
+    partes.push(await textoRecargos(almacen, cid, pid));
     if (notas.length) {
         partes.push("Memoria guardada del dueño (correcciones y decisiones de trabajos anteriores):\n" +
             notas.slice(-80).map((x) => `- ${String(x.texto).slice(0, 400)}`).join("\n"));

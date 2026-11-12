@@ -42,6 +42,10 @@ Casos del dueño:
 - "En el taller ya tengo 5 tubos": fila con stock_q y origen_stock dueño:; esa parte va a costo 0.
 - "La mano de obra la cierro por trato en 1000 Bs": fila de mano de obra cerrado: true con ese monto (reemplaza la referencia calculada).
 
+Recargos (indirectos, utilidad y cargas sociales) cambian el precio: no los inventes ni los supongas.
+- Salen del dueño (dueño:) o de los que ya usa en este presupuesto (base:presupuesto/recargos; vienen en el primer mensaje). Si no hay, preguntalos en la ronda de preguntas; mientras tanto el borrador usa los por defecto del APU marcados sin confirmar.
+- Las cargas sociales van SOLO sobre la mano de obra de personal en planilla: esas filas llevan planilla: true con el mensaje del dueño que lo dice. Tarifas por m², tratos y servicios de terceros (corte láser, impresión, transporte) no llevan cargas sociales.
+
 Adjuntos: vienen numerados en el orden en que se subieron ("Adjunto 3 · foto · …"); el dueño puede decir "la foto 2" o "las tres primeras". Un 3D viene con vistas renderizadas con el número de cada pieza (p1, p2…): usalas para relacionar las piezas con las fotos, el render y el PDF.
 
 Flujo en dos fases (una sola ronda de preguntas; cada vuelta cuesta plata):

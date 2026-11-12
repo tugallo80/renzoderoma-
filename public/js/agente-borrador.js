@@ -180,6 +180,7 @@
         // --- trato cerrado por el dueño (ruta B): monto fijo que reemplaza la referencia calculada
         if (op.cerrado) {
             if (tipo !== 'mo') return { error: 'cerrado: solo para mano de obra' };
+            if (op.planilla) return { error: 'planilla: un trato no lleva cargas sociales' };
             var vc = validarOrigen(op.origen_p, ctx, 'p');
             if (!vc.ok || vc.origen.tipo !== 'dueño' || !(num(op.p) > 0)) return { error: 'trato cerrado: p (monto) con origen_p dueño:<mensaje>' };
             var quien = txt(op.oficio || op.trabajadores, 80);
@@ -208,6 +209,13 @@
         if (!f.d) return { error: 'falta la descripción (d)' };
         if (f.u === 'jornal' && f.medida && f.medida !== 'und') motivos.push('falta el rendimiento para pasar ' + f.medida + ' a jornales');
         if (op.nota) f.nota = (f.nota ? f.nota + ' · ' : '') + txt(op.nota, 200);
+        // --- personal en planilla: la única mano de obra que lleva cargas sociales (tarifas por m², tratos y terceros, no)
+        if (op.planilla) {
+            if (tipo !== 'mo') return { error: 'planilla: solo para mano de obra' };
+            var vpl = validarOrigen(op.origen_planilla, ctx, 'planilla');
+            if (!vpl.ok || vpl.origen.tipo !== 'dueño') return { error: 'planilla: necesita origen_planilla dueño:<mensaje> (el dueño dijo que es personal en planilla); no se supone' };
+            f.planilla = true; f.origen_planilla = vpl.origen.texto;
+        }
         if (motivos.length) f.revisar = motivos.join(' · ');
         return { fila: f };
     }
@@ -454,11 +462,13 @@
             case 'recargos': {
                 var v = validarOrigen(op.origen, ctx, 'recargos');
                 if (!v.ok) throw new Error('recargos: ' + v.error);
-                if (v.origen.tipo === 'pieza3d') throw new Error('recargos: pieza3d no vale');
-                var rc = v.origen.texto === 'base:presupuesto/recargos' && ctx.recargosPresupuesto ? clon(ctx.recargosPresupuesto) : {};
-                ['cs', 'ind', 'util'].forEach(function (k) { if (op[k] != null) { var x = num(op[k]); if (!(x >= 0 && x < 500)) throw new Error('recargo ' + k + ' inválido'); rc[k] = x; } });
-                if (rc.cs == null || rc.ind == null || rc.util == null) throw new Error('recargos: faltan cs, ind o util');
-                rc.origen = v.origen.texto;
+                if (v.origen.tipo !== 'dueño' && v.origen.texto !== 'base:presupuesto/recargos') throw new Error('recargos: los porcentajes los da el dueño (dueño:<mensaje>) o salen del presupuesto (base:presupuesto/recargos); no se suponen');
+                var rc = v.origen.texto === 'base:presupuesto/recargos' && ctx.recargosPresupuesto ? dePresupuesto(ctx.recargosPresupuesto) : clon(b.recargos && !b.recargos.pendiente ? b.recargos : {});
+                if (op.cs_planilla == null && op.cs != null) op.cs_planilla = op.cs;
+                ['ind', 'util', 'cs_planilla'].forEach(function (k) { if (op[k] != null) { var x = num(op[k]); if (!(x >= 0 && x < 500)) throw new Error('recargo ' + k + ' inválido'); rc[k] = x; } });
+                if (rc.ind == null || rc.util == null) throw new Error('recargos: faltan indirectos (ind) o utilidad (util)');
+                if (rc.cs_planilla === undefined) rc.cs_planilla = null;
+                rc.origen = v.origen.texto; delete rc.pendiente;
                 b.recargos = rc;
                 r.ok = true; return;
             }
@@ -499,16 +509,52 @@
         return null;
     }
 
-    // ------------------------------------------------------------------ totales (los calcula la herramienta)
+    // ------------------------------------------------------------------ recargos y totales (los calcula la herramienta)
+    /**
+     * Recargos del borrador: { ind, util, cs_planilla, origen, pendiente? }.
+     * - Indirectos y utilidad valen para todo el ítem.
+     * - Las cargas sociales (cs_planilla) van SOLO sobre la mano de obra de personal en planilla (filas con planilla: true);
+     *   tarifas por m², tratos y servicios de terceros no llevan cargas sociales.
+     * - Ningún porcentaje se supone: salen del dueño o del presupuesto. Si no hay, se calcula con los valores por defecto del
+     *   modal del APU de presupuesto.html (indirectos 10 %, utilidad 15 %, CS 0 %) y quedan "pendiente": el agente los pregunta.
+     */
+    var DEFECTO_APU = { ind: 10, util: 15 };
+    function dePresupuesto(p) {
+        return { ind: p.ind, util: p.util, cs_planilla: p.cs_planilla != null ? p.cs_planilla : null, origen: 'base:presupuesto/recargos', desde: p.desde || null };
+    }
+    function recargosVigentes(b, ctx) {
+        var rc = b.recargos;
+        // borradores viejos: una sola "cs" sobre toda la MO y defaults inventados (55/10/50) → se rehacen
+        if (rc && !('cs_planilla' in rc)) rc = /^dueño:/.test(rc.origen || '') ? { ind: rc.ind, util: rc.util, cs_planilla: rc.cs != null ? rc.cs : null, origen: rc.origen } : null;
+        var refrescar = !rc || rc.pendiente || rc.origen === 'base:presupuesto/recargos';
+        if (refrescar && ctx && ctx.recargosPresupuesto && ctx.recargosPresupuesto.ind != null && ctx.recargosPresupuesto.util != null) rc = dePresupuesto(ctx.recargosPresupuesto);
+        if (!rc) rc = { ind: DEFECTO_APU.ind, util: DEFECTO_APU.util, cs_planilla: null, origen: 'por defecto del APU (sin confirmar)', pendiente: true };
+        return rc;
+    }
+    var suma = function (fs) { return fs.reduce(function (s, f) { return s + (num(f.q) || 0) * (num(f.p) || 0); }, 0); };
+    /** Costo por grupo de un ítem (por unidad) y precio unitario con recargos. */
+    function costoItem(it, rc) {
+        var moPlanilla = suma(it.apu.mo.filter(function (f) { return f.planilla; }));
+        var g = { mat: r2(suma(it.apu.mat)), mo: r2(suma(it.apu.mo)), mo_planilla: r2(moPlanilla), cs: r2(moPlanilla * (num(rc.cs_planilla) || 0) / 100), eq: r2(suma(it.apu.eq)), sub: r2(suma(it.apu.sub)) };
+        var dir = suma(it.apu.mat) + suma(it.apu.mo) + moPlanilla * (num(rc.cs_planilla) || 0) / 100 + suma(it.apu.eq) + suma(it.apu.sub);
+        g.directo = r2(dir);
+        return { grupos: g, pu: Math.round(dir * (1 + (num(rc.ind) || 0) / 100) * (1 + (num(rc.util) || 0) / 100) * 100) / 100 };
+    }
+
     function calcularTotales(b, ctx) {
-        var rc = b.recargos || (ctx && ctx.recargosPresupuesto ? Object.assign({ origen: 'base:presupuesto/recargos' }, ctx.recargosPresupuesto) : { cs: 55, ind: 10, util: 50, origen: 'apu-utils (por defecto)' });
-        if (!b.recargos) b.recargos = rc;
+        var rc = b.recargos = recargosVigentes(b, ctx);
         var total = 0, marcadas = 0, pendientes = 0, aparte = [];
         b.capitulos.forEach(function (c) {
             var tc = 0;
             c.items.forEach(function (it) {
-                var apu = { mat: it.apu.mat, mo: it.apu.mo, eq: it.apu.eq, sub: it.apu.sub, cs: rc.cs, ind: rc.ind, util: rc.util };
-                it.pu = L.calcPu(apu);
+                it.apu.mo.forEach(function (f) {
+                    var falta = 'falta el % de cargas sociales del personal en planilla: preguntáselo al dueño';
+                    if (f.planilla && rc.cs_planilla == null) f.revisar = f.revisar && f.revisar.indexOf(falta) < 0 ? f.revisar + ' · ' + falta : (f.revisar || falta);
+                    else if (f.revisar && f.revisar.indexOf(falta) >= 0) { f.revisar = f.revisar.split(' · ').filter(function (x) { return x !== falta; }).join(' · '); if (!f.revisar) delete f.revisar; }
+                });
+                var ci = costoItem(it, rc);
+                it.grupos = ci.grupos;
+                it.pu = ci.pu;
                 it.total = r2(it.pu * (num(it.cant) || 0));
                 it.marcadas = TIPOS_FILA.reduce(function (s, t) { return s + it.apu[t].filter(function (f) { return f.revisar; }).length; }, 0);
                 it.supuestos_pendientes = supuestosPendientes(it);
@@ -527,6 +573,11 @@
         b.aparte = aparte;   // alternativas y "por confirmar": cotizadas, fuera del total
         return b;
     }
+    function textoRecargos(rc) {
+        return 'indirectos ' + rc.ind + ' %, utilidad ' + rc.util + ' %, cargas sociales ' + (rc.cs_planilla != null ? rc.cs_planilla + ' %' : 'sin dato') +
+            ' solo sobre la MO en planilla (' + rc.origen + ')' +
+            (rc.pendiente ? '. SIN CONFIRMAR: son los por defecto del APU; preguntale al dueño indirectos y utilidad (y el % de cargas sociales si hay personal en planilla) en la ronda de preguntas, y cargalos con la operación recargos' : '');
+    }
 
     /** Resumen compacto para devolverle al modelo después de cada operación. */
     /**
@@ -538,7 +589,7 @@
         return {
             total: b.total, fuera_del_total: (b.aparte || []).length ? (b.aparte || []).map(function (a) { return a.desc + ' (' + NOMBRE_CONDICION[a.condicion] + '): ' + a.total; }) : undefined,
             filas_marcadas: b.filas_marcadas, supuestos_sin_confirmar: b.supuestos_pendientes || 0,
-            recargos: [b.recargos && b.recargos.cs, b.recargos && b.recargos.ind, b.recargos && b.recargos.util].join('/') + ' % (cs/ind/util)',
+            recargos: b.recargos ? textoRecargos(b.recargos) : undefined,
             capitulos: b.capitulos.map(function (c) {
                 return { id: c.id, nombre: c.nombre, total: c.total, items: c.items.map(function (it) {
                     var o = { id: it.id, desc: it.desc, cant: it.cant + ' ' + it.und, pu: it.pu, total: it.total };
@@ -550,13 +601,14 @@
                     if (verFilas(it.id)) TIPOS_FILA.forEach(function (t) {
                         if (it.apu[t].length) o[t] = it.apu[t].map(function (f, i) {
                             // [n, d, "q u", p, marca]
-                            var marca = [f.revisar, f.supuesto ? (f.confirmado ? 'supuesto ok' : 'supuesto sin confirmar') : '', f.stock_q ? 'stock ' + f.stock_q : '', f.cerrado ? 'trato cerrado' : ''].filter(Boolean).join(' · ');
+                            var marca = [f.revisar, f.planilla ? 'planilla (+CS)' : '', f.supuesto ? (f.confirmado ? 'supuesto ok' : 'supuesto sin confirmar') : '', f.stock_q ? 'stock ' + f.stock_q : '', f.cerrado ? 'trato cerrado' : ''].filter(Boolean).join(' · ');
                             var x = [i + 1, f.d, f.q + ' ' + f.u, f.p];
                             if (marca) x.push(marca);
                             return x;
                         });
                     });
                     else if (it.marcadas) o.filas_marcadas = it.marcadas;
+                    if (verFilas(it.id) && it.grupos) o.costo_unitario = { materiales: it.grupos.mat, mano_obra: it.grupos.mo, cargas_sociales: it.grupos.cs || undefined, otros_gastos: it.grupos.eq || undefined, sub_items: it.grupos.sub || undefined };
                     return o;
                 }) };
             })
@@ -570,7 +622,7 @@
     function aItemsPresupuesto(b, opciones) {
         opciones = opciones || {};
         b = normalizar(b);
-        var rc = b.recargos || {};
+        var rc = recargosVigentes(b, opciones.ctx || null);
         var salida = [];
         b.capitulos.forEach(function (c) {
             var listos = c.items.filter(function (it) { return !supuestosPendientes(it); });
@@ -579,12 +631,18 @@
             listos.forEach(function (it) {
                 var limpia = function (f) {
                     var x = { d: f.d, u: f.u, q: f.q, p: f.p, origen: 'agente', origen_q: f.origen_q || null, origen_p: f.origen_p || null };
-                    ['clave', 'nota', 'revisar', 'trato', 'referencia', 'cerrado', 'supuesto', 'confirmacion', 'stock_q', 'q_total', 'origen_stock', 'geometria', 'measures', 'measures_modo'].forEach(function (k) { if (f[k] != null) x[k] = f[k]; });
+                    ['clave', 'nota', 'revisar', 'trato', 'referencia', 'cerrado', 'planilla', 'origen_planilla', 'supuesto', 'confirmacion', 'stock_q', 'q_total', 'origen_stock', 'geometria', 'measures', 'measures_modo'].forEach(function (k) { if (f[k] != null) x[k] = f[k]; });
                     return x;
                 };
+                // El presupuesto tiene UNA cs por ítem sobre toda la MO: si el ítem mezcla planilla con tarifas por m², tratos o
+                // terceros, esa otra MO pasa a "otros gastos" (sin cargas sociales) con la marca "MO sin CS"; así el precio es el mismo.
+                var planilla = it.apu.mo.filter(function (f) { return f.planilla; });
+                var moSinCs = planilla.length ? it.apu.mo.filter(function (f) { return !f.planilla; }) : [];
+                var moConCs = planilla.length ? planilla : it.apu.mo;
+                var eq = it.apu.eq.map(limpia).concat(moSinCs.map(function (f) { var x = limpia(f); x.d = 'MO sin CS · ' + x.d; x.mo_sin_cs = true; return x; }));
                 var item = {
                     type: 'item', id: it.id, origen: 'agente', desc: it.desc, und: it.und || 'glb', cant: it.cant, feat: textoCaracteristicas(it),
-                    apu: { mat: it.apu.mat.map(limpia), mo: it.apu.mo.map(limpia), eq: it.apu.eq.map(limpia), sub: it.apu.sub.map(limpia), cs: rc.cs, ind: rc.ind, util: rc.util },
+                    apu: { mat: it.apu.mat.map(limpia), mo: moConCs.map(limpia), eq: eq, sub: it.apu.sub.map(limpia), cs: planilla.length ? (num(rc.cs_planilla) || 0) : 0, ind: rc.ind, util: rc.util },
                     agente: { conv: opciones.conv || 'principal', condicion: it.condicion || null, grupo: it.grupo || null, version: b.version, cant_origen: it.cant_origen || null, desde3d: it.desde3d || null, filas_a_revisar: it.marcadas || 0, aplicado: opciones.fecha || null }
                 };
                 item.pu = L.calcPu(item.apu);
@@ -664,7 +722,7 @@
     var TIT_FILA = { mat: 'materiales', mo: 'mano de obra', eq: 'equipo', sub: 'subcontratos' };
 
     var api = { CONDICIONES: CONDICIONES, NOMBRE_CONDICION: NOMBRE_CONDICION, editarManual: editarManual, textoCaracteristicas: textoCaracteristicas, fijarCaracteristicas: fijarCaracteristicas, itemSospechoso: itemSospechoso, AVISO_COMPONENTE: AVISO_COMPONENTE, normalizar: normalizar, confirmarSupuestos: confirmarSupuestos, confirmarItem: confirmarItem, supuestosPendientes: supuestosPendientes, cantidadGeometria: cantidadGeometria, aplicarAlPresupuesto: aplicarAlPresupuesto, vacio: vacio, validarOrigen: validarOrigen, armarFila: armarFila, aplicarOperaciones: aplicarOperaciones,
-        calcularTotales: calcularTotales, resumen: resumen, aItemsPresupuesto: aItemsPresupuesto, MEDIDAS: MEDIDAS, TIPOS_FILA: TIPOS_FILA };
+        calcularTotales: calcularTotales, recargosVigentes: recargosVigentes, costoItem: costoItem, textoRecargos: textoRecargos, DEFECTO_APU: DEFECTO_APU, resumen: resumen, aItemsPresupuesto: aItemsPresupuesto, MEDIDAS: MEDIDAS, TIPOS_FILA: TIPOS_FILA };
     if (typeof module !== 'undefined' && module.exports) module.exports = api;
     else global.AgenteBorrador = api;
 })(typeof window !== 'undefined' ? window : globalThis);

@@ -85,6 +85,9 @@
             '#mod-agente .ag-f{display:grid;grid-template-columns:1fr auto;gap:2px 8px;font-size:12px;padding:6px 0;border-top:1px dashed var(--border);}',
             '#mod-agente .ag-f .num{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums;}',
             '#mod-agente .ag-f .ori{grid-column:1/-1;color:var(--gray);font-size:11px;}',
+            '#mod-agente .ag-grupos{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;}',
+            '#mod-agente .ag-g{background:var(--bg);border-radius:8px;padding:5px 8px;font-size:12px;font-weight:800;font-variant-numeric:tabular-nums;}',
+            '#mod-agente .ag-g i{display:block;font-style:normal;font-weight:600;font-size:10px;color:var(--gray);}',
             '#mod-agente .ag-f.marcada{background:rgba(255,59,48,.06);} #mod-agente .ag-f.marcada .rev{grid-column:1/-1;color:var(--red);font-size:11px;font-weight:700;}',
             '#mod-agente .ag-o{display:inline-block;padding:0 5px;border-radius:6px;font-size:10px;font-weight:800;margin-right:3px;background:rgba(0,0,0,.07);}',
             '#mod-agente .ag-o.pieza3d{background:rgba(52,199,89,.15);color:#1e7f3a;} #mod-agente .ag-o.base{background:rgba(0,122,255,.12);color:#0a58c2;}',
@@ -309,7 +312,17 @@
         var t = (/^([a-zñ_0-9]+):/i.exec(o) || [])[1] || '';
         return '<span class="ag-o ' + esc(t) + '" title="' + esc(o) + '">' + esc(NOMBRE_ORIGEN[t] || t || '?') + '</span>';
     }
-    var TIT = { mat: 'Materiales', mo: 'Mano de obra', eq: 'Equipo', sub: 'Subcontratos' };
+    var TIT = { mat: 'Materiales', mo: 'Mano de obra', eq: 'Otros gastos (equipo, logística)', sub: 'Sub-ítems y subcontratos' };
+    /** Totales por grupo del APU de un ítem (los calcula AgenteBorrador: costo directo por unidad, sin indirectos ni utilidad). */
+    function totalesGrupo(it) {
+        var g = it.grupos;
+        if (!g) return '';
+        var caja = function (lbl, v) { return '<span class="ag-g"><i>' + lbl + '</i>Bs ' + bs(v) + '</span>'; };
+        var h = caja('Materiales', g.mat) + caja('Mano de obra' + (g.cs ? ' (+ Bs ' + bs(g.cs) + ' CS)' : ''), g.mo + (g.cs || 0));
+        if (g.sub) h += caja('Sub-ítems', g.sub);
+        if (g.eq) h += caja('Otros gastos', g.eq);
+        return '<div class="ag-grupos" title="Costo directo' + ((it.cant || 1) !== 1 ? ' por unidad' : '') + ', sin indirectos ni utilidad">' + h + '</div>';
+    }
     function pintarBorrador() {
         var tab = $('ag-tab'), el = $('ag-borr');
         if (!tab || !el) return;
@@ -320,8 +333,9 @@
         tab.classList.toggle('on', verBorrador);
         if (!caps.length) { if (verBorrador) window._agVerBorrador(false); return; }
         var rc = borrador.recargos || {};
-        el.innerHTML = '<div class="ag-it-sub" style="margin-bottom:8px;">Borrador v' + (borrador.version || 1) + ' · recargos: cargas sociales ' + (rc.cs != null ? rc.cs : '?') + ' %, indirectos ' +
-            (rc.ind != null ? rc.ind : '?') + ' %, utilidad ' + (rc.util != null ? rc.util : '?') + ' % ' + chipOrigen(rc.origen) +
+        el.innerHTML = '<div class="ag-it-sub" style="margin-bottom:8px;">Borrador v' + (borrador.version || 1) + ' · recargos: indirectos ' +
+            (rc.ind != null ? rc.ind : '?') + ' %, utilidad ' + (rc.util != null ? rc.util : '?') + ' %, cargas sociales ' + (rc.cs_planilla != null ? rc.cs_planilla + ' %' : '—') + ' solo sobre la MO en planilla ' +
+            (rc.pendiente ? '<b style="color:var(--orange);">(por defecto del APU, sin confirmar: decíselos al agente)</b>' : chipOrigen(rc.origen)) +
             (borrador.filas_marcadas ? ' · <b style="color:var(--red);">' + borrador.filas_marcadas + ' fila' + (borrador.filas_marcadas > 1 ? 's marcadas' : ' marcada') + '</b>' : '') + '</div>' +
             caps.map(function (c) {
                 return '<div class="ag-cap"><h3><span>' + esc(String(c.nombre || '').toUpperCase()) + '</span><span>Bs ' + bs(c.total) + '</span></h3>' +
@@ -332,7 +346,7 @@
                             if (!fs.length) return '';
                             return '<div class="ag-it-sub" style="margin-top:6px;font-weight:700;">' + TIT[t] + '</div>' + fs.map(function (f, fi) {
                                 return '<div class="ag-f' + (f.revisar ? ' marcada' : '') + (f.supuesto ? ' supuesto' + (f.confirmado ? ' ok' : '') : '') + '"><span>' + esc(f.d) +
-                                    (f.cerrado ? ' <b style="color:var(--orange);font-size:10px;">TRATO CERRADO</b>' : '') + (f.supuesto ? ' <span style="font-size:10px;font-weight:700;color:' + (f.confirmado ? 'var(--green)' : '#0b6e99') + ';">' + (f.confirmado ? '✓ confirmado' : 'supuesto sin confirmar') + '</span>' : '') +
+                                    (f.cerrado ? ' <b style="color:var(--orange);font-size:10px;">TRATO CERRADO</b>' : '') + (f.planilla ? ' <b style="color:var(--blue);font-size:10px;" title="Personal en planilla: lleva cargas sociales">PLANILLA +CS</b> ' + chipOrigen(f.origen_planilla) : '') + (f.supuesto ? ' <span style="font-size:10px;font-weight:700;color:' + (f.confirmado ? 'var(--green)' : '#0b6e99') + ';">' + (f.confirmado ? '✓ confirmado' : 'supuesto sin confirmar') + '</span>' : '') +
                                     '</span><span class="num">' + bs(f.q * f.p) + ' <button class="ag-ed" onclick="_agBorrarFila(\'' + esc(it.id) + '\',\'' + t + '\',' + (fi + 1) + ')" title="Borrar la fila (sin IA)" aria-label="Borrar fila">🗑</button></span>' +
                                     '<span class="ori">' + chipOrigen(f.origen_q) + (f.stock_q ? f.q_total + ' ' + esc(f.u) + ' − stock propio ' + chipOrigen(f.origen_stock) + f.stock_q + ' = ' : '') + f.q + ' ' + esc(f.u) + ' × ' + (f.p ? chipOrigen(f.origen_p) + bs(f.p) : '—') +
                                     (f.factor ? ' · factor ' + f.factor + ' ' + chipOrigen(f.origen_factor) : '') + (f.nota ? ' · ' + esc(f.nota) : '') + '</span>' +
@@ -351,7 +365,7 @@
                                 return '<div' + (pend ? ' style="color:#0b6e99;"' : '') + '>• ' + esc(c.texto) + ' ' + chipOrigen(c.origen) + (pend ? ' <i>(supuesto: sale al presupuesto cuando lo confirmes)</i>' : '') + '</div>';
                             }).join('') + '</div>' : '<div class="ag-it-sub" style="color:var(--orange);">Sin características para el cliente: pedíselas al agente.</div>') +
                             (it.nota ? '<div class="ag-it-sub">' + esc(it.nota) + '</div>' : '') +
-                            (it.aviso ? '<div class="ag-it-sub" style="color:var(--orange);font-weight:700;">⚠ ' + esc(it.aviso) + '</div>' : '') + filas +
+                            (it.aviso ? '<div class="ag-it-sub" style="color:var(--orange);font-weight:700;">⚠ ' + esc(it.aviso) + '</div>' : '') + filas + totalesGrupo(it) +
                             (it.supuestos_pendientes ? '<div class="ag-sup"><span style="flex:1;">' + it.supuestos_pendientes + ' supuesto' + (it.supuestos_pendientes > 1 ? 's' : '') +
                                 ' del agente sin confirmar: este ítem no se aplica al presupuesto hasta que los confirmes (o corregilos por el chat).</span>' +
                                 '<button class="ag-btn prim" onclick="_agConfirmarSup(\'' + it.id + '\')">Confirmar supuestos</button></div>' : '') + '</div>';

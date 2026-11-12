@@ -57,17 +57,29 @@ async function base(ctx) {
     return ctx._base;
 }
 
+/**
+ * Recargos que el dueño ya usa en ESTE presupuesto (sin valores por defecto: nada se supone).
+ * - Solo ítems cargados por el dueño: los que aplicó el agente (origen "agente") no cuentan, para no realimentar sus propios valores.
+ * - ind y util: del último ítem que tiene los dos.
+ * - cs_planilla: del último ítem con cargas sociales > 0 (en el presupuesto la CS de un ítem va sobre su MO; si es > 0 es personal
+ *   en planilla). Las tarifas por m² usan 0 %, que no dice nada sobre la planilla.
+ * Devuelve null si el presupuesto no tiene ítems del dueño con recargos.
+ */
 async function recargosPresupuesto(ctx) {
     const items = await ctx.almacen.leer(`proyectos/${ctx.cid}/${ctx.pid}/presupuesto/items`);
-    const lista = Array.isArray(items) ? items : Object.values(items || {});
+    const lista = (Array.isArray(items) ? items : Object.values(items || {})).filter(it => it && it.apu && it.origen !== "agente" && !it.agente);
+    const pct = (v) => { const n = parseFloat(v); return isFinite(n) && n >= 0 ? (n > 0 && n < 1 ? n * 100 : n) : null; };
+    let rc = null;
     for (let i = lista.length - 1; i >= 0; i--) {
-        const a = lista[i] && lista[i].apu;
-        if (a && (a.util != null || a.ind != null || a.cs != null)) {
-            const pct = (v, d) => { const n = parseFloat(v); return isFinite(n) ? (n > 0 && n < 1 ? n * 100 : n) : d; };
-            return { cs: pct(a.cs, 55), ind: pct(a.ind, 10), util: pct(a.util, 50) };
-        }
+        const a = lista[i].apu, ind = pct(a.ind), util = pct(a.util);
+        if (ind != null && util != null) { rc = { ind, util, cs_planilla: null, desde: String(lista[i].desc || "").slice(0, 60) }; break; }
     }
-    return null;
+    if (!rc) return null;
+    for (let i = lista.length - 1; i >= 0; i--) {
+        const cs = pct(lista[i].apu.cs);
+        if (cs > 0) { rc.cs_planilla = cs; break; }
+    }
+    return rc;
 }
 
 async function contexto(ctx) {
@@ -221,7 +233,7 @@ Operaciones (campo "op"):
 - item {capitulo, desc, und?, cant?, cant_origen?, caracteristicas?, condicion?, grupo?, nota?, id?}: ítem sin 3D (o para editar desc/cant/características de uno existente con id).
 - desc: nombre corto y claro, lo que se entrega ("Trofeo Paceña"), máximo 80 caracteres; el detalle va en caracteristicas.
 - caracteristicas (en item e item_desde_3d): 3 a 6 líneas cortas PARA EL CLIENTE (van al PDF): medidas generales (alto × ancho × fondo), materiales y acabados, composición si ayuda, qué incluye y qué no (traslado, instalación, diseño). [{texto, origen}]: toda línea con números lleva origen (pieza3d:, cota_plano:, dueño: o supuesto:). Sin precios ni datos internos (trato, stock, recargos): se rechazan. Una línea con supuesto sin confirmar no sale al presupuesto hasta que se confirme.
-- fila {item, tipo: mat|mo|eq|sub, d, u?, origen_q, medida?, q?, geometria?, factor?, origen_factor?, clave?, p?, origen_p?, stock_q?, origen_stock?, cerrado?, oficio?, nota?, reemplaza?: n}:
+- fila {item, tipo: mat|mo|eq|sub, d, u?, origen_q, medida?, q?, geometria?, factor?, origen_factor?, clave?, p?, origen_p?, stock_q?, origen_stock?, cerrado?, oficio?, planilla?, origen_planilla?, nota?, reemplaza?: n}:
   · origen_q "pieza3d:<adjunto>/<p1,p2>": la cantidad la calcula la herramienta con "medida" (m2_cara, m2_sup, ml_perimetro, ml_largo, und, m3, glb) × factor.
   · origen_q "supuesto:<explicación>" (sin planos ni 3D, tu propuesta constructiva): mandá "geometria" [{desc, cant, largo_m, ancho_m?}] y "medida" (ml_largo, m2_cara, ml_perimetro, und); la herramienta calcula la cantidad. Esas filas quedan "sin confirmar" y NO se aplican al presupuesto hasta que el dueño las confirme.
   · origen_q "dueño:<mensaje>" o "cota_plano:<adjunto> p.<n> \\"<cita>\\"": va q (o geometria si te dio medidas).
@@ -230,7 +242,8 @@ Operaciones (campo "op"):
   · Trato cerrado por el dueño (tipo mo, cerrado: true, p = monto, origen_p dueño:<mensaje>, oficio o trabajadores): reemplaza la referencia calculada de la ruta B.
 - confirmar_supuestos {item?, confirmacion: dueño:<mensaje>}: cuando el dueño acepta tu propuesta (sin item: todos).
 - quitar {item} | {item, tipo, fila: n} | {capitulo}.
-- recargos {cs, ind, util, origen}: cargas sociales, indirectos y utilidad en %; origen "base:presupuesto/recargos" (los del presupuesto) o "dueño:<mensaje>". Si no se cargan, se usan los del presupuesto.
+- recargos {ind, util, cs_planilla, origen}: indirectos, utilidad y cargas sociales del personal en planilla, en %; origen "dueño:<mensaje>" o "base:presupuesto/recargos" (los que el dueño ya usa en este presupuesto). Nunca los supongas. Si el presupuesto no tiene, el borrador calcula con los por defecto del APU (ind 10, util 15, CS 0) marcados SIN CONFIRMAR: preguntalos en la ronda de preguntas.
+- planilla: true (en filas de mano de obra, con origen_planilla dueño:<mensaje>): personal en planilla formal. SOLO esas filas llevan cargas sociales (cs_planilla). Tarifas por m², tratos (cerrados o de referencia) y servicios de terceros (corte láser, impresión, transporte) no llevan: sin planilla.
 "item" en fila/quitar: id del ítem o su descripción exacta.`,
             input_schema: {
                 type: "object",
@@ -505,4 +518,4 @@ async function ejecutar(ctx, bloque) {
     }
 }
 
-module.exports = { definiciones, ejecutar, validar, HERRAMIENTAS, cargarMedicion, contexto };
+module.exports = { definiciones, ejecutar, validar, HERRAMIENTAS, cargarMedicion, contexto, recargosPresupuesto };
