@@ -2132,6 +2132,54 @@
         }
     }
 
+    // Celda "Descripción" de los PDF: título del ítem en negrita + viñetas de características.
+    // autoTable no mezcla negrita y normal en una celda: se calculan las líneas reales (con el
+    // ancho de la columna) para que la fila tenga la altura correcta, y se dibujan a mano.
+    // Antes se tapaba la primera línea y se escribía el título encima → textos superpuestos.
+    function _pdfCeldaDesc(doc) {
+        const esDesc = d => d.section === 'body' && d.cell.raw && typeof d.cell.raw === 'object' && d.cell.raw._type === 'item_desc';
+        const pad = (st, lado) => { const p = st.cellPadding; return typeof p === 'number' ? p : ((p && p[lado]) || 0); };
+        return {
+            didParseCell: function(d) {
+                if (!esDesc(d)) return;
+                const raw = d.cell.raw, st = d.cell.styles, fs = st.fontSize || 10;
+                const ancho = (typeof st.cellWidth === 'number' ? st.cellWidth : 90) - pad(st, 'left') - pad(st, 'right') - 0.5;
+                const titulo = String(raw._title || '-');
+                let resto = String(raw.content || '');
+                if (resto.indexOf(titulo) === 0) resto = resto.slice(titulo.length);
+                const lineas = resto.split('\n').map(l => l.trim()).filter(Boolean);
+                doc.setFontSize(fs);
+                doc.setFont(undefined, 'bold');   const tit = doc.splitTextToSize(titulo, ancho);
+                doc.setFont(undefined, 'normal'); const cuerpo = [];
+                lineas.forEach(l => cuerpo.push.apply(cuerpo, doc.splitTextToSize(l, ancho)));
+                raw._tit = tit; raw._cuerpo = cuerpo;
+                d.cell.text = tit.concat(cuerpo);   // con esto autoTable calcula la altura de la fila
+            },
+            willDrawCell: function(d) { if (esDesc(d)) d.cell.text = []; },   // el texto lo dibuja didDrawCell
+            didDrawCell: function(d) {
+                if (!esDesc(d) || !d.cell.raw._tit) return;
+                const raw = d.cell.raw, fs = d.cell.styles.fontSize || 10;
+                const lh = fs * doc.getLineHeightFactor() / doc.internal.scaleFactor;
+                const pl = typeof d.cell.padding === 'function' ? d.cell.padding('left') : 3;
+                const pt = typeof d.cell.padding === 'function' ? d.cell.padding('top') : 3;
+                let y = d.cell.y + pt; const x = d.cell.x + pl;
+                doc.setFontSize(fs); doc.setTextColor(0, 0, 0);
+                doc.setFont(undefined, 'bold');   raw._tit.forEach(l => { doc.text(l, x, y, { baseline: 'top' }); y += lh; });
+                doc.setFont(undefined, 'normal'); raw._cuerpo.forEach(l => { doc.text(l, x, y, { baseline: 'top' }); y += lh; });
+            }
+        };
+    }
+
+    // Capítulos sin ítems visibles (todos con el ojo apagado) no se imprimen
+    function _pdfSinCapitulosVacios(rows) {
+        return rows.filter((r, i) => {
+            const c = r[0];
+            if (!(c && typeof c === 'object' && c._cap)) return true;
+            const sig = rows[i + 1];
+            return !!sig && !!(sig[0] && typeof sig[0] === 'object' && sig[0]._type === 'item_desc');
+        });
+    }
+
     // Agrega logo (esquina superior derecha) + pie de página membrete a TODAS las páginas
     function _pdfAddMembrete(doc, logoB64) {
         const pageW  = doc.internal.pageSize.getWidth();
@@ -2214,7 +2262,7 @@
             data.forEach(item => {
                 if(item.type === 'chapter') { 
                     let chapName = (item.name || 'CAPÍTULO').toUpperCase();
-                    rows.push([{content: chapName, colSpan: 5, styles: {fillColor: [220,220,220], fontStyle:'bold'}}]); 
+                    rows.push([{content: chapName, colSpan: 5, _cap: true, styles: {fillColor: [220,220,220], fontStyle:'bold'}}]); 
                 } 
                 else {
                     // Saltar ítems inactivos (ojito apagado)
@@ -2232,22 +2280,11 @@
 
             if (typeof doc.autoTable !== 'function') throw new Error("La librería de Tablas no cargó.");
 
-            doc.autoTable({ startY: 45, head: [['Descripción', 'Und', 'Cant', 'P.U. (Bs)', 'Total (Bs)']], body: rows, styles: { cellPadding: 3 }, margin: { top: 20 },
-                didDrawCell: function(_dd) {
-                    if (_dd.section !== 'body' || _dd.column.index !== 0) return;
-                    const _raw = _dd.cell.raw;
-                    if (!_raw || typeof _raw !== 'object' || _raw._type !== 'item_desc' || !_raw._title) return;
-                    const _fs = _dd.cell.styles.fontSize || 9; const _sc = doc.internal.scaleFactor;
-                    const _lh = (_fs * 1.15) / _sc;
-                    const _padL = typeof _dd.cell.padding === 'function' ? _dd.cell.padding('left') : 3;
-                    const _padT = typeof _dd.cell.padding === 'function' ? _dd.cell.padding('top') : 3;
-                    const _fc = _dd.cell.styles.fillColor;
-                    if (Array.isArray(_fc)) doc.setFillColor(_fc[0], _fc[1], _fc[2]); else doc.setFillColor(255, 255, 255);
-                    doc.rect(_dd.cell.x + 0.3, _dd.cell.y + 0.3, _dd.cell.width - 0.6, _padT + _lh, 'F');
-                    doc.setFontSize(_fs); doc.setFont(undefined, 'bold'); doc.setTextColor(0, 0, 0);
-                    doc.text(_raw._title, _dd.cell.x + _padL, _dd.cell.y + _padT + (_fs * 0.75) / _sc);
-                    doc.setFont(undefined, 'normal');
-                }
+            const _desc1 = _pdfCeldaDesc(doc);
+            doc.autoTable({ startY: 45, head: [['Descripción', 'Und', 'Cant', 'P.U. (Bs)', 'Total (Bs)']], body: _pdfSinCapitulosVacios(rows),
+                styles: { cellPadding: 3, fontSize: 9 }, margin: { top: 20, bottom: 22 }, rowPageBreak: 'avoid',
+                columnStyles: { 0: { cellWidth: 97 }, 1: { cellWidth: 16, halign: 'center' }, 2: { cellWidth: 14, halign: 'center' }, 3: { cellWidth: 26, halign: 'right' }, 4: { cellWidth: 28, halign: 'right' } },
+                didParseCell: _desc1.didParseCell, willDrawCell: _desc1.willDrawCell, didDrawCell: _desc1.didDrawCell
             });
             const descPct = parseFloat(document.getElementById('t-desc-pct').value) || 0;
             const descVal = Math.round(subtotal * descPct / 100 * 100) / 100;
@@ -2258,7 +2295,8 @@
             let finalY = doc.lastAutoTable.finalY + 5;
             // Si no cabe el bloque completo en la página actual, agregar fila de total a la tabla misma
             // usando una fila especial, y luego continuar en nueva página solo si hay imágenes
-            if (finalY + _espacioTotal > 285) {
+            const _limite = doc.internal.pageSize.getHeight() - 22;   // el pie de página ocupa los últimos ~16 mm
+            if (finalY + _espacioTotal > _limite) {
                 // Agregar el total como última fila de la tabla en la página actual
                 doc.autoTable({
                     startY: finalY,
@@ -2310,10 +2348,13 @@
                 }
             }
 
+            // Condiciones: nunca debajo del pie de página
+            const _lineasCond = [`• Pago: ${document.getElementById('c-pago').value || '-'}`, `• Validez: ${document.getElementById('c-validez').value || '-'}`];
+            if(document.getElementById('sw-mont').checked) _lineasCond.push(`• Incluye Montaje`);
+            if(document.getElementById('sw-desm').checked) _lineasCond.push(`• Incluye Desmontaje`);
+            if (finalY + 7 + _lineasCond.length * 5 > _limite) { doc.addPage(); finalY = 25; }
             doc.setFontSize(11); doc.setFont(undefined, 'bold'); doc.text("CONDICIONES:", 14, finalY); finalY+=7; doc.setFontSize(9); doc.setFont(undefined, 'normal');
-            doc.text(`• Pago: ${document.getElementById('c-pago').value || '-'}`, 14, finalY); finalY+=5; doc.text(`• Validez: ${document.getElementById('c-validez').value || '-'}`, 14, finalY); finalY+=5;
-            if(document.getElementById('sw-mont').checked) { doc.text(`• Incluye Montaje`, 14, finalY); finalY+=5; }
-            if(document.getElementById('sw-desm').checked) { doc.text(`• Incluye Desmontaje`, 14, finalY); finalY+=5; }
+            _lineasCond.forEach(l => { doc.text(l, 14, finalY); finalY += 5; });
 
             if(anexos.length > 0) {
                 doc.addPage(); doc.setFontSize(16); doc.setFont(undefined, 'bold'); doc.text("ANEXO FOTOGRÁFICO Y PLANOS", 14, 20); let py = 30;
@@ -2414,7 +2455,7 @@
                 if (item.type === 'chapter') {
                     let chapName = (item.name || 'CAPÍTULO').toUpperCase();
                     rows.push([{
-                        content: chapName, colSpan: 8,
+                        content: chapName, colSpan: 8, _cap: true,
                         styles: { fillColor: [30, 58, 95], textColor: 255, fontStyle: 'bold', fontSize: 7.5 }
                     }]);
                 } else {
@@ -2476,9 +2517,10 @@
             if (typeof doc.autoTable !== 'function') throw new Error("La librería de Tablas no cargó.");
 
             // Anchuras: 14 + 85 + 15 + 18 + 28 + 30 + 25 + 22 + 31 + 14 = 282 ✓ (269mm usable)
+            const _desc2 = _pdfCeldaDesc(doc);
             doc.autoTable({
                 startY: 45,
-                margin: { top: 20, left: 14, right: 14 },
+                margin: { top: 20, left: 14, right: 14, bottom: 22 },
                 head: [[
                     { content: 'Descripción' },
                     { content: 'Und', styles: { halign: 'center' } },
@@ -2489,7 +2531,7 @@
                     { content: 'IT 3%',   styles: { halign: 'right' } },
                     { content: 'Total c/Imp', styles: { halign: 'right' } }
                 ]],
-                body: rows,
+                body: _pdfSinCapitulosVacios(rows),
                 styles: {
                     cellPadding: { top: 2, bottom: 2, left: 3, right: 3 },
                     fontSize: 7,
@@ -2517,23 +2559,11 @@
                     7: { cellWidth: 33, halign: 'right', fillColor: [245, 255, 248] }
                 },
                 // Separador visual entre "Total" y bloque de impuestos, y antes de "Total c/Imp"
+                rowPageBreak: 'avoid',
+                didParseCell: function(d) { _desc2.didParseCell(d); },
+                willDrawCell: function(d) { _desc2.willDrawCell(d); },
                 didDrawCell: function(d) {
-                    // Título de ítem en negrita (col 0)
-                    if (d.section === 'body' && d.column.index === 0) {
-                        const _raw = d.cell.raw;
-                        if (_raw && typeof _raw === 'object' && _raw._type === 'item_desc' && _raw._title) {
-                            const _fs = d.cell.styles.fontSize || 7; const _sc = doc.internal.scaleFactor;
-                            const _lh = (_fs * 1.15) / _sc;
-                            const _padL = typeof d.cell.padding === 'function' ? d.cell.padding('left') : 3;
-                            const _padT = typeof d.cell.padding === 'function' ? d.cell.padding('top') : 2;
-                            const _fc = d.cell.styles.fillColor;
-                            if (Array.isArray(_fc)) doc.setFillColor(_fc[0], _fc[1], _fc[2]); else doc.setFillColor(255, 255, 255);
-                            doc.rect(d.cell.x + 0.3, d.cell.y + 0.3, d.cell.width - 0.6, _padT + _lh, 'F');
-                            doc.setFontSize(_fs); doc.setFont(undefined, 'bold'); doc.setTextColor(0, 0, 0);
-                            doc.text(_raw._title, d.cell.x + _padL, d.cell.y + _padT + (_fs * 0.75) / _sc);
-                            doc.setFont(undefined, 'normal');
-                        }
-                    }
+                    _desc2.didDrawCell(d);   // título en negrita + viñetas (col 0)
                     if (d.section === 'body' || d.section === 'head') {
                         // Línea azul sutil a la izquierda de col 4 (Total) — separa datos base de impuestos
                         if (d.column.index === 4) {
@@ -2553,7 +2583,7 @@
 
             // ── Condiciones (igual que exportPDF) ───────────────────────────
             let finalY = doc.lastAutoTable.finalY + 8;
-            if (finalY > 185) { doc.addPage(); finalY = 20; }
+            if (finalY + 30 > doc.internal.pageSize.getHeight() - 22) { doc.addPage(); finalY = 25; }
             const descPct2 = parseFloat(document.getElementById('t-desc-pct').value) || 0;
             const descVal = parseFloat(document.getElementById('t-desc-val').value) || 0;
 
@@ -2567,7 +2597,8 @@
             doc.setTextColor(0, 0, 0); doc.setFont(undefined, 'normal'); doc.setFontSize(8);
 
             finalY += 12;
-            if (finalY > 190) { doc.addPage(); finalY = 20; }
+            // Condiciones: nunca debajo del pie de página (el pie ocupa los últimos ~16 mm)
+            if (finalY + 6 + 4 * 5 > doc.internal.pageSize.getHeight() - 22) { doc.addPage(); finalY = 25; }
             doc.setFontSize(9); doc.setFont(undefined, 'bold'); doc.text("CONDICIONES:", 14, finalY); finalY += 6;
             doc.setFontSize(8); doc.setFont(undefined, 'normal');
             doc.text(`• Pago: ${document.getElementById('c-pago').value || '-'}`, 14, finalY); finalY += 5;
