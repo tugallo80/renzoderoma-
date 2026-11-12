@@ -4,6 +4,7 @@
  * con eager_input_streaming la API no la valida.
  */
 const N = require("./compartido/agente-nucleo.js");
+const B = require("./compartido/agente-borrador.js");
 
 const RAIZ = (ctx) => `proyectos/${ctx.cid}/${ctx.pid}/agente`;
 
@@ -43,6 +44,75 @@ async function cargarMedicion(ctx, id) {
     return { meta, med: N.escalarMedicion(ctx._mediciones[id], factor) };
 }
 
+
+// ---------------------------------------------------------------- contexto para validar orígenes
+const NODOS = ["materiales", "mano_obra", "oficios", "rendimientos", "equivalencias_vw"];
+async function base(ctx) {
+    if (!ctx._base) {
+        ctx._base = {};
+        for (const n of NODOS) ctx._base[n] = (await ctx.almacen.leer(`base_datos/${n}`)) || {};
+    }
+    return ctx._base;
+}
+
+async function recargosPresupuesto(ctx) {
+    const items = await ctx.almacen.leer(`proyectos/${ctx.cid}/${ctx.pid}/presupuesto/items`);
+    const lista = Array.isArray(items) ? items : Object.values(items || {});
+    for (let i = lista.length - 1; i >= 0; i--) {
+        const a = lista[i] && lista[i].apu;
+        if (a && (a.util != null || a.ind != null || a.cs != null)) {
+            const pct = (v, d) => { const n = parseFloat(v); return isFinite(n) ? (n > 0 && n < 1 ? n * 100 : n) : d; };
+            return { cs: pct(a.cs, 55), ind: pct(a.ind, 10), util: pct(a.util, 50) };
+        }
+    }
+    return null;
+}
+
+async function contexto(ctx) {
+    const adjuntos = (await ctx.almacen.leer(`${RAIZ(ctx)}/adjuntos`)) || {};
+    const mediciones = {};
+    for (const id of Object.keys(adjuntos)) {
+        if (adjuntos[id].tipo === "3d") { try { mediciones[id] = (await cargarMedicion(ctx, id)).med; } catch (e) { /* sin medición */ } }
+    }
+    const msgs = (await ctx.almacen.leer(`${RAIZ(ctx)}/conversacion/mensajes`)) || {};
+    const mensajesDueno = {};
+    Object.keys(msgs).forEach((k) => { if (msgs[k] && msgs[k].rol === "dueno") mensajesDueno[k] = true; });
+    return { adjuntos, mediciones, mensajesDueno, base: await base(ctx), recargosPresupuesto: await recargosPresupuesto(ctx) };
+}
+
+// ---------------------------------------------------------------- buscar en la base
+function normalizar(t) { return String(t || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9.,]+/g, " ").trim(); }
+function espesorDe(m, clave) {
+    const e = parseFloat(m && (m.espesor_mm != null ? m.espesor_mm : m.espesor));
+    if (e > 0) return e;
+    const t = `${(m && (m.n || m.desc)) || ""} ${clave}`;
+    const r = /(\d+(?:[.,]\d+)?)\s*mm\b/i.exec(t) || /\b(?:mdf|melamina|terciado|acrilico|acrílico|pvc|foam|trupan)\D{0,6}(\d+(?:[.,]\d+)?)\b/i.exec(t);
+    return r ? parseFloat(r[1].replace(",", ".")) : null;
+}
+function precioDe(m) { const p = parseFloat(m && (m.p != null ? m.p : m.pu)); return p > 0 ? Math.round(p * 100) / 100 : null; }
+
+function entrada(nodo, clave, m) {
+    const o = { origen: `base:${nodo}/${clave}`, clave };
+    if (nodo === "materiales") {
+        Object.assign(o, { nombre: m.n || m.desc || clave, unidad: m.u || m.und || null, precio: precioDe(m) });
+        const e = espesorDe(m, clave); if (e) o.espesor_mm = e;
+        if (m.plancha_largo || m.largo) o.plancha = [m.plancha_largo || m.largo, m.plancha_ancho || m.ancho];
+        if (m.barra_largo) o.barra_largo = m.barra_largo;
+        if (m.mo_receta) o.receta_mo = m.mo_receta; else if (m.mo_receta_ninguna) o.receta_mo = "no lleva";
+        if (o.precio == null) o.aviso = "sin precio en la base";
+    } else if (nodo === "mano_obra") {
+        Object.assign(o, { nombre: m.n || m.desc || clave, unidad: m.u || m.und || null, precio: precioDe(m) });
+        if (o.precio == null) o.aviso = "sin precio en la base";
+    } else if (nodo === "oficios") {
+        Object.assign(o, { nombre: m.nombre || clave, costo_jornal: parseFloat(m.costo_jornal) > 0 ? parseFloat(m.costo_jornal) : null });
+    } else if (nodo === "rendimientos") {
+        Object.assign(o, { oficio: m.oficio, indicador: m.indicador, por_jornal: m.por_jornal != null ? m.por_jornal : null, trabajo: m.trabajo || "", tramos: m.tramos || null });
+    } else if (nodo === "equivalencias_vw") {
+        Object.assign(o, { texto: m.vw, material: m.material, tipo: m.tipo || null });
+    }
+    return o;
+}
+
 const HERRAMIENTAS = [
     {
         def: {
@@ -68,6 +138,186 @@ const HERRAMIENTAS = [
             if (!r.piezas.length) r.aviso = "Ninguna pieza coincide con el filtro. Ítems del 3D: " + N.resumenMedicion(med).items.map((x) => x.item).join(", ");
             if (!meta.escala) r.aviso_escala = "Escala tal como vino en el archivo (" + (meta.unidad || "?") + "). Si el plano da una medida total distinta, puede no estar a escala: preguntalo o usá la cota del plano.";
             return r;
+        },
+    },
+    {
+        def: {
+            name: "buscar_base",
+            description: "Busca en la base de Rubik: materiales (nombre, unidad, precio, espesor, plancha, receta de mano de obra), mano de obra (unidad y precio), oficios (costo del jornal), rendimientos (por jornal, por indicador) y equivalencias (texto del archivo o del PDF → material). Búsqueda por palabras sin acentos y, para materiales, por espesor en mm. Cada resultado trae su origen (base:<nodo>/<clave>) para usar en el borrador. Si algo no aparece, NO lo inventes: queda marcado o se pregunta.",
+            input_schema: {
+                type: "object",
+                properties: {
+                    texto: { type: "string", description: "Palabras a buscar (ej. \"mdf blanco\", \"vinil corte\", \"carpintero\"). Vacío: lista todo el nodo (hasta el límite)." },
+                    nodo: { type: "string", enum: ["materiales", "mano_obra", "oficios", "rendimientos", "equivalencias_vw", "todos"], description: "Dónde buscar (por defecto: todos)." },
+                    espesor_mm: { type: "number", description: "Opcional: solo materiales de este espesor (±0,5 mm)." },
+                    claves: { type: "array", items: { type: "string" }, description: "Opcional: traer estas claves exactas." },
+                    limite: { type: "integer", description: "Máximo de resultados (por defecto 25, máximo 80)." },
+                },
+            },
+        },
+        progreso: "Buscando en la base…",
+        async correr(ctx, e) {
+            const bd = await base(ctx);
+            const nodos = !e.nodo || e.nodo === "todos" ? NODOS : [e.nodo];
+            const palabras = normalizar(e.texto).split(" ").filter((w) => w.length > 1);
+            const limite = Math.min(Math.max(parseInt(e.limite || 25, 10) || 25, 1), 80);
+            const res = [];
+            for (const n of nodos) {
+                for (const k of Object.keys(bd[n] || {})) {
+                    const m = bd[n][k];
+                    if (!m || typeof m !== "object") continue;
+                    if (e.claves && e.claves.length) { if (e.claves.includes(k)) res.push({ p: 99, x: entrada(n, k, m) }); continue; }
+                    const hay = normalizar(`${k} ${m.n || ""} ${m.desc || ""} ${m.nombre || ""} ${m.vw || ""} ${m.trabajo || ""} ${m.oficio || ""}`);
+                    const puntos = palabras.filter((w) => hay.includes(w)).length;
+                    if (palabras.length && puntos < Math.ceil(palabras.length / 2)) continue;
+                    if (e.espesor_mm != null && n === "materiales") { const es = espesorDe(m, k); if (!(es != null && Math.abs(es - e.espesor_mm) <= 0.5)) continue; }
+                    res.push({ p: puntos, x: entrada(n, k, m) });
+                }
+            }
+            res.sort((a, b) => b.p - a.p);
+            const salida = res.slice(0, limite).map((r) => r.x);
+            return { encontrados: res.length, mostrados: salida.length, resultados: salida,
+                ...(salida.length ? {} : { aviso: "No hay nada parecido en la base. No lo inventes: dejalo marcado sin precio o preguntá; si el dueño lo confirma, guardalo con guardar_en_base." }) };
+        },
+    },
+    {
+        def: {
+            name: "armar_borrador",
+            description: `Crea o edita el BORRADOR del presupuesto (capítulos → ítems → APU con filas mat/mo/eq/sub). Aplica una lista de operaciones en orden; las válidas quedan y las inválidas vuelven rechazadas con su motivo. Devuelve el borrador resumido con los totales, que CALCULA ESTA HERRAMIENTA (pu del APU con recargos, total del ítem, del capítulo y general): nunca los calcules vos.
+Operaciones (campo "op"):
+- capitulo {nombre, id?}: crea o renombra.
+- item_desde_3d {capitulo, adjunto, item3d | piezas[], desc?, materiales?: {"p1":"CLAVE_BASE"}, ruta?: "A"|"B", rendimiento?: clave, cant?, cant_origen?}: el algoritmo de Importar 3D arma el APU desde la medición: materiales por unidad (m², ml, planchas, barras…), mano de obra por receta del material (ruta A) o una fila de trato con el oficio (ruta B, referencia para negociar). Si lo repetís sobre el mismo ítem (id), rehace las filas automáticas y conserva las tuyas.
+- item {capitulo, desc, und?, cant?, cant_origen?, nota?, id?}: ítem sin 3D (o para editar desc/cant de uno existente con id).
+- fila {item, tipo: mat|mo|eq|sub, d, u?, origen_q, medida?, q?, factor?, origen_factor?, clave?, p?, origen_p?, nota?, reemplaza?: n}: con origen_q "pieza3d:<adjunto>/<p1,p2>" la cantidad la calcula la herramienta con "medida" (m2_cara, m2_sup, ml_perimetro, ml_largo, und, m3, glb) × factor; con "dueño:<mensaje>" o "cota_plano:<adjunto> p.<n> \\"<cita>\\"" va q. Con clave (de buscar_base) el precio sale SIEMPRE de la base; sin clave, p solo con origen_p dueño: o cota_plano:. Sin precio, la fila queda marcada.
+- quitar {item} | {item, tipo, fila: n} | {capitulo}.
+- recargos {cs, ind, util, origen}: cargas sociales, indirectos y utilidad en %; origen "base:presupuesto/recargos" (los del presupuesto) o "dueño:<mensaje>". Si no se cargan, se usan los del presupuesto.
+"item" en fila/quitar: id del ítem o su descripción exacta.`,
+            input_schema: {
+                type: "object",
+                properties: {
+                    operaciones: { type: "array", items: { type: "object", properties: { op: { type: "string", enum: ["capitulo", "item", "item_desde_3d", "fila", "quitar", "recargos"] } }, required: ["op"] } },
+                },
+                required: ["operaciones"],
+            },
+        },
+        progreso: "Armando el borrador…",
+        async correr(ctx, e) {
+            const v = await contexto(ctx);
+            const actual = await ctx.almacen.leer(`${RAIZ(ctx)}/borrador`);
+            const r = B.aplicarOperaciones(actual, e.operaciones.slice(0, 80), v, () => ctx.almacen.nuevaClave());
+            const aplicadas = r.resultados.filter((x) => x.ok).length;
+            if (aplicadas) {
+                r.borrador.actualizado = ctx.almacen.ahora();
+                await ctx.almacen.escribir(`${RAIZ(ctx)}/borrador`, JSON.parse(JSON.stringify(r.borrador)));
+            }
+            return {
+                aplicadas, rechazadas: r.resultados.filter((x) => !x.ok).map((x) => ({ n: x.n, op: x.op, motivo: x.error })),
+                borrador: B.resumen(r.borrador),
+            };
+        },
+    },
+    {
+        def: {
+            name: "escala_3d",
+            description: "Calibra la escala de un 3D adjunto cuando el modelo no está a escala real: con una medida total del modelo (alto, ancho o fondo) o la de una pieza, que sale de una cota del plano o la dijo el dueño. Escala parejo todas las piezas (largos ×f, áreas ×f², volúmenes ×f³). Nunca con una medida supuesta.",
+            input_schema: {
+                type: "object",
+                properties: {
+                    adjunto: { type: "string" },
+                    medida_mm: { type: "number", description: "La medida real en mm." },
+                    eje: { type: "string", enum: ["alto", "ancho", "fondo"], description: "Medida total del modelo entero (o usá pieza + dimension)." },
+                    pieza: { type: "string", description: "Id de pieza (p1…)." },
+                    dimension: { type: "string", enum: ["largo", "ancho", "espesor"] },
+                    origen: { type: "string", description: "cota_plano:<adjunto> p.<n> \"<cita>\" o dueño:<mensaje>." },
+                },
+                required: ["adjunto", "medida_mm", "origen"],
+            },
+        },
+        progreso: "Calibrando la escala del 3D…",
+        async correr(ctx, e) {
+            const v = await contexto(ctx);
+            const o = B.validarOrigen(e.origen, v);
+            if (!o.ok) throw new Error("origen: " + o.error);
+            if (o.origen.tipo !== "cota_plano" && o.origen.tipo !== "dueño") throw new Error("la escala solo se calibra con una cota del plano o un dato del dueño");
+            const meta = await ctx.almacen.leer(`${RAIZ(ctx)}/adjuntos/${e.adjunto}`);
+            if (!meta || meta.tipo !== "3d") throw new Error("no es un 3D medido");
+            const crudo = ctx._mediciones && ctx._mediciones[e.adjunto] ? ctx._mediciones[e.adjunto] : (await cargarMedicion(ctx, e.adjunto)) && ctx._mediciones[e.adjunto];
+            let medido;
+            if (e.pieza) {
+                const i = /^p(\d+)$/.exec(e.pieza); const p = i && crudo.piezas[parseInt(i[1], 10) - 1];
+                if (!p || !e.dimension) throw new Error("pieza o dimensión inválida");
+                medido = p[e.dimension];
+            } else if (e.eje && meta.tamano_m) {
+                medido = meta.tamano_m[{ ancho: 0, alto: 1, fondo: 2 }[e.eje]];
+            } else throw new Error("indicá eje (si el 3D trae su tamaño total) o pieza + dimension");
+            if (!(medido > 0) || !(e.medida_mm > 0)) throw new Error("medida inválida");
+            const factor = (e.medida_mm / 1000) / medido;
+            const escala = { factor: Math.round(factor * 1e6) / 1e6, origen: o.origen.texto, texto: `${e.pieza ? e.pieza + " " + e.dimension : e.eje} = ${e.medida_mm} mm`, fecha: ctx.almacen.ahora() };
+            await ctx.almacen.actualizar(`${RAIZ(ctx)}/adjuntos/${e.adjunto}`, { escala });
+            ctx._mediciones = {};   // se vuelve a leer escalada
+            return { ok: true, factor: escala.factor, nota: `Todas las piezas quedaron × ${escala.factor.toFixed(4)}. Volvé a consultar medicion_3d y rehacé los ítems del 3D (item_desde_3d) para que tomen la escala.` };
+        },
+    },
+    {
+        def: {
+            name: "guardar_en_base",
+            description: "Guarda en la base algo NUEVO o una corrección que el dueño CONFIRMÓ explícitamente en este chat: un material (con o sin precio), una mano de obra, un oficio con su costo por jornal, un rendimiento o la receta de mano de obra de un material. Deja historial del cambio. Sin la confirmación del dueño (su id de mensaje) no se guarda nada.",
+            input_schema: {
+                type: "object",
+                properties: {
+                    nodo: { type: "string", enum: ["materiales", "mano_obra", "oficios", "rendimientos", "receta"] },
+                    clave: { type: "string", description: "Clave (MAYÚSCULAS_CON_GUIONES). Para receta: la clave del material." },
+                    datos: { type: "object", description: "materiales/mano_obra: {n, u, p?, espesor_mm?, plancha_largo?, plancha_ancho?, barra_largo?} · oficios: {nombre, costo_jornal?} · rendimientos: {oficio, indicador, por_jornal, trabajo?} · receta: {pasos: [{mo, medida, factor?}]} o {ninguna: true}" },
+                    confirmacion: { type: "string", description: "dueño:<id del mensaje donde el dueño lo confirma>." },
+                },
+                required: ["nodo", "clave", "datos", "confirmacion"],
+            },
+        },
+        progreso: "Guardando en la base…",
+        async correr(ctx, e) {
+            const v = await contexto(ctx);
+            const o = N.parsearOrigen(e.confirmacion);
+            if (!o || o.tipo !== "dueño" || !v.mensajesDueno[o.ref.split(/\s/)[0]]) throw new Error("hace falta la confirmación del dueño: dueño:<id de su mensaje>");
+            const clave = String(e.clave).toUpperCase().trim().replace(/[.#$[\]/\s]+/g, "_").slice(0, 80);
+            if (!clave) throw new Error("clave inválida");
+            const d = e.datos || {};
+            const numOk = (x) => x == null || (isFinite(parseFloat(x)) && parseFloat(x) >= 0);
+            let ruta, cambios = {};
+            const pick = (ks) => ks.forEach((k) => { if (d[k] !== undefined && d[k] !== null && d[k] !== "") cambios[k] = typeof d[k] === "string" ? d[k].slice(0, 200) : d[k]; });
+            if (e.nodo === "materiales" || e.nodo === "mano_obra") {
+                ruta = `base_datos/${e.nodo}/${clave}`;
+                pick(["n", "u", "p", "espesor_mm", "plancha_largo", "plancha_ancho", "barra_largo"]);
+                if (!cambios.n && !(await ctx.almacen.leer(ruta))) throw new Error("falta el nombre (n)");
+                ["p", "espesor_mm", "plancha_largo", "plancha_ancho", "barra_largo"].forEach((k) => { if (!numOk(cambios[k])) throw new Error(k + " inválido"); if (cambios[k] != null) cambios[k] = parseFloat(cambios[k]); });
+                if (cambios.p == null && !(await ctx.almacen.leer(ruta))) { cambios.p = 0; cambios.falta_precio = true; }
+                if (cambios.p > 0) cambios.falta_precio = null;
+                cambios.origen = "agente";
+            } else if (e.nodo === "oficios") {
+                ruta = `base_datos/oficios/${clave}`; pick(["nombre", "costo_jornal"]);
+                if (!numOk(cambios.costo_jornal)) throw new Error("costo_jornal inválido");
+            } else if (e.nodo === "rendimientos") {
+                ruta = `base_datos/rendimientos/${clave}`; pick(["oficio", "indicador", "por_jornal", "trabajo", "notas", "tramos"]);
+                if (cambios.indicador && !["m2_tablero", "ml_canto", "m2_superficie", "piezas", "m3", "letras_por_alto"].includes(cambios.indicador)) throw new Error("indicador inválido");
+                if (!numOk(cambios.por_jornal)) throw new Error("por_jornal inválido");
+            } else if (e.nodo === "receta") {
+                ruta = `base_datos/materiales/${clave}`;
+                if (!v.base.materiales[clave]) throw new Error("no existe el material " + clave);
+                if (d.ninguna) cambios = { mo_receta: null, mo_receta_ninguna: true };
+                else {
+                    const pasos = (Array.isArray(d.pasos) ? d.pasos : []).map((x) => ({ mo: String(x.mo || ""), medida: String(x.medida || ""), factor: parseFloat(x.factor) > 0 ? parseFloat(x.factor) : 1 }));
+                    if (!pasos.length || pasos.some((x) => !v.base.mano_obra[x.mo] || !B.MEDIDAS.includes(x.medida))) throw new Error("cada paso necesita una mano de obra que exista (mo) y una medida válida");
+                    cambios = { mo_receta: pasos, mo_receta_ninguna: null };
+                }
+            }
+            if (!Object.keys(cambios).length) throw new Error("no hay datos para guardar");
+            const antes = await ctx.almacen.leer(ruta);
+            cambios.fecha_mod = ctx.almacen.ahora();
+            await ctx.almacen.actualizar(ruta, cambios);
+            const resumen = {};
+            Object.keys(cambios).forEach((k) => { resumen[k] = { antes: antes && antes[k] !== undefined ? antes[k] : null, despues: cambios[k] === undefined ? null : cambios[k] }; });
+            await ctx.almacen.agregar("base_datos/historial_cambios", { ruta, que: `agente: ${e.nodo}`, cambios: JSON.parse(JSON.stringify(resumen)), fecha: ctx.almacen.ahora(), por: ctx.uid || null, confirmacion: o.texto, proyecto: `${ctx.cid}/${ctx.pid}` });
+            ctx._base = null;
+            return { ok: true, guardado: ruta, origen: `base:${e.nodo === "receta" ? "materiales" : e.nodo}/${clave}` };
         },
     },
     {
@@ -128,4 +378,4 @@ async function ejecutar(ctx, bloque) {
     }
 }
 
-module.exports = { definiciones, ejecutar, validar, HERRAMIENTAS, cargarMedicion };
+module.exports = { definiciones, ejecutar, validar, HERRAMIENTAS, cargarMedicion, contexto };

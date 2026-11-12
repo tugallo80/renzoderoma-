@@ -79,6 +79,30 @@ await page.evaluate(() => window._fbFalso.set('proyectos/cliDemo/proyDemo/agente
 await page.evaluate(() => window._fbFalso.set('agente_costos/' + window.AgenteNucleo.mesClave() + '/_total', { usd: 30.2, llamadas: 140 }));
 await captura('6-tope');
 
+// 7) Borrador con el origen de cada número (armado con la misma herramienta que usa la Function)
+await page.evaluate(() => {
+    const med = { piezas: [
+        { item: 'Mostrador', pieza: 'Tapa', material: 'MDF_18', cant: 1, largo: 1.8, ancho: 0.6, espesor: 0.018, tipo: 'plancha', area_m2: 2.2536, area_cara_m2: 1.08, perimetro_ml: 4.8, volumen_m3: 0.0194, acabados: [] },
+        { item: 'Mostrador', pieza: 'Lateral', material: 'MDF_18', cant: 2, largo: 0.9, ancho: 0.6, espesor: 0.018, tipo: 'plancha', area_m2: 1.1448, area_cara_m2: 0.54, perimetro_ml: 3.0, volumen_m3: 0.0097, acabados: [] },
+        { item: 'Totem', pieza: 'Cuerpo', material: null, origen_vw: 'Acrilico', cant: 1, largo: 2.4, ancho: 0.8, espesor: 0.3, tipo: 'volumen', area_m2: 5.76, volumen_m3: 0.576, acabados: [] }] };
+    const ctx = { adjuntos: { A3D: { tipo: '3d' }, PDF1: { tipo: 'pdf' } }, mediciones: { A3D: med }, mensajesDueno: { M1: true },
+        recargosPresupuesto: { cs: 55, ind: 10, util: 30 },
+        base: { materiales: { MDF_18: { n: 'MDF 18 mm blanco', u: 'm2', p: 120, mo_receta: [{ mo: 'LAQUEADO', medida: 'm2_sup' }] }, ACRILICO_3: { n: 'Acrílico 3 mm', u: 'm2', p: 0 }, VINIL: { n: 'Vinil de corte', u: 'm2', p: 45 } },
+            mano_obra: { LAQUEADO: { n: 'Laqueado', u: 'm2', p: 35 } }, oficios: {}, rendimientos: {} } };
+    let n = 0;
+    const r = window.AgenteBorrador.aplicarOperaciones(null, [
+        { op: 'item_desde_3d', capitulo: 'Stand demo', adjunto: 'A3D', item3d: 'Mostrador', desc: 'Mostrador recepción' },
+        { op: 'fila', item: 'Mostrador recepción', tipo: 'mat', d: 'Adhesivo lateral', u: 'und', q: 3, origen_q: 'dueño:M1', p: 50, origen_p: 'dueño:M1' },
+        { op: 'item_desde_3d', capitulo: 'Stand demo', adjunto: 'A3D', item3d: 'Totem', desc: 'Restauración tótem', materiales: { p3: 'ACRILICO_3' } },
+        { op: 'fila', item: 'Restauración tótem', tipo: 'mat', d: 'Vinil frente', origen_q: 'cota_plano:PDF1 p.2 "0,80 x 2,40"', q: 1.92, clave: 'VINIL' },
+    ], ctx, () => 'id' + (++n));
+    window._fbFalso.set('proyectos/cliDemo/proyDemo/agente/borrador', r.borrador);
+});
+await page.click('#ag-tab');
+await captura('7-borrador');
+await page.evaluate(() => document.getElementById('ag-borr').scrollTo(0, 99999));
+await captura('8-borrador-total');
+
 console.log(errores.length ? 'ERRORES EN LA PÁGINA:\n' + errores.join('\n') : 'sin errores en la página');
 await browser.close(); srv.close();
 if (errores.length) process.exitCode = 1;
