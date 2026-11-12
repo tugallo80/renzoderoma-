@@ -35,6 +35,12 @@
         if (user) {
             window.rubikUser = user;
             _resolve(user);
+            // Botón flotante "Rubik Agente App" (Claude): solo en páginas del hub con sesión
+            if (!isExempt && !document.getElementById('rubik-claude-fab-js')) {
+                var sc = document.createElement('script');
+                sc.id = 'rubik-claude-fab-js'; sc.src = '/js/claude-flotante.js?v=1'; sc.defer = true;
+                document.head.appendChild(sc);
+            }
         } else {
             _reject(new Error('No autenticado'));
             if (!isExempt) redirect();
