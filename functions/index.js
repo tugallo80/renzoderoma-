@@ -84,6 +84,11 @@ async function requireAuth(req, res) {
     }
 }
 
+// ── Agente IA cotizador (docs/sesiones/04-agente-ia.md) ───────────────────────
+const agente = require("./agente");
+exports.agenteApi   = agente.crearApi({ requireAuth, applyCors });
+exports.agenteTurno = agente.crearTrigger({ ANTHROPIC_API_KEY });
+
 // ── Claude helpers ────────────────────────────────────────────────────────────
 
 /** Convierte partes de formato Gemini a bloques de contenido de Claude */

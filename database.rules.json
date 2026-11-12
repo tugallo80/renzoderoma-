@@ -33,6 +33,18 @@
       ".write": "auth != null && root.child('acceso').child('hub').child(auth.uid).val() === true"
     },
 
+    // ─── AGENTE IA (docs/sesiones/04-agente-ia.md) ──────────────────
+    // La cola de turnos la escribe y la lee solo la Function (admin).
+    // Los costos los escribe solo la Function; el hub los lee.
+    "agente_cola": {
+      ".read":  false,
+      ".write": false
+    },
+    "agente_costos": {
+      ".read":  "auth != null && root.child('acceso').child('hub').child(auth.uid).val() === true",
+      ".write": false
+    },
+
     // ─── TODO LO DEMÁS: SOLO HUB ──────────────────────────────────
     // proyectos (pagos, compras, licitaciones), clientes, personal,
     // supervisores, caja_chica, ingresos, cobros, base_datos, config_ia,

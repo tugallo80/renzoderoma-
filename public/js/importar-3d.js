@@ -227,6 +227,60 @@
             (f.size >= 1048576 ? (f.size / 1048576).toFixed(1) + ' MB' : f.size >= 1024 ? Math.round(f.size / 1024) + ' KB' : f.size + ' bytes');
     }
 
+    /**
+     * Lee el modelo en el navegador (sin texturas ni pedidos afuera). Devuelve { raiz, tipo: 'fbx'|'gltf' }.
+     * urls: arreglo donde se anotan los object URL creados (quien llama los libera).
+     */
+    async function leerModelo(modelo, archivos, urls) {
+        var T = await cargarThree();
+        var ext = (modelo.name.split('.').pop() || '').toLowerCase();
+        var mapa = {}, faltan = [];
+        archivos.forEach(function (f) { if (f !== modelo && /\.(bin|gltf)$/i.test(f.name)) { var u = URL.createObjectURL(f); urls.push(u); mapa[f.name] = u; } });
+        var manager = new T.THREE.LoadingManager();
+        manager.setURLModifier(Lector3D.modificadorURL(mapa, faltan));   // sin texturas ni pedidos afuera
+        var buf = await modelo.arrayBuffer();
+        if (ext === 'fbx') {
+            var raiz = new T.FBXLoader(manager).parse(buf, '');
+            Lector3D.aplicarPropiedadesFBX(raiz, Lector3D.leerPropiedadesFBX(buf));
+            return { raiz: raiz, tipo: 'fbx' };
+        }
+        var loader = new T.GLTFLoader(manager);
+        loader.register(Lector3D.pluginSinTexturas(T.THREE));
+        var draco = new T.DRACOLoader(); draco.setDecoderPath(CDN_THREE + 'examples/jsm/libs/draco/gltf/');
+        loader.setDRACOLoader(draco);
+        var entrada = ext === 'gltf' ? new TextDecoder().decode(buf) : buf;
+        var gltf = await new Promise(function (ok, ko) { loader.parse(entrada, '', ok, ko); }).catch(function (e) {
+            if (faltan.length) throw new Error('Falta el archivo ' + faltan[0] + '. Elegí el .gltf junto con su .bin (o exportá en .glb).');
+            throw e;
+        });
+        draco.dispose();
+        Lector3D.prepararGLTF(gltf);
+        return { raiz: gltf.scene, tipo: 'gltf' };
+    }
+
+    /** Saca de un .zip solo lo que sirve (modelo, .bin, rubik.json, PDF, imágenes si se piden). */
+    async function extraerZip(zipFile, conImagenes) {
+        if (typeof JSZip === 'undefined') throw new Error('No se pudo abrir el .zip (falta JSZip). Descomprimilo y elegí el archivo de adentro.');
+        var zip = await JSZip.loadAsync(zipFile);
+        var re = conImagenes ? /\.(glb|gltf|fbx|bin|json|pdf|jpe?g|png|webp)$/i : /\.(glb|gltf|fbx|bin|json|pdf)$/i;
+        var entradas = Object.keys(zip.files).filter(function (n) {
+            var base = n.split('/').pop();
+            return !zip.files[n].dir && n.indexOf('__MACOSX') < 0 && base.charAt(0) !== '.' && (re.test(n) || base.indexOf('.') < 0);   // también sin extensión
+        });
+        var sacados = [];
+        for (var e = 0; e < entradas.length; e++) {
+            var blob = await zip.files[entradas[e]].async('blob');
+            sacados.push(new File([blob], entradas[e].split('/').pop()));
+        }
+        return (await normalizarArchivos(sacados)).archivos;
+    }
+
+    // Para el Agente IA (agente-chat.js): misma lectura y medición del 3D, sin la pantalla de revisión.
+    window.Importar3D = {
+        normalizarArchivos: normalizarArchivos, leerModelo: leerModelo, extraerZip: extraerZip,
+        equivalencias: function () { return basePromesa || cargarBase(); }
+    };
+
     window._i3Archivos = async function (lista) {
         var originales = Array.from(lista || []);
         if (!originales.length) return;
@@ -244,23 +298,9 @@
         // .zip: se sacan solo el modelo, su .bin y el rubik.json (las imágenes ni se descomprimen)
         var zips = archivos.filter(function (f) { return ext(f) === 'zip'; });
         if (zips.length) {
-            if (typeof JSZip === 'undefined') return pasoElegir('No se pudo abrir el .zip (falta JSZip). Descomprimilo y elegí el archivo de adentro.');
             try {
                 await pasoCargando('Abriendo ' + zips[0].name + '…');
-                for (var z = 0; z < zips.length; z++) {
-                    var zip = await JSZip.loadAsync(zips[z]);
-                    var entradas = Object.keys(zip.files).filter(function (n) {
-                        var base = n.split('/').pop();
-                        return !zip.files[n].dir && n.indexOf('__MACOSX') < 0 && base.charAt(0) !== '.' &&
-                            (/\.(glb|gltf|fbx|bin|json|pdf)$/i.test(n) || base.indexOf('.') < 0);   // también sin extensión
-                    });
-                    var sacados = [];
-                    for (var e = 0; e < entradas.length; e++) {
-                        var blob = await zip.files[entradas[e]].async('blob');
-                        sacados.push(new File([blob], entradas[e].split('/').pop()));
-                    }
-                    archivos = archivos.concat((await normalizarArchivos(sacados)).archivos);
-                }
+                for (var z = 0; z < zips.length; z++) archivos = archivos.concat(await extraerZip(zips[z]));
             } catch (err) { return pasoElegir('No se pudo abrir el .zip: ' + (err && err.message ? err.message : err)); }
             archivos = archivos.filter(function (f) { return ext(f) !== 'zip'; });
         }
@@ -297,30 +337,9 @@
                 var T = await cargarThree();
                 await pasoCargando('Leyendo ' + modelo.name + '…' + (pesado ? ' (' + pesado + ' MB: puede tardar)' : ''));
                 if (pesado) $('i3-body').insertAdjacentHTML('beforeend', '<div class="i3-card" style="border-color:var(--orange);"><div class="i3-nota">⚠ ' + esc(consejo) + '</div></div>');
-                var mapa = {}, faltan = [];
-                archivos.forEach(function (f) { if (f !== modelo && /\.(bin|gltf)$/i.test(f.name)) { var u = URL.createObjectURL(f); urls.push(u); mapa[f.name] = u; } });
-                var manager = new T.THREE.LoadingManager();
-                manager.setURLModifier(Lector3D.modificadorURL(mapa, faltan));   // sin texturas ni pedidos afuera
-                var buf = await modelo.arrayBuffer();
-                if (ext(modelo) === 'fbx') {
-                    est.raiz = new T.FBXLoader(manager).parse(buf, '');
-                    Lector3D.aplicarPropiedadesFBX(est.raiz, Lector3D.leerPropiedadesFBX(buf));
-                    est.tipo = 'fbx';
-                } else {
-                    var loader = new T.GLTFLoader(manager);
-                    loader.register(Lector3D.pluginSinTexturas(T.THREE));
-                    var draco = new T.DRACOLoader(); draco.setDecoderPath(CDN_THREE + 'examples/jsm/libs/draco/gltf/');
-                    loader.setDRACOLoader(draco);
-                    var entrada = ext(modelo) === 'gltf' ? new TextDecoder().decode(buf) : buf;
-                    var gltf = await new Promise(function (ok, ko) { loader.parse(entrada, '', ok, ko); }).catch(function (e) {
-                        if (faltan.length) throw new Error('Falta el archivo ' + faltan[0] + '. Elegí el .gltf junto con su .bin (o exportá en .glb).');
-                        throw e;
-                    });
-                    draco.dispose();
-                    Lector3D.prepararGLTF(gltf);
-                    est.raiz = gltf.scene;
-                    est.tipo = 'gltf';
-                }
+                var leido = await leerModelo(modelo, archivos, urls);
+                est.raiz = leido.raiz;
+                est.tipo = leido.tipo;
                 est.det = Lector3D.detectarUnidad(est.raiz, est.tipo);
                 est.unidad = est.det.unidad;
                 est.factor = Lector3D.FACTORES[est.unidad];   // m por unidad del archivo (cambia al calibrar)
@@ -1226,6 +1245,7 @@
     async function revisarCompartidos() {
         if (!window.Compartidos3D || !window.indexedDB) return;
         var q = new URLSearchParams(location.search), pedido = q.get('importar3d');
+        if (q.get('agente')) return;   // "Compartir → Rubik" con destino Agente IA: lo toma agente-chat.js
         var lista;
         try { lista = await Compartidos3D.pendientes(); } catch (e) { return; }
         if (pedido) {   // sacar el parámetro de la URL (si se recarga, no vuelve a importar)
@@ -1235,9 +1255,10 @@
         if (!lista.length) return;
         var envio = lista.find(function (e) { return e.id === pedido; }) || lista[0];
         if (!(pedido && envio.id === pedido) &&
-            !confirm('Tenés un archivo compartido a Rubik: ' + envio.nombres.join(', ') + '.\n¿Importarlo en este presupuesto?\n(Cancelar: queda guardado para otro proyecto, hasta 24 h.)')) return;
+            !confirm('Tenés un archivo compartido a Rubik: ' + envio.nombres.join(', ') + '.\n¿Mandarlo al ' + (window.abrirAgenteIA ? 'Agente IA' : 'Importar 3D') + ' de este presupuesto?\n(Cancelar: queda guardado para otro proyecto, hasta 24 h.)')) return;
         var archivos = await Compartidos3D.tomar(envio.id);   // lo borra de IndexedDB
         if (!archivos.length) return;
+        if (!pedido && window.abrirAgenteIA) { window.abrirAgenteIA(archivos); return; }
         window.abrirImportar3D();
         window._i3Archivos(archivos);
     }

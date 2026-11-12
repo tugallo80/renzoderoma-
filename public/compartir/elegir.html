@@ -49,9 +49,11 @@
 </head>
 <body>
 <div class="box">
-    <h1>📦 ¿Dónde lo importo?</h1>
-    <div class="nota">Llegó por "Compartir → Rubik". Elegí el proyecto: la app nunca lo asigna sola. El archivo queda solo en
-        este teléfono y se borra apenas lo importás, si cancelás, o a las 24 h.</div>
+    <h1>📦 ¿A qué proyecto lo mando?</h1>
+    <div class="nota">Llegó por "Compartir → Rubik". Elegí el proyecto: la app nunca lo asigna sola. Se abre el
+        <b>Agente IA</b> del presupuesto con estos archivos adjuntos (3D, PDF, fotos o capturas). El archivo queda solo en
+        este teléfono y se borra apenas lo usás, si cancelás, o a las 24 h.</div>
+    <label style="font-weight:400;display:flex;gap:8px;align-items:center;"><input type="checkbox" id="usar-imp3d"> Abrir con "Importar 3D" (respaldo) en vez del Agente IA</label>
     <div class="card" id="archivos"><div class="nota">Buscando el archivo…</div></div>
     <div id="cuerpo"></div>
 </div>
@@ -85,7 +87,7 @@
     window._ir = function (cid, pid, pname, cname) {
         localStorage.setItem('rubik_client_id', cid); localStorage.setItem('rubik_current_pid', pid);
         localStorage.setItem('rubik_current_pname', pname || ''); localStorage.setItem('rubik_client_name', cname || '');
-        location.href = '/presupuesto.html?cid=' + encodeURIComponent(cid) + '&pid=' + encodeURIComponent(pid) + '&importar3d=' + encodeURIComponent(envio.id);
+        location.href = '/presupuesto.html?cid=' + encodeURIComponent(cid) + '&pid=' + encodeURIComponent(pid) + (document.getElementById('usar-imp3d') && document.getElementById('usar-imp3d').checked ? '&importar3d=' : '&agente=') + encodeURIComponent(envio.id);
     };
     window._irIdx = function (i) { var r = recientes()[i]; window._ir(r.cid, r.pid, r.pname, r.cname); };
     window._irProy = function (cid, pid) {
@@ -223,8 +225,8 @@
             return '<div class="archivo">' + esc(a.nombre) + '<span class="nota" style="font-weight:400;">' +
                 (a.detectado && utiles.indexOf(a.detectado) >= 0 ? ' · ' + a.detectado.toUpperCase() : '') + mb + '</span></div>' +
                 (raro ? '<div class="error" style="font-size:13px;">⚠ No parece un modelo 3D, PDF, foto ni .zip (tipo: ' + esc(a.tipo || 'vacío') + '). Podés cancelar.</div>' : '');
-        }).join('') + (det.length && !hay3D ? '<div class="nota" style="margin-top:6px;color:var(--text);">Sin modelo 3D: "Importar 3D" lo va a pedir. ' +
-            'Para cotizar solo con un PDF o una foto, usá <b>Presupuesto IA</b> en el presupuesto.</div>' : '');
+        }).join('') + (det.length && !hay3D ? '<div class="nota" style="margin-top:6px;color:var(--text);">Sin modelo 3D: el Agente IA lo lee igual ' +
+            '(PDF, fotos, capturas). "Importar 3D" sí necesita el modelo.</div>' : '');
         pintar();
         (window.rubikAuthReady || Promise.resolve()).then(function () {
             return firebase.database().ref('clientes').once('value');

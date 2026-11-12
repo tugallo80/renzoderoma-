@@ -89,6 +89,13 @@
         }
       },
       {
+        "source": "/api/agente",
+        "function": {
+          "functionId": "agenteApi",
+          "region": "us-central1"
+        }
+      },
+      {
         "source": "/api/tts",
         "function": {
           "functionId": "ttsProxy",
