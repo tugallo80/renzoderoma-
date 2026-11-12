@@ -338,6 +338,9 @@
         return (it.caracteristicas || []).filter(function (c) { return !c.supuesto || c.confirmado; }).map(function (c) { return '• ' + c.texto; }).join('\n');
     }
 
+    var CONDICIONES = ['alternativa', 'por_confirmar'];
+    var NOMBRE_CONDICION = { alternativa: 'ALTERNATIVA', por_confirmar: 'POR CONFIRMAR' };
+
     function itemNuevo(op, nuevoId) {
         return { id: nuevoId(), desc: txt(op.desc, 200), und: txt(op.und, 20) || 'glb', cant: 1, apu: { mat: [], mo: [], eq: [], sub: [] } };
     }
@@ -393,6 +396,12 @@
                 if (op.und) it.und = txt(op.und, 20);
                 var e = fijarCant(it, op, ctx); if (e) throw new Error(e);
                 if (op.nota != null) it.nota = txt(op.nota, 400);
+                // Alternativas excluyentes y renglones "por confirmar": se cotizan pero NO suman al total
+                if (op.condicion !== undefined) {
+                    if (op.condicion === null || op.condicion === '' || op.condicion === 'normal') { delete it.condicion; delete it.grupo; }
+                    else if (CONDICIONES.indexOf(op.condicion) >= 0) { it.condicion = op.condicion; if (op.grupo) it.grupo = txt(op.grupo, 80); }
+                    else throw new Error('condicion: alternativa, por_confirmar o normal');
+                }
                 if (!ex) cap.items.push(it);
                 else if (cap !== ex.capitulo) { ex.capitulo.items = ex.capitulo.items.filter(function (x) { return x !== it; }); cap.items.push(it); }
                 r.ok = true; r.id = it.id; return;
@@ -494,7 +503,7 @@
     function calcularTotales(b, ctx) {
         var rc = b.recargos || (ctx && ctx.recargosPresupuesto ? Object.assign({ origen: 'base:presupuesto/recargos' }, ctx.recargosPresupuesto) : { cs: 55, ind: 10, util: 50, origen: 'apu-utils (por defecto)' });
         if (!b.recargos) b.recargos = rc;
-        var total = 0, marcadas = 0, pendientes = 0;
+        var total = 0, marcadas = 0, pendientes = 0, aparte = [];
         b.capitulos.forEach(function (c) {
             var tc = 0;
             c.items.forEach(function (it) {
@@ -506,7 +515,8 @@
                 var sos = itemSospechoso(it);
                 if (sos) it.aviso = sos; else delete it.aviso;
                 marcadas += it.marcadas; pendientes += it.supuestos_pendientes;
-                tc += it.total;
+                if (it.condicion) aparte.push({ id: it.id, desc: it.desc, condicion: it.condicion, grupo: it.grupo || null, total: it.total });
+                else tc += it.total;
             });
             c.total = r2(tc);
             total += c.total;
@@ -514,6 +524,7 @@
         b.total = r2(total);
         b.filas_marcadas = marcadas;
         b.supuestos_pendientes = pendientes;
+        b.aparte = aparte;   // alternativas y "por confirmar": cotizadas, fuera del total
         return b;
     }
 
@@ -525,13 +536,15 @@
     function resumen(b, tocados) {
         var verFilas = function (id) { return !tocados || tocados.indexOf(id) >= 0; };
         return {
-            total: b.total, filas_marcadas: b.filas_marcadas, supuestos_sin_confirmar: b.supuestos_pendientes || 0,
+            total: b.total, fuera_del_total: (b.aparte || []).length ? (b.aparte || []).map(function (a) { return a.desc + ' (' + NOMBRE_CONDICION[a.condicion] + '): ' + a.total; }) : undefined,
+            filas_marcadas: b.filas_marcadas, supuestos_sin_confirmar: b.supuestos_pendientes || 0,
             recargos: [b.recargos && b.recargos.cs, b.recargos && b.recargos.ind, b.recargos && b.recargos.util].join('/') + ' % (cs/ind/util)',
             capitulos: b.capitulos.map(function (c) {
                 return { id: c.id, nombre: c.nombre, total: c.total, items: c.items.map(function (it) {
                     var o = { id: it.id, desc: it.desc, cant: it.cant + ' ' + it.und, pu: it.pu, total: it.total };
                     if (it.supuestos_pendientes) o.supuestos_sin_confirmar = it.supuestos_pendientes;
                     if (it.aviso) o.aviso = it.aviso;
+                    if (it.condicion) o.condicion = NOMBRE_CONDICION[it.condicion] + ' (no suma al total)' + (it.grupo ? ' · ' + it.grupo : '');
                     if (!(it.caracteristicas || []).length) o.aviso = (o.aviso ? o.aviso + ' · ' : '') + 'faltan las características para el cliente';
                     else if (verFilas(it.id)) o.caracteristicas = it.caracteristicas.map(function (c) { return c.texto + (c.supuesto && !c.confirmado ? ' (supuesto sin confirmar)' : ''); });
                     if (verFilas(it.id)) TIPOS_FILA.forEach(function (t) {
@@ -572,9 +585,11 @@
                 var item = {
                     type: 'item', id: it.id, origen: 'agente', desc: it.desc, und: it.und || 'glb', cant: it.cant, feat: textoCaracteristicas(it),
                     apu: { mat: it.apu.mat.map(limpia), mo: it.apu.mo.map(limpia), eq: it.apu.eq.map(limpia), sub: it.apu.sub.map(limpia), cs: rc.cs, ind: rc.ind, util: rc.util },
-                    agente: { conv: opciones.conv || 'principal', version: b.version, cant_origen: it.cant_origen || null, desde3d: it.desde3d || null, filas_a_revisar: it.marcadas || 0, aplicado: opciones.fecha || null }
+                    agente: { conv: opciones.conv || 'principal', condicion: it.condicion || null, grupo: it.grupo || null, version: b.version, cant_origen: it.cant_origen || null, desde3d: it.desde3d || null, filas_a_revisar: it.marcadas || 0, aplicado: opciones.fecha || null }
                 };
                 item.pu = L.calcPu(item.apu);
+                // fuera del total: se usa el "ojo" del presupuesto (activo: false, no suma ni sale en el PDF)
+                if (it.condicion) item.activo = false;
                 if (it.measures) { item.measures = it.measures; item.measures_modo = it.measures_modo || 'volumen'; }
                 salida.push(JSON.parse(JSON.stringify(item)));
             });
@@ -648,7 +663,7 @@
     }
     var TIT_FILA = { mat: 'materiales', mo: 'mano de obra', eq: 'equipo', sub: 'subcontratos' };
 
-    var api = { editarManual: editarManual, textoCaracteristicas: textoCaracteristicas, fijarCaracteristicas: fijarCaracteristicas, itemSospechoso: itemSospechoso, AVISO_COMPONENTE: AVISO_COMPONENTE, normalizar: normalizar, confirmarSupuestos: confirmarSupuestos, confirmarItem: confirmarItem, supuestosPendientes: supuestosPendientes, cantidadGeometria: cantidadGeometria, aplicarAlPresupuesto: aplicarAlPresupuesto, vacio: vacio, validarOrigen: validarOrigen, armarFila: armarFila, aplicarOperaciones: aplicarOperaciones,
+    var api = { CONDICIONES: CONDICIONES, NOMBRE_CONDICION: NOMBRE_CONDICION, editarManual: editarManual, textoCaracteristicas: textoCaracteristicas, fijarCaracteristicas: fijarCaracteristicas, itemSospechoso: itemSospechoso, AVISO_COMPONENTE: AVISO_COMPONENTE, normalizar: normalizar, confirmarSupuestos: confirmarSupuestos, confirmarItem: confirmarItem, supuestosPendientes: supuestosPendientes, cantidadGeometria: cantidadGeometria, aplicarAlPresupuesto: aplicarAlPresupuesto, vacio: vacio, validarOrigen: validarOrigen, armarFila: armarFila, aplicarOperaciones: aplicarOperaciones,
         calcularTotales: calcularTotales, resumen: resumen, aItemsPresupuesto: aItemsPresupuesto, MEDIDAS: MEDIDAS, TIPOS_FILA: TIPOS_FILA };
     if (typeof module !== 'undefined' && module.exports) module.exports = api;
     else global.AgenteBorrador = api;

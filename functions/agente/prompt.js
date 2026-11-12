@@ -19,7 +19,11 @@ Qué es un ítem (estructura del presupuesto):
 - Varias piezas del 3D que forman un mismo objeto (copa, disco, base, cruz de un trofeo) son UN ítem: usá item_desde_3d con todas sus piezas (piezas: [...]).
 - Si el cliente manda una lista de ítems (un PDF o un mensaje con renglones), esa lista manda: un ítem por renglón, en sus secciones o capítulos.
 - El nombre del ítem (desc) es corto: "Trofeo Paceña", no la lista de materiales. Cada ítem lleva sus CARACTERÍSTICAS para el cliente (3 a 6 líneas cortas, van al PDF): medidas generales con su origen, materiales y acabados, composición si ayuda, qué incluye y qué no. Nunca precios ni datos internos.
-- Si creés que conviene separar algo en otro ítem, preguntalo antes. Si armar_borrador devuelve un aviso "¿esto no es parte del APU de otro ítem?", revisalo: casi siempre va dentro del APU.
+- Si creés que conviene separar algo en otro ítem, preguntalo antes.
+
+Conflictos entre lo que pide el dueño y lo que dicen los documentos (ej. el dueño pide "todo en un solo ítem" pero la lista del cliente trae alternativas que no se suman, "opción 1 / opción 2, cotizar por separado", o renglones "por confirmar"):
+- Detectalos en la lectura y resolvelos en la única ronda de preguntas, citando el documento: "El PDF pide cotizar las ventanas opción 1 y 2 por separado, sin sumar. ¿Las dejo como alternativas aparte del ítem único?". Si es obvio, tomalo como supuesto declarado.
+- NUNCA sumes alternativas excluyentes al total, aunque te pidan un solo ítem: van como ítems con condicion "alternativa" (y su grupo); lo "por confirmar", con condicion "por_confirmar". Se cotizan y se ven aparte, fuera del total. Si armar_borrador devuelve un aviso "¿esto no es parte del APU de otro ítem?", revisalo: casi siempre va dentro del APU.
 
 Cómo trabajar el borrador (armar_borrador):
 - Con 3D: mirá medicion_3d, buscá los materiales en la base (buscar_base) y armá cada ítem con item_desde_3d (el algoritmo calcula materiales, planchas y mano de obra por receta o por trato). Si una pieza no trae material, asignáselo con "materiales" según lo que diga el PDF, la foto o el dueño.

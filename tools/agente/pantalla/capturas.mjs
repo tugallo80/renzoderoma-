@@ -275,6 +275,30 @@ await captura('17-soltar-y-pegar');
 await page.evaluate(() => { const dt = new DataTransfer(); dt.items.add(new File(['x'], 'x.pdf', { type: 'application/pdf' })); document.querySelector('#mod-agente .ag-box').dispatchEvent(new DragEvent('dragenter', { dataTransfer: dt, bubbles: true, cancelable: true })); });
 await captura('18-zona-soltar');
 
+// 19) Adjunto que falla: un 503 suelto se reintenta solo; si sigue fallando, Enviar pregunta "¿reintentar o enviar sin él?"
+await page.evaluate(() => { window._agNueva(); });
+await page.waitForTimeout(400);
+await page.evaluate(() => { window._fallarAdjuntar = 1; });
+await page.setInputFiles('#ag-file', [{ name: 'lista-cliente.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.4\n% lista inventada') }]);
+await page.waitForFunction(() => document.querySelector('#ag-adj .ag-chip') && !document.querySelector('#ag-adj .ag-spin'), null, { timeout: 20000 });
+const solo = await page.evaluate(() => document.querySelector('#ag-adj .ag-chip').className);
+console.log('503 suelto', solo);
+if (/error/.test(solo)) throw new Error('el 503 suelto no se reintentó solo');
+await page.evaluate(() => { document.querySelector('#ag-adj .ag-chip button[aria-label="Quitar"]').click(); window._fallarAdjuntar = 10; });
+await page.setInputFiles('#ag-file', [{ name: 'lista-cliente.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.4\n% lista inventada') }]);
+await page.waitForSelector('#ag-adj .ag-chip.error', { timeout: 30000 });
+await page.fill('#ag-txt', 'Cotizá según la lista');
+await page.click('#ag-env');
+await page.waitForSelector('#ag-f-re', { state: 'visible' });
+await captura('19-adjunto-fallido');
+await page.evaluate(() => { window._fallarAdjuntar = 0; });
+const enviadosAntes = await page.evaluate(() => window._pedidosAgente.filter((p) => p.accion === 'enviar').length);
+await page.click('#ag-f-re');
+await page.waitForFunction((n) => window._pedidosAgente.filter((p) => p.accion === 'enviar').length > n, enviadosAntes, { timeout: 20000 });
+const env = await page.evaluate(() => window._pedidosAgente.filter((p) => p.accion === 'enviar').at(-1));
+console.log('enviado tras reintentar', JSON.stringify({ texto: env.texto, adjuntos: env.adjuntos.length }));
+if (env.adjuntos.length !== 1) throw new Error('no se mandó el adjunto reintentado');
+
 console.log(errores.length ? 'ERRORES EN LA PÁGINA:\n' + errores.join('\n') : 'sin errores en la página');
 await browser.close(); srv.close();
 if (errores.length) process.exitCode = 1;
