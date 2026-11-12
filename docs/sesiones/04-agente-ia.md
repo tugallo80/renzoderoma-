@@ -17,7 +17,7 @@ Modelo: **Claude Opus 5.5** (`claude-opus-5-5`), configurable en `/config/agente
 |---|---|---|
 | 1 | Chat + adjuntos + 🎤 + 🔊 + medidor de costos, con herramientas mínimas (`medicion_3d`, `preguntar_al_dueno`) | ✅ 12 nov 2026 |
 | 2 | Herramientas de base y 3D + borrador con validación de origen | ✅ 12 nov 2026 |
-| 3 | Editor de anotaciones de fotos | ⏳ |
+| 3 | Editor de anotaciones de fotos | ✅ 12 nov 2026 |
 | 4 | Aplicar al presupuesto + memoria simple | ⏳ |
 
 ---
@@ -128,9 +128,28 @@ Lógica pura en `public/js/agente-borrador.js` (la usan la Function, vía copia 
 **En el chat:** botón verde **📋 Bs total** arriba → capítulos → ítems → APU, con una etiqueta por número: **3D** (medido),
 **base**, **plano** (cota), **vos** (lo dijiste). Filas marcadas en rojo con el motivo.
 
+## Entrega 3 — editor de anotaciones de fotos
+
+`public/js/agente-anotador.js`. Cada foto adjunta se sube enseguida; el **✏️** de su chip abre el editor (pantalla completa):
+
+- **📏 Cota:** se arrastra de un extremo al otro y se escribe la medida tal como va en el plano ("4,00 m") y una nota
+  opcional. Línea **fina** (proporcional a la foto, ~1/900 del lado mayor), extremos con **flechas** o **ticks** a 45°, y el
+  número en una etiqueta **chica y semitransparente corrida al costado de la línea**, para no tapar la foto.
+- **⭕ / ▭ marcas** (con nota opcional) y **T notas** de texto. Cuatro colores para que se vean sobre cualquier foto.
+- **✋** mover la foto y tocar una anotación para editarla o borrarla; **＋ / －** zoom; **↶ / ↷** deshacer y rehacer.
+- Es una **capa vectorial (SVG)**: se puede volver a abrir y seguir editando antes de mandar.
+- Al tocar **Listo** se sube de nuevo: la **foto original**, la **foto anotada** (JPEG dibujado con la misma geometría) y el
+  **JSON** de las anotaciones en píxeles de la foto:
+  `{tipo:"cota", n, valor:"2,40 m", de:[x,y], a:[x,y], extremos:"flechas"|"ticks", largo_px, nota?}`,
+  `{tipo:"marca", n, forma:"circulo"|"rectangulo", de, a, nota?}`, `{tipo:"nota", n, texto, en}`.
+- Al agente le llegan las dos imágenes y el JSON, con la indicación de que las cotas son del dueño: en el borrador valen
+  como origen **`dueño:<id del adjunto>`** (lo verifica la validación de origen).
+- El dibujador de cotas de "Presupuesto IA" queda como estaba (ese módulo se retira cuando el agente lo reemplace).
+
 ### Pruebas (sin gastar plata)
 
-- `cd tools/agente && npm test` — 38 pruebas (entrega 2: orígenes inválidos, fila sin origen rechazada, cantidad calculada
+- `cd tools/agente && npm test` — 39 pruebas (entrega 3: foto anotada → original + anotada + JSON al modelo, cota del dueño como origen,
+  límite de anotaciones). 38 pruebas (entrega 2: orígenes inválidos, fila sin origen rechazada, cantidad calculada
   desde el 3D ignorando la del modelo, precio de la base, totales = `calcPu`, item_desde_3d con ruta A y B, corrección "eran tres
   adhesivos", ítems para el presupuesto, flujo completo adjuntar → borrador → corrección con la API simulada, guardar_en_base con
   y sin confirmación, escala con cota). Entrega 1: 26 pruebas con la API **simulada**: medidor (Opus, Sonnet, Haiku, caché 1 h, fallback por
@@ -139,7 +158,8 @@ Lógica pura en `public/js/agente-borrador.js` (la usan la Function, vía copia 
   preguntas que cortan el turno, tope y "Seguir igual", rechazo, `max_tokens` con herramienta cortada, entrada inválida,
   continuación por tiempo, detener, error y reintento. También verifica que `functions/agente/compartido/` sea copia exacta
   de `public/js/` (`npm run sincronizar` la actualiza).
-- `node pantalla/capturas.mjs` — capturas en tamaño celular (Pixel 7) con Firebase y `/api/agente` simulados; mide un GLB
+- `node pantalla/capturas.mjs` — capturas (entrega 3: dibuja 2 cotas, un círculo y una nota con el mouse sobre una foto inventada,
+  deshace/rehace y verifica el JSON y la imagen anotada) — capturas en tamaño celular (Pixel 7) con Firebase y `/api/agente` simulados; mide un GLB
   de ejemplo de verdad con el lector 3D.
 - `tools/probar-reglas` — 170 OK, con las reglas nuevas de `agente_cola` y `agente_costos`.
 

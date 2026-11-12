@@ -35,7 +35,6 @@ await page.evaluate(() => window.abrirAgenteIA());
 await captura('1-chat-vacio');
 
 // 2) Adjuntar 3D + PDF + foto juntos (un solo botón)
-await page.evaluate(() => { window.AgenteAnotador = null; });
 const PDF = Buffer.from('%PDF-1.4\n% planos inventados\n');
 const JPG = readFileSync(join(RAIZ, 'public/icons/hub-192.png'));
 await page.setInputFiles('#ag-file', [
@@ -102,6 +101,52 @@ await page.click('#ag-tab');
 await captura('7-borrador');
 await page.evaluate(() => document.getElementById('ag-borr').scrollTo(0, 99999));
 await captura('8-borrador-total');
+
+// 9) Editor de anotaciones: foto inventada (dibujada en el navegador), cota, círculo y nota
+await page.click('#ag-tab');
+const fotoB64 = await page.evaluate(() => {
+    const c = document.createElement('canvas'); c.width = 1200; c.height = 1600; const x = c.getContext('2d');
+    const g = x.createLinearGradient(0, 0, 0, 1600); g.addColorStop(0, '#c9d6df'); g.addColorStop(1, '#8a9ba8'); x.fillStyle = g; x.fillRect(0, 0, 1200, 1600);
+    x.fillStyle = '#6d4c41'; x.fillRect(0, 1350, 1200, 250);
+    x.fillStyle = '#263238'; x.fillRect(420, 250, 360, 1150); x.fillStyle = '#ef6c00'; x.fillRect(450, 300, 300, 700);
+    x.fillStyle = '#fff'; x.font = 'bold 70px sans-serif'; x.fillText('DEMO', 500, 600);
+    return c.toDataURL('image/jpeg', 0.85).split(',')[1];
+});
+await page.setInputFiles('#ag-file', [{ name: 'totem-foto.jpg', mimeType: 'image/jpeg', buffer: Buffer.from(fotoB64, 'base64') }]);
+await page.waitForSelector('#ag-adj button[aria-label="Anotar la foto"]');
+await page.click('#ag-adj button[aria-label="Anotar la foto"]');
+await page.waitForSelector('#mod-anot', { state: 'visible' });
+await page.waitForTimeout(300);
+const caja = await page.locator('#an-svg').boundingBox();
+const P = (fx, fy) => [caja.x + caja.width * fx, caja.y + caja.height * fy];
+async function arrastrar(a, b) { await page.mouse.move(...a); await page.mouse.down(); await page.mouse.move(...b, { steps: 6 }); await page.mouse.up(); }
+// cota del alto del tótem (de arriba a abajo, a la derecha)
+await arrastrar(P(0.70, 0.156), P(0.70, 0.875));
+await page.fill('#an-in-0', '2,40 m'); await page.fill('#an-in-1', 'alto total del tótem'); await page.click('#an-b-ok');
+// cota del ancho, con ticks
+await page.click('#an-ext');
+await arrastrar(P(0.35, 0.93), P(0.65, 0.93));
+await page.fill('#an-in-0', '0,80 m'); await page.click('#an-b-ok');
+// círculo en el cartel naranja y nota
+await page.click('[data-h="circulo"]');
+await arrastrar(P(0.38, 0.33), P(0.62, 0.42));
+await page.click('[data-h="nota"]');
+await page.mouse.click(...P(0.25, 0.55));
+await page.fill('#an-in-0', 'restaurar pintura'); await page.click('#an-b-ok');
+await captura('9-editor-anotaciones');
+// deshacer y rehacer
+await page.click('#an-undo'); await page.click('#an-redo');
+await page.click('#mod-anot .prim');
+await page.waitForFunction(() => window._pedidosAgente.some((p) => p.anotaciones));
+const anot = await page.evaluate(() => window._pedidosAgente.find((p) => p.anotaciones));
+console.log('anotaciones', JSON.stringify(anot.anotaciones));
+if (anot.anotaciones.length !== 4 || !anot.anotada || anot.anotaciones[0].valor !== '2,40 m') throw new Error('anotaciones mal');
+await page.waitForTimeout(300);
+await captura('10-foto-anotada-lista');
+await page.evaluate(() => { const b = document.createElement('canvas'); });
+const anotadaB64 = anot.anotada;
+await page.evaluate((b64) => { const w = window.open ? null : null; document.body.insertAdjacentHTML('beforeend', '<img id="anotada-prueba" style="position:fixed;inset:0;z-index:99999;width:100%;height:100%;object-fit:contain;background:#000;" src="data:image/jpeg;base64,' + b64 + '">'); }, anotadaB64);
+await captura('11-imagen-anotada-que-recibe-el-agente');
 
 console.log(errores.length ? 'ERRORES EN LA PÁGINA:\n' + errores.join('\n') : 'sin errores en la página');
 await browser.close(); srv.close();
