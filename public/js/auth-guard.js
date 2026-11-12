@@ -38,7 +38,7 @@
             // Botón flotante "Rubik Agente App" (Claude): solo en páginas del hub con sesión
             if (!isExempt && !document.getElementById('rubik-claude-fab-js')) {
                 var sc = document.createElement('script');
-                sc.id = 'rubik-claude-fab-js'; sc.src = '/js/claude-flotante.js?v=2'; sc.defer = true;
+                sc.id = 'rubik-claude-fab-js'; sc.src = '/js/claude-flotante.js?v=3'; sc.defer = true;
                 document.head.appendChild(sc);
             }
         } else {

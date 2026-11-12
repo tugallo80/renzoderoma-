@@ -16,13 +16,15 @@
     var LOCAL = 'rubik_claude_proyecto_url';
     var url = null;
 
-    function leerLocal() { try { return localStorage.getItem(LOCAL); } catch (e) { return null; } }
+    // Enlace válido: un proyecto o chat concreto de claude.ai (con su id), no la dirección genérica
+    var VALIDO = /^https:\/\/claude\.ai\/(project|chat)\/[A-Za-z0-9-]{8,}/;
+    function leerLocal() { try { var v = localStorage.getItem(LOCAL); return VALIDO.test(v || '') ? v : null; } catch (e) { return null; } }
     function guardarLocal(v) { try { localStorage.setItem(LOCAL, v); } catch (e) {} }
     function db() { try { return window.firebase && firebase.database ? firebase.database() : null; } catch (e) { return null; } }
 
     url = leerLocal();
     var d = db();
-    if (d) d.ref(RUTA).once('value').then(function (s) { if (s.val()) { url = s.val(); guardarLocal(url); } }).catch(function () {});
+    if (d) d.ref(RUTA).once('value').then(function (s) { if (VALIDO.test(s.val() || '')) { url = s.val(); guardarLocal(url); } }).catch(function () {});
 
     function esCelular() {
         return (window.matchMedia && matchMedia('(pointer: coarse)').matches) || window.innerWidth < 768;
@@ -32,11 +34,11 @@
         var v = prompt(
             'Pegá el enlace de tu proyecto "RUBIK AGENTE APP" de Claude.\n' +
             '(En claude.ai abrí el proyecto y copiá la dirección: https://claude.ai/project/…)',
-            url || 'https://claude.ai/project/'
+            url || ''
         );
         if (v === null) return null;
         v = v.trim();
-        if (!/^https:\/\/claude\.ai\//.test(v)) { alert('El enlace tiene que empezar con https://claude.ai/'); return null; }
+        if (!VALIDO.test(v)) { alert('Ese enlace no es de un proyecto. Tiene que ser como https://claude.ai/project/01a1…: abrí el proyecto en Claude y copiá la dirección completa.'); return null; }
         url = v; guardarLocal(v);
         var d2 = db(); if (d2) d2.ref(RUTA).set(v).catch(function () {});
         return v;
