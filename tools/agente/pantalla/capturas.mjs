@@ -148,6 +148,20 @@ const anotadaB64 = anot.anotada;
 await page.evaluate((b64) => { const w = window.open ? null : null; document.body.insertAdjacentHTML('beforeend', '<img id="anotada-prueba" style="position:fixed;inset:0;z-index:99999;width:100%;height:100%;object-fit:contain;background:#000;" src="data:image/jpeg;base64,' + b64 + '">'); }, anotadaB64);
 await captura('11-imagen-anotada-que-recibe-el-agente');
 
+// 12) Aplicar al presupuesto
+await page.evaluate(() => document.getElementById('anotada-prueba').remove());
+page.on('dialog', (d) => d.accept());
+await page.click('#ag-tab');
+await page.evaluate(() => document.getElementById('ag-borr').scrollTo(0, 99999));
+await captura('12-aplicar');
+await page.click('#ag-aplicar .ag-btn.prim');
+await page.waitForTimeout(300);
+const aplicado = await page.evaluate(() => ({ ids: data.map((x) => x.desc || x.name), origen: data.filter((x) => x.type === 'item').map((x) => x.origen), guardado: window._guardado }));
+console.log('presupuesto', JSON.stringify(aplicado));
+if (aplicado.ids[0] !== 'Ítem que ya estaba' || !aplicado.guardado || aplicado.origen.filter((o) => o === 'agente').length !== 2) throw new Error('aplicar falló');
+await page.evaluate(() => document.getElementById('ag-borr').scrollTo(0, 99999));
+await captura('13-aplicado');
+
 console.log(errores.length ? 'ERRORES EN LA PÁGINA:\n' + errores.join('\n') : 'sin errores en la página');
 await browser.close(); srv.close();
 if (errores.length) process.exitCode = 1;

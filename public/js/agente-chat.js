@@ -153,7 +153,7 @@
         h = h.replace(/^\s*[-•]\s+(.*)$/gm, '• $1');
         return h.replace(/\n/g, '<br>');
     }
-    function hora(ms) { try { return new Date(ms).toLocaleTimeString('es-BO', { hour: '2-digit', minute: '2-digit' }); } catch (e) { return ''; } }
+    function hora(ms) { if (typeof ms !== 'number') return ''; try { return new Date(ms).toLocaleTimeString('es-BO', { hour: '2-digit', minute: '2-digit' }); } catch (e) { return ''; } }
     function iconoTipo(t) { return t === '3d' ? '🧊' : t === 'pdf' ? '📄' : t === 'imagen' ? '🖼' : '📎'; }
 
     function pintarMensajes(alFinal) {
@@ -239,6 +239,37 @@
             '<div id="ag-aplicar"></div>';
         if (window._agPintarAplicar) window._agPintarAplicar();
     }
+    // ------------------------------------------------------------------ aplicar al presupuesto (al final, id estable, origen "agente")
+    window._agPintarAplicar = function () {
+        var el = $('ag-aplicar');
+        if (!el || !borrador) return;
+        var ap = borrador.aplicado;
+        el.innerHTML = '<div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:12px;margin:10px 0 20px;">' +
+            (ap ? '<div class="ag-it-sub" style="margin-bottom:8px;">✅ Aplicada la versión ' + ap.version + ' (' + hora(ap.fecha) + '): ' + ap.agregados + ' ítems nuevos' +
+                (ap.actualizados ? ', ' + ap.actualizados + ' actualizados' : '') + '.' + (ap.version !== borrador.version ? ' <b>Hay cambios después de aplicar.</b>' : '') + '</div>' : '') +
+            '<label style="display:flex;gap:8px;align-items:center;font-size:13px;margin-bottom:8px;"><input type="checkbox" id="ag-con-cap" checked> Con sus capítulos</label>' +
+            '<button class="ag-btn prim" style="width:100%;padding:12px;font-size:15px;" onclick="_agAplicar()">' + (ap ? 'Aplicar de nuevo al presupuesto' : 'Aplicar al presupuesto') + '</button>' +
+            '<div class="ag-it-sub" style="margin-top:6px;">Los ítems van al final del presupuesto. Si ya se aplicaron, se actualizan en su lugar (no se reordena nada).' +
+            (borrador.filas_marcadas ? (borrador.filas_marcadas > 1 ? ' Las ' + borrador.filas_marcadas + ' filas marcadas quedan' : ' La fila marcada queda') + ' en rojo en el APU.' : '') + '</div></div>';
+    };
+    window._agAplicar = function () {
+        if (!borrador || typeof data === 'undefined' || !window.AgenteBorrador) return alert('No se pudo leer el presupuesto.');
+        var items = AgenteBorrador.aItemsPresupuesto(borrador, { capitulos: $('ag-con-cap') ? $('ag-con-cap').checked : true, fecha: Date.now() });
+        var n = items.filter(function (x) { return x.type === 'item'; }).length;
+        if (!n) return alert('El borrador no tiene ítems.');
+        if (!confirm('¿Agregar ' + n + ' ítem' + (n > 1 ? 's' : '') + ' del borrador al presupuesto (Bs ' + bs(borrador.total) + ')?' +
+            (borrador.filas_marcadas ? '\n' + borrador.filas_marcadas + ' filas quedan marcadas (sin precio o sin rendimiento).' : ''))) return;
+        var r = AgenteBorrador.aplicarAlPresupuesto(data, items);
+        data.length = 0; r.data.forEach(function (x) { data.push(x); });
+        if (typeof saveDB === 'function') saveDB(true);
+        if (typeof render === 'function') render();
+        var ap = { fecha: firebase.database.ServerValue.TIMESTAMP, version: borrador.version, agregados: r.agregados, actualizados: r.actualizados, por: (firebase.auth().currentUser || {}).uid || null };
+        db.ref(raiz() + '/borrador/aplicado').set(ap).catch(function (e) { console.warn('[agente] aplicado', e); });
+        db.ref(raiz() + '/conversacion/mensajes').push({ rol: 'aviso', fecha: firebase.database.ServerValue.TIMESTAMP,
+            texto: '✅ Borrador v' + borrador.version + ' aplicado al presupuesto: ' + r.agregados + ' ítems nuevos' + (r.actualizados ? ', ' + r.actualizados + ' actualizados' : '') + ' (Bs ' + bs(borrador.total) + ').' });
+        alert('✅ Listo: ' + r.agregados + ' ítems agregados al final' + (r.actualizados ? ' y ' + r.actualizados + ' actualizados en su lugar' : '') + '.');
+    };
+
     window._agVerBorrador = function (forzar) {
         verBorrador = typeof forzar === 'boolean' ? forzar : !verBorrador;
         $('ag-borr').style.display = verBorrador ? 'block' : 'none';
@@ -307,8 +338,19 @@
             '<label>Tope mensual (US$)<input id="ag-c-tope" type="number" min="1" step="1" inputmode="decimal" value="' + c.tope_mensual_usd + '"></label>' +
             '<label>Avisar al llegar al (%)<input id="ag-c-aviso" type="number" min="10" max="100" step="5" value="' + c.aviso_pct + '"></label>' +
             '<div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;"><button class="ag-btn prim" onclick="_agGuardarConfig()">Guardar</button>' +
-            '<button class="ag-btn" onclick="cerrarAgenteIA(); abrirImportar3D();">Importar 3D (respaldo)</button></div>';
+            '<button class="ag-btn" onclick="cerrarAgenteIA(); abrirImportar3D();">Importar 3D (respaldo)</button></div>' +
+            '<div style="margin-top:14px;"><b>Memoria del agente</b> <span style="color:var(--gray);">(correcciones y decisiones que recuerda entre proyectos)</span><div id="ag-memoria">Cargando…</div></div>';
+        db.ref('agente_memoria/notas').limitToLast(100).once('value').then(function (s) {
+            var h = [];
+            s.forEach(function (ch) { var v = ch.val() || {}; h.push('<div style="display:flex;gap:6px;align-items:flex-start;padding:5px 0;border-bottom:1px solid var(--border);"><span style="flex:1;">' + esc(v.texto) +
+                '</span><button class="ag-btn" style="padding:2px 8px;" onclick="_agBorrarMemoria(\'' + ch.key + '\')" aria-label="Borrar">×</button></div>'); });
+            var m = $('ag-memoria'); if (m) m.innerHTML = h.length ? h.reverse().join('') : '<div style="color:var(--gray);padding:4px 0;">Todavía no anotó nada. Cuando lo corrijas, te propone recordarlo.</div>';
+        }).catch(function (e) { var m = $('ag-memoria'); if (m) m.textContent = 'No se pudo leer: ' + e.message; });
     }
+    window._agBorrarMemoria = function (k) {
+        if (!confirm('¿Borrar esta nota de la memoria?')) return;
+        db.ref('agente_memoria/notas/' + k).remove().then(pintarConfig).catch(function (e) { alert(e.message); });
+    };
     window._agGuardarConfig = function () {
         var v = { modelo: $('ag-c-modelo').value, effort: $('ag-c-effort').value,
             tope_mensual_usd: parseFloat($('ag-c-tope').value) || N.CONFIG_DEFECTO.tope_mensual_usd,
@@ -442,7 +484,7 @@
         try {
             var res = await llamar({ accion: 'adjuntar', tipo: 'imagen', nombre: p.nombre, datos: await aBase64(p.red.blob), ancho: p.red.ancho, alto: p.red.alto,
                 anotada: await aBase64(r.blob), anotaciones: r.anotaciones });
-            marcar(p, { estado: 'listo', id: res.id, miniatura: r.miniatura, anotacionesEditor: r.editor, nota: p.nombre + ' · ' + r.anotaciones.length + ' anotación' + (r.anotaciones.length > 1 ? 'es' : '') });
+            marcar(p, { estado: 'listo', id: res.id, miniatura: r.miniatura, anotacionesEditor: r.editor, nota: p.nombre + ' · ' + r.anotaciones.length + (r.anotaciones.length > 1 ? ' anotaciones' : ' anotación') });
         } catch (e) { marcar(p, { estado: 'error', error: e.message }); }
     };
 

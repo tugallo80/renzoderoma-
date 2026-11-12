@@ -408,7 +408,32 @@
         return salida;
     }
 
-    var api = { vacio: vacio, validarOrigen: validarOrigen, armarFila: armarFila, aplicarOperaciones: aplicarOperaciones,
+    /**
+     * Suma los ítems del borrador al presupuesto (arreglo `data` de presupuesto.html) sin reordenar nada:
+     * - un ítem o capítulo que ya se aplicó antes (mismo id) se actualiza EN SU LUGAR (las licitaciones apuntan por posición);
+     * - lo nuevo va AL FINAL.
+     * Devuelve { data, agregados, actualizados }.
+     */
+    function aplicarAlPresupuesto(data, items) {
+        var salida = (data || []).slice(), agregados = 0, actualizados = 0;
+        var porId = {};
+        salida.forEach(function (x, i) { if (x && x.id) porId[x.id] = i; });
+        items.forEach(function (it) {
+            if (it.id && porId[it.id] != null) {
+                var viejo = salida[porId[it.id]];
+                if (it.type === 'chapter') { salida[porId[it.id]] = Object.assign({}, viejo, { name: it.name }); return; }
+                // se conserva lo que el presupuesto le agregó al ítem (fotos, notas de licitación, etc.)
+                salida[porId[it.id]] = Object.assign({}, viejo, it);
+                actualizados++;
+            } else {
+                salida.push(it);
+                if (it.type === 'item') agregados++;
+            }
+        });
+        return { data: salida, agregados: agregados, actualizados: actualizados };
+    }
+
+    var api = { aplicarAlPresupuesto: aplicarAlPresupuesto, vacio: vacio, validarOrigen: validarOrigen, armarFila: armarFila, aplicarOperaciones: aplicarOperaciones,
         calcularTotales: calcularTotales, resumen: resumen, aItemsPresupuesto: aItemsPresupuesto, MEDIDAS: MEDIDAS, TIPOS_FILA: TIPOS_FILA };
     if (typeof module !== 'undefined' && module.exports) module.exports = api;
     else global.AgenteBorrador = api;

@@ -18,7 +18,7 @@ Modelo: **Claude Opus 5.5** (`claude-opus-5-5`), configurable en `/config/agente
 | 1 | Chat + adjuntos + 🎤 + 🔊 + medidor de costos, con herramientas mínimas (`medicion_3d`, `preguntar_al_dueno`) | ✅ 12 nov 2026 |
 | 2 | Herramientas de base y 3D + borrador con validación de origen | ✅ 12 nov 2026 |
 | 3 | Editor de anotaciones de fotos | ✅ 12 nov 2026 |
-| 4 | Aplicar al presupuesto + memoria simple | ⏳ |
+| 4 | Aplicar al presupuesto + memoria simple | ✅ 12 nov 2026 |
 
 ---
 
@@ -146,9 +146,24 @@ Lógica pura en `public/js/agente-borrador.js` (la usan la Function, vía copia 
   como origen **`dueño:<id del adjunto>`** (lo verifica la validación de origen).
 - El dibujador de cotas de "Presupuesto IA" queda como estaba (ese módulo se retira cuando el agente lo reemplace).
 
+## Entrega 4 — aplicar al presupuesto y memoria
+
+**"Aplicar al presupuesto"** (al final de la vista del borrador, `AgenteBorrador.aItemsPresupuesto` + `aplicarAlPresupuesto`):
+- Convierte el borrador al formato de `presupuesto.html` (como `armarItems` de Importar 3D): cada ítem con su **id estable**
+  (el del borrador), `origen: "agente"`, el APU con recargos, `pu` recalculado, las `measures` del 3D (para CÓMPUTO) y
+  `agente: { version, cant_origen, desde3d, filas_a_revisar }`. Cada fila conserva `origen_q` / `origen_p`.
+- Lo **nuevo va al final**; si se vuelve a aplicar después de corregir, lo ya aplicado (mismo id) se **actualiza en su
+  lugar** y conserva lo que se le agregó en el presupuesto (fotos, etc.). Nunca se reordena (las licitaciones apuntan por posición).
+- Opcional: con sus capítulos. Queda `borrador/aplicado` con versión y cantidades, y un aviso en el chat.
+- En el presupuesto, esos ítems muestran la etiqueta **Agente** (con ⚠n si hay filas marcadas) y en el APU el origen de cada fila.
+
+**Memoria simple** (`memoria`): anotar, leer o borrar notas cortas en `/agente_memoria/notas/{push}` `{ texto, fecha, proyecto, uid }`.
+Se leen al empezar cada conversación (van en el primer mensaje). En ⚙ se ven y se pueden borrar.
+
 ### Pruebas (sin gastar plata)
 
-- `cd tools/agente && npm test` — 39 pruebas (entrega 3: foto anotada → original + anotada + JSON al modelo, cota del dueño como origen,
+- `cd tools/agente && npm test` — 42 pruebas (entrega 4: aplicar al final y actualizar en su lugar, memoria entre proyectos,
+  flujo completo adjuntar → borrador → corrección → aplicar). 39 pruebas (entrega 3: foto anotada → original + anotada + JSON al modelo, cota del dueño como origen,
   límite de anotaciones). 38 pruebas (entrega 2: orígenes inválidos, fila sin origen rechazada, cantidad calculada
   desde el 3D ignorando la del modelo, precio de la base, totales = `calcPu`, item_desde_3d con ruta A y B, corrección "eran tres
   adhesivos", ítems para el presupuesto, flujo completo adjuntar → borrador → corrección con la API simulada, guardar_en_base con
@@ -166,5 +181,13 @@ Lógica pura en `public/js/agente-borrador.js` (la usan la Function, vía copia 
 ### La prueba real la hace el dueño
 
 1. Abrir un presupuesto → **Agente IA** → ⚙: dejar Opus 5.5, esfuerzo Alto, tope.
-2. 📎 un FBX + el PDF de planos + una foto; escribir o dictar el contexto; enviar.
+2. 📎 un FBX + el PDF de planos + una foto (✏️ para marcar una cota); escribir o dictar el contexto; enviar.
 3. Mirar el progreso, las preguntas y el costo de la cotización. Probar 🔊.
+4. Abrir **📋 Borrador**: ver de dónde sale cada número; corregir algo por el chat.
+5. **Aplicar al presupuesto** y revisar los ítems "Agente" al final (y su APU).
+6. Para comparar modelos: repetir la misma cotización en otro proyecto con Sonnet 5.5 (⚙) y comparar borrador y costo.
+
+### Pendientes / próximas etapas
+- Reglas de Storage en la consola (ver arriba).
+- Comparar con Gemini con las mismas cotizaciones (hoy `/config/agente` elige entre modelos de Claude).
+- Retirar "Presupuesto IA" cuando el agente lo reemplace; "Importar 3D" sigue como respaldo en ⚙.
