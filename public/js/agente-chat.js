@@ -119,7 +119,9 @@
     }
 
     // ------------------------------------------------------------------ abrir / cerrar y escuchas en RTDB
-    window.abrirAgenteIA = function (archivos) {
+    var foco = null;   // {item, desc}: ítem del presupuesto sobre el que se abrió el agente
+    window.abrirAgenteIA = function (archivos, enfoque) {
+        foco = enfoque && enfoque.item ? enfoque : null;
         crearModal();
         $('mod-agente').style.display = 'block';
         document.body.style.overflow = 'hidden';
@@ -127,6 +129,12 @@
         pintarMensajes(); pintarEstado(); pintarCosto(); pintarAdjuntos(); pintarBorrador();
         if (archivos && archivos.length) window._agArchivos(archivos);
         setTimeout(function () { var m = $('ag-msgs'); if (m) m.scrollTop = m.scrollHeight; }, 50);
+        if (foco) {
+            var t = $('ag-txt');
+            if (t && !t.value.trim()) { t.value = 'Sobre «' + (foco.desc || 'este ítem') + '»: '; window._agAuto(t); }
+            enfocarItem();
+            setTimeout(function () { if (t) { t.focus(); try { t.setSelectionRange(t.value.length, t.value.length); } catch (e) { /* nada */ } } }, 350);
+        }
     };
 
     window.cerrarAgenteIA = function () {
@@ -232,7 +240,7 @@
                                     (f.revisar ? '<span class="rev">⚠ ' + esc(f.revisar) + '</span>' : '') + '</div>';
                             }).join('');
                         }).join('');
-                        return '<div class="ag-it"><div class="ag-it-cab"><span>' + esc(it.desc) + '</span><span>Bs ' + bs(it.total) + '</span></div>' +
+                        return '<div class="ag-it" data-id="' + esc(it.id) + '"><div class="ag-it-cab"><span>' + esc(it.desc) + '</span><span>Bs ' + bs(it.total) + '</span></div>' +
                             '<div class="ag-it-sub">' + (it.cant != null ? it.cant : 1) + ' ' + esc(it.und || 'glb') + (it.cant_origen ? ' ' + chipOrigen(it.cant_origen) : '') +
                             ' × Bs ' + bs(it.pu) + ' (precio unitario con recargos)' + (it.desde3d ? ' · del 3D, ruta ' + esc(it.desde3d.ruta || 'A') : '') +
                             (it.marcadas ? ' · <b style="color:var(--red);">' + it.marcadas + (it.marcadas > 1 ? ' marcadas' : ' marcada') + '</b>' : '') + '</div>' +
@@ -252,6 +260,7 @@
             chipOrigen('base:') + 'base de precios · ' + chipOrigen('cota_plano:') + 'cota del plano · ' + chipOrigen('dueño:') + 'lo dijiste vos · ' + chipOrigen('supuesto:') + 'propuesta del agente (hay que confirmarla). Para corregir, escribilo en el chat.</div>' +
             '<div id="ag-aplicar"></div>';
         if (window._agPintarAplicar) window._agPintarAplicar();
+        if (foco && !foco.hecho) enfocarItem();
     }
     // ------------------------------------------------------------------ aplicar al presupuesto (al final, id estable, origen "agente")
     window._agPintarAplicar = function () {
@@ -290,6 +299,17 @@
         var r = AgenteBorrador.confirmarSupuestos(borrador, itemId, 'dueño:botón "Confirmar supuestos"');
         db.ref(raiz() + '/borrador').set(JSON.parse(JSON.stringify(r.borrador))).catch(function (e) { alert('No se pudo guardar: ' + e.message); });
     };
+    /** Lleva el borrador al ítem en foco y lo resalta (si el borrador ya cargó; si no, se reintenta al llegar). */
+    function enfocarItem() {
+        if (!foco) return;
+        var el = document.querySelector('#ag-borr .ag-it[data-id="' + String(foco.item).replace(/"/g, '') + '"]');
+        if (!el) return;
+        window._agVerBorrador(true);
+        el.scrollIntoView({ block: 'start', behavior: 'smooth' });
+        el.style.transition = 'box-shadow .3s'; el.style.boxShadow = '0 0 0 3px var(--green)';
+        setTimeout(function () { el.style.boxShadow = ''; }, 2500);
+        foco.hecho = true;
+    }
     window._agVerBorrador = function (forzar) {
         verBorrador = typeof forzar === 'boolean' ? forzar : !verBorrador;
         $('ag-borr').style.display = verBorrador ? 'block' : 'none';

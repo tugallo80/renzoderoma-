@@ -228,6 +228,12 @@ En el primer borrador aplicado (Trofeo Paceña) el campo quedó vacío. Ahora:
 - En el chat se ven debajo del nombre del ítem, con su origen; si faltan, aviso naranja. El agente recibe "faltan las características
   para el cliente" en el resumen. Se corrigen por chat.
 
+## Del presupuesto al agente
+
+En `presupuesto.html`, la etiqueta verde **🤖 Agente** de un ítem aplicado abre el **Agente IA del proyecto con ese ítem en foco**:
+el borrador se abre, se desplaza a ese ítem y lo resalta, y el cuadro de texto queda con "Sobre «Trofeo Paceña»: " para la corrección.
+Si el ítem tiene filas sin precio, al lado aparece **⚠n APU**, que abre el APU. Es la misma plantilla del ítem en celular y escritorio.
+
 ### Pruebas (sin gastar plata)
 
 - `cd tools/agente && npm test` — 56 pruebas (características: origen en números, sin datos internos, desc larga rechazada, supuesto
