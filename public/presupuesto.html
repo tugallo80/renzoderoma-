@@ -414,21 +414,22 @@
             </div>
             
             <div style="background:#f9f9f9; padding:10px; border-radius:8px; margin-bottom:10px;">
-                <div class="apu-head"><span>SUB-ÍTEMS (Partidas Compuestas)</span></div><div id="apu-sub"></div><div class="btn-add-row" onclick="addApuRow('sub')" style="color:var(--orange); border-color:var(--orange);">+ AGREGAR SUB-ÍTEM</div>
+                <div class="apu-head"><span>SUB-ÍTEMS (Partidas Compuestas)</span><span id="apu-tot-sub" style="color:var(--text);"></span></div><div id="apu-sub"></div><div class="btn-add-row" onclick="addApuRow('sub')" style="color:var(--orange); border-color:var(--orange);">+ AGREGAR SUB-ÍTEM</div>
             </div>
 
             <div style="background:#f9f9f9; padding:10px; border-radius:8px; margin-bottom:10px;">
-                <div class="apu-head"><span>MATERIALES E IMPRESIONES</span></div><div id="apu-mat"></div><div class="btn-add-row" onclick="addApuRow('mat')">+ AGREGAR MATERIAL</div>
+                <div class="apu-head"><span>MATERIALES E IMPRESIONES</span><span id="apu-tot-mat" style="color:var(--text);"></span></div><div id="apu-mat"></div><div class="btn-add-row" onclick="addApuRow('mat')">+ AGREGAR MATERIAL</div>
             </div>
             
             <div style="background:#f9f9f9; padding:10px; border-radius:8px; margin-bottom:10px;">
-                <div class="apu-head"><span>MANO DE OBRA (Rubros)</span></div><div id="apu-mo"></div><div class="btn-add-row" onclick="addApuRow('mo')">+ AGREGAR MANO DE OBRA</div>
+                <div class="apu-head"><span>MANO DE OBRA (Rubros)</span><span id="apu-tot-mo" style="color:var(--text);"></span></div><div id="apu-mo"></div><div class="btn-add-row" onclick="addApuRow('mo')">+ AGREGAR MANO DE OBRA</div>
             </div>
             
             <div style="background:#f9f9f9; padding:10px; border-radius:8px; margin-bottom:10px;">
-                <div class="apu-head"><span>OTROS GASTOS (Logística, Herramientas...)</span></div><div id="apu-eq"></div><div class="btn-add-row" onclick="addApuRow('eq')">+ AGREGAR OTROS GASTOS</div>
+                <div class="apu-head"><span>OTROS GASTOS (Logística, Herramientas...)</span><span id="apu-tot-eq" style="color:var(--text);"></span></div><div id="apu-eq"></div><div class="btn-add-row" onclick="addApuRow('eq')">+ AGREGAR OTROS GASTOS</div>
             </div>
             
+            <div id="apu-resumen" style="display:grid; grid-template-columns:repeat(auto-fit,minmax(130px,1fr)); gap:8px; margin-bottom:10px;"></div>
             <div style="background:var(--bg); padding:10px; border-radius:8px; display:grid; grid-template-columns:1fr 1fr 1fr 1fr; gap:10px;">
                 <div><span class="lbl">MO Base</span><input id="apu-mo-base" class="mod-inp" readonly style="color:var(--gray)"></div>
                 <div><span class="lbl" title="Cargas sociales sobre MO. Tarifas por m2 (Rubik): 0%. Personal en planilla formal: 55%">CS MO % <span style="font-size:9px;color:var(--blue)">ℹ</span></span><input type="number" step="any" id="apu-cs" class="mod-inp" value="0" onchange="recalcApu()" style="color:var(--orange)"></div>
@@ -1219,6 +1220,19 @@
         document.getElementById('apu-dir').value = fMoney(dir);
         const ind = parseFloat(document.getElementById('apu-ind').value) || 0; const util = parseFloat(document.getElementById('apu-util').value) || 0;
         apu.ind = ind; apu.util = util; apu.cs = cs;
+        // Totales por grupo (costo directo, sin indirectos ni utilidad)
+        const _tot = {};
+        ['sub','mat','mo','eq'].forEach(t => { _tot[t] = 0; if (apu[t]) apu[t].forEach(x => _tot[t] += (stripZeros(x.q) * stripZeros(x.p))); });
+        ['sub','mat','mo','eq'].forEach(t => { const el = document.getElementById('apu-tot-' + t); if (el) el.innerText = _tot[t] ? 'Total: ' + fMoney(_tot[t]) + ' Bs' : ''; });
+        const _res = document.getElementById('apu-resumen');
+        if (_res) {
+            const caja = (lbl, val, color) => `<div style="background:var(--bg);border-radius:8px;padding:8px 10px;"><div class="lbl">${lbl}</div><div style="font-weight:800;font-size:15px;color:${color};">${fMoney(val)} Bs</div></div>`;
+            let html = caja('Total materiales', _tot.mat, 'var(--text)')
+                + caja('Total mano de obra' + (cs ? ' (+' + cs + '% CS)' : ''), _tot.mo + csAmt, 'var(--text)');
+            if (_tot.sub) html += caja('Total sub-ítems', _tot.sub, 'var(--text)');
+            if (_tot.eq) html += caja('Total otros gastos', _tot.eq, 'var(--text)');
+            _res.innerHTML = html;
+        }
         document.getElementById('apu-final').innerText = fMoney(dir * (1 + (ind/100)) * (1 + (util/100)));
     }
     
