@@ -188,14 +188,21 @@ Operaciones (campo "op"):
 - capitulo {nombre, id?}: crea o renombra.
 - item_desde_3d {capitulo, adjunto, item3d | piezas[], desc?, materiales?: {"p1":"CLAVE_BASE"}, ruta?: "A"|"B", rendimiento?: clave, cant?, cant_origen?}: el algoritmo de Importar 3D arma el APU desde la medición: materiales por unidad (m², ml, planchas, barras…), mano de obra por receta del material (ruta A) o una fila de trato con el oficio (ruta B, referencia para negociar). Si lo repetís sobre el mismo ítem (id), rehace las filas automáticas y conserva las tuyas.
 - item {capitulo, desc, und?, cant?, cant_origen?, nota?, id?}: ítem sin 3D (o para editar desc/cant de uno existente con id).
-- fila {item, tipo: mat|mo|eq|sub, d, u?, origen_q, medida?, q?, factor?, origen_factor?, clave?, p?, origen_p?, nota?, reemplaza?: n}: con origen_q "pieza3d:<adjunto>/<p1,p2>" la cantidad la calcula la herramienta con "medida" (m2_cara, m2_sup, ml_perimetro, ml_largo, und, m3, glb) × factor; con "dueño:<mensaje>" o "cota_plano:<adjunto> p.<n> \\"<cita>\\"" va q. Con clave (de buscar_base) el precio sale SIEMPRE de la base; sin clave, p solo con origen_p dueño: o cota_plano:. Sin precio, la fila queda marcada.
+- fila {item, tipo: mat|mo|eq|sub, d, u?, origen_q, medida?, q?, geometria?, factor?, origen_factor?, clave?, p?, origen_p?, stock_q?, origen_stock?, cerrado?, oficio?, nota?, reemplaza?: n}:
+  · origen_q "pieza3d:<adjunto>/<p1,p2>": la cantidad la calcula la herramienta con "medida" (m2_cara, m2_sup, ml_perimetro, ml_largo, und, m3, glb) × factor.
+  · origen_q "supuesto:<explicación>" (sin planos ni 3D, tu propuesta constructiva): mandá "geometria" [{desc, cant, largo_m, ancho_m?}] y "medida" (ml_largo, m2_cara, ml_perimetro, und); la herramienta calcula la cantidad. Esas filas quedan "sin confirmar" y NO se aplican al presupuesto hasta que el dueño las confirme.
+  · origen_q "dueño:<mensaje>" o "cota_plano:<adjunto> p.<n> \\"<cita>\\"": va q (o geometria si te dio medidas).
+  · Con clave (de buscar_base) el precio sale SIEMPRE de la base; sin clave, p solo con origen_p dueño: o cota_plano:. Sin precio, la fila queda marcada.
+  · Stock propio ("en el taller tengo 5 tubos"): stock_q + origen_stock dueño:<mensaje>; esa parte va a costo 0 y se compra el resto.
+  · Trato cerrado por el dueño (tipo mo, cerrado: true, p = monto, origen_p dueño:<mensaje>, oficio o trabajadores): reemplaza la referencia calculada de la ruta B.
+- confirmar_supuestos {item?, confirmacion: dueño:<mensaje>}: cuando el dueño acepta tu propuesta (sin item: todos).
 - quitar {item} | {item, tipo, fila: n} | {capitulo}.
 - recargos {cs, ind, util, origen}: cargas sociales, indirectos y utilidad en %; origen "base:presupuesto/recargos" (los del presupuesto) o "dueño:<mensaje>". Si no se cargan, se usan los del presupuesto.
 "item" en fila/quitar: id del ítem o su descripción exacta.`,
             input_schema: {
                 type: "object",
                 properties: {
-                    operaciones: { type: "array", items: { type: "object", properties: { op: { type: "string", enum: ["capitulo", "item", "item_desde_3d", "fila", "quitar", "recargos"] } }, required: ["op"] } },
+                    operaciones: { type: "array", items: { type: "object", properties: { op: { type: "string", enum: ["capitulo", "item", "item_desde_3d", "fila", "quitar", "recargos", "confirmar_supuestos"] } }, required: ["op"] } },
                 },
                 required: ["operaciones"],
             },
@@ -323,11 +330,12 @@ Operaciones (campo "op"):
     {
         def: {
             name: "memoria",
-            description: "Memoria simple del agente, compartida entre proyectos (/agente_memoria). Anotá las correcciones y decisiones del dueño que valgan para trabajos futuros (cómo cobra algo, qué material usa para tal cosa, qué no le gusta). Una nota corta por idea, sin datos confidenciales del cliente (nombres, montos de este cliente). También podés leerlas o borrar una que quedó vieja.",
+            description: "Memoria simple del agente, compartida entre proyectos (/agente_memoria). tipo \"nota\": correcciones y decisiones del dueño (cómo cobra algo, qué no le gusta). tipo \"norma\": cómo construye este taller, cuando el dueño corrige o confirma un criterio constructivo (\"nuestros bastidores llevan tubo 20×40 con travesaño cada 1 m\"); usá las normas en las próximas propuestas. Una idea corta por entrada, sin datos confidenciales del cliente. También podés leer o borrar.",
             input_schema: {
                 type: "object",
                 properties: {
                     accion: { type: "string", enum: ["anotar", "leer", "borrar"] },
+                    tipo: { type: "string", enum: ["nota", "norma"], description: "Por defecto nota." },
                     texto: { type: "string", description: "La nota (para anotar), máximo 400 caracteres." },
                     id: { type: "string", description: "Id de la nota (para borrar)." },
                 },
@@ -339,17 +347,20 @@ Operaciones (campo "op"):
             if (e.accion === "anotar") {
                 const t = String(e.texto || "").trim();
                 if (!t) throw new Error("falta el texto de la nota");
-                const id = await ctx.almacen.agregar("agente_memoria/notas", { texto: t.slice(0, 400), fecha: ctx.almacen.ahora(), proyecto: `${ctx.cid}/${ctx.pid}`, uid: ctx.uid || null });
+                const id = await ctx.almacen.agregar(`agente_memoria/${e.tipo === "norma" ? "normas" : "notas"}`, { texto: t.slice(0, 400), fecha: ctx.almacen.ahora(), proyecto: `${ctx.cid}/${ctx.pid}`, uid: ctx.uid || null });
                 return { ok: true, id };
             }
             if (e.accion === "borrar") {
                 if (!/^[A-Za-z0-9_-]{1,40}$/.test(String(e.id || ""))) throw new Error("id inválido");
-                if (!(await ctx.almacen.leer(`agente_memoria/notas/${e.id}`))) throw new Error("no existe esa nota");
-                await ctx.almacen.borrar(`agente_memoria/notas/${e.id}`);
+                const nodo = e.tipo === "norma" ? "normas" : "notas";
+                if (!(await ctx.almacen.leer(`agente_memoria/${nodo}/${e.id}`))) throw new Error("no existe esa entrada en " + nodo);
+                await ctx.almacen.borrar(`agente_memoria/${nodo}/${e.id}`);
                 return { ok: true };
             }
             const notas = (await ctx.almacen.leer("agente_memoria/notas")) || {};
-            return { notas: Object.keys(notas).slice(-100).map((k) => ({ id: k, texto: notas[k].texto })) };
+            const normas = (await ctx.almacen.leer("agente_memoria/normas")) || {};
+            return { notas: Object.keys(notas).slice(-100).map((k) => ({ id: k, texto: notas[k].texto })),
+                normas: Object.keys(normas).slice(-100).map((k) => ({ id: k, texto: normas[k].texto })) };
         },
     },
     {

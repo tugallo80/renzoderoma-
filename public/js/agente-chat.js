@@ -83,6 +83,10 @@
             '#mod-agente .ag-o{display:inline-block;padding:0 5px;border-radius:6px;font-size:10px;font-weight:800;margin-right:3px;background:rgba(0,0,0,.07);}',
             '#mod-agente .ag-o.pieza3d{background:rgba(52,199,89,.15);color:#1e7f3a;} #mod-agente .ag-o.base{background:rgba(0,122,255,.12);color:#0a58c2;}',
             '#mod-agente .ag-o.cota_plano{background:rgba(175,82,222,.14);color:#7a2fa0;} #mod-agente .ag-o.dueño{background:rgba(255,149,0,.16);color:#a35f00;}',
+            '#mod-agente .ag-o.supuesto{background:rgba(90,200,250,.22);color:#0b6e99;}',
+            '#mod-agente .ag-f.supuesto{background:rgba(90,200,250,.10);border-left:3px solid #5ac8fa;padding-left:6px;}',
+            '#mod-agente .ag-f.supuesto.ok{border-left-color:var(--green);background:none;}',
+            '#mod-agente .ag-sup{margin-top:8px;padding:8px;border-radius:10px;background:rgba(90,200,250,.12);font-size:12px;display:flex;gap:8px;align-items:center;}',
             '#mod-agente .ag-tot{position:sticky;bottom:0;background:var(--bg);padding:10px 2px;font-weight:800;display:flex;justify-content:space-between;border-top:2px solid var(--text);}'
         ].join('\n');
         document.head.appendChild(css);
@@ -192,7 +196,7 @@
     // ------------------------------------------------------------------ borrador (capítulos → ítems → APU, con el origen de cada número)
     function bs(x) { return (Math.round((parseFloat(x) || 0) * 100) / 100).toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
     function lista(v) { return Array.isArray(v) ? v : v ? Object.keys(v).sort(function (a, b) { return a - b; }).map(function (k) { return v[k]; }) : []; }
-    var NOMBRE_ORIGEN = { pieza3d: '3D', base: 'base', cota_plano: 'plano', 'dueño': 'vos' };
+    var NOMBRE_ORIGEN = { pieza3d: '3D', base: 'base', cota_plano: 'plano', 'dueño': 'vos', supuesto: 'supuesto' };
     function chipOrigen(o) {
         if (!o) return '';
         var t = (/^([a-zñ_0-9]+):/i.exec(o) || [])[1] || '';
@@ -220,8 +224,10 @@
                             var fs = lista(apu[t]);
                             if (!fs.length) return '';
                             return '<div class="ag-it-sub" style="margin-top:6px;font-weight:700;">' + TIT[t] + '</div>' + fs.map(function (f) {
-                                return '<div class="ag-f' + (f.revisar ? ' marcada' : '') + '"><span>' + esc(f.d) + '</span><span class="num">' + bs(f.q * f.p) + '</span>' +
-                                    '<span class="ori">' + chipOrigen(f.origen_q) + f.q + ' ' + esc(f.u) + ' × ' + (f.p ? chipOrigen(f.origen_p) + bs(f.p) : '—') +
+                                return '<div class="ag-f' + (f.revisar ? ' marcada' : '') + (f.supuesto ? ' supuesto' + (f.confirmado ? ' ok' : '') : '') + '"><span>' + esc(f.d) +
+                                    (f.cerrado ? ' <b style="color:var(--orange);font-size:10px;">TRATO CERRADO</b>' : '') + (f.supuesto ? ' <span style="font-size:10px;font-weight:700;color:' + (f.confirmado ? 'var(--green)' : '#0b6e99') + ';">' + (f.confirmado ? '✓ confirmado' : 'supuesto sin confirmar') + '</span>' : '') +
+                                    '</span><span class="num">' + bs(f.q * f.p) + '</span>' +
+                                    '<span class="ori">' + chipOrigen(f.origen_q) + (f.stock_q ? f.q_total + ' ' + esc(f.u) + ' − stock propio ' + chipOrigen(f.origen_stock) + f.stock_q + ' = ' : '') + f.q + ' ' + esc(f.u) + ' × ' + (f.p ? chipOrigen(f.origen_p) + bs(f.p) : '—') +
                                     (f.factor ? ' · factor ' + f.factor + ' ' + chipOrigen(f.origen_factor) : '') + (f.nota ? ' · ' + esc(f.nota) : '') + '</span>' +
                                     (f.revisar ? '<span class="rev">⚠ ' + esc(f.revisar) + '</span>' : '') + '</div>';
                             }).join('');
@@ -230,12 +236,15 @@
                             '<div class="ag-it-sub">' + (it.cant != null ? it.cant : 1) + ' ' + esc(it.und || 'glb') + (it.cant_origen ? ' ' + chipOrigen(it.cant_origen) : '') +
                             ' × Bs ' + bs(it.pu) + ' (precio unitario con recargos)' + (it.desde3d ? ' · del 3D, ruta ' + esc(it.desde3d.ruta || 'A') : '') +
                             (it.marcadas ? ' · <b style="color:var(--red);">' + it.marcadas + (it.marcadas > 1 ? ' marcadas' : ' marcada') + '</b>' : '') + '</div>' +
-                            (it.nota ? '<div class="ag-it-sub">' + esc(it.nota) + '</div>' : '') + filas + '</div>';
+                            (it.nota ? '<div class="ag-it-sub">' + esc(it.nota) + '</div>' : '') + filas +
+                            (it.supuestos_pendientes ? '<div class="ag-sup"><span style="flex:1;">' + it.supuestos_pendientes + ' supuesto' + (it.supuestos_pendientes > 1 ? 's' : '') +
+                                ' del agente sin confirmar: este ítem no se aplica al presupuesto hasta que los confirmes (o corregilos por el chat).</span>' +
+                                '<button class="ag-btn prim" onclick="_agConfirmarSup(\'' + it.id + '\')">Confirmar supuestos</button></div>' : '') + '</div>';
                     }).join('') + '</div>';
             }).join('') +
             '<div class="ag-tot"><span>TOTAL BORRADOR</span><span>Bs ' + bs(borrador.total) + '</span></div>' +
             '<div class="ag-it-sub" style="margin:8px 0 4px;">Los totales los calcula la app (no la IA). Etiquetas: ' + chipOrigen('pieza3d:') + 'medido del 3D · ' +
-            chipOrigen('base:') + 'base de precios · ' + chipOrigen('cota_plano:') + 'cota del plano · ' + chipOrigen('dueño:') + 'lo dijiste vos. Para corregir, escribilo en el chat.</div>' +
+            chipOrigen('base:') + 'base de precios · ' + chipOrigen('cota_plano:') + 'cota del plano · ' + chipOrigen('dueño:') + 'lo dijiste vos · ' + chipOrigen('supuesto:') + 'propuesta del agente (hay que confirmarla). Para corregir, escribilo en el chat.</div>' +
             '<div id="ag-aplicar"></div>';
         if (window._agPintarAplicar) window._agPintarAplicar();
     }
@@ -249,6 +258,7 @@
                 (ap.actualizados ? ', ' + ap.actualizados + ' actualizados' : '') + '.' + (ap.version !== borrador.version ? ' <b>Hay cambios después de aplicar.</b>' : '') + '</div>' : '') +
             '<label style="display:flex;gap:8px;align-items:center;font-size:13px;margin-bottom:8px;"><input type="checkbox" id="ag-con-cap" checked> Con sus capítulos</label>' +
             '<button class="ag-btn prim" style="width:100%;padding:12px;font-size:15px;" onclick="_agAplicar()">' + (ap ? 'Aplicar de nuevo al presupuesto' : 'Aplicar al presupuesto') + '</button>' +
+            (borrador.supuestos_pendientes ? '<div style="color:#0b6e99;font-weight:700;font-size:12px;margin-bottom:6px;">Los ítems con supuestos sin confirmar no se aplican todavía.</div>' : '') +
             '<div class="ag-it-sub" style="margin-top:6px;">Los ítems van al final del presupuesto. Si ya se aplicaron, se actualizan en su lugar (no se reordena nada).' +
             (borrador.filas_marcadas ? (borrador.filas_marcadas > 1 ? ' Las ' + borrador.filas_marcadas + ' filas marcadas quedan' : ' La fila marcada queda') + ' en rojo en el APU.' : '') + '</div></div>';
     };
@@ -256,7 +266,7 @@
         if (!borrador || typeof data === 'undefined' || !window.AgenteBorrador) return alert('No se pudo leer el presupuesto.');
         var items = AgenteBorrador.aItemsPresupuesto(borrador, { capitulos: $('ag-con-cap') ? $('ag-con-cap').checked : true, fecha: Date.now() });
         var n = items.filter(function (x) { return x.type === 'item'; }).length;
-        if (!n) return alert('El borrador no tiene ítems.');
+        if (!n) return alert(borrador.supuestos_pendientes ? 'Todos los ítems tienen supuestos sin confirmar: confirmalos primero.' : 'El borrador no tiene ítems.');
         if (!confirm('¿Agregar ' + n + ' ítem' + (n > 1 ? 's' : '') + ' del borrador al presupuesto (Bs ' + bs(borrador.total) + ')?' +
             (borrador.filas_marcadas ? '\n' + borrador.filas_marcadas + ' filas quedan marcadas (sin precio o sin rendimiento).' : ''))) return;
         var r = AgenteBorrador.aplicarAlPresupuesto(data, items);
@@ -270,6 +280,11 @@
         alert('✅ Listo: ' + r.agregados + ' ítems agregados al final' + (r.actualizados ? ' y ' + r.actualizados + ' actualizados en su lugar' : '') + '.');
     };
 
+    window._agConfirmarSup = function (itemId) {
+        if (trabajando()) return alert('Esperá a que el agente termine para confirmar.');
+        var r = AgenteBorrador.confirmarSupuestos(borrador, itemId, 'dueño:botón "Confirmar supuestos"');
+        db.ref(raiz() + '/borrador').set(JSON.parse(JSON.stringify(r.borrador))).catch(function (e) { alert('No se pudo guardar: ' + e.message); });
+    };
     window._agVerBorrador = function (forzar) {
         verBorrador = typeof forzar === 'boolean' ? forzar : !verBorrador;
         $('ag-borr').style.display = verBorrador ? 'block' : 'none';
@@ -340,16 +355,20 @@
             '<div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;"><button class="ag-btn prim" onclick="_agGuardarConfig()">Guardar</button>' +
             '<button class="ag-btn" onclick="cerrarAgenteIA(); abrirImportar3D();">Importar 3D (respaldo)</button></div>' +
             '<div style="margin-top:14px;"><b>Memoria del agente</b> <span style="color:var(--gray);">(correcciones y decisiones que recuerda entre proyectos)</span><div id="ag-memoria">Cargando…</div></div>';
-        db.ref('agente_memoria/notas').limitToLast(100).once('value').then(function (s) {
+        Promise.all(['normas', 'notas'].map(function (n) { return db.ref('agente_memoria/' + n).limitToLast(100).once('value').then(function (s) { return { n: n, s: s }; }); })).then(function (rs) {
             var h = [];
-            s.forEach(function (ch) { var v = ch.val() || {}; h.push('<div style="display:flex;gap:6px;align-items:flex-start;padding:5px 0;border-bottom:1px solid var(--border);"><span style="flex:1;">' + esc(v.texto) +
-                '</span><button class="ag-btn" style="padding:2px 8px;" onclick="_agBorrarMemoria(\'' + ch.key + '\')" aria-label="Borrar">×</button></div>'); });
-            var m = $('ag-memoria'); if (m) m.innerHTML = h.length ? h.reverse().join('') : '<div style="color:var(--gray);padding:4px 0;">Todavía no anotó nada. Cuando lo corrijas, te propone recordarlo.</div>';
+            rs.forEach(function (r) {
+                var filas = [];
+                r.s.forEach(function (ch) { var v = ch.val() || {}; filas.push('<div style="display:flex;gap:6px;align-items:flex-start;padding:5px 0;border-bottom:1px solid var(--border);"><span style="flex:1;">' + esc(v.texto) +
+                    '</span><button class="ag-btn" style="padding:2px 8px;" onclick="_agBorrarMemoria(\'' + r.n + '\',\'' + ch.key + '\')" aria-label="Borrar">×</button></div>'); });
+                if (filas.length) h.push('<div style="font-weight:700;margin-top:6px;">' + (r.n === 'normas' ? 'Normas constructivas del taller' : 'Notas') + '</div>' + filas.reverse().join(''));
+            });
+            var m = $('ag-memoria'); if (m) m.innerHTML = h.length ? h.join('') : '<div style="color:var(--gray);padding:4px 0;">Todavía no anotó nada. Cuando lo corrijas, te propone recordarlo.</div>';
         }).catch(function (e) { var m = $('ag-memoria'); if (m) m.textContent = 'No se pudo leer: ' + e.message; });
     }
-    window._agBorrarMemoria = function (k) {
-        if (!confirm('¿Borrar esta nota de la memoria?')) return;
-        db.ref('agente_memoria/notas/' + k).remove().then(pintarConfig).catch(function (e) { alert(e.message); });
+    window._agBorrarMemoria = function (nodo, k) {
+        if (!confirm('¿Borrar esta entrada de la memoria?')) return;
+        db.ref('agente_memoria/' + nodo + '/' + k).remove().then(pintarConfig).catch(function (e) { alert(e.message); });
     };
     window._agGuardarConfig = function () {
         var v = { modelo: $('ag-c-modelo').value, effort: $('ag-c-effort').value,
@@ -427,6 +446,76 @@
     }
     window._agQuitar = function (clave) { pendientes = pendientes.filter(function (p) { return p.clave !== clave; }); pintarAdjuntos(); };
 
+    /**
+     * Vistas del 3D para el agente (isométrica y frente) con el número de cada pieza (p1, p2… = orden de rubik/1).
+     * El modelo no "ve" el FBX: con esto relaciona las piezas con las fotos, el render y el PDF. Si falla, se sigue sin vistas.
+     */
+    async function renderVistas(raiz, res) {
+        var T = (await window.Importar3D.three()).THREE;
+        var W = 1000, H = 750, vistas = [];
+        var renderer = new T.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+        renderer.setSize(W, H, false); renderer.setClearColor(0xffffff, 1);
+        var escena = new T.Scene();
+        var padre = raiz.parent; escena.add(raiz);
+        escena.overrideMaterial = new T.MeshNormalMaterial({ side: T.DoubleSide });
+        raiz.updateMatrixWorld(true);
+        // centro de cada objeto de cada pieza; el encuadre es el de las piezas medidas (no el entorno del archivo)
+        var marcas = [], caja = new T.Box3();
+        (res.piezas || []).forEach(function (p, i) {
+            (p.objetos || []).forEach(function (nombre) {
+                var o = raiz.getObjectByName(nombre);
+                if (!o) return;
+                var c = new T.Box3().setFromObject(o);
+                if (!c.isEmpty()) { caja.union(c); marcas.push({ id: 'p' + (i + 1), pos: c.getCenter(new T.Vector3()) }); }
+            });
+        });
+        if (caja.isEmpty()) caja.setFromObject(raiz);
+        var centro = caja.getCenter(new T.Vector3()), tam = caja.getSize(new T.Vector3());
+        var radio = Math.max(tam.x, tam.y, tam.z) || 1;
+        [['isométrica', new T.Vector3(1, 0.8, 1)], ['frente', new T.Vector3(0, 0, 1)]].forEach(function (v) {
+            var dir = v[1].clone().normalize();
+            var asp = W / H, m = radio * 0.62;
+            var cam = new T.OrthographicCamera(-m * asp, m * asp, m, -m, -radio * 10, radio * 10);
+            cam.position.copy(centro.clone().add(dir.multiplyScalar(radio * 2))); cam.up.set(0, 1, 0); cam.lookAt(centro); cam.updateMatrixWorld();
+            // encuadre justo: las 8 esquinas de la caja en coordenadas de la cámara, con margen y la proporción de la imagen
+            var mn = [Infinity, Infinity], mx = [-Infinity, -Infinity];
+            [caja.min.x, caja.max.x].forEach(function (x) { [caja.min.y, caja.max.y].forEach(function (y) { [caja.min.z, caja.max.z].forEach(function (z) {
+                var q = new T.Vector3(x, y, z).applyMatrix4(cam.matrixWorldInverse);
+                mn[0] = Math.min(mn[0], q.x); mn[1] = Math.min(mn[1], q.y); mx[0] = Math.max(mx[0], q.x); mx[1] = Math.max(mx[1], q.y);
+            }); }); });
+            var cxm = (mn[0] + mx[0]) / 2, cym = (mn[1] + mx[1]) / 2, hw = Math.max((mx[0] - mn[0]) / 2, 1e-6) * 1.12, hh = Math.max((mx[1] - mn[1]) / 2, 1e-6) * 1.12;
+            if (hw / hh > asp) hh = hw / asp; else hw = hh * asp;
+            cam.left = cxm - hw; cam.right = cxm + hw; cam.top = cym + hh; cam.bottom = cym - hh;
+            cam.updateProjectionMatrix();
+            renderer.render(escena, cam);
+            var cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+            var cx = cv.getContext('2d'); cx.drawImage(renderer.domElement, 0, 0);
+            cx.font = 'bold 18px system-ui,sans-serif'; cx.textAlign = 'center'; cx.textBaseline = 'middle';
+            var puestas = [];   // evita que las etiquetas se pisen: se corren hacia abajo
+            marcas.forEach(function (mk) {
+                var q = mk.pos.clone().project(cam), x = (q.x + 1) / 2 * W, y = (1 - q.y) / 2 * H;
+                if (x < 0 || x > W || y < 0 || y > H) return;
+                var w = cx.measureText(mk.id).width + 10;
+                if (puestas.some(function (o) { return o.id === mk.id && Math.abs(o.x - x) < 30 && Math.abs(o.y - y) < 30; })) return;
+                for (var k = 0; k < 12 && puestas.some(function (o) { return Math.abs(o.x - x) < (o.w + w) / 2 && Math.abs(o.y - y) < 24; }); k++) y += 24;
+                puestas.push({ id: mk.id, x: x, y: y, w: w });
+                cx.fillStyle = 'rgba(0,0,0,0.65)'; cx.fillRect(x - w / 2, y - 12, w, 24);
+                cx.fillStyle = '#fff'; cx.fillText(mk.id, x, y + 1);
+            });
+            cx.fillStyle = '#333'; cx.textAlign = 'left'; cx.font = '15px system-ui,sans-serif';
+            cx.fillText('Vista ' + v[0] + ' · números = piezas de medicion_3d', 10, H - 14);
+            vistas.push({ nombre: v[0], canvas: cv });
+        });
+        escena.remove(raiz); if (padre) padre.add(raiz);
+        escena.overrideMaterial.dispose(); renderer.dispose();
+        var salida = [];
+        for (var i = 0; i < vistas.length; i++) {
+            var blob = await new Promise(function (r) { vistas[i].canvas.toBlob(r, 'image/jpeg', 0.82); });
+            salida.push({ nombre: vistas[i].nombre, datos: await aBase64(blob), miniatura: i === 0 ? vistas[i].canvas.toDataURL('image/jpeg', 0.5) : null });
+        }
+        return salida;
+    }
+
     async function adjuntar3D(modelo, archivos, json) {
         var p = agregarPendiente((json || modelo).name, '3d');
         var urls = [];
@@ -434,11 +523,11 @@
             if (!window.Importar3D) throw new Error('No cargó el lector 3D.');
             marcar(p, { nota: 'Midiendo ' + (json || modelo).name + '…' });
             var eq = await window.Importar3D.equivalencias();
-            var res, tam = null, unidad = 'm';
+            var res, tam = null, unidad = 'm', leido = null;
             if (json) {
                 res = Lector3D.desdeRubikJson(JSON.parse(await json.text()), eq);
             } else {
-                var leido = await window.Importar3D.leerModelo(modelo, archivos, urls);
+                leido = await window.Importar3D.leerModelo(modelo, archivos, urls);
                 var det = Lector3D.detectarUnidad(leido.raiz, leido.tipo);
                 var factor = Lector3D.FACTORES[det.unidad];
                 res = Lector3D.analizar(leido.raiz, { factor: factor, equivalencias: eq, archivo: modelo.name, proyecto: modelo.name.replace(/\.[^.]+$/, '') });
@@ -446,8 +535,15 @@
                 unidad = det.unidad + (det.motivo ? ' (' + det.motivo + ')' : '');
             }
             if (!res.piezas || !res.piezas.length) throw new Error('El modelo no tiene piezas medibles.');
+            var vistas = [];
+            if (leido) {
+                marcar(p, { nota: 'Dibujando las vistas…' });
+                try { vistas = await renderVistas(leido.raiz, res); } catch (ev) { console.warn('[agente] vistas del 3D', ev); vistas = []; }
+                if (vistas[0]) marcar(p, { miniatura: vistas[0].miniatura });
+            }
             marcar(p, { nota: 'Subiendo la medición…' });
-            var r = await llamar({ accion: 'adjuntar', tipo: '3d', nombre: (json || modelo).name, medicion: res, tamano_m: tam, unidad: unidad });
+            var r = await llamar({ accion: 'adjuntar', tipo: '3d', nombre: (json || modelo).name, medicion: res, tamano_m: tam, unidad: unidad,
+                vistas: vistas.map(function (v) { return { nombre: v.nombre, datos: v.datos }; }) });
             marcar(p, { estado: 'listo', id: r.id, nota: (json || modelo).name + ' · ' + res.piezas.length + ' piezas' });
         } catch (e) {
             console.error('[agente] 3D', e);

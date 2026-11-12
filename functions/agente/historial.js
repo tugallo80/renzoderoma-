@@ -6,9 +6,15 @@
  * La expansión es determinista para que el prefijo cacheado no cambie entre llamadas.
  */
 
-function etiquetaAdjunto(id, a) {
-    const tipo = a.tipo === "3d" ? "modelo 3D medido por la app" : a.tipo === "pdf" ? "PDF" : a.tipo === "imagen" ? "imagen" : a.tipo;
-    return `[Adjunto ${id} · ${a.nombre || "sin nombre"} · ${tipo}]`;
+function claseAdjunto(a) {
+    if (a.tipo === "3d") return "3D (resumen de medición)";
+    if (a.tipo === "pdf") return "PDF";
+    if (a.tipo === "imagen") return (a.mime === "image/png" || /screenshot|captura|screen|pantalla/i.test(a.nombre || "")) ? "captura" : "foto";
+    return a.tipo;
+}
+/** "Adjunto 3 · foto · IMG_123.jpg (id -Kabc)": numerados en el orden en que se subieron en la conversación. */
+function etiquetaAdjunto(id, a, n) {
+    return `[Adjunto ${n != null ? n + " · " : ""}${claseAdjunto(a)} · ${a.nombre || "sin nombre"} (id ${id})]`;
 }
 
 /**
@@ -17,6 +23,7 @@ function etiquetaAdjunto(id, a) {
  */
 async function expandirMensajes(mensajes, cargar) {
     const salida = [];
+    let n = 0;   // numeración de adjuntos en toda la conversación (determinista: no rompe la caché)
     for (const m of mensajes) {
         if (!Array.isArray(m.content)) { salida.push(m); continue; }
         const content = [];
@@ -29,7 +36,7 @@ async function expandirMensajes(mensajes, cargar) {
                 continue;
             }
             const a = datos.meta;
-            content.push({ type: "text", text: etiquetaAdjunto(b.id, a) });
+            content.push({ type: "text", text: etiquetaAdjunto(b.id, a, ++n) });
             if (a.tipo === "pdf" && datos.base64) {
                 content.push({ type: "document", source: { type: "base64", media_type: "application/pdf", data: datos.base64 }, title: String(a.nombre || "documento.pdf").slice(0, 200) });
             } else if (a.tipo === "imagen" && datos.base64) {
@@ -43,6 +50,10 @@ async function expandirMensajes(mensajes, cargar) {
                 }
             } else if (a.tipo === "3d") {
                 content.push({ type: "text", text: `El navegador ya midió este 3D (${a.resumen || "sin resumen"}). Consultá piezas, medidas, áreas y perímetros con la herramienta medicion_3d (adjunto "${b.id}").` });
+                (datos.vistas_base64 || []).forEach((v, i) => {
+                    content.push({ type: "text", text: `[Vista ${i + 1} del 3D (${(a.vistas_nombres || [])[i] || "vista"}) con el número de cada pieza (p1, p2…) — solo para ubicarte: las medidas salen de medicion_3d]` });
+                    content.push({ type: "image", source: { type: "base64", media_type: "image/jpeg", data: v } });
+                });
             }
         }
         salida.push({ role: m.role, content });
@@ -88,4 +99,4 @@ function leerHistorial(texto) {
     try { const v = JSON.parse(texto); return Array.isArray(v) ? v : []; } catch (e) { return []; }
 }
 
-module.exports = { expandirMensajes, contenidoParaHistorial, agregarUsuario, cerrarHerramientasPendientes, leerHistorial, etiquetaAdjunto };
+module.exports = { claseAdjunto, expandirMensajes, contenidoParaHistorial, agregarUsuario, cerrarHerramientasPendientes, leerHistorial, etiquetaAdjunto };

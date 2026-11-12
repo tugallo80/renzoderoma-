@@ -19,6 +19,7 @@ Modelo: **Claude Opus 5.5** (`claude-opus-5-5`), configurable en `/config/agente
 | 2 | Herramientas de base y 3D + borrador con validación de origen | ✅ 12 nov 2026 |
 | 3 | Editor de anotaciones de fotos | ✅ 12 nov 2026 |
 | 4 | Aplicar al presupuesto + memoria simple | ✅ 12 nov 2026 |
+| 2b | Supuestos (cotizar solo con texto), stock propio, trato cerrado, normas constructivas, adjuntos numerados y vistas del 3D (pedido de la sesión maestra) | ✅ 12 nov 2026 |
 
 ---
 
@@ -160,9 +161,33 @@ Lógica pura en `public/js/agente-borrador.js` (la usan la Function, vía copia 
 **Memoria simple** (`memoria`): anotar, leer o borrar notas cortas en `/agente_memoria/notas/{push}` `{ texto, fecha, proyecto, uid }`.
 Se leen al empezar cada conversación (van en el primer mensaje). En ⚙ se ven y se pueden borrar.
 
+## Entrega 2b — cotizar solo con texto, stock propio, trato cerrado (pedido del dueño vía la sesión maestra)
+
+- **Origen `supuesto:<explicación>`** para la propuesta constructiva del agente cuando no hay planos ni fotos ("bastidor con lona
+  de 5×3 con patitas"): el agente no frena pidiendo planos, propone un despiece y manda la **geometría** (`[{desc, cant, largo_m,
+  ancho_m?}]` + `medida`: ml_largo, m2_cara, ml_perimetro, und). **La cantidad la calcula la herramienta** (ej. 2 × 5 + 6 × 3 =
+  28 ml); un `q` escrito a mano con supuesto se rechaza. Los precios siguen saliendo de la base (supuesto no vale como origen de precio).
+  - Las filas con supuesto se ven en **celeste** ("supuesto sin confirmar") y **no se aplican al presupuesto** hasta que el dueño
+    las confirma: botón **"Confirmar supuestos"** por ítem, u operación `confirmar_supuestos` con `dueño:<mensaje>` si lo confirma por chat.
+  - La geometría también se puede usar con `dueño:` o `cota_plano:` (cuando el dueño da medidas).
+- **Stock propio** ("en el taller tengo 5 tubos"): `stock_q` + `origen_stock dueño:<mensaje>` → la fila guarda el total, la parte en
+  stock va a costo 0 y se cobra lo que falta comprar ("5 de stock propio (sin costo) + 3 a comprar").
+- **Trato cerrado por el dueño** ("la mano de obra la cierro en 1000 Bs con Don Pedro"): fila de mano de obra `cerrado: true`, monto
+  con `origen_p dueño:`; reemplaza la referencia calculada de la ruta B y se mantiene si se rehace el ítem desde el 3D. Se ve
+  "TRATO CERRADO" y la nota "monto cerrado por el dueño (Don Pedro)".
+- **Normas constructivas** (`memoria` con `tipo: "norma"` → `/agente_memoria/normas/`): cómo construye el taller ("bastidores con
+  tubo 20×40 y travesaño cada 1 m"). Van primero en el mensaje inicial de cada conversación y se ven/borran en ⚙.
+- **Adjuntos numerados** en el orden en que se subieron, con su clase: "Adjunto 1 · foto · IMG_123.jpg", "Adjunto 2 · captura · …"
+  (PNG o nombre de captura), "Adjunto 3 · PDF", "Adjunto 4 · 3D (resumen de medición)". El dueño puede decir "la foto 2".
+- **Vistas del 3D:** al adjuntar un 3D, el navegador dibuja con three.js una vista **isométrica** y una de **frente**, encuadradas en
+  las piezas medidas, con el **número de cada pieza** (p1, p2… = ids de `medicion_3d`). Se suben como JPG junto a la medición y le
+  llegan al agente como imágenes, para relacionar el 3D con las fotos, el render y el PDF (las medidas siguen saliendo de `medicion_3d`).
+
 ### Pruebas (sin gastar plata)
 
-- `cd tools/agente && npm test` — 42 pruebas (entrega 4: aplicar al final y actualizar en su lugar, memoria entre proyectos,
+- `cd tools/agente && npm test` — 49 pruebas (2b: geometría supuesta calculada por la herramienta y precio de la base, supuestos
+  que no se aplican hasta confirmar, stock a costo 0, trato cerrado que reemplaza la referencia, adjuntos numerados y vistas del 3D,
+  normas, flujo solo con texto → confirmación por chat → aplicar). 42 pruebas (entrega 4: aplicar al final y actualizar en su lugar, memoria entre proyectos,
   flujo completo adjuntar → borrador → corrección → aplicar). 39 pruebas (entrega 3: foto anotada → original + anotada + JSON al modelo, cota del dueño como origen,
   límite de anotaciones). 38 pruebas (entrega 2: orígenes inválidos, fila sin origen rechazada, cantidad calculada
   desde el 3D ignorando la del modelo, precio de la base, totales = `calcPu`, item_desde_3d con ruta A y B, corrección "eran tres

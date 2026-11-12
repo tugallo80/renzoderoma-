@@ -277,7 +277,7 @@
 
     // Para el Agente IA (agente-chat.js): misma lectura y medición del 3D, sin la pantalla de revisión.
     window.Importar3D = {
-        normalizarArchivos: normalizarArchivos, leerModelo: leerModelo, extraerZip: extraerZip,
+        normalizarArchivos: normalizarArchivos, leerModelo: leerModelo, extraerZip: extraerZip, three: cargarThree,
         equivalencias: function () { return basePromesa || cargarBase(); }
     };
 
