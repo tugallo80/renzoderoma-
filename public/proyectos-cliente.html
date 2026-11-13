@@ -126,7 +126,7 @@
                 </div>
                 
                 <button class="btn-act btn-edit" onclick="goToEditProject()"><i class="ph-bold ph-pencil-simple"></i> Editar Datos y Foto</button>
-                <button class="btn-act" style="background:rgba(191,90,242,0.1); color:#bf5af2; border:1px solid rgba(191,90,242,0.35);" onclick="abrirReqAsistido()"><i class="ph-bold ph-ruler"></i> Requerimiento Asistido</button>
+                <!-- Sesión 6: se quitó "Requerimiento Asistido" (módulo retirado). -->
                 <button class="btn-act btn-wsp" onclick="shareProject('wsp')"><i class="ph-bold ph-whatsapp-logo"></i> Notificar a Cliente (WhatsApp)</button>
                 <button class="btn-act btn-mail" onclick="shareProject('mail')"><i class="ph-bold ph-envelope-simple"></i> Notificar a Cliente (Correo)</button>
                 <button class="btn-act" style="background:rgba(52,199,89,0.12); color:var(--green); border:1px solid var(--green);" onclick="duplicarProyecto()"><i class="ph-bold ph-copy-simple"></i> Duplicar Proyecto</button>
@@ -717,14 +717,6 @@
         });
     }
 
-    function abrirReqAsistido() {
-        if (!actionPid) return;
-        localStorage.setItem('rubik_current_pid', actionPid);
-        localStorage.setItem('rubik_current_pname', (actionData && actionData.name) || '');
-        localStorage.setItem('rubik_req_backref', 'proyectos-cliente.html');
-        closeModals();
-        window.location.href = 'requerimiento-asistido.html';
-    }
     function previewImg(inp) { if(inp.files && inp.files[0]) { tempImgFile = inp.files[0]; document.getElementById('preview-img').src = URL.createObjectURL(tempImgFile); document.getElementById('preview-img').style.display = 'block'; document.getElementById('icon-cam').style.display = 'none'; document.getElementById('txt-cam').style.display = 'none'; document.getElementById('modal-add').style.display = 'flex'; } }
 
     function compressImage(file, maxWidth, quality) {

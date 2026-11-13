@@ -23,9 +23,9 @@
 ## Entregas
 | # | Qué | Estado |
 |---|---|---|
-| 1 | Herramienta `prueba_imagen` (devuelve un PNG hecho en el servidor) para confirmar que claude.ai le pasa la imagen a Claude | ✅ mergeada · falta la prueba del dueño |
-| 2 | Pantalla Requerimiento (formulario, adjuntos, anotador, lista de pendientes) + tarjeta en `index.html` + reglas | ✅ PR listo · espera el OK de la maestra para mergear (toca `functions/`) |
-| 3 | Borrar `requerimiento-asistido` (sin tocar los datos) | pendiente |
+| 1 | Herramienta `prueba_imagen` (devuelve un PNG hecho en el servidor) para confirmar que claude.ai le pasa la imagen a Claude | ✅ mergeada y **probada por el dueño**: Claude ve las imágenes del conector (probado hasta ~300 KB por imagen) |
+| 2 | Pantalla Requerimiento (formulario, adjuntos, anotador, lista de pendientes) + tarjeta en `index.html` + reglas | ✅ mergeada (#310) · falta la prueba del dueño en la app |
+| 3 | Borrar `requerimiento-asistido` (sin tocar los datos) | ✅ PR |
 | 4 | Conector: `listar_requerimientos`, `leer_requerimiento`, `asignar_requerimiento` + skill | pendiente (toca `functions/`) |
 | 5 | Conector: `generar_render` (Nano Banana 2.1 / Pro fijo) y `aprobar_render` + skill | pendiente (toca `functions/`) |
 | 6 | Retirar Render y Medir; matriz en el ítem, PDF y producción | pendiente |
@@ -67,6 +67,18 @@
 2. En la foto, ✏️ → poné una cota y una nota → Listo. Tiene que decir "1 anotación" (o las que pusiste).
 3. **Guardar** → aparece en la lista como *pendiente* y el inicio muestra el número.
 4. Salí, volvé a entrar, tocá el requerimiento: tiene que estar todo. Volvé a anotar la foto: aparecen las cotas de antes.
+
+### Entrega 3 — módulo viejo "Requerimiento asistido" retirado
+- Se borró `public/requerimiento-asistido.html`.
+- `dashboard-proyecto.html`: se quitaron el botón "Req. Asistido" de arriba, su módulo y su aviso. En su lugar, el
+  módulo **"Requerimientos"** abre la pantalla nueva.
+- `proyectos-cliente.html`: se quitó el botón "Requerimiento Asistido".
+- Portal del cliente (`cliente-view.html`): se quitó el modal "Completar medidas". Las notificaciones viejas de ese tipo
+  se ven como una notificación común.
+- **Datos:** `/requerimientos_asistidos` **no se borró**: queda como archivo (las reglas siguen igual: solo hub).
+- **Queda para decidir el dueño:** el portal del cliente tiene un cotizador IA "por ítems"
+  (`generarCotizacionItems`) que guarda en `/requerimientos_asistidos`. No es el módulo retirado, así que no se tocó.
+  Hoy el portal no tiene acceso a datos (reglas: solo hub), así que no se usa.
 
 ### Prueba de la entrega 1 (dueño, en claude.ai)
 En un chat del proyecto RUBIK AGENTE APP: *"probá prueba_imagen"*. Claude tiene que decir un **número de 4 cifras** y los

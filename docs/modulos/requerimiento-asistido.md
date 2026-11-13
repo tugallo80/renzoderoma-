@@ -1,4 +1,9 @@
-# Requerimiento Asistido
+# Requerimiento Asistido — RETIRADO (sesión 6, 13 nov 2026)
+
+> El dueño ya no lo usaba. Se borraron la página `public/requerimiento-asistido.html`, los botones de
+> `dashboard-proyecto.html` y `proyectos-cliente.html` y el modal de medidas del portal del cliente.
+> **Los datos `/requerimientos_asistidos` NO se borraron**: quedan como archivo. Lo reemplaza el Requerimiento
+> (`docs/modulos/requerimiento.md`). Lo de abajo describe cómo era.
 
 ## Qué hace
 Herramienta para que el admin arme un formulario de requerimiento de medidas y lo envíe al cliente. El admin define ítems (con foto de referencia/render y descripción técnica), elige qué dimensiones necesita que el cliente mida, y Gemini estructura el APU y precio estimado por ítem. Cuando el cliente responde con sus medidas, la IA recalcula y el admin aprueba e inyecta los ítems directamente en el presupuesto del proyecto.

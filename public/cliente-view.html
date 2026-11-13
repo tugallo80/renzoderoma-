@@ -993,32 +993,7 @@
         </div>
     </div>
 
-    <!-- ── Modal Requerimiento de Medidas ── -->
-    <div id="mod-medidas-req" style="display:none; position:fixed; inset:0; z-index:4000; background:rgba(0,0,0,0.75); backdrop-filter:blur(14px); align-items:flex-end; justify-content:center; flex-direction:column;">
-        <div style="background:var(--bg); width:100%; max-width:560px; border-radius:28px 28px 0 0; max-height:90vh; display:flex; flex-direction:column; margin:0 auto;">
-            <!-- Header -->
-            <div style="padding:20px 22px 16px; border-bottom:1px solid var(--border); display:flex; justify-content:space-between; align-items:center; flex-shrink:0;">
-                <div>
-                    <div style="font-size:18px; font-weight:900; display:flex; align-items:center; gap:8px;"><i class="ph-fill ph-ruler" style="color:#bf5af2;"></i> Completar Medidas</div>
-                    <div style="font-size:12px; color:var(--gray); font-weight:600; margin-top:2px;">Rubik Studio necesita estas medidas para cotizarte</div>
-                </div>
-                <button onclick="document.getElementById('mod-medidas-req').style.display='none'" style="background:none;border:none;font-size:24px;cursor:pointer;color:var(--gray);padding:4px;">✕</button>
-            </div>
-            <!-- Body scrollable -->
-            <div id="mod-medidas-body" style="flex:1; overflow-y:auto; padding:18px 22px;">
-                <div style="text-align:center;padding:30px;color:var(--gray);">Cargando...</div>
-            </div>
-            <!-- Footer -->
-            <div style="padding:16px 22px; border-top:1px solid var(--border); flex-shrink:0; padding-bottom:calc(16px + env(safe-area-inset-bottom, 0px));">
-                <button id="btn-enviar-medidas" onclick="enviarMedidas()" style="width:100%;padding:16px;border-radius:14px;border:none;background:linear-gradient(135deg,#bf5af2,#007aff);color:#fff;font-size:16px;font-weight:900;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:10px;">
-                    <i class="ph-fill ph-paper-plane-tilt"></i> Enviar Medidas ✓
-                </button>
-                <div style="font-size:11px; color:var(--gray); text-align:center; margin-top:10px; font-weight:600;">
-                    Una vez enviadas, Rubik Studio generará tu cotización y la revisará antes de enviártela.
-                </div>
-            </div>
-        </div>
-    </div>
+    <!-- Sesión 6: se quitó el modal de medidas del "Requerimiento asistido" (módulo retirado; los datos quedan en /requerimientos_asistidos). -->
 
     <div id="mod-negociacion" class="modal">
         <div style="background:var(--card); width:90%; max-width:400px; padding:25px; border-radius:24px; position:relative;">
@@ -1393,27 +1368,7 @@
             const timeAgo = tsDate ? _timeAgo(tsDate) : '';
             const hasProject = n.cid && n.pid;
 
-            // ── Notif especial: Requerimiento de medidas ──
-            if (n.tipo === 'requerimiento_medidas' && n.req_id && n.pid) {
-                return `<div style="
-                    background:linear-gradient(135deg, rgba(191,90,242,0.08), rgba(0,122,255,0.06));
-                    border-radius:16px; padding:16px;
-                    border:2px solid ${isUnread ? '#bf5af2' : 'rgba(191,90,242,0.25)'};
-                    position:relative;
-                ">
-                    ${isUnread ? `<div style="position:absolute; left:10px; top:10px; width:8px; height:8px; border-radius:50%; background:#bf5af2;"></div>` : ''}
-                    <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:8px; margin-bottom:8px;">
-                        <div style="font-size:14px; font-weight:900; line-height:1.3; flex:1; padding-left:${isUnread ? '16px' : '0'};">${n.titulo || '📐 Requerimiento de medidas'}</div>
-                        <div style="font-size:10px; color:var(--gray); white-space:nowrap; flex-shrink:0;">${timeAgo}</div>
-                    </div>
-                    <div style="font-size:12px; color:var(--gray); margin-bottom:12px; ${isUnread ? 'padding-left:16px' : ''}">${n.mensaje || 'Rubik Studio necesita que ingreses las medidas de tu proyecto.'}</div>
-                    <button onclick="abrirModalMedidas('${n.key}','${n.req_id}','${n.pid}')" style="
-                        width:100%; padding:13px; border-radius:12px; border:none;
-                        background:linear-gradient(135deg,#bf5af2,#007aff); color:#fff;
-                        font-size:14px; font-weight:900; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:8px;
-                    "><i class="ph-fill ph-ruler"></i> Completar Medidas</button>
-                </div>`;
-            }
+            // (Sesión 6) Las notificaciones viejas de "requerimiento_medidas" se muestran como una común: el módulo se retiró.
 
             // Notif estándar
             return `<div onclick="_clickNotif('${n.key}', '${n.cid||''}', '${n.pid||''}')" style="
@@ -1434,130 +1389,7 @@
         }).join('');
     }
 
-    // ── Modal de medidas para el cliente ──────────────────────────────
-    let _reqMedidasData = null;
-
-    window.abrirModalMedidas = async function(notifKey, reqId, pid) {
-        // Marcar notif como leída
-        if (notifKey && notifKey !== 'undefined') {
-            db.ref(`notificaciones/clientes/${cid}/${notifKey}`).update({ read: true });
-        }
-
-        const modal = document.getElementById('mod-medidas-req');
-        const body  = document.getElementById('mod-medidas-body');
-        if (!modal || !body) return;
-
-        modal.style.display = 'flex';
-        body.innerHTML = `<div style="text-align:center; padding:30px; color:var(--gray);"><div style="width:30px;height:30px;border:3px solid rgba(191,90,242,0.3);border-top-color:#bf5af2;border-radius:50%;animation:spin 0.8s linear infinite;margin:0 auto 12px;"></div>Cargando...</div>`;
-
-        try {
-            const snap = await firebase.database().ref(`requerimientos_asistidos/${cid}/${pid}/${reqId}`).once('value');
-            if (!snap.exists()) { body.innerHTML = '<p style="text-align:center;color:var(--red);">No se encontró el requerimiento.</p>'; return; }
-            _reqMedidasData = { ...snap.val(), reqId, pid };
-            const items = _reqMedidasData.items || [];
-
-            const dimLabel = d => ({ ancho:'Ancho (m)', alto:'Alto (m)', profundidad:'Profundidad (m)', cantidad:'Cantidad (u)', metros_lineales:'Metros lineales (ml)', diametro:'Diámetro (m)', area:'Área (m²)' }[d] || d);
-
-            const notaCliente = _reqMedidasData.nota_cliente || 'Por favor completá las medidas de cada ítem. Rubik Studio las usará para preparar tu cotización personalizada.';
-            let html = `<div style="background:rgba(191,90,242,0.08);border:1px solid rgba(191,90,242,0.2);border-radius:12px;padding:12px 14px;margin-bottom:16px;display:flex;gap:10px;align-items:flex-start;">
-                <i class="ph-fill ph-info" style="color:#bf5af2;font-size:18px;flex-shrink:0;margin-top:1px;"></i>
-                <span style="font-size:13px;color:var(--text);font-weight:600;line-height:1.5;">${notaCliente}</span>
-            </div>`;
-
-            items.forEach((it, i) => {
-                const dims = it.dims_requeridas || ['ancho','alto','cantidad'];
-                const medPrev = it.medidas_cliente || {};
-                const nombreVisible = it.nombre || it.desc || `Ítem ${i+1}`;
-                html += `<div style="background:var(--bg);border:1.5px solid rgba(191,90,242,0.25);border-radius:16px;overflow:hidden;margin-bottom:14px;">
-                    <!-- Header del ítem -->
-                    <div style="background:rgba(191,90,242,0.12);padding:10px 14px;display:flex;align-items:center;gap:8px;">
-                        <span style="background:#bf5af2;color:#fff;font-size:10px;font-weight:900;padding:3px 9px;border-radius:20px;">ÍTEM ${i+1}</span>
-                        <span style="font-size:14px;font-weight:900;color:var(--text);">${nombreVisible}</span>
-                    </div>
-                    <!-- Foto de referencia (si existe) -->
-                    ${it.img_url ? `<img src="${it.img_url}" style="width:100%;max-height:200px;object-fit:cover;display:block;">` : ''}
-                    <!-- Campos de medida -->
-                    <div style="padding:14px;">
-                        <div style="font-size:11px;font-weight:700;color:var(--gray);margin-bottom:10px;text-transform:uppercase;letter-spacing:0.3px;">Completá las medidas</div>
-                        <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:10px;">
-                            ${dims.map(d => `<div>
-                                <div style="font-size:10px;font-weight:800;color:#bf5af2;text-transform:uppercase;margin-bottom:5px;letter-spacing:0.3px;">${dimLabel(d)}</div>
-                                <input type="number" step="any" min="0" data-item="${i}" data-dim="${d}" value="${medPrev[d]||''}"
-                                    style="width:100%;padding:12px;border:2px solid var(--border);border-radius:12px;background:var(--card);color:var(--text);font-size:16px;font-weight:700;box-sizing:border-box;outline:none;-webkit-appearance:none;"
-                                    placeholder="0" inputmode="decimal">
-                            </div>`).join('')}
-                        </div>
-                    </div>
-                </div>`;
-            });
-
-            body.innerHTML = html;
-
-        } catch(e) {
-            body.innerHTML = `<p style="color:var(--red);">Error: ${e.message}</p>`;
-        }
-    };
-
-    window.enviarMedidas = async function() {
-        if (!_reqMedidasData) return;
-        const { reqId, pid, items } = _reqMedidasData;
-        if (!items || !items.length) return;
-
-        // Recoger inputs
-        const inputs = document.querySelectorAll('#mod-medidas-body input[data-item]');
-        const medidasPorItem = {};
-        inputs.forEach(inp => {
-            const i = inp.dataset.item;
-            const d = inp.dataset.dim;
-            if (!medidasPorItem[i]) medidasPorItem[i] = {};
-            if (inp.value) medidasPorItem[i][d] = parseFloat(inp.value);
-        });
-
-        // Validar: todos los dims obligatorios deben estar
-        for (let i = 0; i < items.length; i++) {
-            const dims = items[i].dims_requeridas || [];
-            for (const d of dims) {
-                if (!medidasPorItem[i] || !medidasPorItem[i][d]) {
-                    alert(`Por favor completá todos los campos del Ítem ${parseInt(i)+1}.`);
-                    return;
-                }
-            }
-        }
-
-        const btn = document.getElementById('btn-enviar-medidas');
-        if (btn) { btn.disabled = true; btn.innerText = 'Enviando...'; }
-
-        try {
-            // Actualizar medidas en cada ítem
-            const itemsActualizados = items.map((it, i) => ({
-                ...it,
-                medidas_cliente: medidasPorItem[i] || {}
-            }));
-
-            await firebase.database().ref(`requerimientos_asistidos/${cid}/${pid}/${reqId}`).update({
-                items: itemsActualizados,
-                estado: 'medidas_recibidas',
-                fecha_medidas: new Date().toISOString()
-            });
-
-            // Notificar al hub
-            await firebase.database().ref('notificaciones/hub').push({
-                tipo: 'medidas_completadas',
-                cid, pid, req_id: reqId,
-                msg: `El cliente completó las medidas del requerimiento "${_reqMedidasData.titulo || ''}"`,
-                fecha: new Date().toISOString()
-            });
-
-            document.getElementById('mod-medidas-req').style.display = 'none';
-            _reqMedidasData = null;
-            alert('✅ ¡Medidas enviadas! Rubik Studio recibirá una notificación y preparará tu cotización.');
-
-        } catch(e) {
-            alert('Error al enviar: ' + e.message);
-        } finally {
-            if (btn) { btn.disabled = false; btn.innerText = 'Enviar Medidas ✓'; }
-        }
-    };
+    // (Sesión 6) Se quitaron abrirModalMedidas/enviarMedidas del "Requerimiento asistido" (módulo retirado).
 
     window._clickNotif = function(key, notifCid, notifPid) {
         // Marcar como leída
