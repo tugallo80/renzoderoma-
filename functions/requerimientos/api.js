@@ -36,7 +36,8 @@ function b64(datos, max, que) {
     if (typeof datos !== "string" || !datos) falla(`Falta el contenido de ${que}.`);
     const buf = Buffer.from(datos, "base64");
     if (!buf.length) falla(`El contenido de ${que} está vacío.`);
-    if (buf.length > max) falla(`${que} pesa ${(buf.length / 1048576).toFixed(1)} MB; el máximo es ${Math.round(max / 1048576)} MB.`, 413);
+    const tam = (n) => (n >= 1048576 ? `${(n / 1048576).toFixed(1)} MB` : `${Math.ceil(n / 1024)} KB`);
+    if (buf.length > max) falla(`${que} pesa ${tam(buf.length)}; el máximo es ${tam(max)}.`, 413);
     return buf;
 }
 const esImagen = (buf) => (buf[0] === 0xff && buf[1] === 0xd8) || (buf[0] === 0x89 && buf[1] === 0x50) || (buf.slice(0, 4).toString() === "RIFF" && buf.slice(8, 12).toString() === "WEBP");

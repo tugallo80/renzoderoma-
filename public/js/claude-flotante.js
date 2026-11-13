@@ -44,6 +44,9 @@
         return v;
     }
 
+    /** Para otras pantallas (Requerimiento → "Pedile a Claude"): abre el proyecto de Claude como el botón. */
+    window.RubikClaude = { abrir: function () { abrir(); } };
+
     function abrir() {
         var destino = url || pedirEnlace();
         if (!destino) return;

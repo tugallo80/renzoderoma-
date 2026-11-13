@@ -26,7 +26,7 @@
 | 1 | Herramienta `prueba_imagen` (devuelve un PNG hecho en el servidor) para confirmar que claude.ai le pasa la imagen a Claude | ✅ mergeada y **probada por el dueño**: Claude ve las imágenes del conector (probado hasta ~300 KB por imagen) |
 | 2 | Pantalla Requerimiento (formulario, adjuntos, anotador, lista de pendientes) + tarjeta en `index.html` + reglas | ✅ mergeada (#310) · falta la prueba del dueño en la app |
 | 3 | Borrar `requerimiento-asistido` (sin tocar los datos) | ✅ PR |
-| 4 | Conector: `listar_requerimientos`, `leer_requerimiento`, `asignar_requerimiento` + skill | pendiente (toca `functions/`) |
+| 4 | Conector: `listar_requerimientos`, `leer_requerimiento`, `asignar_requerimiento` + skill + botón "Pedile a Claude" | ✅ PR · espera el OK de la maestra (toca `functions/`) |
 | 5 | Conector: `generar_render` (Nano Banana 2.1 / Pro fijo) y `aprobar_render` + skill | pendiente (toca `functions/`) |
 | 6 | Retirar Render y Medir; matriz en el ítem, PDF y producción | pendiente |
 
@@ -67,6 +67,32 @@
 2. En la foto, ✏️ → poné una cota y una nota → Listo. Tiene que decir "1 anotación" (o las que pusiste).
 3. **Guardar** → aparece en la lista como *pendiente* y el inicio muestra el número.
 4. Salí, volvé a entrar, tocá el requerimiento: tiene que estar todo. Volvé a anotar la foto: aparecen las cotas de antes.
+
+### Entrega 4 — Claude toma el requerimiento por el conector
+- `functions/mcp/requerimientos.js` (módulo aparte; `herramientas.js` solo lo suma a la lista):
+  - **`listar_requerimientos`** `{estado?, texto?}`: pendientes por defecto.
+  - **`leer_requerimiento`** `{id, desde?, sin_imagenes?}`: datos (descripción, cliente, adjuntos con las anotaciones como
+    datos) + **imágenes** (foto anotada "para Claude", o la foto; vistas del 3D) hasta **~300 KB por respuesta** (probado en
+    claude.ai hasta ~300 KB por imagen); si quedan, `siguiente_desde`. Los PDF no se muestran por acá.
+  - **`asignar_requerimiento`** `{id, cid, pid, conv, confirmacion: dueño:<id>, cotizado?}`: pide la confirmación del dueño
+    (un mensaje suyo registrado en esa cotización). La descripción queda como mensaje del dueño y **los adjuntos se copian**
+    a los del proyecto (archivos a `agente/{cid}/{pid}/…`, mismo formato que el Agente IA): `medicion_3d`, `escala_3d` y los
+    orígenes `dueño:<adjunto>` (cotas dibujadas), `cota_plano:` y `pieza3d:` funcionan igual. No copia dos veces ni lo
+    reasigna a otro proyecto. Con `cotizado: true` lo marca cotizado. Los "otros" (DWG…) no se copian (el agente no los lee).
+- `functions/mcp/index.js`: `/requerimientos` en el cerco del conector y Storage `requerimientos/…` (lectura) además de `agente/…`.
+- Skill: sección "Requerimientos" en `SKILL.md` y las 3 herramientas en `referencias/herramientas.md` (ZIP regenerado).
+- App: botón **"Pedile a Claude"** en el requerimiento: copia "Tengo un requerimiento nuevo… (id …). Leelo con
+  leer_requerimiento…" y abre el proyecto de Claude (el dueño pega y envía; no hay forma oficial de mandarlo solo).
+  `claude-flotante.js` expone `RubikClaude.abrir()`.
+- Pruebas: `tools/mcp` 25/25 (listar, leer con imágenes y paginado, asignar con confirmación, copia de archivos,
+  `medicion_3d` sobre el 3D copiado, `armar_borrador` citando `dueño:<adjunto>` y la descripción, cotizado, descartado),
+  cliente MCP real 11 pasos, `tools/requerimientos` 7/7, `tools/agente` 62/62; botón probado en Chromium.
+
+### Prueba de la entrega 4 (dueño)
+1. En la app, abrí un requerimiento con foto anotada → **Pedile a Claude** → en Claude, chat nuevo del proyecto → pegá y enviá.
+2. Claude tiene que listar/leer el requerimiento, **describir lo que ve en la foto** y usar tus cotas tal cual.
+3. Decile para qué cliente/proyecto es → crea o elige el proyecto, abre la cotización y asigna el requerimiento.
+4. Sigue la cotización de siempre. En la app, el requerimiento pasa a *asignado* (y a *cotizado* cuando terminás).
 
 ### Entrega 3 — módulo viejo "Requerimiento asistido" retirado
 - Se borró `public/requerimiento-asistido.html`.
