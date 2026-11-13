@@ -11,7 +11,7 @@
  *   { tipo:"marca", n, forma:"circulo"|"rectangulo", de:[x,y], a:[x,y], nota? }
  *   { tipo:"nota", n, texto, en:[x,y] }
  * Uso: AgenteAnotador.editar({ blob, ancho, alto, canvas }, nombre, previas?) → Promise<null | {cancelado} | {anotaciones, blob, miniatura, editor}>
- * (null = "Mandar sin anotar").
+ * (null = "Mandar sin anotar"). Tamaño de texto y líneas con la barra (a.tam); zoom con dos dedos o la rueda del mouse.
  */
 (function (global) {
     'use strict';
@@ -34,7 +34,7 @@
     /** Medidas de trazo y texto en píxeles de la foto, proporcionales al tamaño (texto grande para que se lea). */
     function escala(w, h) {
         var lado = Math.max(w, h);
-        return { trazo: Math.max(2, lado / 650), punta: Math.max(9, lado / 80), tick: Math.max(6, lado / 120), letra: Math.max(18, Math.round(lado / 30)), pad: Math.max(4, lado / 250) };   // letra ~3 % del lado: se lee también en la copia chica que ve Claude
+        return { trazo: Math.max(2, lado / 650), punta: Math.max(9, lado / 80), tick: Math.max(6, lado / 120), letra: Math.max(18, Math.round(lado / 30)), pad: Math.max(4, lado / 250) };   // letra ~3 % del lado (×tamaño de la barra)
     }
     /** Dónde va la etiqueta de una cota: al costado de la línea (perpendicular), para no taparla. */
     function posEtiqueta(a, b, e) {
@@ -45,6 +45,11 @@
         var ang = Math.atan2(dy, dx) * 180 / Math.PI;
         if (ang > 90) ang -= 180; if (ang < -90) ang += 180;
         return { x: (a[0] + b[0]) / 2 + nx * off, y: (a[1] + b[1]) / 2 + ny * off, ang: ang };
+    }
+    /** Escala de una anotación con su tamaño (a.tam: 1 = normal; lo cambia la barra "Tamaño"). */
+    function conTam(e, tam) {
+        var k = tam > 0 ? tam : 1;
+        return { trazo: e.trazo * k, punta: e.punta * k, tick: e.tick * k, letra: e.letra * k, pad: e.pad * k };
     }
     function anchoTexto(t, letra) { return String(t).length * letra * 0.58 + 2; }
 
@@ -69,6 +74,7 @@
         return grupo;
     }
     function dibujarUna(g, a, e, seleccionada) {
+        e = conTam(e, a.tam);
         var color = a.color || COLORES[0];
         var grupo = el('g', { 'data-i': st.anot.indexOf(a) }, g);
         var trazo = { stroke: color, 'stroke-width': e.trazo, fill: 'none', 'stroke-linecap': 'round' };
@@ -116,7 +122,9 @@
             cx.fillStyle = color; cx.textAlign = 'center'; cx.textBaseline = 'middle'; cx.fillText(texto, 0, 1);
             cx.restore();
         }
+        var e0 = e;
         st.anot.forEach(function (a) {
+            e = conTam(e0, a.tam);
             var color = a.color || COLORES[0];
             cx.strokeStyle = color; cx.fillStyle = color; cx.lineWidth = e.trazo;
             if (a.tipo === 'cota') {
@@ -172,6 +180,9 @@
             '#mod-anot .an-lienzo img,#mod-anot .an-lienzo svg{position:absolute;left:0;top:0;width:100%;height:100%;display:block;}',
             '#mod-anot .an-col{width:26px;height:26px;border-radius:50%;min-width:26px;padding:0;border:2px solid #555;}',
             '#mod-anot .an-col.on{border-color:#fff;box-shadow:0 0 0 2px #007aff;}',
+            '#mod-anot .an-tam{display:flex;align-items:center;gap:6px;width:100%;font-size:13px;color:#ccc;}',
+            '#mod-anot .an-tam input[type=range]{flex:1;accent-color:#007aff;min-width:80px;}',
+            '#mod-anot .an-tam input[type=number]{width:58px;background:#2c2c2e;color:#fff;border:1px solid #3a3a3c;border-radius:8px;padding:6px;font-size:15px;font-weight:700;text-align:center;}',
             '#mod-anot .an-ayuda{font-size:12px;color:#aaa;padding:4px 10px;background:#1c1c1e;text-align:center;}',
             '#an-dlg{position:fixed;inset:0;z-index:9950;background:rgba(0,0,0,.6);display:none;align-items:flex-end;justify-content:center;}',
             '#an-dlg .box{background:#fff;color:#1c1c1e;width:100%;max-width:520px;border-radius:16px 16px 0 0;padding:16px;padding-bottom:max(16px,env(safe-area-inset-bottom));}',
@@ -196,7 +207,7 @@
             '<div class="an-bar">' +
             '  <span style="display:flex;gap:6px;align-items:center;">' + COLORES.map(function (c, i) { return '<button class="an-col' + (i ? '' : ' on') + '" style="background:' + c + '" onclick="_anColor(' + i + ')" aria-label="Color"></button>'; }).join('') + '</span>' +
             '  <button id="an-ext" onclick="_anExtremos()" title="Extremos de la cota">→← flechas</button>' +
-            '  <span style="display:flex;gap:6px;"><button onclick="_anZoom(1.5)" aria-label="Acercar">＋</button><button onclick="_anZoom(1/1.5)" aria-label="Alejar">－</button></span>' +
+            '  <span class="an-tam"><span>Tamaño</span><input type="range" id="an-tam-r" min="30" max="300" step="5" value="100" oninput="_anTam(this.value)"><input type="number" id="an-tam-n" min="30" max="300" step="5" value="100" inputmode="numeric" onchange="_anTam(this.value)"><span>%</span></span>' +
             '  <span style="display:flex;gap:6px;"><button id="an-undo" onclick="_anDeshacer()" aria-label="Deshacer">↶</button><button id="an-redo" onclick="_anRehacer()" aria-label="Rehacer">↷</button></span>' +
             '  <span id="an-cuenta" style="font-size:12px;color:#aaa;width:100%;text-align:center;"></span>' +
             '</div>';
@@ -204,11 +215,18 @@
         var dlg = document.createElement('div');
         dlg.id = 'an-dlg';
         document.body.appendChild(dlg);
-        var svg = $('an-svg');
-        svg.addEventListener('pointerdown', abajo);
-        svg.addEventListener('pointermove', mover);
-        svg.addEventListener('pointerup', arriba);
-        svg.addEventListener('pointercancel', function () { st.borrador = null; st.arrastre = null; dibujar(); });
+        // Toda la zona recibe los dedos: con dos dedos se acerca/aleja y se mueve, como en la galería.
+        var zona = $('an-zona');
+        zona.addEventListener('pointerdown', abajo);
+        zona.addEventListener('pointermove', mover);
+        zona.addEventListener('pointerup', arriba);
+        zona.addEventListener('pointercancel', arriba);
+        zona.addEventListener('wheel', function (ev) {   // PC: rueda del mouse
+            if (!st) return;
+            ev.preventDefault();
+            var r = zona.getBoundingClientRect();
+            zoomEn(st.vista.z * (ev.deltaY < 0 ? 1.15 : 1 / 1.15), ev.clientX - r.left, ev.clientY - r.top, st.vista.x, st.vista.y, st.vista.z, ev.clientX - r.left, ev.clientY - r.top);
+        }, { passive: false });
     }
 
     var AYUDA = {
@@ -216,6 +234,7 @@
         circulo: 'Arrastrá para marcar con un círculo.', rectangulo: 'Arrastrá para marcar con un rectángulo.',
         nota: 'Tocá donde va la nota.', mover: 'Arrastrá para mover la foto. Tocá una anotación para editarla o borrarla.'
     };
+    var AYUDA_ZOOM = ' Con dos dedos: acercar, alejar y mover.';
 
     function punto(ev) {
         var svg = $('an-svg'), pt = svg.createSVGPoint();
@@ -233,11 +252,31 @@
         st.vista = { z: 1, x: (W - st.w * f) / 2, y: (H - st.h * f) / 2, base: f };
         aplicarVista();
     }
+    /** Zoom con el punto (mx0,my0) de la vista inicial (vx0,vy0,z0) llevado a (mx,my) de la pantalla. */
+    function zoomEn(nz, mx0, my0, vx0, vy0, z0, mx, my) {
+        nz = Math.max(1, Math.min(10, nz));
+        var lx = (mx0 - vx0) / z0, ly = (my0 - vy0) / z0;
+        st.vista.z = nz; st.vista.x = mx - lx * nz; st.vista.y = my - ly * nz;
+        if (nz === 1 && z0 > 1 && Math.abs(mx - mx0) + Math.abs(my - my0) < 2) { encajar(); return; }
+        aplicarVista();
+    }
+    function dedos() { return Object.keys(st.punteros).map(function (k) { return st.punteros[k]; }); }
     function guardarHistoria() { st.historial.push(clon(st.anot)); st.rehacer = []; if (st.historial.length > 100) st.historial.shift(); }
 
     function abajo(ev) {
+        if (!st) return;
         ev.preventDefault();
-        $('an-svg').setPointerCapture(ev.pointerId);
+        try { $('an-zona').setPointerCapture(ev.pointerId); } catch (e) { /* nada */ }
+        st.punteros[ev.pointerId] = { x: ev.clientX, y: ev.clientY };
+        var ds = dedos();
+        if (ds.length >= 2) {   // segundo dedo: se cancela lo que se estaba dibujando y empieza el pellizco
+            st.borrador = null; st.arrastre = null;
+            var r = $('an-zona').getBoundingClientRect(), a = ds[0], b = ds[1];
+            st.pinch = { d0: Math.hypot(b.x - a.x, b.y - a.y) || 1, mx0: (a.x + b.x) / 2 - r.left, my0: (a.y + b.y) / 2 - r.top, vx0: st.vista.x, vy0: st.vista.y, z0: st.vista.z, left: r.left, top: r.top };
+            dibujar();
+            return;
+        }
+        if (st.pinch) return;
         var p = punto(ev);
         if (st.herr === 'mover') {
             var gi = ev.target.closest && ev.target.closest('g[data-i]');
@@ -248,10 +287,20 @@
         st.arrastre = { de: p };
         st.borrador = st.herr === 'cota' ? { tipo: 'cota', de: p, a: p, color: st.color, extremos: st.extremos } :
             { tipo: 'marca', forma: st.herr, de: p, a: p, color: st.color };
+        st.borrador.tam = st.tam;
         dibujar();
     }
     function mover(ev) {
-        if (!st || !st.arrastre) return;
+        if (!st) return;
+        if (st.punteros[ev.pointerId]) st.punteros[ev.pointerId] = { x: ev.clientX, y: ev.clientY };
+        if (st.pinch) {
+            var ds = dedos();
+            if (ds.length < 2) return;
+            var a = ds[0], b = ds[1], P = st.pinch;
+            zoomEn(P.z0 * Math.hypot(b.x - a.x, b.y - a.y) / P.d0, P.mx0, P.my0, P.vx0, P.vy0, P.z0, (a.x + b.x) / 2 - P.left, (a.y + b.y) / 2 - P.top);
+            return;
+        }
+        if (!st.arrastre) return;
         if (st.herr === 'mover') {
             var dx = ev.clientX - st.arrastre.x, dy = ev.clientY - st.arrastre.y;
             if (Math.abs(dx) + Math.abs(dy) > 6) st.arrastre.movio = true;
@@ -261,10 +310,17 @@
         if (st.borrador) { st.borrador.a = punto(ev); dibujar(); }
     }
     function arriba(ev) {
-        if (!st || !st.arrastre) return;
+        if (!st) return;
+        delete st.punteros[ev.pointerId];
+        if (st.pinch) {   // termina el pellizco cuando se levantan todos los dedos
+            if (!dedos().length) { st.pinch = null; if (st.vista.z <= 1.02) encajar(); }
+            return;
+        }
+        if (ev.type === 'pointercancel') { st.borrador = null; st.arrastre = null; dibujar(); return; }
+        if (!st.arrastre) return;
         var a = st.arrastre; st.arrastre = null;
         if (st.herr === 'mover') { if (!a.movio && a.toque >= 0) editar(a.toque); return; }
-        if (a.nota) { pedir({ titulo: 'Nota', campos: [['texto', 'Texto', '']] }, function (v) { if (v.texto) { guardarHistoria(); st.anot.push({ tipo: 'nota', texto: v.texto, en: a.nota, color: st.color }); } dibujar(); }); return; }
+        if (a.nota) { pedir({ titulo: 'Nota', campos: [['texto', 'Texto', '']] }, function (v) { if (v.texto) { guardarHistoria(); st.anot.push({ tipo: 'nota', texto: v.texto, en: a.nota, color: st.color, tam: st.tam }); } dibujar(); }); return; }
         var b = st.borrador; st.borrador = null;
         var minimo = Math.max(st.w, st.h) / 60;
         if (!b || Math.hypot(b.a[0] - b.de[0], b.a[1] - b.de[1]) < minimo) { dibujar(); return; }
@@ -318,7 +374,7 @@
     window._anHerr = function (h) {
         st.herr = h;
         document.querySelectorAll('#mod-anot [data-h]').forEach(function (b) { b.classList.toggle('on', b.getAttribute('data-h') === h); });
-        $('an-ayuda').textContent = AYUDA[h];
+        $('an-ayuda').textContent = AYUDA[h] + AYUDA_ZOOM;
     };
     window._anColor = function (i) {
         st.color = COLORES[i];
@@ -328,11 +384,18 @@
         st.extremos = st.extremos === 'ticks' ? 'flechas' : 'ticks';
         $('an-ext').textContent = st.extremos === 'ticks' ? '/ ticks /' : '→← flechas';
     };
-    window._anZoom = function (f) {
-        var z = $('an-zona'), cx = z.clientWidth / 2, cy = z.clientHeight / 2;
-        var nz = Math.max(1, Math.min(8, st.vista.z * f)), k = nz / st.vista.z;
-        st.vista.x = cx - (cx - st.vista.x) * k; st.vista.y = cy - (cy - st.vista.y) * k; st.vista.z = nz;
-        if (nz === 1) encajar(); else aplicarVista();
+    /** Tamaño de texto y líneas (30–300 %): cambia todas las anotaciones de esta foto y las nuevas. */
+    window._anTam = function (v) {
+        var n = Math.max(30, Math.min(300, Math.round(Number(v) || 100)));
+        $('an-tam-r').value = n; $('an-tam-n').value = n;
+        var t = n / 100;
+        if (t === st.tam) return;
+        clearTimeout(st._tamT);
+        if (!st._tamHist) { guardarHistoria(); st._tamHist = true; }   // un solo paso de deshacer por arrastre de la barra
+        st._tamT = setTimeout(function () { if (st) st._tamHist = false; }, 600);
+        st.tam = t;
+        st.anot.forEach(function (a) { a.tam = t; });
+        dibujar();
     };
     window._anDeshacer = function () { if (!st.historial.length) return; st.rehacer.push(clon(st.anot)); st.anot = st.historial.pop(); st.sel = -1; dibujar(); };
     window._anRehacer = function () { if (!st.rehacer.length) return; st.historial.push(clon(st.anot)); st.anot = st.rehacer.pop(); dibujar(); };
@@ -361,7 +424,9 @@
         crear();
         return new Promise(function (resolver) {
             var url = URL.createObjectURL(red.blob);
-            st = { w: red.ancho, h: red.alto, anot: previas ? clon(previas) : [], historial: [], rehacer: [], herr: 'cota', color: COLORES[0], extremos: 'flechas', sel: -1, resolver: resolver, url: url };
+            st = { w: red.ancho, h: red.alto, anot: previas ? clon(previas) : [], historial: [], rehacer: [], herr: 'cota', color: COLORES[0], extremos: 'flechas', sel: -1, resolver: resolver, url: url, punteros: {}, pinch: null, tam: 1 };
+            if (st.anot.length && st.anot[0].tam > 0) st.tam = st.anot[0].tam;
+            $('an-tam-r').value = Math.round(st.tam * 100); $('an-tam-n').value = Math.round(st.tam * 100);
             $('an-titulo').textContent = 'Anotar · ' + (nombre || 'foto');
             var svg = $('an-svg'); svg.setAttribute('viewBox', '0 0 ' + st.w + ' ' + st.h);
             st.capa = $('an-capa');
