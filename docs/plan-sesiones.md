@@ -89,6 +89,11 @@ Además: Prioridad 4 (Actions y repo privado) y, antes de la salida a la venta, 
 - [x] Desactivar el login anónimo y el registro abierto con email en Firebase Auth (paso D1–D2, nov 2026)
 - [x] Borrar la cuenta de prueba `test@rubikbolivia.com` y los 35 usuarios anónimos (paso D3): queda solo la cuenta del dueño
 - [x] Limitar la retención de versiones de Hosting a 20 (paso D4): se borran las versiones con el export
+- [x] **Storage cerrado al público (13 nov 2026).** Las reglas eran `allow read, write: if true` para todo el bucket
+      (cualquiera podía listar, leer, subir y borrar). Ahora: `/agente` y `/requerimientos` solo las Functions; el resto solo con
+      sesión iniciada. Se aplicó con `tools/storage-reglas.sh cerrar` en Cloud Shell → ruleset `6c6b9746-d80f-473a-99e1-8d91885a7c80`.
+      Volver atrás: `bash storage-reglas.sh volver projects/rubik-bolivia/rulesets/86a75b5e-3231-464c-9a17-63df1c805f6d`.
+      Al reabrir las apps de clientes/trabajadores revisar también sus permisos de Storage.
 - [x] `/api/imagen` (`proxyImagen`): solo lista blanca, solo imágenes de nuestro Storage (`docs/sesiones/01-cerrar-api-imagen.md`).
       Probado por el dueño (PDF de Auditoría Impositiva con fotos)
 
