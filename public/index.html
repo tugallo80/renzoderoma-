@@ -48,7 +48,13 @@
         .logo-img { height: 70px; max-width: 100%; border-radius: 12px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); object-fit: contain; background: #fff;}
         .welcome { font-size: 24px; font-weight: 900; margin-top: 15px; letter-spacing: -0.5px; color: var(--text);}
 
-        .grid-apps { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; max-width: 500px; margin: 0 auto; }
+        .grid-apps { display: grid; grid-template-columns: repeat(6, 1fr); gap: 15px; max-width: 500px; margin: 0 auto; }
+        /* Orden: Requerimiento y Clientes grandes (ancho completo); abajo, tres tarjetas iguales en una fila. */
+        .grid-apps .app-big { grid-column: 1 / -1; }
+        .grid-apps .app-sm { grid-column: span 2; padding: 16px 12px; min-height: 120px; }
+        .grid-apps .app-sm span { font-size: 13px; }
+        .grid-apps .app-sm i.main-ic { font-size: 28px; }
+        .grid-apps .app-sm i.bg-ic { font-size: 70px; }
         
         .app-btn { border-radius: 22px; padding: 20px; color: white; text-decoration: none; display: flex; flex-direction: column; justify-content: center; align-items: flex-start; position: relative; overflow: hidden; transition: transform 0.2s, box-shadow 0.2s; box-shadow: 0 8px 20px rgba(0,0,0,0.1); cursor: pointer; min-height: 120px; border: 1px solid rgba(255,255,255,0.1);}
         .app-btn:active { transform: scale(0.95); box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
@@ -228,25 +234,32 @@
     </div>
 
     <div class="grid-apps">
-        <a href="clientes.html" class="app-btn b-cli" style="grid-column: 1 / -1;">
+        <a href="requerimiento.html" class="app-btn b-req app-big">
+            <i class="ph-fill ph-clipboard-text main-ic"></i>
+            <span>Requerimiento<br>nuevo</span>
+            <span class="req-badge" id="req-badge" title="Requerimientos pendientes"></span>
+            <i class="ph-fill ph-paperclip bg-ic"></i>
+        </a>
+
+        <a href="clientes.html" class="app-btn b-cli app-big">
             <i class="ph-fill ph-users-three main-ic"></i>
             <span>Clientes &<br>Proyectos</span>
             <i class="ph-fill ph-briefcase bg-ic"></i>
         </a>
         
-        <a href="base_datos.html" class="app-btn b-db">
+        <a href="base_datos.html" class="app-btn b-db app-sm">
             <i class="ph-fill ph-database main-ic"></i>
             <span>Base de Datos<br>& Ítems</span>
             <i class="ph-fill ph-hard-drives bg-ic"></i>
         </a>
 
-        <a href="tesoreria.html" class="app-btn b-fin">
+        <a href="tesoreria.html" class="app-btn b-fin app-sm">
             <i class="ph-fill ph-wallet main-ic"></i>
             <span>Finanzas &<br>Tesorería</span>
             <i class="ph-fill ph-coins bg-ic"></i>
         </a>
 
-        <a href="portafolio-admin.html" class="app-btn b-portfolio">
+        <a href="portafolio-admin.html" class="app-btn b-portfolio app-sm">
             <i class="ph-fill ph-images main-ic"></i>
             <span>Portafolio<br>Web Pública</span>
             <i class="ph-fill ph-globe bg-ic"></i>
@@ -260,12 +273,6 @@
              <i class="ph-fill ph-robot bg-ic"></i>
              </a>
         -->
-        <a href="requerimiento.html" class="app-btn b-req">
-            <i class="ph-fill ph-clipboard-text main-ic"></i>
-            <span>Requerimiento<br>nuevo</span>
-            <span class="req-badge" id="req-badge" title="Requerimientos pendientes"></span>
-            <i class="ph-fill ph-paperclip bg-ic"></i>
-        </a>
 
     </div>
 
