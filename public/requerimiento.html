@@ -54,6 +54,10 @@
         .btn-mic { width: 46px; height: 46px; border-radius: 50%; padding: 0; font-size: 20px; background: var(--bg); border: 1px solid var(--border); flex: none; }
         .btn-mic.grabando { background: var(--red); color: #fff; border-color: var(--red); }
         .zona { border: 2px dashed var(--border); border-radius: 14px; padding: 18px; text-align: center; color: var(--gray); font-weight: 600; font-size: 14px; cursor: pointer; }
+        .origenes { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 10px; }
+        .origenes .btn { font-size: 14px; padding: 11px 8px; }
+        @media (min-width: 700px) { .origenes { grid-template-columns: repeat(4, 1fr); } }
+        @media (pointer: coarse) { #rq-zona { display: none; } }  /* en el celular bastan los botones */
         .zona.activa { border-color: var(--blue); background: rgba(0,122,255,.06); color: var(--blue); }
         .adjs { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; margin-top: 12px; }
         .adj { position: relative; background: var(--bg); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; font-size: 12px; }
@@ -117,11 +121,20 @@
         </div>
         <div class="campo">
             <label class="lbl">Adjuntos</label>
+            <div class="origenes">
+                <button type="button" class="btn btn-sec" onclick="document.getElementById('rq-file-cam').click()"><i class="ph-bold ph-camera"></i> Cámara</button>
+                <button type="button" class="btn btn-sec" onclick="document.getElementById('rq-file-gal').click()"><i class="ph-bold ph-images"></i> Galería</button>
+                <button type="button" class="btn btn-sec" onclick="document.getElementById('rq-file').click()"><i class="ph-bold ph-folder-open"></i> Archivos</button>
+                <button type="button" class="btn btn-sec" onclick="RQ.enlace()"><i class="ph-bold ph-link"></i> Enlace (Drive)</button>
+            </div>
             <div class="zona" id="rq-zona" onclick="document.getElementById('rq-file').click()">
                 <i class="ph-bold ph-paperclip" style="font-size:22px;"></i><br>
                 Fotos, capturas, renders, PDF, 3D (FBX, GLB, ZIP) u otros<br>
-                <span style="font-size:12px;">Tocá para elegir, arrastrá o pegá (Ctrl+V)</span>
+                <span style="font-size:12px;">En la PC: arrastrá o pegá (Ctrl+V) acá</span>
             </div>
+            <!-- Tres entradas: con una sola, Android ofrece solo Cámara/Videocámara/Archivos y no la Galería -->
+            <input type="file" id="rq-file-cam" accept="image/*" capture="environment" style="display:none" onchange="RQ.archivos(this.files); this.value='';">
+            <input type="file" id="rq-file-gal" accept="image/*" multiple style="display:none" onchange="RQ.archivos(this.files); this.value='';">
             <input type="file" id="rq-file" multiple style="display:none" onchange="RQ.archivos(this.files); this.value='';">
             <div class="adjs" id="rq-adjs"></div>
             <div id="rq-renders-caja" style="display:none;margin-top:16px;">
@@ -641,6 +654,18 @@ window.RQ = (function () {
         pintarLista();
     }
 
+    // ------------------------------------------------------------------ enlaces (Drive u otros)
+    // Se agrega a la descripción: Claude lo ve con leer_requerimiento y lo abre con su conector de Google Drive.
+    function enlace() {
+        var v = prompt('Pegá el enlace (Google Drive, Dropbox, WeTransfer…):', '');
+        if (v === null) return;
+        v = v.trim();
+        if (!/^https?:\/\/\S+$/i.test(v)) { alert('Eso no parece un enlace. Tiene que empezar con https://'); return; }
+        var t = $('rq-desc');
+        if (t.value.indexOf(v) === -1) t.value = (t.value ? t.value.replace(/\s+$/, '') + '\n' : '') + 'Enlace: ' + v;
+        aviso('Enlace agregado a la descripción. Tocá Guardar.');
+    }
+
     // ------------------------------------------------------------------ inicio
     function iniciar() {
         var zona = $('rq-zona');
@@ -673,7 +698,7 @@ window.RQ = (function () {
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', iniciar); else iniciar();
 
     return {
-        nuevo: nuevo, abrir: abrir, guardar: guardar, pedirAClaude: pedirAClaude, descartar: descartar, reabrir: reabrir, cambioCliente: cambioCliente, mic: mic,
+        nuevo: nuevo, abrir: abrir, guardar: guardar, pedirAClaude: pedirAClaude, descartar: descartar, reabrir: reabrir, cambioCliente: cambioCliente, mic: mic, enlace: enlace,
         archivos: archivos, anotar: anotar, quitar: quitar, filtro: filtro, verRender: verRender,
         reintentar: function (c) { var p = subiendo.find(function (x) { return x.clave === c; }); if (p && p.reintentar) p.reintentar(p); },
         descartarError: function (c) { subiendo = subiendo.filter(function (x) { return x.clave !== c; }); pintarAdjuntos(); }
