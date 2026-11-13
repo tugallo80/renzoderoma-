@@ -94,6 +94,8 @@ Además: Prioridad 4 (Actions y repo privado) y, antes de la salida a la venta, 
       sesión iniciada. Se aplicó con `tools/storage-reglas.sh cerrar` en Cloud Shell → ruleset `6c6b9746-d80f-473a-99e1-8d91885a7c80`.
       Volver atrás: `bash storage-reglas.sh volver projects/rubik-bolivia/rulesets/86a75b5e-3231-464c-9a17-63df1c805f6d`.
       Al reabrir las apps de clientes/trabajadores revisar también sus permisos de Storage.
+- [ ] `geminiLiveKey` le entrega la clave completa de Gemini al navegador (solo a la lista blanca del hub). Cambiar por un
+      token efímero de Gemini Live para que la clave nunca salga del servidor. No urgente.
 - [x] `/api/imagen` (`proxyImagen`): solo lista blanca, solo imágenes de nuestro Storage (`docs/sesiones/01-cerrar-api-imagen.md`).
       Probado por el dueño (PDF de Auditoría Impositiva con fotos)
 
