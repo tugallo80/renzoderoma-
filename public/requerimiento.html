@@ -151,6 +151,7 @@
             <button class="btn btn-prim" id="rq-guardar" onclick="RQ.guardar()"><i class="ph-bold ph-floppy-disk"></i> Guardar</button>
         </div>
         <div class="nota" id="rq-estado-txt"></div>
+        <div class="nota" id="rq-guardado"></div>
     </div>
 
     <div class="card">
@@ -229,7 +230,13 @@ window.RQ = (function () {
     function llenarForm() {
         var r = actual || {};
         $('rq-titulo').textContent = r.id ? (r.titulo || 'Requerimiento') : 'Requerimiento nuevo';
-        $('rq-desc').value = r.descripcion || '';
+        var guardada = r.descripcion || '', local = leerBorrador(r.id);
+        $('rq-desc').value = local !== null && local !== guardada ? local : guardada;
+        if (local !== null && local !== guardada) { estadoGuardado('sin guardar'); programarGuardado(); } else estadoGuardado('');
+        llenarCliente();
+    }
+    function llenarCliente() {
+        var r = actual || {};
         var c = r.cliente;
         if (c && c.cid) { $('rq-cliente').value = c.cid; if ($('rq-cliente').value !== c.cid) { pintarClientes(); $('rq-cliente').value = c.cid; } $('rq-cliente-nuevo').style.display = 'none'; }
         else if (c && c.nombre) { $('rq-cliente').value = '__nuevo__'; $('rq-cliente-nuevo').value = c.nombre; $('rq-cliente-nuevo').style.display = 'block'; }
@@ -237,6 +244,33 @@ window.RQ = (function () {
         pintarEstado();
         pintarAdjuntos();
     }
+
+    // ------------------------------------------------------------------ guardado automático de la descripción
+    // Cada cambio queda en el teléfono al instante (sobrevive a recargar) y se guarda en la app a los 2 s.
+    function claveBorrador(id) { return 'rubik_rq_borrador_' + (id || 'nuevo'); }
+    function leerBorrador(id) { try { return localStorage.getItem(claveBorrador(id)); } catch (e) { return null; } }
+    function borrador() {
+        try { localStorage.setItem(claveBorrador(actual && actual.id), $('rq-desc').value); } catch (e) { /* sin espacio: queda el guardado en la app */ }
+        estadoGuardado('sin guardar');
+        programarGuardado();
+    }
+    var tGuardado = null, guardandoAuto = null;
+    function programarGuardado() { clearTimeout(tGuardado); tGuardado = setTimeout(guardarAuto, 2000); }
+    async function guardarAuto() {
+        if (!actual || !actual.id) return;   // el nuevo se crea al tocar Guardar o al adjuntar; mientras, queda en el teléfono
+        if (guardandoAuto) { programarGuardado(); return; }
+        var id = actual.id, texto = $('rq-desc').value;
+        guardandoAuto = llamar({ accion: 'editar', id: id, cliente: clienteDelForm(), descripcion: texto });
+        try {
+            await guardandoAuto;
+            if (actual && actual.id === id) {
+                actual.descripcion = texto;
+                if ($('rq-desc').value === texto) { try { localStorage.removeItem(claveBorrador(id)); } catch (e) { /* nada */ } estadoGuardado('guardado ✓'); }
+            }
+        } catch (e) { estadoGuardado('sin conexión: queda en el teléfono y se reintenta'); setTimeout(programarGuardado, 8000); }
+        finally { guardandoAuto = null; }
+    }
+    function estadoGuardado(t) { var e = $('rq-guardado'); if (e) e.textContent = t ? 'Descripción: ' + t : ''; }
     function pintarEstado() {
         var r = actual || {};
         var desc = r.estado === 'descartado';
@@ -258,10 +292,15 @@ window.RQ = (function () {
     async function asegurarId() {
         if (actual && actual.id) return actual.id;
         if (!creando) {
-            creando = llamar({ accion: 'crear', cliente: clienteDelForm(), descripcion: $('rq-desc').value })
+            var cuerpoDesc = $('rq-desc').value;
+            creando = llamar({ accion: 'crear', cliente: clienteDelForm(), descripcion: cuerpoDesc })
                 .then(function (r) {
                     actual = Object.assign({ id: r.id, estado: 'pendiente' }, todos[r.id] || {});
                     actual.id = r.id;
+                    // el borrador del "nuevo" pasa a ser el de este id (y se guarda si cambió mientras se creaba)
+                    try { localStorage.removeItem(claveBorrador(null)); } catch (e) { /* nada */ }
+                    if (actual.descripcion === undefined) actual.descripcion = cuerpoDesc;
+                    if ($('rq-desc').value !== actual.descripcion) borrador();
                     history.replaceState({}, '', '#' + r.id);
                     pintarEstado(); pintarLista();
                     return r.id;
@@ -279,8 +318,12 @@ window.RQ = (function () {
                 if (!$('rq-desc').value.trim() && !clienteDelForm() && !subiendo.length) { aviso('Escribí qué pidió el cliente o adjuntá algo.'); return; }
                 await asegurarId();
             } else {
-                await llamar({ accion: 'editar', id: actual.id, cliente: clienteDelForm(), descripcion: $('rq-desc').value });
+                var texto = $('rq-desc').value;
+                clearTimeout(tGuardado);
+                await llamar({ accion: 'editar', id: actual.id, cliente: clienteDelForm(), descripcion: texto });
+                actual.descripcion = texto;
             }
+            if (actual && actual.id && $('rq-desc').value === actual.descripcion) { try { localStorage.removeItem(claveBorrador(actual.id)); } catch (e) { /* nada */ } estadoGuardado('guardado ✓'); }
             if (subiendo.some(function (p) { return p.estado === 'procesando'; })) aviso('Guardado. Los adjuntos se siguen subiendo…');
             else aviso('Guardado ✓ Queda pendiente para Claude.');
         } catch (e) { alert('No se pudo guardar: ' + e.message); }
@@ -348,17 +391,23 @@ window.RQ = (function () {
         dictar(SR, 'es-BO');
     }
     function dictar(SR, idioma) {
-        var t = $('rq-desc'), base = t.value ? t.value.replace(/\s+$/, '') + ' ' : '', finalTxt = '', oyo = false;
+        var t = $('rq-desc'), oyo = false, puesto = '';   // puesto = lo que este dictado agregó al final del texto
         var r = new SR();
-        r.lang = idioma; r.continuous = true; r.interimResults = true;
+        // En Android, el modo continuo repite frases (el texto "se llena"): ahí se escucha frase por frase y se reanuda solo.
+        r.lang = idioma; r.continuous = !/Android/i.test(navigator.userAgent); r.interimResults = true;
         r.onresult = function (ev) {
             oyo = true; cortes = 0;
-            var interino = '';
-            for (var i = ev.resultIndex; i < ev.results.length; i++) {
-                if (ev.results[i].isFinal) finalTxt += ev.results[i][0].transcript + ' ';
-                else interino += ev.results[i][0].transcript;
-            }
-            t.value = base + finalTxt + interino;
+            var dicho = '';
+            for (var i = 0; i < ev.results.length; i++) dicho += ev.results[i][0].transcript;
+            dicho = dicho.trim();
+            // Solo se reemplaza lo que agregó el dictado: lo que el dueño escribió a mano no se toca
+            var v = t.value;
+            if (puesto && v.slice(-puesto.length) === puesto) v = v.slice(0, -puesto.length);
+            else if (puesto) { puesto = ''; }
+            var sep = v && !/\s$/.test(v) && dicho ? ' ' : '';
+            puesto = sep + dicho;
+            t.value = v + puesto;
+            borrador();
         };
         r.onerror = function (ev) {
             if (ev.error === 'language-not-supported' && idioma === 'es-BO') { r.onend = null; rec = null; dictar(SR, 'es-419'); return; }
@@ -366,7 +415,7 @@ window.RQ = (function () {
             if (ev.error === 'audio-capture') { seguir = false; alert('No se encontró el micrófono.'); }
         };
         r.onend = function () {
-            rec = null; t.value = t.value.replace(/\s+$/, '');
+            rec = null;
             if (!oyo) cortes++;
             // Chrome corta tras un silencio: volver a escuchar (hasta 5 cortes seguidos sin oír nada)
             if (seguir && cortes < 5) { setTimeout(function () { if (seguir) dictar(SR, idioma); }, 250); return; }
@@ -672,6 +721,13 @@ window.RQ = (function () {
         ['dragenter', 'dragover'].forEach(function (ev) { zona.addEventListener(ev, function (e) { e.preventDefault(); zona.classList.add('activa'); }); });
         ['dragleave', 'drop'].forEach(function (ev) { zona.addEventListener(ev, function (e) { e.preventDefault(); zona.classList.remove('activa'); }); });
         zona.addEventListener('drop', function (e) { archivos(e.dataTransfer.files); });
+        if (!location.hash.slice(1)) llenarForm();   // recupera lo que quedó escrito sin guardar en un requerimiento nuevo
+        $('rq-desc').addEventListener('input', function (e) {
+            // si escribe a mano mientras el micrófono está prendido, se apaga el micrófono para no pisar lo escrito
+            if (e.isTrusted && (rec || seguir) && e.inputType && e.inputType.indexOf('insert') === 0 && e.inputType !== 'insertReplacementText') mic();
+            borrador();
+        });
+        window.addEventListener('pagehide', function () { if (actual && actual.id && tGuardado) guardarAuto(); });
         document.addEventListener('paste', function (e) {
             var fs = Array.from((e.clipboardData && e.clipboardData.files) || []);
             if (fs.length) { e.preventDefault(); archivos(fs); }
@@ -679,7 +735,7 @@ window.RQ = (function () {
         window.addEventListener('beforeunload', function (e) { if (subiendo.some(function (p) { return p.estado === 'procesando'; })) { e.preventDefault(); e.returnValue = ''; } });
         firebase.auth().onAuthStateChanged(function (u) {
             if (!u) return;
-            db.ref('clientes').once('value').then(function (s) { clientes = s.val() || {}; pintarClientes(); if (actual) llenarForm(); }).catch(function () {});
+            db.ref('clientes').once('value').then(function (s) { clientes = s.val() || {}; pintarClientes(); if (actual) llenarCliente(); }).catch(function () {});
             db.ref('requerimientos').orderByChild('actualizado').limitToLast(200).on('value', function (s) {
                 todos = s.val() || {};
                 var h = location.hash.slice(1);
