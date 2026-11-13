@@ -25,7 +25,7 @@ HTML/CSS/JS con Firebase Realtime DB y Firebase Storage. Usa Phosphor Icons. Inc
 - El paste global (Ctrl+V) detecta si hay un ítem activo (tab Planos) y sube al ítem, o si no va a la galería general.
 - Los trabajadores acceden con `?mode=worker` en la URL y ven los mismos archivos pero sin controles de subida/eliminación.
 - El módulo CAD se abre desde aquí como pantalla separada (`cad.html`).
-- La herramienta de medición IA (`Medir`) permite acotar dimensiones sobre las imágenes.
+- (Sesión 6) Se retiró el botón **Medir**: en su lugar, **Requerimiento** abre `requerimiento.html` (fotos con cotas y notas con el anotador del agente). El código del modal viejo sigue, sin botón.
 
 ## Problemas conocidos y pendientes
 - Los PDFs se muestran en lista pero no se previsualizan inline (se abren en nueva pestaña).
