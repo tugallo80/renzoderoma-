@@ -1848,6 +1848,11 @@
     function triggerUpload() { document.getElementById('file-up').click(); }
     
     async function processPhotoUpload(inp) { 
+        if(inp.files[0] && !/^image\//.test(inp.files[0].type || '') && !/\.(jpe?g|png|webp|gif|heic|heif)$/i.test(inp.files[0].name || '')) {
+            // Este botón es solo para la foto del ítem: un 3D, PDF u otro archivo va por el Agente IA o el Requerimiento
+            alert('Este botón es solo para fotos del ítem.\n\n"' + inp.files[0].name + '" no es una imagen. Para un 3D (FBX, GLB, ZIP) o un PDF: abrí el Agente IA de este proyecto y adjuntalo con el clip 📎, o cargalo en el Requerimiento. Así Claude lo puede medir.');
+            inp.value = ""; return;
+        }
         if(inp.files[0]) { 
             document.getElementById('loader-title').innerText = "Subiendo..."; document.getElementById('global-loader').style.display='flex'; 
             try { 
@@ -1855,7 +1860,7 @@
                 const snap = await storage.ref(`presupuesto/${pid}_img_${Date.now()}.jpg`).putString(b64, 'data_url'); 
                 const url = await snap.ref.getDownloadURL(); 
                 saveImageToItem(url); 
-            } catch(e) { alert("Error al subir"); } 
+            } catch(e) { alert("Error al subir: " + (e && e.message ? e.message : e)); } 
             finally { document.getElementById('global-loader').style.display='none'; inp.value = ""; document.getElementById('mod-photo').style.display='none';} 
         } 
     }
