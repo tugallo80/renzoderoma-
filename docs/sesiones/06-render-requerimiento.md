@@ -27,8 +27,8 @@
 | 2 | Pantalla Requerimiento (formulario, adjuntos, anotador, lista de pendientes) + tarjeta en `index.html` + reglas | ✅ mergeada (#310) · falta la prueba del dueño en la app |
 | 3 | Borrar `requerimiento-asistido` (sin tocar los datos) | ✅ PR |
 | 4 | Conector: `listar_requerimientos`, `leer_requerimiento`, `asignar_requerimiento` + skill + botón "Pedile a Claude" | ✅ mergeada (#314) |
-| 5 | Conector: `generar_render` (Nano Banana 2.1 / Pro fijo) y `aprobar_render` + skill + renders en la app | ✅ PR · espera el OK de la maestra (toca `functions/`) |
-| 6 | Retirar Render y Medir; matriz en el ítem, PDF y producción | pendiente |
+| 5 | Conector: `generar_render` (Nano Banana 2.1 / Pro fijo) y `aprobar_render` + skill + renders en la app | ✅ mergeada (#317) |
+| 6 | Retirar Render y Medir; matriz en el ítem, PDF y producción | ✅ PR |
 
 ### Entrega 2 — cómo quedó
 - **Pantalla** `public/requerimiento.html`, desde la tarjeta **"Requerimiento nuevo"** del inicio (reemplaza a Cerebro
@@ -67,6 +67,14 @@
 2. En la foto, ✏️ → poné una cota y una nota → Listo. Tiene que decir "1 anotación" (o las que pusiste).
 3. **Guardar** → aparece en la lista como *pendiente* y el inicio muestra el número.
 4. Salí, volvé a entrar, tocá el requerimiento: tiene que estar todo. Volvé a anotar la foto: aparecen las cotas de antes.
+
+### Entrega 6 — botones viejos retirados; la matriz ya llega al PDF y a producción
+- **Presupuesto:** el botón **Render** (PC y barra del celular) ahora es **Requerimiento** (abre `requerimiento.html`); se
+  quitaron el cubito "Render Axonométrico IA" de cada ítem y "⚡ Generar Render IA" del menú de la foto. Los modales viejos
+  quedan en el código sin botón (se pueden borrar cuando el dueño confirme). **Presupuesto IA no se tocó.**
+- **Diseños:** el botón **Medir** ahora es **Requerimiento**.
+- **Matriz:** `aprobar_render` la deja en `item.img`, que ya usan el PDF del presupuesto (anexos y ficha del ítem),
+  producción (galería y PDF de producción) y el portal del cliente. No hizo falta tocar esas pantallas.
 
 ### Entrega 5 — render con Gemini desde Claude
 **Diseño (corregido con la sesión del conector y la maestra):** Firebase Hosting corta a los **60 s** los pedidos que

@@ -36,5 +36,5 @@ HTML/CSS/JS puro con Firebase Realtime DB y Storage. Librerías: JSZip, Sortable
 ## Problemas conocidos y pendientes
 - En proyectos con más de ~200 ítems el re-render puede ser lento.
 - El historial de versiones del presupuesto no está implementado.
-- La integración de Render 3D está como botón pero la funcionalidad depende de un servicio externo.
+- (Sesión 6) Se retiraron el botón **Render**, el cubito "Render Axonométrico IA" de cada ítem y "⚡ Generar Render IA" del menú de la foto: ahora el botón **Requerimiento** abre `requerimiento.html` y el render lo hace Claude (`generar_render` / `aprobar_render` → `item.img`). El código de los modales viejos sigue, sin botones. **Presupuesto IA no se tocó** (usa su anotador `mod-medicion-pres`).
 - La generación APU por lotes (Gemini) tiene `maxOutputTokens: 16000`; ítems muy complejos con muchos materiales/MO pueden seguir truncando si el JSON supera ese límite.
