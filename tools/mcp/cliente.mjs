@@ -99,6 +99,14 @@ try {
     paso('listar_clientes, listar_proyectos, abrir_cotizacion, registrar_mensaje_del_dueno, armar_borrador; aplicar sin confirmación → error');
 
     // 7. GET al MCP: 405 (no hay stream de servidor)
+    // imagen en el resultado (sesión 6): llega como bloque image por el SDK real
+    const img = await cliente.callTool({ name: 'prueba_imagen', arguments: {} });
+    assert.ok(!img.isError);
+    assert.deepEqual(img.content.map((c) => c.type), ['text', 'image']);
+    assert.equal(img.content[1].mimeType, 'image/png');
+    assert.equal(Buffer.from(img.content[1].data, 'base64').subarray(1, 4).toString(), 'PNG');
+    paso('prueba_imagen → texto + imagen PNG');
+
     r = await ir('/mcp', { headers: { Authorization: `Bearer ${tok.access_token}`, Accept: 'text/event-stream' } });
     assert.equal(r.status, 405);
     paso('GET /mcp → 405');

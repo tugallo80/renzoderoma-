@@ -430,6 +430,59 @@ prueba('skill cotizar-en-rubik: frontmatter válido y el ZIP publicado igual a l
     archivos.forEach((f) => assert.equal(execFileSync('unzip', ['-p', zip, f]).toString(), readFileSync(dir + f.slice('cotizar-en-rubik/'.length), 'utf8'), `${f}: regenerá el ZIP con npm run skill`));
 });
 
+// ------------------------------------------------------------------ imágenes (sesión 6)
+prueba('prueba_imagen: devuelve texto + PNG válido con el código dibujado, sin tocar la base', async () => {
+    const ent = crearEntorno();
+    const antes = JSON.stringify(ent.almacen.datos);
+    const r = await H.llamar(ent.almacen, 'renzo', 'prueba_imagen', {});
+    assert.ok(!r.isError, JSON.stringify(r));
+    assert.equal(r.content.length, 2);
+    assert.equal(r.content[0].type, 'text');
+    assert.equal(r.content[1].type, 'image');
+    assert.equal(r.content[1].mimeType, 'image/png');
+    const buf = Buffer.from(r.content[1].data, 'base64');
+    assert.deepEqual([...buf.subarray(0, 8)], [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+    // CRC de cada bloque y decodificación de los píxeles
+    const IMG = require('../../functions/mcp/imagen.js');
+    const zlib = require('zlib');
+    let p = 8, idat = [], ancho = 0, alto = 0;
+    while (p < buf.length) {
+        const n = buf.readUInt32BE(p), tipo = buf.toString('ascii', p + 4, p + 8), datos = buf.subarray(p + 8, p + 8 + n);
+        assert.equal(buf.readUInt32BE(p + 8 + n), IMG.crc32(buf.subarray(p + 4, p + 8 + n)), 'CRC de ' + tipo);
+        if (tipo === 'IHDR') { ancho = datos.readUInt32BE(0); alto = datos.readUInt32BE(4); }
+        if (tipo === 'IDAT') idat.push(datos);
+        p += 12 + n;
+    }
+    const filas = zlib.inflateSync(Buffer.concat(idat));
+    assert.equal(filas.length, (ancho * 3 + 1) * alto);
+    const px = (x, y) => [...filas.subarray(y * (ancho * 3 + 1) + 1 + x * 3, y * (ancho * 3 + 1) + 1 + x * 3 + 3)];
+    assert.deepEqual(px(5, 5), [220, 30, 30]);          // arriba izquierda: rojo
+    assert.deepEqual(px(ancho - 5, 5), [30, 170, 60]);  // arriba derecha: verde
+    // el código no viaja en el texto
+    assert.ok(!/\b\d{4}\b(?! caracteres)/.test(r.content[0].text.replace(/\d+×\d+|\d+ KB|\d+ caracteres/g, '')));
+    // hay cifras dibujadas (píxeles oscuros en la zona del número)
+    let oscuros = 0; for (let y = 110; y < 250; y++) for (let x = 140; x < 600; x++) if (px(x, y)[0] < 50) oscuros++;
+    assert.ok(oscuros > 2000);
+    assert.equal(JSON.stringify(ent.almacen.datos), antes);
+});
+
+prueba('prueba_imagen: peso_kb agranda la imagen y se acota; entrada inválida se rechaza', async () => {
+    const ent = crearEntorno();
+    const chica = await H.llamar(ent.almacen, 'renzo', 'prueba_imagen', {});
+    const grande = await H.llamar(ent.almacen, 'renzo', 'prueba_imagen', { peso_kb: 100 });
+    const kb = (r) => Buffer.from(r.content[1].data, 'base64').length / 1024;
+    assert.ok(kb(chica) < 10, 'chica: ' + kb(chica));
+    assert.ok(kb(grande) > 95 && kb(grande) < 110, 'grande: ' + kb(grande));
+    const tope = await H.llamar(ent.almacen, 'renzo', 'prueba_imagen', { peso_kb: 1e6 });
+    assert.ok(kb(tope) < 410);
+    const mala = await H.llamar(ent.almacen, 'renzo', 'prueba_imagen', { peso_kb: 'mucho' });
+    assert.ok(mala.isError);
+    // las demás herramientas siguen devolviendo un solo bloque de texto
+    const otra = await H.llamar(ent.almacen, 'renzo', 'listar_clientes', {});
+    assert.equal(otra.content.length, 1);
+    assert.equal(otra.content[0].type, 'text');
+});
+
 // ------------------------------------------------------------------ correr
 let bien = 0;
 for (const [n, fn] of pruebas) {
