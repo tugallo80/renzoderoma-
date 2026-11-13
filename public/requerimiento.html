@@ -317,18 +317,29 @@ window.RQ = (function () {
     }
 
     // ------------------------------------------------------------------ dictado (del navegador; sin IA)
-    var rec = null;
+    // Mientras dicta: la pantalla no se apaga (wake lock) y, si Chrome corta por silencio, sigue solo
+    // hasta que el dueño toque ⏹.
+    var rec = null, seguir = false, wake = null, cortes = 0;
+    async function pantallaEncendida(on) {
+        try {
+            if (on && !wake && 'wakeLock' in navigator) { wake = await navigator.wakeLock.request('screen'); wake.addEventListener('release', function () { wake = null; }); }
+            if (!on && wake) { var w = wake; wake = null; await w.release(); }
+        } catch (e) { /* sin wake lock: igual dicta */ }
+    }
+    document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'visible' && seguir) pantallaEncendida(true); });
     function mic() {
-        if (rec) { try { rec.stop(); } catch (e) { /* nada */ } return; }
+        if (rec || seguir) { seguir = false; pantallaEncendida(false); if (rec) { try { rec.stop(); } catch (e) { /* nada */ } } marcarMic(false); return; }
         var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
         if (!SR) { alert('Este navegador no permite dictar. Usá el micrófono del teclado del teléfono.'); return; }
+        seguir = true; cortes = 0; pantallaEncendida(true);
         dictar(SR, 'es-BO');
     }
     function dictar(SR, idioma) {
-        var t = $('rq-desc'), base = t.value ? t.value.replace(/\s+$/, '') + ' ' : '', finalTxt = '';
+        var t = $('rq-desc'), base = t.value ? t.value.replace(/\s+$/, '') + ' ' : '', finalTxt = '', oyo = false;
         var r = new SR();
         r.lang = idioma; r.continuous = true; r.interimResults = true;
         r.onresult = function (ev) {
+            oyo = true; cortes = 0;
             var interino = '';
             for (var i = ev.resultIndex; i < ev.results.length; i++) {
                 if (ev.results[i].isFinal) finalTxt += ev.results[i][0].transcript + ' ';
@@ -337,11 +348,18 @@ window.RQ = (function () {
             t.value = base + finalTxt + interino;
         };
         r.onerror = function (ev) {
-            if (ev.error === 'language-not-supported' && idioma === 'es-BO') { rec = null; marcarMic(false); dictar(SR, 'es-419'); return; }
-            if (ev.error === 'not-allowed') alert('El navegador no dio permiso para el micrófono.');
+            if (ev.error === 'language-not-supported' && idioma === 'es-BO') { r.onend = null; rec = null; dictar(SR, 'es-419'); return; }
+            if (ev.error === 'not-allowed' || ev.error === 'service-not-allowed') { seguir = false; alert('El navegador no dio permiso para el micrófono.'); }
+            if (ev.error === 'audio-capture') { seguir = false; alert('No se encontró el micrófono.'); }
         };
-        r.onend = function () { rec = null; marcarMic(false); t.value = t.value.replace(/\s+$/, ''); };
-        try { r.start(); rec = r; marcarMic(true); } catch (e) { rec = null; alert('No se pudo usar el micrófono.'); }
+        r.onend = function () {
+            rec = null; t.value = t.value.replace(/\s+$/, '');
+            if (!oyo) cortes++;
+            // Chrome corta tras un silencio: volver a escuchar (hasta 5 cortes seguidos sin oír nada)
+            if (seguir && cortes < 5) { setTimeout(function () { if (seguir) dictar(SR, idioma); }, 250); return; }
+            seguir = false; pantallaEncendida(false); marcarMic(false);
+        };
+        try { r.start(); rec = r; marcarMic(true); } catch (e) { rec = null; seguir = false; pantallaEncendida(false); marcarMic(false); alert('No se pudo usar el micrófono.'); }
     }
     function marcarMic(on) { var b = $('rq-mic'); b.classList.toggle('grabando', !!on); b.textContent = on ? '⏹' : '🎤'; }
 
