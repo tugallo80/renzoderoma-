@@ -42,14 +42,20 @@ function acotar(almacen, rutas) {
     });
 }
 
-function verificarRutaArchivo(ruta) {
+/** Carpetas de Storage que puede tocar cada almacén (por defecto, solo las del agente). */
+const ARCHIVOS_AGENTE = [/^agente\/[^/]+\/[^/]+\/[^/]+/];
+
+function verificarRutaArchivo(ruta, carpetas = ARCHIVOS_AGENTE) {
     const r = limpiar(ruta);
-    if (!/^agente\/[^/]+\/[^/]+\/[^/]+/.test(r) || r.includes("..")) throw new Error(`Archivo fuera del agente: ${r}`);
+    if (!carpetas.some((re) => re.test(r)) || r.includes("..")) throw new Error(`Archivo fuera del agente: ${r}`);
     return r;
 }
 
-/** Almacén real (firebase-admin). `rutas`: otra lista de rutas permitidas (la usa el conector MCP). */
-function crearAlmacen(admin, rutas = RUTAS_PERMITIDAS) {
+/**
+ * Almacén real (firebase-admin). `rutas`: otra lista de rutas permitidas (la usa el conector MCP).
+ * `archivos`: otras carpetas de Storage permitidas (Requerimientos, sesión 6).
+ */
+function crearAlmacen(admin, rutas = RUTAS_PERMITIDAS, archivos = ARCHIVOS_AGENTE) {
     const db = admin.database();
     const verificarRuta = (r) => verificarRutaCon(r, rutas);
     const bucket = () => admin.storage().bucket();
@@ -66,13 +72,16 @@ function crearAlmacen(admin, rutas = RUTAS_PERMITIDAS) {
         },
         ahora() { return Date.now(); },
         async subirArchivo(ruta, buffer, mime) {
-            await bucket().file(verificarRutaArchivo(ruta)).save(buffer, { contentType: mime, resumable: false, metadata: { cacheControl: "private, max-age=0" } });
+            await bucket().file(verificarRutaArchivo(ruta, archivos)).save(buffer, { contentType: mime, resumable: false, metadata: { cacheControl: "private, max-age=0" } });
         },
         async bajarArchivo(ruta) {
-            const [buf] = await bucket().file(verificarRutaArchivo(ruta)).download();
+            const [buf] = await bucket().file(verificarRutaArchivo(ruta, archivos)).download();
             return buf;
+        },
+        async borrarArchivo(ruta) {
+            await bucket().file(verificarRutaArchivo(ruta, archivos)).delete({ ignoreNotFound: true });
         },
     };
 }
 
-module.exports = { crearAlmacen, acotar, verificarRuta, verificarRutaArchivo, RUTAS_PERMITIDAS };
+module.exports = { crearAlmacen, acotar, verificarRuta, verificarRutaArchivo, RUTAS_PERMITIDAS, ARCHIVOS_AGENTE };

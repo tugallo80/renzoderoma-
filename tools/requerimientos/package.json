@@ -1,0 +1,7 @@
+{
+  "name": "probar-requerimientos",
+  "private": true,
+  "type": "module",
+  "description": "Pruebas de /api/requerimiento contra Firebase SIMULADO (almacén en memoria). No gasta plata. Necesita `npm install` en functions/.",
+  "scripts": { "test": "node probar.mjs" }
+}
