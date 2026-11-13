@@ -356,6 +356,25 @@ window.RQ = (function () {
         return cv.toDataURL('image/jpeg', 0.6);
     }
 
+    /**
+     * Copia chica para que Claude la vea por el conector: lado ≤ 1024 px y ≤ 90 KB (el resultado de una herramienta en
+     * claude.ai tiene un límite de ~150.000 caracteres; 90 KB en base64 son ~120.000).
+     */
+    async function paraClaude(fuente) {
+        var w0 = fuente.naturalWidth || fuente.width, h0 = fuente.naturalHeight || fuente.height;
+        var lados = [1024, 860, 720], blob = null;
+        for (var i = 0; i < lados.length; i++) {
+            var f = Math.min(1, lados[i] / Math.max(w0, h0));
+            var cv = document.createElement('canvas'); cv.width = Math.max(1, Math.round(w0 * f)); cv.height = Math.max(1, Math.round(h0 * f));
+            var cx = cv.getContext('2d'); cx.fillStyle = '#fff'; cx.fillRect(0, 0, cv.width, cv.height); cx.drawImage(fuente, 0, 0, cv.width, cv.height);
+            for (var q = 0.8; q >= 0.4; q -= 0.1) {
+                blob = await new Promise(function (r) { cv.toBlob(r, 'image/jpeg', q); });
+                if (blob && blob.size <= 90 * 1024) return aBase64(blob);
+            }
+        }
+        return blob ? aBase64(blob) : null;
+    }
+
     function agregarPendiente(nombre, tipo, reintentar) {
         var p = { clave: Math.random().toString(36).slice(2), nombre: nombre, tipo: tipo, estado: 'procesando', reintentar: reintentar || null, req: actual && actual.id };
         subiendo.push(p); pintarAdjuntos();
@@ -415,7 +434,8 @@ window.RQ = (function () {
             var red = await reducirImagen(f), mini = miniatura(red.canvas);
             marcar(p, { miniatura: mini });
             var id = await asegurarId(); p.req = id;
-            var r = await llamar({ accion: 'adjuntar', id: id, tipo: 'imagen', nombre: f.name || 'foto.jpg', datos: await aBase64(red.blob), ancho: red.ancho, alto: red.alto, miniatura: mini });
+            var r = await llamar({ accion: 'adjuntar', id: id, tipo: 'imagen', nombre: f.name || 'foto.jpg', datos: await aBase64(red.blob), ancho: red.ancho, alto: red.alto, miniatura: mini,
+                para_claude: await paraClaude(red.canvas) });
             fotos[r.adj] = red;
             terminar(p);
         } catch (e) { marcar(p, { estado: 'error', error: e.message }); }
@@ -517,8 +537,10 @@ window.RQ = (function () {
             var res = await window.AgenteAnotador.editar(red, meta.nombre, meta.anotaciones_editor || null);
             if (!res || res.cancelado) return;
             var lista = res.anotaciones || [];
+            var anotadaImg = lista.length && res.blob ? await cargarImagen(res.blob) : null;
             await llamar({ accion: 'anotar', id: actual.id, adj: adj, anotaciones: lista, editor: lista.length ? res.editor : null,
-                anotada: lista.length ? await aBase64(res.blob) : null, miniatura: lista.length && res.blob ? miniatura(await cargarImagen(res.blob)) : miniatura(red.canvas) });
+                anotada: lista.length ? await aBase64(res.blob) : null, anotada_claude: anotadaImg ? await paraClaude(anotadaImg) : null,
+                miniatura: anotadaImg ? miniatura(anotadaImg) : miniatura(red.canvas) });
             aviso(lista.length ? 'Anotaciones guardadas ✓' : 'Sin anotaciones');
         } catch (e) { alert('No se pudo anotar: ' + e.message); }
     }

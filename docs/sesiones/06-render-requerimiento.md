@@ -40,6 +40,9 @@
     vistas), y cualquier otro archivo tal cual (DWG, Excel…; hasta 20 MB).
   - Fotos: ✏️ abre el **anotador del agente** (`agente-anotador.js`); se guardan la foto original, la anotada, las
     anotaciones como datos y el estado del editor (para volver a editarlas).
+  - De cada foto (y de la anotada) el navegador guarda además una **copia chica "para Claude"** (lado ≤ 1024 px,
+    ≤ 90 KB ≈ 120.000 caracteres en base64), para que el conector la devuelva como imagen sin pasarse del límite de
+    claude.ai. El servidor no tiene librerías de imagen. Probado con una foto de ruido de 3000×2000: 89 KB.
   - Guardar deja el requerimiento **pendiente**. Lista con filtros (pendientes y asignados / cotizados / descartados);
     tocar uno lo abre para editar (también con `requerimiento.html#<id>`). Descartar y reabrir.
 - **Function** `requerimientoApi` en `/api/requerimiento` (`functions/requerimientos/`): solo lista blanca hub, valida

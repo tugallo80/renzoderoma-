@@ -8,8 +8,9 @@
  *
  *   crear     {cliente?, descripcion?}                → {id}
  *   editar    {id, cliente?, descripcion?}
- *   adjuntar  {id, tipo: pdf|imagen|3d|otro, nombre, …} → {adj, meta}   (imagen: datos, anotada?, anotaciones?, editor?, miniatura?)
- *   anotar    {id, adj, anotada, anotaciones, editor?, miniatura?}  (vuelve a anotar una foto ya subida; la original no cambia)
+ *   adjuntar  {id, tipo: pdf|imagen|3d|otro, nombre, …} → {adj, meta}
+ *             (imagen: datos, anotada?, anotaciones?, editor?, miniatura?, para_claude?, anotada_claude?)
+ *   anotar    {id, adj, anotada, anotaciones, editor?, miniatura?, anotada_claude?}  (vuelve a anotar una foto ya subida; la original no cambia)
  * anotaciones = las del anotador del agente para Claude; editor = su estado, para volver a abrirlas y seguir editando.
  *   quitar    {id, adj}
  *   archivo   {id, adj, anotada?}                       → {meta, datos(base64)}
@@ -17,7 +18,7 @@
  * cliente: {cid} de un cliente existente o {nombre} de uno que todavía no está en la app (lo crea Claude al asignar).
  */
 const ID = /^[A-Za-z0-9_-]{1,64}$/;
-const MAX = { pdf: 20 * 1024 * 1024, imagen: 5 * 1024 * 1024, medicion: 8 * 1024 * 1024, otro: 20 * 1024 * 1024, miniatura: 60 * 1024 };
+const MAX = { pdf: 20 * 1024 * 1024, imagen: 5 * 1024 * 1024, medicion: 8 * 1024 * 1024, otro: 20 * 1024 * 1024, miniatura: 60 * 1024, claude: 200 * 1024 };
 const MAX_ADJUNTOS = 40;
 const ESTADOS = ["pendiente", "asignado", "cotizado", "descartado"];
 /** Carpetas de Storage de esta Function (para crearAlmacen). */
@@ -131,6 +132,19 @@ async function adjuntar(almacen, b) {
                 meta.anotada_ruta = `${base}/anotada.jpg`;
                 await subir(meta.anotada_ruta, an, "image/jpeg");
             }
+            // Copias chicas "para Claude" (las arma el navegador): el conector las devuelve como imagen sin pasarse del límite
+            if (b.para_claude) {
+                const pc = b64(b.para_claude, MAX.claude, "la copia para Claude");
+                if (!esJPEG(pc)) falla("La copia para Claude tiene que ser JPG.");
+                meta.claude_ruta = `${base}/claude.jpg`;
+                await subir(meta.claude_ruta, pc, "image/jpeg");
+            }
+            if (b.anotada && b.anotada_claude) {
+                const pc = b64(b.anotada_claude, MAX.claude, "la copia anotada para Claude");
+                if (!esJPEG(pc)) falla("La copia anotada para Claude tiene que ser JPG.");
+                meta.anotada_claude_ruta = `${base}/anotada_claude.jpg`;
+                await subir(meta.anotada_claude_ruta, pc, "image/jpeg");
+            }
             const anot = limpiarAnotaciones(b.anotaciones);
             if (anot && anot.length) { meta.anotaciones = anot; meta.anotaciones_editor = limpiarAnotaciones(b.editor); }
             if (b.ancho && b.alto) { meta.ancho = Math.round(Number(b.ancho)) || null; meta.alto = Math.round(Number(b.alto)) || null; }
@@ -190,9 +204,15 @@ async function anotar(almacen, b) {
         if (!esJPEG(an)) falla("La foto anotada tiene que ser JPG.");
         cambios.anotada_ruta = `requerimientos/${b.id}/${b.adj}/anotada.jpg`;
         await almacen.subirArchivo(cambios.anotada_ruta, an, "image/jpeg");
-    } else if (meta.anotada_ruta) {
-        await almacen.borrarArchivo(meta.anotada_ruta).catch(() => {});
-        cambios.anotada_ruta = null;
+        if (b.anotada_claude) {
+            const pc = b64(b.anotada_claude, MAX.claude, "la copia anotada para Claude");
+            if (!esJPEG(pc)) falla("La copia anotada para Claude tiene que ser JPG.");
+            cambios.anotada_claude_ruta = `requerimientos/${b.id}/${b.adj}/anotada_claude.jpg`;
+            await almacen.subirArchivo(cambios.anotada_claude_ruta, pc, "image/jpeg");
+        }
+    } else {
+        for (const r of [meta.anotada_ruta, meta.anotada_claude_ruta]) if (r) await almacen.borrarArchivo(r).catch(() => {});
+        cambios.anotada_ruta = null; cambios.anotada_claude_ruta = null;
     }
     const mini = limpiarMiniatura(b.miniatura);
     if (mini) cambios.miniatura = mini;
@@ -202,7 +222,7 @@ async function anotar(almacen, b) {
 }
 
 function rutasDe(meta) {
-    return [meta.ruta, meta.anotada_ruta, meta.medicion_ruta].concat(meta.vistas_rutas || []).filter(Boolean);
+    return [meta.ruta, meta.anotada_ruta, meta.claude_ruta, meta.anotada_claude_ruta, meta.medicion_ruta].concat(meta.vistas_rutas || []).filter(Boolean);
 }
 
 async function quitar(almacen, b) {

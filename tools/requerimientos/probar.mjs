@@ -62,7 +62,9 @@ prueba('adjuntar: foto con anotaciones, PDF, 3D con vistas y otro archivo; todo 
     const al = nuevo();
     const { id } = await ok(al, { accion: 'crear', descripcion: 'Mueble' });
     const anot = [{ tipo: 'cota', n: 1, valor: '1,20 m', de: [10, 10], a: [200, 10] }];
-    const f = await ok(al, { accion: 'adjuntar', id, tipo: 'imagen', nombre: 'foto.png', datos: b64(png), anotada: b64(jpg), anotaciones: anot, ancho: 640, alto: 360, miniatura: 'data:image/jpeg;base64,' + b64(jpg) });
+    const f = await ok(al, { accion: 'adjuntar', id, tipo: 'imagen', nombre: 'foto.png', datos: b64(png), anotada: b64(jpg), anotaciones: anot, ancho: 640, alto: 360, miniatura: 'data:image/jpeg;base64,' + b64(jpg), para_claude: b64(jpg), anotada_claude: b64(jpg) });
+    assert.ok(al.archivos.has(`requerimientos/${id}/${f.adj}/claude.jpg`));
+    assert.ok(al.archivos.has(`requerimientos/${id}/${f.adj}/anotada_claude.jpg`));
     assert.equal(f.meta.tipo, 'imagen'); assert.equal(f.meta.mime, 'image/png');
     assert.deepEqual(f.meta.anotaciones, anot);
     assert.ok(al.archivos.has(`requerimientos/${id}/${f.adj}/original.png`));
@@ -98,6 +100,8 @@ prueba('adjuntar: valida tipos, contenido y tamaños; si falla no deja archivos 
     await mal(al, { accion: 'adjuntar', id, tipo: 'imagen', datos: b64(png), anotaciones: 'texto' }, /lista/);
     await mal(al, { accion: 'adjuntar', id, tipo: 'imagen', datos: b64(png), miniatura: 'javascript:alert(1)' }, /Miniatura/);
     await mal(al, { accion: 'adjuntar', id, tipo: 'imagen', datos: b64(png), anotada: b64(png) }, /anotada tiene que ser JPG/);
+    await mal(al, { accion: 'adjuntar', id, tipo: 'imagen', datos: b64(png), para_claude: b64(png) }, /para Claude tiene que ser JPG/);
+    await mal(al, { accion: 'adjuntar', id, tipo: 'imagen', datos: b64(png), para_claude: Buffer.concat([jpg, Buffer.alloc(API.MAX.claude)]).toString('base64') }, /máximo/, 413);
     await mal(al, { accion: 'adjuntar', id, tipo: 'otro', datos: Buffer.alloc(API.MAX.otro + 10).toString('base64') }, /máximo/, 413);
     assert.equal(al.archivos.size, 0, 'quedaron archivos de pedidos fallidos: ' + [...al.archivos.keys()]);
     assert.equal(al.datos.requerimientos[id].adjuntos, undefined);
@@ -108,12 +112,14 @@ prueba('anotar de nuevo y quitar: la original no cambia; quitar borra los archiv
     const { id } = await ok(al, { accion: 'crear' });
     const f = await ok(al, { accion: 'adjuntar', id, tipo: 'imagen', nombre: 'f.png', datos: b64(png) });
     await mal(al, { accion: 'anotar', id, adj: f.adj, anotaciones: [{ tipo: 'nota', n: 1, texto: 'x', en: [1, 1] }] }, /Falta el contenido/);
-    const r = await ok(al, { accion: 'anotar', id, adj: f.adj, anotada: b64(jpg), anotaciones: [{ tipo: 'nota', n: 1, texto: 'vidrio templado', en: [5, 5] }] });
+    const r = await ok(al, { accion: 'anotar', id, adj: f.adj, anotada: b64(jpg), anotada_claude: b64(jpg), anotaciones: [{ tipo: 'nota', n: 1, texto: 'vidrio templado', en: [5, 5] }] });
+    assert.ok(al.archivos.has(`requerimientos/${id}/${f.adj}/anotada_claude.jpg`));
     assert.equal(r.anotaciones, 1);
     assert.ok(al.archivos.has(`requerimientos/${id}/${f.adj}/anotada.jpg`));
     assert.deepEqual(al.archivos.get(`requerimientos/${id}/${f.adj}/original.png`).buf, png);
     await ok(al, { accion: 'anotar', id, adj: f.adj, anotaciones: [] });
     assert.ok(!al.archivos.has(`requerimientos/${id}/${f.adj}/anotada.jpg`));
+    assert.ok(!al.archivos.has(`requerimientos/${id}/${f.adj}/anotada_claude.jpg`));
     assert.equal(al.datos.requerimientos[id].adjuntos[f.adj].anotaciones, undefined);
     const p = await ok(al, { accion: 'adjuntar', id, tipo: 'pdf', nombre: 'a.pdf', datos: b64('%PDF-x') });
     await mal(al, { accion: 'anotar', id, adj: p.adj, anotaciones: [] }, /Solo se anotan fotos/);
