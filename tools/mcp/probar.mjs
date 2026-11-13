@@ -489,7 +489,12 @@ const JPGr = (n = 10) => Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), B
 const MED = { formato: 'rubik/1', archivo: 'stand.fbx', unidad: 'm', resumen: '1 pieza', piezas: [
     { item: 'Mostrador demo', pieza: 'Tapa', material: 'MDF_18', cant: 1, largo: 1.8, ancho: 0.6, espesor: 0.018, tipo: 'plancha', area_m2: 2.2536, area_cara_m2: 1.08, perimetro_ml: 4.8, volumen_m3: 0.01944, acabados: [] }] };
 async function requerimientoDemo(ent, extra = {}) {
-    const api = (b) => REQ.atender(ent.almacen, b, 'renzo').then((r) => { assert.equal(r.status, 200, JSON.stringify(r.cuerpo)); return r.cuerpo; });
+    // la app (requerimientoApi) sí escribe en requerimientos/: mismo almacén, con su permiso de Storage
+    const app = Object.assign({}, ent.almacen, {
+        subirArchivo: async (r, buf, mime) => { assert.match(r, /^requerimientos\//); ent.almacen.archivos.set(r, { buf: Buffer.from(buf), mime }); },
+        borrarArchivo: async (r) => { ent.almacen.archivos.delete(r); },
+    });
+    const api = (b) => REQ.atender(app, b, 'renzo').then((r) => { assert.equal(r.status, 200, JSON.stringify(r.cuerpo)); return r.cuerpo; });
     const { id } = await api({ accion: 'crear', cliente: { cid: 'cliDemo' }, descripcion: 'Mostrador de 1,80 m de largo en MDF blanco, con logo' });
     const anot = [{ tipo: 'cota', n: 1, valor: '1,80 m', de: [10, 10], a: [500, 10] }];
     const foto = await api({ accion: 'adjuntar', id, tipo: 'imagen', nombre: 'mostrador.jpg', datos: JPGr(500).toString('base64'), anotada: JPGr(400).toString('base64'), anotaciones: anot, ancho: 800, alto: 600, para_claude: JPGr(extra.kbClaude ? extra.kbClaude * 1024 : 50).toString('base64'), anotada_claude: JPGr(extra.kbClaude ? extra.kbClaude * 1024 : 40).toString('base64') });
@@ -549,7 +554,11 @@ prueba('requerimientos: asignar pide confirmación, copia los adjuntos al proyec
     const m = await ok(ent, 'registrar_mensaje_del_dueno', { ...C, texto: 'cotizá el requerimiento del mostrador' });
     const r = await ok(ent, 'asignar_requerimiento', { ...C, id: q.id, confirmacion: m.origen });
     assert.ok(r.ok);
-    assert.match(r.descripcion_origen, /^dueño:/);
+    assert.equal(r.descripcion_origen, undefined);
+    // la descripción queda como contexto (aviso), no como mensaje del dueño
+    const msgs = Object.values(ent.almacen.datos.proyectos.cliDemo.proyOtro.agente.conversaciones[ab.conv].conversacion.mensajes);
+    assert.ok(msgs.some((x) => x.rol === 'aviso' && /Mostrador de 1,80 m/.test(x.texto)));
+    assert.ok(!msgs.some((x) => x.rol === 'dueno' && /Mostrador de 1,80 m/.test(x.texto)));
     assert.deepEqual(Object.keys(r.adjuntos).sort(), [q.foto, q.pdf, q.t3d].sort());
     assert.ok(r.sin_copiar.archivos.includes('planta.dwg'));
     const raiz = ent.almacen.datos.proyectos.cliDemo.proyOtro.agente;
@@ -568,14 +577,20 @@ prueba('requerimientos: asignar pide confirmación, copia los adjuntos al proyec
     // la cota dibujada en la foto vale como origen dueño:<adjunto>; la descripción, como dueño:<mensaje>
     const b = await ok(ent, 'armar_borrador', { ...C, operaciones: [
         { op: 'capitulo', nombre: 'Mostrador' },
-        { op: 'item', capitulo: 'Mostrador', desc: 'Mostrador', und: 'pza', cant: 1, cant_origen: r.descripcion_origen, caracteristicas: [{ texto: 'Mostrador en MDF blanco' }] },
+        { op: 'item', capitulo: 'Mostrador', desc: 'Mostrador', und: 'pza', cant: 1, cant_origen: m.origen, caracteristicas: [{ texto: 'Mostrador en MDF blanco' }] },
         { op: 'fila', item: 'Mostrador', tipo: 'mat', d: 'MDF 18', clave: 'MDF_18', q: 1.8, origen_q: `dueño:${r.adjuntos[q.foto].adjunto}` },
     ] });
     assert.equal(b.rechazadas.length, 0, JSON.stringify(b.rechazadas));
-    // repetir: no copia de nuevo; otro proyecto: no
+    // repetir (también desde otra cotización del mismo proyecto): no copia de nuevo; otro proyecto: no
     const r2 = await ok(ent, 'asignar_requerimiento', { ...C, id: q.id, confirmacion: m.origen });
     assert.ok(r2.ya_asignado);
+    const abB = await ok(ent, 'abrir_cotizacion', { cid: 'cliDemo', pid: 'proyOtro', titulo: 'otra del mismo proyecto' });
+    const mB = await ok(ent, 'registrar_mensaje_del_dueno', { cid: 'cliDemo', pid: 'proyOtro', conv: abB.conv, texto: 'asignalo' });
+    const r3 = await ok(ent, 'asignar_requerimiento', { cid: 'cliDemo', pid: 'proyOtro', conv: abB.conv, id: q.id, confirmacion: mB.origen });
+    assert.ok(r3.ya_asignado && r3.aviso);
     assert.equal(Object.keys(raiz.adjuntos).length, 3);
+    // el conector nunca escribe en la carpeta de los requerimientos
+    await assert.rejects(ent.almacen.subirArchivo(`requerimientos/${q.id}/x/y.jpg`, JPGr(), 'image/jpeg'), /fuera/);
     const ab2 = await ok(ent, 'abrir_cotizacion', { cid: 'cliDemo', pid: 'proyDemo', titulo: 'otra' });
     const m2 = await ok(ent, 'registrar_mensaje_del_dueno', { cid: 'cliDemo', pid: 'proyDemo', conv: ab2.conv, texto: 'asignalo acá' });
     assert.match((await llamar(ent, 'asignar_requerimiento', { cid: 'cliDemo', pid: 'proyDemo', conv: ab2.conv, id: q.id, confirmacion: m2.origen })).texto, /ya está asignado a otro proyecto/);
@@ -594,6 +609,10 @@ prueba('requerimientos: descartado no se asigna; el conector no toca otras carpe
     const C = { cid: 'cliDemo', pid: 'proyOtro', conv: ab.conv };
     const m = await ok(ent, 'registrar_mensaje_del_dueno', { ...C, texto: 'cotizalo' });
     assert.match((await llamar(ent, 'asignar_requerimiento', { ...C, id: q.id, confirmacion: m.origen })).texto, /descartado/);
+    // una confirmación copiada de otra versión no vale
+    ent.almacen.datos.proyectos.cliDemo.proyOtro.agente.conversaciones[ab.conv].conversacion.mensajes[m.id].copiado_de = 'otra';
+    await REQ.atender(ent.almacen, { accion: 'reabrir', id: q.id }, 'renzo');
+    assert.match((await llamar(ent, 'asignar_requerimiento', { ...C, id: q.id, confirmacion: m.origen })).texto, /otra versión/);
     await assert.rejects(ent.almacen.subirArchivo('compras/x/y.jpg', JPGr(), 'image/jpeg'), /fuera/);
 });
 

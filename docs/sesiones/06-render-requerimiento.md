@@ -75,9 +75,9 @@
     datos) + **imágenes** (foto anotada "para Claude", o la foto; vistas del 3D) hasta **~300 KB por respuesta** (probado en
     claude.ai hasta ~300 KB por imagen); si quedan, `siguiente_desde`. Los PDF no se muestran por acá.
   - **`asignar_requerimiento`** `{id, cid, pid, conv, confirmacion: dueño:<id>, cotizado?}`: pide la confirmación del dueño
-    (un mensaje suyo registrado en esa cotización). La descripción queda como mensaje del dueño y **los adjuntos se copian**
+    (un mensaje suyo registrado en esa cotización). La descripción queda en la conversación como **contexto (rol aviso), no como origen** (puede traer números del cliente; los que importan los confirma el dueño) y **los adjuntos se copian**
     a los del proyecto (archivos a `agente/{cid}/{pid}/…`, mismo formato que el Agente IA): `medicion_3d`, `escala_3d` y los
-    orígenes `dueño:<adjunto>` (cotas dibujadas), `cota_plano:` y `pieza3d:` funcionan igual. No copia dos veces ni lo
+    orígenes `dueño:<adjunto>` (cotas dibujadas), `cota_plano:` y `pieza3d:` funcionan igual. No copia dos veces (aunque se asigne desde otra cotización del mismo proyecto), no acepta confirmaciones copiadas de otra versión, el conector solo **lee** `requerimientos/…` (nunca escribe ahí) y no lo
     reasigna a otro proyecto. Con `cotizado: true` lo marca cotizado. Los "otros" (DWG…) no se copian (el agente no los lee).
 - `functions/mcp/index.js`: `/requerimientos` en el cerco del conector y Storage `requerimientos/…` (lectura) además de `agente/…`.
 - Skill: sección "Requerimientos" en `SKILL.md` y las 3 herramientas en `referencias/herramientas.md` (ZIP regenerado).

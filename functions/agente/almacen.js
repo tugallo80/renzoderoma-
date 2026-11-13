@@ -54,8 +54,9 @@ function verificarRutaArchivo(ruta, carpetas = ARCHIVOS_AGENTE) {
 /**
  * Almacén real (firebase-admin). `rutas`: otra lista de rutas permitidas (la usa el conector MCP).
  * `archivos`: otras carpetas de Storage permitidas (Requerimientos, sesión 6).
+ * `soloLectura`: carpetas que además se pueden LEER pero nunca escribir (el conector lee las de los Requerimientos).
  */
-function crearAlmacen(admin, rutas = RUTAS_PERMITIDAS, archivos = ARCHIVOS_AGENTE) {
+function crearAlmacen(admin, rutas = RUTAS_PERMITIDAS, archivos = ARCHIVOS_AGENTE, soloLectura = []) {
     const db = admin.database();
     const verificarRuta = (r) => verificarRutaCon(r, rutas);
     const bucket = () => admin.storage().bucket();
@@ -75,7 +76,7 @@ function crearAlmacen(admin, rutas = RUTAS_PERMITIDAS, archivos = ARCHIVOS_AGENT
             await bucket().file(verificarRutaArchivo(ruta, archivos)).save(buffer, { contentType: mime, resumable: false, metadata: { cacheControl: "private, max-age=0" } });
         },
         async bajarArchivo(ruta) {
-            const [buf] = await bucket().file(verificarRutaArchivo(ruta, archivos)).download();
+            const [buf] = await bucket().file(verificarRutaArchivo(ruta, archivos.concat(soloLectura))).download();
             return buf;
         },
         async borrarArchivo(ruta) {

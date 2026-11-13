@@ -129,7 +129,7 @@ module.exports = function crear({ falla, proyecto, acotar, RUTAS }) {
             def: {
                 name: "asignar_requerimiento",
                 title: "Asignar un requerimiento a una cotización",
-                description: "Une un Requerimiento a un proyecto y a la cotización abierta (después de abrir_cotizacion; si el cliente o el proyecto no existen, crealos antes con crear_cliente / crear_proyecto). Necesita la confirmación del dueño: registrá con registrar_mensaje_del_dueno su pedido (\"cotizá este requerimiento para…\") y pasá ese dueño:<id>. Hace: la descripción queda como mensaje del dueño (citala con el origen que devuelve) y los adjuntos se copian a los del proyecto con ids nuevos (fotos con sus anotaciones → cotas dibujadas citables como dueño:<adjunto>; fotos y PDF → cota_plano:<adjunto>; 3D → medicion_3d y pieza3d:<adjunto>/…). Si ya estaba asignado a esta misma cotización, no copia de nuevo. Con cotizado:true (al terminar, después de aplicar_al_presupuesto) lo marca cotizado.",
+                description: "Une un Requerimiento a un proyecto y a la cotización abierta (después de abrir_cotizacion; si el cliente o el proyecto no existen, crealos antes con crear_cliente / crear_proyecto). Necesita la confirmación del dueño: registrá con registrar_mensaje_del_dueno su pedido (\"cotizá este requerimiento para…\") y pasá ese dueño:<id>. Hace: la descripción queda en la conversación como contexto (NO es origen: los números que salgan de ahí, confirmalos con el dueño y registralos) y los adjuntos se copian a los del proyecto con ids nuevos (fotos con sus anotaciones → cotas dibujadas citables como dueño:<adjunto>; fotos y PDF → cota_plano:<adjunto>; 3D → medicion_3d y pieza3d:<adjunto>/…). Si ya estaba asignado a este proyecto, no copia de nuevo. Con cotizado:true (al terminar, después de aplicar_al_presupuesto) lo marca cotizado.",
                 inputSchema: { type: "object", properties: {
                     id: { type: "string", description: "Id del requerimiento." },
                     cid: { type: "string" }, pid: { type: "string" }, conv: { type: "string", description: "Id de la conversación (de abrir_cotizacion)." },
@@ -148,6 +148,7 @@ module.exports = function crear({ falla, proyecto, acotar, RUTAS }) {
                 if (!m) falla("confirmacion: dueño:<id> (registrá antes el pedido del dueño con registrar_mensaje_del_dueno)");
                 const msg = await alA.leer(`${RC}/conversacion/mensajes/${m[1]}`);
                 if (!msg || msg.rol !== "dueno") falla(`no hay un mensaje del dueño ${m[1]} en esta cotización`);
+                if (msg.copiado_de) falla("esa confirmación es de otra versión: el dueño tiene que confirmar en esta cotización");
                 if (r.estado === "descartado") falla("el requerimiento está descartado: el dueño lo puede reabrir en la app");
                 if (r.pid && (r.cid !== e.cid || r.pid !== e.pid)) falla(`ya está asignado a otro proyecto (${r.cid}/${r.pid}, ${r.proyecto_nombre || ""}): el dueño lo puede cambiar en la app`);
                 const ahora = almacen.ahora();
@@ -156,13 +157,16 @@ module.exports = function crear({ falla, proyecto, acotar, RUTAS }) {
                     await alReq(almacen).actualizar(`requerimientos/${e.id}`, { estado: "cotizado", cotizado: ahora, actualizado: ahora });
                     return { ok: true, estado: "cotizado" };
                 }
-                if (r.pid && r.conv === e.conv && r.adjuntos_proyecto) {
-                    return { ok: true, ya_asignado: true, descripcion_origen: r.mensaje_descripcion ? `dueño:${r.mensaje_descripcion}` : undefined, adjuntos: r.adjuntos_proyecto };
+                // Ya asignado a este proyecto (desde esta u otra cotización): no se copia de nuevo
+                if (r.pid && r.adjuntos_proyecto) {
+                    return { ok: true, ya_asignado: true, conv: r.conv, adjuntos: r.adjuntos_proyecto,
+                        aviso: r.conv !== e.conv ? `ya estaba asignado a este proyecto desde la cotización ${r.conv}: los adjuntos del proyecto son los mismos` : undefined };
                 }
-                // 1) la descripción, como mensaje del dueño
+                // 1) la descripción queda en la conversación como CONTEXTO (rol "aviso"), no como origen: puede traer números
+                //    del cliente. Los que importan para el costo, que los confirme el dueño (registrar_mensaje_del_dueno).
                 let mensaje = null;
                 if (String(r.descripcion || "").trim()) {
-                    mensaje = await alA.agregar(`${RC}/conversacion/mensajes`, { rol: "dueno", texto: `[Requerimiento ${e.id}${r.cliente && r.cliente.nombre ? ` · ${r.cliente.nombre}` : ""}]\n${String(r.descripcion).slice(0, 20000)}`, fecha: ahora, uid, via: "requerimiento" });
+                    mensaje = await alA.agregar(`${RC}/conversacion/mensajes`, { rol: "aviso", tipo: "requerimiento", texto: `Requerimiento ${e.id}${r.cliente && r.cliente.nombre ? ` · ${r.cliente.nombre}` : ""}:\n${String(r.descripcion).slice(0, 20000)}`, fecha: ahora, via: "requerimiento" });
                 }
                 // 2) los adjuntos, copiados al proyecto (archivos en agente/{cid}/{pid}/{nuevo}/…)
                 const adj = r.adjuntos || {};
@@ -209,7 +213,7 @@ module.exports = function crear({ falla, proyecto, acotar, RUTAS }) {
                 });
                 // para que el Agente IA de la app se entere si abren esta conversación ahí
                 await alA.agregar(`${RC}/conversacion/ediciones`, { texto: `Desde Claude: se asignó el requerimiento ${e.id} (${r.titulo || ""}) con ${Object.keys(mapa).length} adjunto(s).`.slice(0, 600), fecha: ahora });
-                return { ok: true, proyecto: nombreProyecto, descripcion_origen: mensaje ? `dueño:${mensaje}` : undefined, adjuntos: mapa,
+                return { ok: true, proyecto: nombreProyecto, descripcion: mensaje ? "quedó en la conversación como contexto (no es origen): las medidas y cantidades que salgan de ahí, confirmalas con el dueño y registralas" : undefined, adjuntos: mapa,
                     sin_copiar: otros.length ? { archivos: otros, motivo: "no son foto, PDF ni 3D: si hacen falta, pedile al dueño que los adjunte en el chat" } : undefined,
                     siguiente: "buscar_base / medicion_3d → armar_borrador citando estos orígenes" };
             },

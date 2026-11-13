@@ -5,7 +5,7 @@ import { createRequire } from 'node:module';
 const require = createRequire(import.meta.url);
 const { crearAlmacenMemoria } = require('../agente/almacen-memoria.cjs');
 const OA = require('../../functions/mcp/oauth.js');
-const { RUTAS_MCP, ARCHIVOS_MCP, CFG } = require('../../functions/mcp/index.js');
+const { RUTAS_MCP, ARCHIVOS_MCP, ARCHIVOS_MCP_LECTURA, CFG } = require('../../functions/mcp/index.js');
 
 export const DATOS = () => ({
     acceso: { hub: { renzo: true } },
@@ -37,7 +37,7 @@ export function PKCE() {
 }
 
 export function crearEntorno(op = {}) {
-    const almacen = crearAlmacenMemoria(DATOS(), RUTAS_MCP, ARCHIVOS_MCP);
+    const almacen = crearAlmacenMemoria(DATOS(), RUTAS_MCP, ARCHIVOS_MCP, ARCHIVOS_MCP_LECTURA);
     let desfase = 0;
     const traidos = [];
     const dep = {

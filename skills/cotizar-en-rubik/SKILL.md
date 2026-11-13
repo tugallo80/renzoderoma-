@@ -68,8 +68,9 @@ cotas y notas dibujadas, PDF, 3D ya medido y otros archivos. No corre ninguna IA
 2. Cliente y proyecto: si el requerimiento trae `cliente.cid`, usalo; si trae un nombre nuevo, `crear_cliente`; después
    `listar_proyectos` / `crear_proyecto`. Ante la duda, preguntá en la ronda de preguntas.
 3. `abrir_cotizacion` → registrá el pedido del dueño con `registrar_mensaje_del_dueno` → `asignar_requerimiento {id, cid, pid,
-   conv, confirmacion: dueño:<id>}`. Devuelve el origen de la descripción (`dueño:<id>`) y los ids nuevos de los adjuntos en
-   el proyecto: cotas dibujadas → `dueño:<adjunto>`; fotos y PDF → `cota_plano:<adjunto> …`; 3D → `medicion_3d` y `pieza3d:`.
+   conv, confirmacion: dueño:<id>}`. La descripción queda en la conversación como **contexto, no como origen** (puede traer
+   números del cliente): las medidas y cantidades que salgan de ahí, confirmalas con el dueño y registralas. Devuelve los
+   ids nuevos de los adjuntos en el proyecto: cotas dibujadas → `dueño:<adjunto>`; fotos y PDF → `cota_plano:<adjunto> …`; 3D → `medicion_3d` y `pieza3d:`.
 4. Proponé como experto del rubro: **dividí en ítems según lo que se entrega** (a veces es uno solo; a veces son muchas
    piezas), con la materialidad y el sistema constructivo. Seguí el flujo de siempre (preguntas, borrador, aplicar).
 5. Al terminar (después de aplicar), con su OK: `asignar_requerimiento {…, cotizado: true}`.

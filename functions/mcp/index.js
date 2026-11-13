@@ -29,8 +29,9 @@ const RUTAS_MCP = [
     /^respaldos_agente(\/|$)/,
     /^requerimientos(\/|$)/,   // sesión 6
 ];
-/** Carpetas de Storage: las del agente (adjuntos de las cotizaciones) y las de los Requerimientos. */
-const ARCHIVOS_MCP = ARCHIVOS_AGENTE.concat(REQ.ARCHIVOS);
+/** Storage: escribe y lee las del agente (adjuntos de las cotizaciones); las de los Requerimientos solo las LEE. */
+const ARCHIVOS_MCP = ARCHIVOS_AGENTE;
+const ARCHIVOS_MCP_LECTURA = REQ.ARCHIVOS;
 
 const INSTRUCCIONES = `Conector de la app de Rubik Bolivia (taller de stands, mobiliario, letreros). Con él cotizás en la app del dueño, con sus reglas:
 - Un ítem es lo que se entrega; materiales y mano de obra van dentro del APU.
@@ -44,7 +45,7 @@ Si está el skill "cotizar-en-rubik", seguilo. Respondé en español de Bolivia,
 
 function dependencias(admin, esHub) {
     return {
-        almacen: crearAlmacen(admin, RUTAS_MCP, ARCHIVOS_MCP),
+        almacen: crearAlmacen(admin, RUTAS_MCP, ARCHIVOS_MCP, ARCHIVOS_MCP_LECTURA),
         ahora: () => Date.now(),
         esHub,
         verificarIdToken: (t) => admin.auth().verifyIdToken(t, true),
@@ -184,4 +185,4 @@ function crearFuncion({ admin, esHub }) {
     });
 }
 
-module.exports = { crearFuncion, atender, crearServidorMcp, CFG, RUTAS_MCP, ARCHIVOS_MCP, INSTRUCCIONES };
+module.exports = { crearFuncion, atender, crearServidorMcp, CFG, RUTAS_MCP, ARCHIVOS_MCP, ARCHIVOS_MCP_LECTURA, INSTRUCCIONES };
