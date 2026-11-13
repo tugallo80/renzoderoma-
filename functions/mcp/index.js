@@ -28,9 +28,12 @@ const RUTAS_MCP = [
     /^config\/agente(\/|$)/,
     /^respaldos_agente(\/|$)/,
     /^requerimientos(\/|$)/,   // sesión 6
+    /^render_cola(\/|$)/,      // sesión 6: pedidos de render para renderTurno
 ];
 /** Storage: escribe y lee las del agente (adjuntos de las cotizaciones); las de los Requerimientos solo las LEE. */
-const ARCHIVOS_MCP = ARCHIVOS_AGENTE;
+const ARCHIVOS_MCP = ARCHIVOS_AGENTE.concat([
+    /^presupuesto\/render_req_[A-Za-z0-9_-]+\.jpg$/,   // render aprobado → imagen del ítem (aprobar_render)
+]);
 const ARCHIVOS_MCP_LECTURA = REQ.ARCHIVOS;
 
 const INSTRUCCIONES = `Conector de la app de Rubik Bolivia (taller de stands, mobiliario, letreros). Con él cotizás en la app del dueño, con sus reglas:
@@ -179,6 +182,7 @@ async function atender(dep, req, res) {
 function crearFuncion({ admin, esHub }) {
     const { onRequest } = require("firebase-functions/v2/https");
     let dep = null;
+    // Sin secretos: el render con Gemini lo hace la Function renderTurno (functions/render), con cola.
     return onRequest({ region: "us-central1", timeoutSeconds: 60, memory: "512MiB", invoker: "public", cors: false, concurrency: 20 }, async (req, res) => {
         dep = dep || dependencias(admin, esHub);
         await atender(dep, req, res);

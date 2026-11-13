@@ -13,7 +13,7 @@
  *   anotar    {id, adj, anotada, anotaciones, editor?, miniatura?, anotada_claude?}  (vuelve a anotar una foto ya subida; la original no cambia)
  * anotaciones = las del anotador del agente para Claude; editor = su estado, para volver a abrirlas y seguir editando.
  *   quitar    {id, adj}
- *   archivo   {id, adj, anotada?}                       → {meta, datos(base64)}
+ *   archivo   {id, adj, anotada?, vista?} o {id, render} → {meta, datos(base64)}
  *   descartar {id} · reabrir {id}
  * cliente: {cid} de un cliente existente o {nombre} de uno que todavía no está en la app (lo crea Claude al asignar).
  */
@@ -239,7 +239,15 @@ async function quitar(almacen, b) {
 }
 
 async function archivo(almacen, b) {
-    await leerReq(almacen, b.id, false);
+    const req = await leerReq(almacen, b.id, false);
+    if (b.render != null) {
+        // render generado por Claude (generar_render): se ve en la app
+        if (!ID.test(String(b.render))) falla("Render inválido.");
+        const ren = (req.renders || {})[b.render];
+        if (!ren || !ren.ruta) falla("No existe el render.", 404);
+        const buf = await almacen.bajarArchivo(ren.ruta);
+        return { meta: { nombre: `render-${b.render}.jpg`, mime: "image/jpeg" }, datos: Buffer.from(buf).toString("base64") };
+    }
     if (!ID.test(String(b.adj || ""))) falla("Adjunto inválido.");
     const meta = await almacen.leer(`requerimientos/${b.id}/adjuntos/${b.adj}`);
     if (!meta) falla("No existe el adjunto.", 404);

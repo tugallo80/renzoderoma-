@@ -616,6 +616,150 @@ prueba('requerimientos: descartado no se asigna; el conector no toca otras carpe
     await assert.rejects(ent.almacen.subirArchivo('compras/x/y.jpg', JPGr(), 'image/jpeg'), /fuera/);
 });
 
+// ------------------------------------------------------------------ render con Gemini SIMULADO (sesión 6, entrega 5): no gasta plata
+// El conector encola en /render_cola y espera; renderTurno (functions/render) procesa. Acá la cola se procesa en el "dormir".
+const REN = require('../../functions/render/gemini.js');
+const RT = require('../../functions/render/index.js');
+const REQMCP = require('../../functions/mcp/requerimientos.js');
+const IMGp = require('../../functions/mcp/imagen.js');
+function geminiFalso({ modelos = ['gemini-nano-banana-2.1', 'gemini-3-pro-image', 'gemini-2.5-flash'], respuesta } = {}) {
+    const pedidos = [];
+    const fetchF = async (url, op = {}) => {
+        pedidos.push({ url, op, cuerpo: op.body ? JSON.parse(op.body) : null });
+        assert.equal(op.headers['x-goog-api-key'], 'clave-falsa');
+        if (/\/models\?/.test(url)) return { ok: true, status: 200, json: async () => ({ models: modelos.map((m) => ({ name: 'models/' + m })) }) };
+        if (respuesta) return respuesta();
+        const png = IMGp.imagenDePrueba(0).buffer.toString('base64');
+        return { ok: true, status: 200, json: async () => ({ candidates: [{ content: { parts: [
+            { inlineData: { mimeType: 'image/png', data: 'AAAA' }, thought: true },
+            { text: 'Listo.' }, { inlineData: { mimeType: 'image/png', data: png } }] }, finishReason: 'STOP' }] }) };
+    };
+    REN.configurar({ clave: () => 'clave-falsa', fetch: fetchF, log: () => {} });
+    return pedidos;
+}
+/** renderTurno simulado: procesa la cola con su propio permiso de Storage (solo renders). */
+function renderTurnoFalso(ent, { procesa = true } = {}) {
+    const alRT = Object.assign({}, ent.almacen, {
+        subirArchivo: async (r, buf, mime) => { assert.ok(RT.ARCHIVOS.some((re) => re.test(r)), 'renderTurno escribe fuera de renders: ' + r); ent.almacen.archivos.set(r, { buf: Buffer.from(buf), mime }); },
+    });
+    const correr = async () => {
+        const cola = ent.almacen.datos.render_cola || {};
+        for (const k of Object.keys(cola)) { const p = cola[k]; delete cola[k]; await RT.procesar({ almacen: alRT, esHub: async (u) => u === 'renzo', gemini: REN }, p); }
+    };
+    let t = 1762900000000;
+    REQMCP.configurarEspera({ ms: 40000, cada: 2500, ahora: () => t, dormir: async (ms) => { t += ms; if (procesa) await correr(); } });
+    return { correr };
+}
+async function asignado(ent) {
+    const q = await requerimientoDemo(ent);
+    const ab = await ok(ent, 'abrir_cotizacion', { cid: 'cliDemo', pid: 'proyDemo', titulo: 'Mostrador' });
+    const C = { cid: 'cliDemo', pid: 'proyDemo', conv: ab.conv };
+    const m = await ok(ent, 'registrar_mensaje_del_dueno', { ...C, texto: 'cotizalo' });
+    await ok(ent, 'asignar_requerimiento', { ...C, id: q.id, confirmacion: m.origen });
+    return { q, C };
+}
+
+prueba('generar_render: encola para renderTurno, modelo fijo, fotos originales, reglas sin cotas; devuelve la imagen chica', async () => {
+    const ent = crearEntorno();
+    const pedidos = geminiFalso();
+    renderTurnoFalso(ent);
+    const q = await requerimientoDemo(ent);
+    const r = await H.llamar(ent.almacen, 'renzo', 'generar_render', { id: q.id, prompt: 'Mostrador de MDF blanco con logo retroiluminado, en la misma esquina de la foto' });
+    assert.ok(!r.isError, JSON.stringify(r));
+    const d = JSON.parse(r.content[0].text);
+    assert.equal(d.estado, 'listo'); assert.equal(d.modelo, 'gemini-nano-banana-2.1'); assert.equal(d.aspecto, '4:3'); assert.equal(d.tamano, '1K');
+    assert.equal(r.content[1].type, 'image'); assert.equal(r.content[1].mimeType, 'image/jpeg');
+    assert.ok(Buffer.from(r.content[1].data, 'base64').length <= 100 * 1024);
+    const gen = pedidos.find((p) => /:generateContent$/.test(p.url));
+    assert.match(gen.url, /models\/gemini-nano-banana-2\.1:generateContent$/);
+    assert.deepEqual(gen.cuerpo.generationConfig.imageConfig, { aspectRatio: '4:3', imageSize: '1K' });
+    const partes = gen.cuerpo.contents[0].parts;
+    assert.equal(Buffer.from(partes[0].inlineData.data, 'base64').length, JPGr(500).length);   // la foto ORIGINAL, sin cotas
+    assert.match(partes[partes.length - 1].text, /NO dibujes cotas/);
+    const ren = ent.almacen.datos.requerimientos[q.id].renders[d.render];
+    assert.equal(ren.estado, 'listo'); assert.equal(ren.costo_usd_aprox, 0.034);
+    assert.ok(ent.almacen.archivos.has(ren.ruta) && ent.almacen.archivos.has(ren.claude_ruta));
+    assert.equal(Object.keys(ent.almacen.datos.render_cola || {}).length, 0);
+    // corregir con base_render y calidad alta → modelo Pro, el render anterior va primero
+    const d2 = JSON.parse((await H.llamar(ent.almacen, 'renzo', 'generar_render', { id: q.id, prompt: 'Igual, pero el logo en rojo', base_render: d.render, calidad: 'alta', tamano: '2K' })).content[0].text);
+    assert.equal(d2.modelo, 'gemini-3-pro-image'); assert.equal(d2.referencias[0], 'render:' + d.render);
+    assert.equal(pedidos.filter((p) => /\/models\?/.test(p.url)).length, 1);   // ListModels con caché
+    // el conector no puede escribir renders ni la cola de otro lado
+    await assert.rejects(ent.almacen.subirArchivo(`requerimientos/${q.id}/renders/x.jpg`, JPGr(), 'image/jpeg'), /fuera/);
+});
+
+prueba('generar_render: si tarda más de ~40 s devuelve el id; ver_render lo trae cuando termina', async () => {
+    const ent = crearEntorno();
+    geminiFalso();
+    const rt = renderTurnoFalso(ent, { procesa: false });
+    const q = await requerimientoDemo(ent);
+    const d = await ok(ent, 'generar_render', { id: q.id, prompt: 'Mostrador blanco en la esquina' });
+    assert.equal(d.estado, 'en_proceso'); assert.ok(d.render);
+    assert.match((await llamar(ent, 'generar_render', { id: q.id, prompt: 'Otro mostrador blanco' })).texto, /ya hay un render generándose/);
+    assert.equal((await ok(ent, 'ver_render', { id: q.id, render: d.render })).estado, 'en_proceso');
+    await rt.correr();
+    const r = await H.llamar(ent.almacen, 'renzo', 'ver_render', { id: q.id, render: d.render });
+    assert.equal(JSON.parse(r.content[0].text).estado, 'listo'); assert.equal(r.content[1].type, 'image');
+    const lista = await ok(ent, 'ver_render', { id: q.id });
+    assert.equal(lista.renders.length, 1); assert.equal(lista.renders[0].estado, 'listo');
+    // un render que se cortó (renderTurno murió): ver_render lo dice y no bloquea uno nuevo
+    const d3 = await ok(ent, 'generar_render', { id: q.id, prompt: 'Tercer mostrador blanco' });
+    assert.equal(d3.estado, 'en_proceso');
+    await ok(ent, 'ver_render', { id: q.id, render: d3.render });
+    ent.almacen.datos.requerimientos[q.id].renders[d3.render].fecha -= 7 * 60000;
+    assert.match((await llamar(ent, 'ver_render', { id: q.id, render: d3.render })).texto, /se cortó/);
+    assert.equal((await ok(ent, 'generar_render', { id: q.id, prompt: 'Cuarto mostrador blanco' })).estado, 'en_proceso');
+});
+
+prueba('renderTurno: sin el modelo da error claro y NO usa otro; 429, bloqueo y uid ajeno quedan como error', async () => {
+    const ent = crearEntorno();
+    const pedidos = geminiFalso({ modelos: ['gemini-2.5-flash-image', 'gemini-3.1-flash-image'] });
+    renderTurnoFalso(ent);
+    const q = await requerimientoDemo(ent);
+    const r = await llamar(ent, 'generar_render', { id: q.id, prompt: 'Mostrador blanco en la esquina' });
+    assert.ok(r.error); assert.match(r.texto, /no tiene acceso al modelo gemini-nano-banana-2\.1/);
+    assert.equal(pedidos.filter((p) => /generateContent/.test(p.url)).length, 0);
+    geminiFalso({ respuesta: async () => ({ ok: false, status: 429, json: async () => ({ error: { message: 'Your prepayment credits are depleted' } }) }) });
+    assert.match((await llamar(ent, 'generar_render', { id: q.id, prompt: 'Mostrador blanco en la esquina' })).texto, /cuota o créditos/);
+    geminiFalso({ respuesta: async () => ({ ok: true, status: 200, json: async () => ({ candidates: [{ content: { parts: [{ text: 'No puedo.' }] }, finishReason: 'IMAGE_SAFETY' }] }) }) });
+    assert.match((await llamar(ent, 'generar_render', { id: q.id, prompt: 'Mostrador blanco en la esquina' })).texto, /IMAGE_SAFETY/);
+    // un pedido de alguien fuera de la lista blanca no se procesa
+    geminiFalso();
+    const rid = 'Rajeno';
+    await ent.almacen.escribir(`requerimientos/${q.id}/renders/${rid}`, { estado: 'en_proceso', fecha: 1 });
+    const fin = await RT.procesar({ almacen: ent.almacen, esHub: async () => false, gemini: REN }, { req: q.id, rid, uid: 'intruso', prompt: 'x', referencias: [] });
+    assert.equal(fin.fin, 'sin_acceso'); assert.equal(ent.almacen.datos.requerimientos[q.id].renders[rid].estado, 'error');
+    assert.match((await llamar(ent, 'generar_render', { id: q.id, prompt: 'corto' })).texto, /muy corto/);
+    assert.match((await llamar(ent, 'generar_render', { id: q.id, prompt: 'Mostrador blanco', referencias: [q.pdf] })).texto, /no es una foto/);
+});
+
+prueba('aprobar_render: con la aprobación del dueño posterior, pasa a item.img (con respaldo) y la anterior queda en cortes', async () => {
+    const ent = crearEntorno();
+    geminiFalso();
+    renderTurnoFalso(ent);
+    const { q, C } = await asignado(ent);
+    const g = JSON.parse((await H.llamar(ent.almacen, 'renzo', 'generar_render', { id: q.id, prompt: 'Mostrador de MDF blanco' })).content[0].text);
+    const viejo = await ok(ent, 'registrar_mensaje_del_dueno', { ...C, texto: 'algo de antes' });
+    ent.almacen.datos.proyectos.cliDemo.proyDemo.agente.conversaciones[C.conv].conversacion.mensajes[viejo.id].fecha = 1;   // anterior al render
+    assert.match((await llamar(ent, 'aprobar_render', { ...C, id: q.id, render: g.render, item: 'itExistente', confirmacion: viejo.origen })).texto, /posterior al render/);
+    ent.almacen.datos.requerimientos[q.id].renders[g.render].fecha = 2;   // reloj simulado del conector vs. el del almacén
+    const si = await ok(ent, 'registrar_mensaje_del_dueno', { ...C, texto: 'me gusta, usalo' });
+    assert.match((await llamar(ent, 'aprobar_render', { ...C, id: q.id, render: g.render, item: '0', confirmacion: si.origen })).texto, /no hay un ítem/);
+    ent.almacen.datos.proyectos.cliDemo.proyDemo.presupuesto.items[1].img = 'https://vieja.example/img.jpg';
+    const a = await ok(ent, 'aprobar_render', { ...C, id: q.id, render: g.render, item: 'itExistente', confirmacion: si.origen });
+    const it = ent.almacen.datos.proyectos.cliDemo.proyDemo.presupuesto.items[1];
+    assert.match(it.img, /^https:\/\/firebasestorage\.googleapis\.com\/v0\/b\/.+\/o\/presupuesto%2Frender_req_proyDemo_.+\.jpg\?alt=media&token=/);
+    assert.deepEqual(it.cortes, ['https://vieja.example/img.jpg']);
+    assert.equal(it.render_req.render, g.render);
+    assert.ok(a.respaldo);
+    assert.equal(ent.almacen.datos.requerimientos[q.id].matriz, g.render);
+    assert.ok((await ok(ent, 'aprobar_render', { ...C, id: q.id, render: g.render, item: 'itExistente', confirmacion: si.origen })).ya_aprobado);
+    const q2 = await requerimientoDemo(ent);
+    const g2 = JSON.parse((await H.llamar(ent.almacen, 'renzo', 'generar_render', { id: q2.id, prompt: 'Otro mostrador blanco' })).content[0].text);
+    const si2 = await ok(ent, 'registrar_mensaje_del_dueno', { ...C, texto: 'sí' });
+    assert.match((await llamar(ent, 'aprobar_render', { ...C, id: q2.id, render: g2.render, item: 'itExistente', confirmacion: si2.origen })).texto, /no está asignado a este proyecto/);
+});
+
 // ------------------------------------------------------------------ correr
 let bien = 0;
 for (const [n, fn] of pruebas) {

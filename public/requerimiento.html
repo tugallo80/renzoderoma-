@@ -124,6 +124,11 @@
             </div>
             <input type="file" id="rq-file" multiple style="display:none" onchange="RQ.archivos(this.files); this.value='';">
             <div class="adjs" id="rq-adjs"></div>
+            <div id="rq-renders-caja" style="display:none;margin-top:16px;">
+                <label class="lbl">Renders de Claude</label>
+                <div class="adjs" id="rq-renders"></div>
+                <div class="nota">Los genera Claude con Gemini desde el proyecto RUBIK AGENTE APP. Tocá uno para verlo grande. El aprobado pasa a ser la imagen del ítem en el presupuesto.</div>
+            </div>
             <div class="nota">Las fotos se pueden anotar (✏️) con cotas y notas: quedan guardadas como datos para Claude. Los 3D se miden acá, en el navegador, y se guarda la medición con dos vistas.</div>
         </div>
         <div class="acciones">
@@ -424,6 +429,30 @@ window.RQ = (function () {
                 '<button onclick="RQ.descartarError(\'' + p.clave + '\')" title="Quitar">×</button></div>' : '') + '</div>';
         }).join('');
         el.innerHTML = html;
+        pintarRenders();
+    }
+    function pintarRenders() {
+        var r = actual && actual.id ? todos[actual.id] || {} : {};
+        var ren = r.renders || {}, ks = Object.keys(ren).sort(function (a, b) { return (ren[b].fecha || 0) - (ren[a].fecha || 0); });
+        $('rq-renders-caja').style.display = ks.length ? 'block' : 'none';
+        $('rq-renders').innerHTML = ks.map(function (k) {
+            var x = ren[k], ap = x.aprobado;
+            var listo = !x.estado || x.estado === 'listo';
+            return '<div class="adj' + (x.estado === 'error' ? ' error' : '') + '" style="cursor:' + (listo ? 'pointer' : 'default') + ';' + (ap ? 'border-color:var(--green);border-width:2px;' : '') + '"' + (listo ? ' onclick="RQ.verRender(\'' + k + '\')"' : '') + '>' +
+                '<div class="mini">' + (x.miniatura ? '<img src="' + esc(x.miniatura) + '" alt="">' : x.estado === 'error' ? '⚠' : listo ? '🖼' : '<div class="spin"></div>') + '</div>' +
+                '<div class="nom">' + (ap ? '✅ ' + esc(ap.desc || 'Imagen del ítem') : esc((x.calidad === 'alta' ? 'Alta · ' : '') + (x.tamano || ''))) + '</div>' +
+                '<div class="det">' + (x.estado === 'error' ? esc('Error: ' + (x.error || '')) + '<br>' : !listo ? 'Generando… · ' : '') + esc(new Date(x.fecha || 0).toLocaleString('es-BO', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })) + '</div></div>';
+        }).join('');
+    }
+    async function verRender(k) {
+        if (!actual || !actual.id) return;
+        var w = window.open('', '_blank');
+        try {
+            var r = await llamar({ accion: 'archivo', id: actual.id, render: k });
+            var blob = await (await fetch('data:image/jpeg;base64,' + r.datos)).blob();
+            var url = URL.createObjectURL(blob);
+            if (w) w.location.href = url; else window.open(url, '_blank');
+        } catch (e) { if (w) w.close(); alert('No se pudo abrir el render: ' + e.message); }
     }
 
     async function subirPDF(f, previo) {
@@ -627,7 +656,7 @@ window.RQ = (function () {
 
     return {
         nuevo: nuevo, abrir: abrir, guardar: guardar, pedirAClaude: pedirAClaude, descartar: descartar, reabrir: reabrir, cambioCliente: cambioCliente, mic: mic,
-        archivos: archivos, anotar: anotar, quitar: quitar, filtro: filtro,
+        archivos: archivos, anotar: anotar, quitar: quitar, filtro: filtro, verRender: verRender,
         reintentar: function (c) { var p = subiendo.find(function (x) { return x.clave === c; }); if (p && p.reintentar) p.reintentar(p); },
         descartarError: function (c) { subiendo = subiendo.filter(function (x) { return x.clave !== c; }); pintarAdjuntos(); }
     };

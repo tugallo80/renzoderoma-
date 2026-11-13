@@ -31,7 +31,10 @@ function crearAlmacenMemoria(inicial, rutas, carpetas, soloLectura) {
             set(r, v); return { ok: true, valor: v };
         },
         ahora() { reloj += 1; return reloj; },
-        async subirArchivo(r, buf, mime) { archivos.set(verificarRutaArchivo(r, carpetas), { buf: Buffer.from(buf), mime }); },
+        async subirArchivo(r, buf, mime, op = {}) {
+            const v = verificarRutaArchivo(r, carpetas); archivos.set(v, { buf: Buffer.from(buf), mime, token: op.token });
+            return op.token ? `https://firebasestorage.googleapis.com/v0/b/bucket-de-prueba/o/${encodeURIComponent(v)}?alt=media&token=${op.token}` : undefined;
+        },
         async bajarArchivo(r) { const f = archivos.get(verificarRutaArchivo(r, carpetas && soloLectura ? carpetas.concat(soloLectura) : carpetas)); if (!f) throw new Error("no existe " + r); return f.buf; },
         async borrarArchivo(r) { archivos.delete(verificarRutaArchivo(r, carpetas)); },
     };

@@ -6,9 +6,19 @@
  *   asignar_requerimiento  → lo une a un proyecto y a una cotización: la descripción queda como mensaje del dueño y los
  *                            adjuntos se copian a los del proyecto (mismo formato que el Agente IA), así medicion_3d y los
  *                            orígenes dueño:/cota_plano:/pieza3d: funcionan igual. Con cotizado:true lo marca cotizado.
+ *   generar_render         → pide un render con Gemini (modelo fijo) desde las fotos del requerimiento: lo encola en
+ *                            /render_cola (lo hace renderTurno, functions/render) y espera ~40 s; si está, devuelve la
+ *                            imagen para que Claude la revise y corrija; si no, el id para ver_render. Sin cotas en la imagen.
+ *   ver_render             → estado o imagen de un render.
+ *   aprobar_render         → con la confirmación del dueño, el render pasa a ser la imagen del ítem del presupuesto
+ *                            (item.img, la que usan el PDF y producción); la anterior queda en item.cortes.
  * Se arma con las ayudas de herramientas.js (sin require circular).
  */
 const R = require("../agente/rutas");
+const REN = require("../render/gemini");   // solo constantes (modelos, aspectos): la llamada a Gemini la hace renderTurno
+
+/** Espera de generar_render: Hosting corta a los 60 s, así que se espera ~40 s y si no, se devuelve el id (ver_render). */
+let ESPERA = { ms: 40000, cada: 2500, dormir: (ms) => new Promise((ok) => setTimeout(ok, ms)), ahora: () => Date.now() };
 
 const ID = /^[A-Za-z0-9_-]{1,64}$/;
 const ESTADOS = ["pendiente", "asignado", "cotizado", "descartado"];
@@ -16,6 +26,14 @@ const ESTADOS = ["pendiente", "asignado", "cotizado", "descartado"];
 const TOPE_IMAGENES = 300 * 1024;
 /** Nodos de la base que tocan estas herramientas (además del cerco del conector). */
 const RUTAS_REQ = [/^requerimientos(\/|$)/];
+/** Un render que sigue "en proceso" después de esto se considera cortado (renderTurno tiene 300 s). */
+const COLGADO_MS = 6 * 60000;
+/** Renders por requerimiento (para no gastar de más por error). */
+const MAX_RENDERS = 20;
+/** Lo que se agrega siempre al pedido de imagen (el modelo inventa medidas y textos si se le piden). */
+const REGLAS_RENDER = "\n\nReglas: render fotorrealista de venta. Respetá la proporción, el encuadre y el entorno de la foto de referencia. " +
+    "NO dibujes cotas, flechas, medidas, números ni textos técnicos sobre la imagen (las medidas las pone la app aparte). " +
+    "Logos y textos de marca solo si están en las referencias, sin inventar letras.";
 
 module.exports = function crear({ falla, proyecto, acotar, RUTAS }) {
     const alReq = (almacen) => acotar(almacen, RUTAS_REQ);
@@ -49,6 +67,30 @@ module.exports = function crear({ falla, proyecto, acotar, RUTAS }) {
         }
         if (a.tipo === "3d") return (a.vistas_rutas || []).map((ruta, i) => ({ adj: k, ruta, que: `vista ${(a.vistas_nombres || [])[i] || i + 1} del 3D (números = piezas de medicion_3d)` }));
         return [];
+    }
+
+    /** Espera (hasta ms) a que renderTurno termine; devuelve la imagen chica, el error o el id para ver_render. */
+    async function esperarRender(almacen, id, rid, ms, extra) {
+        const ruta = `requerimientos/${id}/renders/${rid}`;
+        const hasta = ESPERA.ahora() + ms;
+        let m = await alReq(almacen).leer(ruta);
+        while (m && (m.estado === "en_proceso" || m.estado === "generando") && ESPERA.ahora() < hasta) {
+            await ESPERA.dormir(ESPERA.cada);
+            m = await alReq(almacen).leer(ruta);
+        }
+        if (!m) falla(`no existe el render ${rid}`);
+        if ((m.estado === "en_proceso" || m.estado === "generando") && ESPERA.ahora() - (m.fecha || 0) > COLGADO_MS) {
+            falla(`el render ${rid} se cortó sin terminar (no cuenta para el máximo): pedilo de nuevo con generar_render`);
+        }
+        if (m.estado === "error") falla(`el render ${rid} falló: ${m.error || "sin detalle"}`);
+        if (m.estado === "en_proceso" || m.estado === "generando") {
+            return Object.assign({ render: rid, estado: "en_proceso", siguiente: "Todavía se está generando: volvé a pedirlo con ver_render {id, render} en unos segundos." }, extra);
+        }
+        const datos = Object.assign({ render: rid, estado: "listo", modelo: m.modelo, calidad: m.calidad, tamano: m.tamano, aspecto: m.aspecto, costo_usd_aprox: m.costo_usd_aprox,
+            nota_del_modelo: m.nota_modelo || undefined, aprobado: m.aprobado ? true : undefined,
+            siguiente: "Revisá la imagen. Si hay que corregir: generar_render con base_render y la corrección. Si el dueño la aprueba: aprobar_render." }, extra);
+        const buf = Buffer.from(await almacen.bajarArchivo(m.claude_ruta));
+        return { __contenido: [{ type: "text", text: JSON.stringify(datos) }, { type: "image", data: buf.toString("base64"), mimeType: "image/jpeg" }] };
     }
 
     return [
@@ -218,8 +260,147 @@ module.exports = function crear({ falla, proyecto, acotar, RUTAS }) {
                     siguiente: "buscar_base / medicion_3d → armar_borrador citando estos orígenes" };
             },
         },
+        {
+            def: {
+                name: "generar_render",
+                title: "Generar un render (Gemini)",
+                description: "Pide un render fotorrealista a Gemini (de la app; modelo fijo: calidad normal = Nano Banana 2.1, ~US$0,03–0,05; alta = Nano Banana Pro, ~US$0,13) a partir de las fotos del requerimiento y tu pedido, y te DEVUELVE LA IMAGEN para que la revises (si tarda más de ~40 s, devuelve el id con estado en_proceso: pedilo con ver_render): si algo no respeta el pedido, llamalo de nuevo con base_render y la corrección. Escribí el prompt como experto (materiales, acabados, iluminación, qué se conserva de la foto); NO pidas cotas ni medidas dibujadas (el modelo inventa números: las medidas van aparte). Gasta plata: no generes de más (máx. " + MAX_RENDERS + " por requerimiento). Queda guardado en el requerimiento; para usarlo como imagen del ítem: aprobar_render.",
+                inputSchema: { type: "object", properties: {
+                    id: { type: "string", description: "Id del requerimiento." },
+                    prompt: { type: "string", maxLength: 6000, description: "Qué generar (en español o inglés)." },
+                    referencias: { type: "array", maxItems: 6, items: { type: "string" }, description: "Opcional: ids de adjuntos (adj) del requerimiento a usar como referencia; por defecto, todas sus fotos (hasta 4). Se manda la foto original, sin las cotas dibujadas." },
+                    base_render: { type: "string", description: "Opcional: id de un render anterior para corregirlo (va como primera referencia)." },
+                    calidad: { type: "string", enum: ["normal", "alta"], description: "Por defecto normal." },
+                    aspecto: { type: "string", enum: REN.ASPECTOS, description: "Opcional: por defecto, el de la primera referencia." },
+                    tamano: { type: "string", enum: ["1K", "2K"], description: "Por defecto 1K (2K para la versión final)." },
+                }, required: ["id", "prompt"] },
+                annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+            },
+            async correr(almacen, uid, e) {
+                const r = await leerReq(almacen, e.id);
+                if (r.estado === "descartado") falla("el requerimiento está descartado");
+                const prompt = String(e.prompt || "").trim();
+                if (prompt.length < 10) falla("el prompt es muy corto: describí qué querés ver");
+                const previos = r.renders || {};
+                const colgado = (x) => ["en_proceso", "generando"].includes(x.estado) && ESPERA.ahora() - (x.fecha || 0) > COLGADO_MS;
+                const vigentes = Object.keys(previos).filter((k) => previos[k] && previos[k].estado !== "error" && !colgado(previos[k]));
+                if (vigentes.length >= MAX_RENDERS) falla(`ya hay ${MAX_RENDERS} renders en este requerimiento: aprobá uno o pedile al dueño que siga desde la app`);
+                if (vigentes.some((k) => ["en_proceso", "generando"].includes(previos[k].estado) && ESPERA.ahora() - (previos[k].fecha || 0) < 5 * 60000)) {
+                    falla("ya hay un render generándose en este requerimiento: esperá y miralo con ver_render");
+                }
+                const adj = r.adjuntos || {};
+                // referencias: render base + fotos originales (sin cotas dibujadas) o la vista del 3D
+                const refs = [], usadas = [];
+                if (e.base_render) {
+                    const b = previos[e.base_render];
+                    if (!b || !b.ruta) falla(`no existe el render ${e.base_render} (o no terminó) en este requerimiento`);
+                    refs.push({ ruta: b.ruta, mime: "image/jpeg" }); usadas.push(`render:${e.base_render}`);
+                }
+                const ids = (Array.isArray(e.referencias) && e.referencias.length ? e.referencias : ordenados(adj).filter((k) => adj[k].tipo === "imagen").slice(0, 4)).slice(0, 6);
+                let primera = null;
+                for (const k of ids) {
+                    const a = adj[k];
+                    if (!a) falla(`no existe el adjunto ${k} en este requerimiento`);
+                    if (a.tipo === "imagen") { refs.push({ ruta: a.ruta, mime: a.mime || "image/jpeg" }); usadas.push(k); if (!primera) primera = a; }
+                    else if (a.tipo === "3d" && a.vistas_rutas && a.vistas_rutas[0]) { refs.push({ ruta: a.vistas_rutas[0], mime: "image/jpeg" }); usadas.push(`${k}:vista1`); }
+                    else falla(`el adjunto ${k} (${a.nombre}) no es una foto ni un 3D con vistas`);
+                }
+                const base = e.base_render ? previos[e.base_render] : null;
+                const aspecto = e.aspecto || (base && base.aspecto) || (primera ? REN.aspectoDe(primera.ancho, primera.alto) : "4:3");
+                const calidad = e.calidad === "alta" ? "alta" : "normal";
+                const tamano = e.tamano === "2K" ? "2K" : "1K";
+                const costo = REN.MODELOS[calidad].usd[tamano];
+                const rid = almacen.nuevaClave();
+                const ahora = ESPERA.ahora();
+                const rutaMeta = `requerimientos/${e.id}/renders/${rid}`;
+                await alReq(almacen).escribir(rutaMeta, { estado: "en_proceso", modelo_pedido: REN.MODELOS[calidad].id, calidad, tamano, aspecto,
+                    prompt: prompt.slice(0, 6000), referencias: usadas, base_render: e.base_render || null, costo_usd_aprox: costo, fecha: ahora, por: "claude" });
+                await alReq(almacen).actualizar(`requerimientos/${e.id}`, { actualizado: ahora });
+                await acotar(almacen, [/^render_cola\/[A-Za-z0-9_-]+$/]).escribir(`render_cola/${rid}`, {
+                    req: e.id, rid, uid, prompt: prompt + REGLAS_RENDER, referencias: refs, calidad, tamano, aspecto, fecha: ahora });
+                console.log("[rubikMcp] generar_render encolado", JSON.stringify({ req: e.id, rid, calidad, tamano, refs: usadas.length, costo }));
+                return esperarRender(almacen, e.id, rid, ESPERA.ms, { referencias: usadas, renders_en_el_requerimiento: vigentes.length + 1 });
+            },
+        },
+        {
+            def: {
+                name: "ver_render",
+                title: "Ver un render",
+                description: "Estado o imagen de un render pedido con generar_render (si no terminó a tiempo, generar_render devuelve su id con estado en_proceso). Si sigue generándose, esperá unos segundos y volvé a pedirlo. Sin render: lista los del requerimiento.",
+                inputSchema: { type: "object", properties: {
+                    id: { type: "string", description: "Id del requerimiento." }, render: { type: "string", description: "Opcional: id del render." },
+                }, required: ["id"] },
+                annotations: { readOnlyHint: true },
+            },
+            async correr(almacen, uid, e) {
+                const r = await leerReq(almacen, e.id);
+                const ren = r.renders || {};
+                if (!e.render) {
+                    return { renders: Object.keys(ren).sort((a, b) => (ren[a].fecha || 0) - (ren[b].fecha || 0)).map((k) => ({ render: k, estado: ren[k].estado || "listo",
+                        calidad: ren[k].calidad, tamano: ren[k].tamano, fecha: fecha(ren[k].fecha), aprobado: ren[k].aprobado ? ren[k].aprobado.desc || true : undefined, error: ren[k].error || undefined })),
+                    matriz: r.matriz || undefined };
+                }
+                if (!ID.test(String(e.render)) || !ren[e.render]) falla(`no existe el render ${e.render} en este requerimiento`);
+                return esperarRender(almacen, e.id, e.render, Math.min(ESPERA.ms, 15000), {});
+            },
+        },
+        {
+            def: {
+                name: "aprobar_render",
+                title: "Aprobar un render como imagen del ítem",
+                description: "Con la confirmación del dueño (dueño:<id> de esta cotización, posterior a que le mostraste el render), el render pasa a ser la IMAGEN PRINCIPAL de un ítem del presupuesto (la que sale en el PDF y en producción). La imagen anterior del ítem no se pierde: queda entre sus imágenes (cortes). El ítem tiene que estar en el presupuesto (después de aplicar_al_presupuesto). El requerimiento tiene que estar asignado a este proyecto.",
+                inputSchema: { type: "object", properties: {
+                    id: { type: "string", description: "Id del requerimiento." }, render: { type: "string", description: "Id del render (de generar_render)." },
+                    cid: { type: "string" }, pid: { type: "string" }, conv: { type: "string" },
+                    item: { type: "string", description: "n (posición) o id del ítem del presupuesto (ver_presupuesto)." },
+                    confirmacion: { type: "string", description: "dueño:<id> del mensaje del dueño que aprueba el render." },
+                }, required: ["id", "render", "cid", "pid", "conv", "item", "confirmacion"] },
+                annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
+            },
+            async correr(almacen, uid, e) {
+                await proyecto(almacen, e, true);
+                const r = await leerReq(almacen, e.id);
+                if (r.cid !== e.cid || r.pid !== e.pid) falla("el requerimiento no está asignado a este proyecto: primero asignar_requerimiento");
+                const ren = (r.renders || {})[e.render];
+                if (!ID.test(String(e.render || "")) || !ren) falla(`no existe el render ${e.render} en este requerimiento`);
+                if (ren.estado && ren.estado !== "listo") falla(`el render ${e.render} no está listo (${ren.estado})`);
+                const alA = acotar(almacen, RUTAS.aplicar(e.cid, e.pid));
+                const RC = R.raizConv(e.cid, e.pid, e.conv);
+                const m = /^dueño:([A-Za-z0-9_-]{1,64})$/.exec(String(e.confirmacion || "").trim());
+                if (!m) falla("confirmacion: dueño:<id> (mostrale el render al dueño y registrá su aprobación)");
+                const msg = await alA.leer(`${RC}/conversacion/mensajes/${m[1]}`);
+                if (!msg || msg.rol !== "dueno" || msg.copiado_de) falla(`no hay un mensaje del dueño ${m[1]} en esta cotización`);
+                if (!(msg.fecha > ren.fecha)) falla("la aprobación tiene que ser un mensaje del dueño posterior al render (mostráselo y esperá su respuesta)");
+                const rutaPres = `proyectos/${e.cid}/${e.pid}/presupuesto`;
+                const items = (await alA.leer(`${rutaPres}/items`)) || [];
+                const claves = Array.isArray(items) ? items.map((_, i) => String(i)) : Object.keys(items).sort((a, b) => Number(a) - Number(b));
+                const k = claves.find((c) => c === String(e.item) || (items[c] && items[c].id && items[c].id === e.item));
+                const it = k != null ? items[k] : null;
+                if (!it || it.type === "chapter") falla(`no hay un ítem ${e.item} en el presupuesto (mirá ver_presupuesto)`);
+                if (it.render_req && it.render_req.render === e.render) return { ok: true, ya_aprobado: true, item: it.desc, img: it.img };
+                // la imagen, con enlace de descarga como las del presupuesto
+                const buf = await almacen.bajarArchivo(ren.ruta);
+                const ahora = almacen.ahora();
+                const url = await almacen.subirArchivo(`presupuesto/render_req_${e.pid}_${e.render}.jpg`, buf, "image/jpeg", { token: REN.nuevoToken() });
+                const dia = new Date(ahora - 4 * 3600 * 1000).toISOString().slice(0, 10);
+                const respaldo = await alA.agregar(`respaldos_agente/${dia}`, { ruta: `${rutaPres}/items/${k}`, antes: JSON.stringify(it), motivo: "aprobar_render (conector Claude)", conv: e.conv, fecha: ahora, por: uid });
+                const cambios = { img: url, render_req: { requerimiento: e.id, render: e.render, fecha: ahora } };
+                if (it.img) {
+                    const cortes = it.cortes || [];
+                    if (Array.isArray(cortes)) cambios.cortes = cortes.concat([it.img]);
+                    else { cambios[`cortes/${alA.nuevaClave()}`] = it.img; }
+                }
+                await alA.actualizar(`${rutaPres}/items/${k}`, cambios);
+                await alReq(almacen).actualizar(`requerimientos/${e.id}`, { matriz: e.render, actualizado: ahora, [`renders/${e.render}/aprobado`]: { item: it.id || Number(k), desc: it.desc, fecha: ahora } });
+                await alA.agregar(`${RC}/conversacion/mensajes`, { rol: "aviso", fecha: ahora, texto: `🖼 Render aprobado como imagen del ítem "${String(it.desc || "").slice(0, 80)}" (desde Claude).` });
+                return { ok: true, item: it.desc, n: Number(k), img: url, imagen_anterior: it.img ? "quedó entre las imágenes del ítem (cortes)" : undefined, respaldo: `respaldos_agente/${dia}/${respaldo}`,
+                    aviso: "Si el dueño tiene el presupuesto abierto en la app, que lo recargue." };
+            },
+        },
     ];
 };
 
 module.exports.RUTAS_REQ = RUTAS_REQ;
 module.exports.TOPE_IMAGENES = TOPE_IMAGENES;
+module.exports.MAX_RENDERS = MAX_RENDERS;
+module.exports.configurarEspera = (c) => { ESPERA = Object.assign({}, ESPERA, c); };
