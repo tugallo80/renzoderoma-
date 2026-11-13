@@ -31,10 +31,10 @@
     }
 
     // ------------------------------------------------------------------ geometría (compartida entre pantalla y exportación)
-    /** Medidas de trazo y texto en píxeles de la foto: finas, proporcionales al tamaño. */
+    /** Medidas de trazo y texto en píxeles de la foto, proporcionales al tamaño (texto grande para que se lea). */
     function escala(w, h) {
         var lado = Math.max(w, h);
-        return { trazo: Math.max(1.5, lado / 900), punta: Math.max(7, lado / 110), tick: Math.max(5, lado / 160), letra: Math.max(13, Math.round(lado / 60)), pad: Math.max(3, lado / 400) };
+        return { trazo: Math.max(2, lado / 650), punta: Math.max(9, lado / 80), tick: Math.max(6, lado / 120), letra: Math.max(18, Math.round(lado / 30)), pad: Math.max(4, lado / 250) };   // letra ~3 % del lado: se lee también en la copia chica que ve Claude
     }
     /** Dónde va la etiqueta de una cota: al costado de la línea (perpendicular), para no taparla. */
     function posEtiqueta(a, b, e) {
