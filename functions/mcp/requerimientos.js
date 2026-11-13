@@ -26,6 +26,8 @@ const ESTADOS = ["pendiente", "asignado", "cotizado", "descartado"];
 const TOPE_IMAGENES = 300 * 1024;
 /** Nodos de la base que tocan estas herramientas (además del cerco del conector). */
 const RUTAS_REQ = [/^requerimientos(\/|$)/];
+/** Un render que sigue "en proceso" después de esto se considera cortado (renderTurno tiene 300 s). */
+const COLGADO_MS = 6 * 60000;
 /** Renders por requerimiento (para no gastar de más por error). */
 const MAX_RENDERS = 20;
 /** Lo que se agrega siempre al pedido de imagen (el modelo inventa medidas y textos si se le piden). */
@@ -77,6 +79,9 @@ module.exports = function crear({ falla, proyecto, acotar, RUTAS }) {
             m = await alReq(almacen).leer(ruta);
         }
         if (!m) falla(`no existe el render ${rid}`);
+        if ((m.estado === "en_proceso" || m.estado === "generando") && ESPERA.ahora() - (m.fecha || 0) > COLGADO_MS) {
+            falla(`el render ${rid} se cortó sin terminar (no cuenta para el máximo): pedilo de nuevo con generar_render`);
+        }
         if (m.estado === "error") falla(`el render ${rid} falló: ${m.error || "sin detalle"}`);
         if (m.estado === "en_proceso" || m.estado === "generando") {
             return Object.assign({ render: rid, estado: "en_proceso", siguiente: "Todavía se está generando: volvé a pedirlo con ver_render {id, render} en unos segundos." }, extra);
@@ -277,7 +282,8 @@ module.exports = function crear({ falla, proyecto, acotar, RUTAS }) {
                 const prompt = String(e.prompt || "").trim();
                 if (prompt.length < 10) falla("el prompt es muy corto: describí qué querés ver");
                 const previos = r.renders || {};
-                const vigentes = Object.keys(previos).filter((k) => previos[k] && previos[k].estado !== "error");
+                const colgado = (x) => ["en_proceso", "generando"].includes(x.estado) && ESPERA.ahora() - (x.fecha || 0) > COLGADO_MS;
+                const vigentes = Object.keys(previos).filter((k) => previos[k] && previos[k].estado !== "error" && !colgado(previos[k]));
                 if (vigentes.length >= MAX_RENDERS) falla(`ya hay ${MAX_RENDERS} renders en este requerimiento: aprobá uno o pedile al dueño que siga desde la app`);
                 if (vigentes.some((k) => ["en_proceso", "generando"].includes(previos[k].estado) && ESPERA.ahora() - (previos[k].fecha || 0) < 5 * 60000)) {
                     falla("ya hay un render generándose en este requerimiento: esperá y miralo con ver_render");

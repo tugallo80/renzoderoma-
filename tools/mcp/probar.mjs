@@ -702,6 +702,13 @@ prueba('generar_render: si tarda más de ~40 s devuelve el id; ver_render lo tra
     assert.equal(JSON.parse(r.content[0].text).estado, 'listo'); assert.equal(r.content[1].type, 'image');
     const lista = await ok(ent, 'ver_render', { id: q.id });
     assert.equal(lista.renders.length, 1); assert.equal(lista.renders[0].estado, 'listo');
+    // un render que se cortó (renderTurno murió): ver_render lo dice y no bloquea uno nuevo
+    const d3 = await ok(ent, 'generar_render', { id: q.id, prompt: 'Tercer mostrador blanco' });
+    assert.equal(d3.estado, 'en_proceso');
+    await ok(ent, 'ver_render', { id: q.id, render: d3.render });
+    ent.almacen.datos.requerimientos[q.id].renders[d3.render].fecha -= 7 * 60000;
+    assert.match((await llamar(ent, 'ver_render', { id: q.id, render: d3.render })).texto, /se cortó/);
+    assert.equal((await ok(ent, 'generar_render', { id: q.id, prompt: 'Cuarto mostrador blanco' })).estado, 'en_proceso');
 });
 
 prueba('renderTurno: sin el modelo da error claro y NO usa otro; 429, bloqueo y uid ajeno quedan como error', async () => {

@@ -75,6 +75,8 @@ el render lo hace una Function aparte con cola, como el Agente IA:
 - **`generar_render`** (conector) valida, deja el estado `en_proceso` en `requerimientos/{id}/renders/{rid}` y el pedido en
   **`/render_cola/{rid}`**, y espera hasta **~40 s**. Si terminó, devuelve la imagen; si no, `{render, estado: "en_proceso"}`.
 - **`ver_render`** `{id, render?}`: la imagen cuando está lista (o el estado / el error); sin `render`, la lista.
+  Un render que sigue "en proceso" más de 6 min se da por cortado (renderTurno murió): `ver_render` lo dice y no cuenta
+  para el máximo. Para probar en local hace falta `npm install` en `functions/` (sharp).
 - **`renderTurno`** (`functions/render/`): trigger de `/render_cola` con el secreto `GEMINI_API_KEY`, **300 s y 1 GiB**.
   Revisa la lista blanca (uid del pedido), baja las referencias, llama a Gemini y pasa el PNG a JPEG con **sharp** (grande
   para el ítem; copia ≤ 100 KB para Claude). Guarda en Storage `requerimientos/{id}/renders/{rid}.jpg` y deja `listo` o

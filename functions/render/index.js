@@ -42,7 +42,9 @@ async function procesar(dep, pedido) {
     } catch (e) {
         const claro = e instanceof gemini.ErrorRender;
         if (!claro) console.error("[renderTurno]", p.req, p.rid, e);
-        await almacen.actualizar(ruta, { estado: "error", error: claro ? e.message : "error interno al generar el render", fin: almacen.ahora() }).catch(() => {});
+        const sinSharp = !claro && /Cannot find module 'sharp'|sharp/i.test(String(e && e.message)) && /find module|load|install/i.test(String(e && e.message));
+        const motivo = claro ? e.message : sinSharp ? "falta la librería sharp en el servidor (npm install en functions/)" : "error interno al generar el render";
+        await almacen.actualizar(ruta, { estado: "error", error: motivo, fin: almacen.ahora() }).catch(() => {});
         return { fin: "error", error: e.message };
     }
 }
