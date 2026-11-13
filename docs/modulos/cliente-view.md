@@ -32,4 +32,4 @@ SPA completa con múltiples vistas internas (landing, home, proyectos, finanzas,
 
 ## Problemas conocidos y pendientes
 - Los juegos de descuento tienen un sistema de "solo un intento" que puede resetearse desde `proyectos-cliente.html`.
-- La sección de requerimientos en el portal del cliente redirige a `requerimiento-asistido.html` en modo cliente.
+- (Sesión 6) Se quitó el modal de medidas del "Requerimiento asistido" (módulo retirado). El cotizador por ítems del portal todavía guarda en `/requerimientos_asistidos` (pendiente de decisión del dueño).

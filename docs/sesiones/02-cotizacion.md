@@ -41,7 +41,7 @@ Cuando un ítem de **B** se aprueba y se diseña en Blender, se **re-cotiza por 
 |---|---|---|
 | "Presupuesto IA": descripción o imagen → Gemini/Claude arma ítems y APU **con cantidades y precios** | `public/presupuesto.html` (`abrirModalIABudget`) | Pasa a ser el **Camino B**. La IA devuelve ítems y materiales con **cantidades estimadas**, sin precios. Los precios los pone la base. Cada ítem queda marcado "Estimado IA" |
 | Cómputo métrico manual (piezas con largo/ancho/alto, plano de corte) | `public/computo.html` → `items/$idx/measures` | **Recibe las piezas desde Blender** en vez de cargarlas a mano. El plano de corte sigue funcionando igual |
-| Requerimiento asistido (el cliente mide, la IA arma el APU) | `public/requerimiento-asistido.html` | Queda como está para obras donde mide el cliente. Se revisa en una sesión aparte |
+| Requerimiento asistido (el cliente mide, la IA arma el APU) | ~~`public/requerimiento-asistido.html`~~ | **Retirado en la sesión 6** (el dueño ya no lo usaba). Los datos quedan en `/requerimientos_asistidos`. Lo reemplaza el Requerimiento (`requerimiento.html`) |
 | APU por ítem (materiales `mat`, mano de obra `mo`, `eq`, `sub`) | `public/js/apu-utils.js` | Se agrega el origen de cada fila: `blender`, `ia` o `manual` |
 | Prompts editables | `/config_ia/prompts/` | El prompt del Camino B se reescribe: "estimá cantidades, no pongas precios, decí tu confianza" |
 

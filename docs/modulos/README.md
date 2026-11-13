@@ -64,7 +64,8 @@ Fuera de `/api/`: `kayApi` (URL directa `us-central1-rubik-bolivia.cloudfunction
 /supervisores/                 ← perfiles de supervisores
 /portafolio/                   ← portafolio público
 /caja_chica/                   ← registros de caja chica
-/requerimientos_asistidos/     ← requerimientos globales
+/requerimientos/               ← requerimientos (sesión 6; los escribe solo la Function)
+/requerimientos_asistidos/     ← ARCHIVO del módulo retirado (no se borra)
 /whatsapp_historial/           ← historial de conversaciones WA
 /whatsapp_clientes/            ← vinculación WA-cliente
 ```
@@ -104,6 +105,7 @@ Fuera de `/api/`: `kayApi` (URL directa `us-central1-rubik-bolivia.cloudfunction
 | [Compras](./compras.md) | `compras.html` | Órdenes de compra, pagos a proveedores, escaneo de facturas |
 | [Licitaciones](./licitaciones.md) | `licitaciones.html` | Licitaciones y asignación de trabajos a subcontratistas |
 | [Cómputo Métrico](./computo.md) | `computo.html` | Cómputo métrico asistido por IA desde imágenes/planos |
-| [Requerimiento Asistido](./requerimiento-asistido.md) | `requerimiento-asistido.md` | Generación de requerimientos de materiales desde presupuesto |
+| [Requerimiento](./requerimiento.md) | `requerimiento.html` | Lo que pidió el cliente (sin IA), punto de partida que toma Claude por el conector |
+| ~~[Requerimiento Asistido](./requerimiento-asistido.md)~~ | — | **Retirado** en la sesión 6 (datos archivados en `/requerimientos_asistidos`) |
 | [App Trabajador](./app-trabajador.md) | `interno/app-trabajador.html` | App interna para trabajadores: tareas y partes diarios |
 | [Herramientas](./herramientas.md) | `herramientas.html` | Descargas: Rubik Agent (automatización de escritorio) |

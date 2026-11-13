@@ -91,10 +91,7 @@
             <button class="btn-nav" id="btn-dup-proy" onclick="duplicarProyecto()" title="Duplicar proyecto"><i class="ph-bold ph-copy-simple"></i></button>
             <button class="btn-nav" id="btn-vis-proy" onclick="toggleVisibleCliente()" title="Visible/Oculto para cliente"><i class="ph-bold ph-eye" id="ico-vis-proy"></i></button>
             <button class="btn-nav" onclick="location.href='base_datos.html'"><i class="ph-bold ph-database"></i> DB Maestra</button>
-            <button class="btn-nav" onclick="abrirReqAsistido()" style="background:rgba(191,90,242,0.1); color:#bf5af2; border-color:rgba(191,90,242,0.35); position:relative;" id="nav-req-btn">
-                <i class="ph-fill ph-ruler"></i> Req. Asistido
-                <span id="nav-req-badge" style="display:none; position:absolute; top:-5px; right:-5px; background:var(--orange); width:14px; height:14px; border-radius:50%; font-size:8px; font-weight:900; color:#fff; align-items:center; justify-content:center; border:2px solid var(--bg);">!</span>
-            </button>
+            <!-- Sesión 6: se quitó "Req. Asistido" (módulo retirado; los datos quedan en /requerimientos_asistidos). -->
         </div>
     </div>
 
@@ -117,13 +114,7 @@
         <div class="mod-item" onclick="abrirModulo('produccion')"><div class="mod-icon ic-pro"><i class="ph-fill ph-hammer"></i></div><div class="mod-label">Control<br>Producción</div></div>
         <div class="mod-item" onclick="abrirModulo('compras')"><div class="mod-icon ic-com"><i class="ph-fill ph-shopping-cart"></i></div><div class="mod-label">Compras y<br>Materiales</div></div>
         <div class="mod-item" onclick="abrirModulo('licitaciones')"><div class="mod-icon ic-lic"><i class="ph-fill ph-handshake"></i></div><div class="mod-label">Licitaciones</div></div>
-        <div class="mod-item" onclick="abrirReqAsistido()" id="mod-req-asistido">
-            <div class="mod-icon" style="color:#bf5af2; position:relative;" id="req-asistido-icon">
-                <i class="ph-fill ph-ruler"></i>
-                <div id="req-asistido-badge" style="display:none; position:absolute; top:-6px; right:-6px; background:#ff9500; width:16px; height:16px; border-radius:50%; font-size:9px; font-weight:900; color:#fff; display:flex; align-items:center; justify-content:center; border:2px solid var(--card);">!</div>
-            </div>
-            <div class="mod-label">Req.<br>Asistido</div>
-        </div>
+        <div class="mod-item" onclick="location.href='requerimiento.html'"><div class="mod-icon" style="color:#d97757;"><i class="ph-fill ph-clipboard-text"></i></div><div class="mod-label">Requeri-<br>mientos</div></div>
     </div>
 
     <div class="generic-card">
@@ -348,19 +339,6 @@
             if (btnCerrar) btnCerrar.style.display = est === 'entregado' ? 'block' : 'none';
         });
 
-        // Badge req asistido
-        db.ref(`requerimientos_asistidos/${cid}/${pid}`).once('value', snap => {
-            if (!snap.exists()) return;
-            let hayPendiente = false;
-            snap.forEach(child => {
-                if (child.val().estado === 'medidas_recibidas') hayPendiente = true;
-            });
-            if (!hayPendiente) return;
-            const b1 = document.getElementById('req-asistido-badge');
-            const b2 = document.getElementById('nav-req-badge');
-            if (b1) b1.style.display = 'flex';
-            if (b2) b2.style.display = 'flex';
-        });
 
         // Datos financieros
         const safe = ref => db.ref(ref).once('value').catch(() => ({ val: () => null }));
@@ -450,10 +428,6 @@
         window.location.href = dest + '.html?cid=' + cid + '&pid=' + pid;
     }
 
-    function abrirReqAsistido() {
-        localStorage.setItem('rubik_req_backref', 'dashboard-proyecto.html');
-        window.location.href = 'requerimiento-asistido.html';
-    }
 
     function aceptarOfertaCliente() {
         db.ref(`proyectos/${cid}/${pid}/negociacion`).once('value', snap => {
