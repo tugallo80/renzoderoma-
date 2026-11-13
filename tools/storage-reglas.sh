@@ -38,8 +38,9 @@ case "$MODO" in
     contenido "$RS"
     echo "------------------------------------------------------------"
     C="$(contenido "$RS")"
-    if echo "$C" | grep -qE 'match /requerimientos/'; then echo "✅ Ya tiene la regla de /requerimientos"; else echo "⏳ Falta la regla de /requerimientos"; fi
-    if echo "$C" | grep -qE 'match /agente/';         then echo "✅ Ya tiene la regla de /agente";         else echo "⏳ Falta la regla de /agente"; fi
+    if echo "$C" | grep -q "allPaths.matches"; then echo "❌ Tiene la regla con allPaths.matches: Storage la rechaza y bloquea TODAS las subidas. Corré: bash storage-reglas.sh cerrar"; fi
+    if echo "$C" | grep -qE "match /requerimientos/|'requerimientos'"; then echo "✅ Ya tiene la regla de /requerimientos"; else echo "⏳ Falta la regla de /requerimientos"; fi
+    if echo "$C" | grep -qE "match /agente/|'agente'";  then echo "✅ Ya tiene la regla de /agente";         else echo "⏳ Falta la regla de /agente"; fi
     if echo "$C" | grep -qE 'match /\{[a-zA-Z]+=\*\*\}'; then
       echo "⚠️  Hay una regla general (match /{…=**}). En Firebase las reglas se SUMAN: si esa regla permite leer,"
       echo "    el bloqueo de /agente y /requerimientos no alcanza. Mandale esta salida a Claude antes de aplicar."
@@ -83,15 +84,16 @@ rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
     // Archivos del Agente IA y de los requerimientos: solo las Functions (cuenta de servicio) los usan.
-    match /agente/{todo=**} { allow read, write: if false; }
-    match /requerimientos/{todo=**} { allow read, write: if false; }
-
     // Todo lo demás: solo con sesión iniciada. Hoy solo existe la cuenta del dueño
     // (login anónimo y registro abierto están desactivados desde la Sesión 0).
     // Los enlaces de descarga con token (los de los PDF y las fotos ya compartidas) siguen funcionando.
-    match /{allPaths=**} {
-      allow read, write: if request.auth != null
-                         && !allPaths.matches('^(agente|requerimientos)/.*');
+    // Ojo: en Storage la variable de {x=**} es una ruta, no un texto (no tiene .matches): por eso se
+    // separa la primera carpeta. Probado en el emulador (tools/storage-reglas-prueba.mjs).
+    match /{carpeta}/{resto=**} {
+      allow read, write: if request.auth != null && !(carpeta in ['agente', 'requerimientos']);
+    }
+    match /{archivo} {
+      allow read, write: if request.auth != null;
     }
   }
 }
