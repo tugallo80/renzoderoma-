@@ -97,7 +97,8 @@ Además: Prioridad 4 (Actions y repo privado) y, antes de la salida a la venta, 
       **Error corregido (13 nov 2026):** esa versión usaba `allPaths.matches(...)`; en Storage `{x=**}` es una ruta y no tiene
       `.matches`, así que la regla daba error y negaba **todas** las subidas y lecturas desde la app (seguían andando solo los
       enlaces con token). Se reemplazó por `match /{carpeta}/{resto=**}` con `carpeta in [...]`, probado en el emulador
-      (`tools/storage-reglas-prueba.mjs`, 10/10). Hay que volver a correr `bash storage-reglas.sh cerrar`.
+      (`tools/storage-reglas-prueba.mjs`, 10/10). Publicado por el dueño en Cloud Shell → ruleset
+      `97e553ca-844d-4283-86a3-8a06ff3a58ce`. Volver a la anterior (rota): `bash storage-reglas.sh volver projects/rubik-bolivia/rulesets/6c6b9746-d80f-473a-99e1-8d91885a7c80`.
 - [ ] `geminiLiveKey` le entrega la clave completa de Gemini al navegador (solo a la lista blanca del hub). Cambiar por un
       token efímero de Gemini Live para que la clave nunca salga del servidor. No urgente.
 - [x] `/api/imagen` (`proxyImagen`): solo lista blanca, solo imágenes de nuestro Storage (`docs/sesiones/01-cerrar-api-imagen.md`).
