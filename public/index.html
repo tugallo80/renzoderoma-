@@ -44,14 +44,17 @@
         
         body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 20px; padding-bottom: 60px; min-height: 100vh; -webkit-tap-highlight-color: transparent; transition: background 0.3s, color 0.3s;}
         
-        .logo-area { text-align: center; margin-top: 20px; margin-bottom: 40px; }
-        .logo-img { height: 70px; max-width: 100%; border-radius: 12px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); object-fit: contain; background: #fff;}
-        .welcome { font-size: 24px; font-weight: 900; margin-top: 15px; letter-spacing: -0.5px; color: var(--text);}
+        .logo-area { text-align: center; margin-top: 0; margin-bottom: 22px; }
+        .logo-img { height: 62px; max-width: 100%; border-radius: 12px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); object-fit: contain; background: #fff;}
+        .welcome { font-size: 22px; font-weight: 900; margin-top: 10px; letter-spacing: -0.5px; color: var(--text);}
 
-        .grid-apps { display: grid; grid-template-columns: repeat(6, 1fr); gap: 15px; max-width: 500px; margin: 0 auto; }
+        .grid-apps { display: grid; grid-template-columns: repeat(6, 1fr); gap: 12px; max-width: 500px; margin: 0 auto; }
         /* Orden: Requerimiento y Clientes grandes (ancho completo); abajo, tres tarjetas iguales en una fila. */
-        .grid-apps .app-big { grid-column: 1 / -1; }
-        .grid-apps .app-sm { grid-column: span 2; padding: 16px 12px; min-height: 120px; }
+        .grid-apps .app-big { grid-column: 1 / -1; min-height: 96px; padding: 16px 20px; }
+        .grid-apps .app-big i.main-ic { margin-bottom: 8px; }
+        /* Espacio abajo para que los botones redondos fijos (Claude y configuración) no tapen las tarjetas */
+        body { padding-bottom: 90px; }
+        .grid-apps .app-sm { grid-column: span 2; padding: 14px 12px; min-height: 108px; }
         .grid-apps .app-sm span { font-size: 13px; }
         .grid-apps .app-sm i.main-ic { font-size: 28px; }
         .grid-apps .app-sm i.bg-ic { font-size: 70px; }
