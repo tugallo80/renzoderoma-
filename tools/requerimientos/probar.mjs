@@ -87,6 +87,13 @@ prueba('adjuntar: foto con anotaciones, PDF, 3D con vistas y otro archivo; todo 
     const vi = await ok(al, { accion: 'archivo', id, adj: t.adj, vista: 1 });
     assert.deepEqual(Buffer.from(vi.datos, 'base64'), jpg);
     await mal(al, { accion: 'archivo', id, adj: p.adj, anotada: true }, /no tiene/, 404);
+    // renders de Claude: se pueden ver desde la app
+    await al.subirArchivo(`requerimientos/${id}/renders/R1.jpg`, jpg, 'image/jpeg');
+    await al.actualizar(`requerimientos/${id}/renders`, { R1: { ruta: `requerimientos/${id}/renders/R1.jpg`, fecha: 1 } });
+    const rr = await ok(al, { accion: 'archivo', id, render: 'R1' });
+    assert.deepEqual(Buffer.from(rr.datos, 'base64'), jpg);
+    await mal(al, { accion: 'archivo', id, render: 'noHay' }, /No existe el render/, 404);
+    await mal(al, { accion: 'archivo', id, render: '../x' }, /Render inválido/);
 });
 
 prueba('adjuntar: valida tipos, contenido y tamaños; si falla no deja archivos sueltos', async () => {

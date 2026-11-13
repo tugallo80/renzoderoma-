@@ -94,7 +94,7 @@ exports.requerimientoApi = require("./requerimientos").crearApi({ requireAuth, a
 
 // ── Conector MCP "Rubik" para claude.ai (docs/sesiones/05-rubik-agente-app.md) ─
 // OAuth con Firebase Auth + lista blanca hub; las cotizaciones las hace Claude con la suscripción del dueño.
-exports.rubikMcp = require("./mcp").crearFuncion({ admin, esHub });
+exports.rubikMcp = require("./mcp").crearFuncion({ admin, esHub, GEMINI_API_KEY });
 
 // ── Claude helpers ────────────────────────────────────────────────────────────
 

@@ -22,6 +22,13 @@ corregí y reintentá; si falta un dato, preguntalo.
 - **`asignar_requerimiento`** `{id, cid, pid, conv, confirmacion: dueño:<id>, cotizado?}` → lo une a esta cotización: la
   descripción queda como contexto (no es origen) y fotos, PDF y 3D se copian a los adjuntos del proyecto
   (`adjuntos`: id nuevo y cómo citarlo). Repetirlo (aunque sea desde otra cotización del mismo proyecto) no copia de nuevo. Con `cotizado: true` lo marca cotizado.
+- **`generar_render`** `{id, prompt, referencias?, base_render?, calidad?="normal"|"alta", aspecto?, tamano?="1K"|"2K"}` →
+  render con Gemini (modelo fijo: normal = Nano Banana 2.1 ~US$0,03–0,05; alta = Nano Banana Pro ~US$0,13) desde las
+  fotos originales del requerimiento (sin las cotas dibujadas); **devuelve la imagen** para que la revises. Para corregir,
+  `base_render` + la corrección. Sin cotas ni textos inventados. Máximo 20 por requerimiento. Si la clave no tiene el
+  modelo, da error (no usa otro).
+- **`aprobar_render`** `{id, render, cid, pid, conv, item, confirmacion: dueño:<id>}` → el render pasa a `item.img` del
+  presupuesto (PDF y producción); la imagen anterior queda en las del ítem. La aprobación tiene que ser posterior al render.
 
 ## Cotizar
 - **`listar_cotizaciones`** `{cid, pid}` → las conversaciones del Agente IA del proyecto (de la app y de Claude): título, fecha,

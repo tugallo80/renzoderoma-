@@ -616,6 +616,104 @@ prueba('requerimientos: descartado no se asigna; el conector no toca otras carpe
     await assert.rejects(ent.almacen.subirArchivo('compras/x/y.jpg', JPGr(), 'image/jpeg'), /fuera/);
 });
 
+// ------------------------------------------------------------------ render con Gemini SIMULADO (sesión 6, entrega 5): no gasta plata
+const REN = require('../../functions/mcp/render.js');
+const IMGp = require('../../functions/mcp/imagen.js');
+function geminiFalso({ modelos = ['gemini-nano-banana-2.1', 'gemini-3-pro-image', 'gemini-2.5-flash'], respuesta } = {}) {
+    const pedidos = [];
+    const fetchF = async (url, op = {}) => {
+        pedidos.push({ url, op, cuerpo: op.body ? JSON.parse(op.body) : null });
+        assert.equal(op.headers['x-goog-api-key'], 'clave-falsa');
+        if (/\/models\?/.test(url)) return { ok: true, status: 200, json: async () => ({ models: modelos.map((m) => ({ name: 'models/' + m })) }) };
+        if (respuesta) return respuesta();
+        const png = IMGp.imagenDePrueba(0).buffer.toString('base64');
+        return { ok: true, status: 200, json: async () => ({ candidates: [{ content: { parts: [
+            { inlineData: { mimeType: 'image/png', data: 'AAAA' }, thought: true },
+            { text: 'Listo.' }, { inlineData: { mimeType: 'image/png', data: png } }] }, finishReason: 'STOP' }] }) };
+    };
+    REN.configurar({ clave: () => 'clave-falsa', fetch: fetchF, log: () => {} });
+    return pedidos;
+}
+async function asignado(ent) {
+    const q = await requerimientoDemo(ent);
+    const ab = await ok(ent, 'abrir_cotizacion', { cid: 'cliDemo', pid: 'proyDemo', titulo: 'Mostrador' });
+    const C = { cid: 'cliDemo', pid: 'proyDemo', conv: ab.conv };
+    const m = await ok(ent, 'registrar_mensaje_del_dueno', { ...C, texto: 'cotizalo' });
+    await ok(ent, 'asignar_requerimiento', { ...C, id: q.id, confirmacion: m.origen });
+    return { q, C };
+}
+
+prueba('generar_render: modelo fijo, fotos originales de referencia, reglas sin cotas; devuelve la imagen chica y la guarda', async () => {
+    const ent = crearEntorno();
+    const pedidos = geminiFalso();
+    const q = await requerimientoDemo(ent);
+    const r = await H.llamar(ent.almacen, 'renzo', 'generar_render', { id: q.id, prompt: 'Mostrador de MDF blanco con logo retroiluminado, en la misma esquina de la foto' });
+    assert.ok(!r.isError, JSON.stringify(r));
+    const d = JSON.parse(r.content[0].text);
+    assert.equal(d.modelo, 'gemini-nano-banana-2.1'); assert.equal(d.aspecto, '4:3'); assert.equal(d.tamano, '1K');
+    assert.equal(r.content[1].type, 'image'); assert.equal(r.content[1].mimeType, 'image/jpeg');
+    assert.ok(Buffer.from(r.content[1].data, 'base64').length <= 100 * 1024);
+    const gen = pedidos.find((p) => /:generateContent$/.test(p.url));
+    assert.match(gen.url, /models\/gemini-nano-banana-2\.1:generateContent$/);
+    assert.deepEqual(gen.cuerpo.generationConfig.imageConfig, { aspectRatio: '4:3', imageSize: '1K' });
+    const partes = gen.cuerpo.contents[0].parts;
+    // la referencia es la foto ORIGINAL (no la anotada con cotas)
+    assert.equal(Buffer.from(partes[0].inlineData.data, 'base64').length, JPGr(500).length);
+    assert.match(partes[partes.length - 1].text, /NO dibujes cotas/);
+    const req = ent.almacen.datos.requerimientos[q.id];
+    const ren = req.renders[d.render];
+    assert.ok(ent.almacen.archivos.has(ren.ruta) && ent.almacen.archivos.has(ren.claude_ruta));
+    assert.equal(ren.costo_usd_aprox, 0.034);
+    // corregir con base_render y calidad alta → modelo Pro, el render anterior va primero
+    const r2 = await H.llamar(ent.almacen, 'renzo', 'generar_render', { id: q.id, prompt: 'Igual, pero el logo en rojo', base_render: d.render, calidad: 'alta', tamano: '2K' });
+    const d2 = JSON.parse(r2.content[0].text);
+    assert.equal(d2.modelo, 'gemini-3-pro-image'); assert.equal(d2.referencias[0], 'render:' + d.render);
+    // ListModels se consulta una sola vez (caché)
+    assert.equal(pedidos.filter((p) => /\/models\?/.test(p.url)).length, 1);
+});
+
+prueba('generar_render: si la clave no tiene el modelo, error claro y NO usa otro; 429 y sin imagen se explican', async () => {
+    const ent = crearEntorno();
+    let pedidos = geminiFalso({ modelos: ['gemini-2.5-flash-image', 'gemini-3.1-flash-image'] });
+    const q = await requerimientoDemo(ent);
+    const r = await llamar(ent, 'generar_render', { id: q.id, prompt: 'Mostrador blanco en la esquina' });
+    assert.ok(r.error); assert.match(r.texto, /no tiene acceso al modelo gemini-nano-banana-2\.1/);
+    assert.equal(pedidos.filter((p) => /generateContent/.test(p.url)).length, 0);
+    geminiFalso({ respuesta: async () => ({ ok: false, status: 429, json: async () => ({ error: { message: 'Your prepayment credits are depleted' } }) }) });
+    assert.match((await llamar(ent, 'generar_render', { id: q.id, prompt: 'Mostrador blanco en la esquina' })).texto, /cuota o créditos/);
+    geminiFalso({ respuesta: async () => ({ ok: true, status: 200, json: async () => ({ candidates: [{ content: { parts: [{ text: 'No puedo.' }] }, finishReason: 'IMAGE_SAFETY' }] }) }) });
+    assert.match((await llamar(ent, 'generar_render', { id: q.id, prompt: 'Mostrador blanco en la esquina' })).texto, /IMAGE_SAFETY/);
+    assert.equal(ent.almacen.datos.requerimientos[q.id].renders, undefined);
+    assert.match((await llamar(ent, 'generar_render', { id: q.id, prompt: 'corto' })).texto, /muy corto/);
+    assert.match((await llamar(ent, 'generar_render', { id: q.id, prompt: 'Mostrador blanco', referencias: [q.pdf] })).texto, /no es una foto/);
+});
+
+prueba('aprobar_render: con la aprobación del dueño posterior, pasa a item.img (con respaldo) y la anterior queda en cortes', async () => {
+    const ent = crearEntorno();
+    geminiFalso();
+    const { q, C } = await asignado(ent);
+    const g = JSON.parse((await H.llamar(ent.almacen, 'renzo', 'generar_render', { id: q.id, prompt: 'Mostrador de MDF blanco' })).content[0].text);
+    const viejo = await ok(ent, 'registrar_mensaje_del_dueno', { ...C, texto: 'algo de antes' });
+    ent.almacen.datos.proyectos.cliDemo.proyDemo.agente.conversaciones[C.conv].conversacion.mensajes[viejo.id].fecha = 1;   // anterior al render
+    assert.match((await llamar(ent, 'aprobar_render', { ...C, id: q.id, render: g.render, item: 'itExistente', confirmacion: viejo.origen })).texto, /posterior al render/);
+    const si = await ok(ent, 'registrar_mensaje_del_dueno', { ...C, texto: 'me gusta, usalo' });
+    assert.match((await llamar(ent, 'aprobar_render', { ...C, id: q.id, render: g.render, item: '0', confirmacion: si.origen })).texto, /no hay un ítem/);
+    ent.almacen.datos.proyectos.cliDemo.proyDemo.presupuesto.items[1].img = 'https://vieja.example/img.jpg';
+    const a = await ok(ent, 'aprobar_render', { ...C, id: q.id, render: g.render, item: 'itExistente', confirmacion: si.origen });
+    const it = ent.almacen.datos.proyectos.cliDemo.proyDemo.presupuesto.items[1];
+    assert.match(it.img, /^https:\/\/firebasestorage\.googleapis\.com\/v0\/b\/.+\/o\/presupuesto%2Frender_req_proyDemo_.+\.jpg\?alt=media&token=/);
+    assert.deepEqual(it.cortes, ['https://vieja.example/img.jpg']);
+    assert.equal(it.render_req.render, g.render);
+    assert.ok(a.respaldo);
+    assert.equal(ent.almacen.datos.requerimientos[q.id].matriz, g.render);
+    assert.ok((await ok(ent, 'aprobar_render', { ...C, id: q.id, render: g.render, item: 'itExistente', confirmacion: si.origen })).ya_aprobado);
+    // sin asignar a este proyecto, no
+    const q2 = await requerimientoDemo(ent);
+    const g2 = JSON.parse((await H.llamar(ent.almacen, 'renzo', 'generar_render', { id: q2.id, prompt: 'Otro mostrador blanco' })).content[0].text);
+    const si2 = await ok(ent, 'registrar_mensaje_del_dueno', { ...C, texto: 'sí' });
+    assert.match((await llamar(ent, 'aprobar_render', { ...C, id: q2.id, render: g2.render, item: 'itExistente', confirmacion: si2.origen })).texto, /no está asignado a este proyecto/);
+});
+
 // ------------------------------------------------------------------ correr
 let bien = 0;
 for (const [n, fn] of pruebas) {

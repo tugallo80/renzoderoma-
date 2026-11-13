@@ -26,8 +26,8 @@
 | 1 | Herramienta `prueba_imagen` (devuelve un PNG hecho en el servidor) para confirmar que claude.ai le pasa la imagen a Claude | ✅ mergeada y **probada por el dueño**: Claude ve las imágenes del conector (probado hasta ~300 KB por imagen) |
 | 2 | Pantalla Requerimiento (formulario, adjuntos, anotador, lista de pendientes) + tarjeta en `index.html` + reglas | ✅ mergeada (#310) · falta la prueba del dueño en la app |
 | 3 | Borrar `requerimiento-asistido` (sin tocar los datos) | ✅ PR |
-| 4 | Conector: `listar_requerimientos`, `leer_requerimiento`, `asignar_requerimiento` + skill + botón "Pedile a Claude" | ✅ PR · espera el OK de la maestra (toca `functions/`) |
-| 5 | Conector: `generar_render` (Nano Banana 2.1 / Pro fijo) y `aprobar_render` + skill | pendiente (toca `functions/`) |
+| 4 | Conector: `listar_requerimientos`, `leer_requerimiento`, `asignar_requerimiento` + skill + botón "Pedile a Claude" | ✅ mergeada (#314) |
+| 5 | Conector: `generar_render` (Nano Banana 2.1 / Pro fijo) y `aprobar_render` + skill + renders en la app | ✅ PR · espera el OK de la maestra (toca `functions/`) |
 | 6 | Retirar Render y Medir; matriz en el ítem, PDF y producción | pendiente |
 
 ### Entrega 2 — cómo quedó
@@ -68,6 +68,37 @@
 3. **Guardar** → aparece en la lista como *pendiente* y el inicio muestra el número.
 4. Salí, volvé a entrar, tocá el requerimiento: tiene que estar todo. Volvé a anotar la foto: aparecen las cotas de antes.
 
+### Entrega 5 — render con Gemini desde Claude
+- `functions/mcp/render.js`: **modelo fijo** — normal = `gemini-nano-banana-2.1` (Nano Banana 2.1, ~US$0,034 en 1K /
+  0,05 en 2K), alta = `gemini-3-pro-image` (Nano Banana Pro, ~US$0,134). Antes de generar revisa con **ListModels**
+  (gratis, caché de 6 h; la lista de modelos de imagen se loguea una vez: `[render] modelos de imagen con esta clave`).
+  Si la clave no tiene el modelo → error claro, **nunca usa otro**. Los ids salen de la investigación (no se pudo abrir
+  ai.google.dev desde la sesión): si el log muestra otros nombres, se corrigen acá.
+  Pedido: fotos originales (sin las cotas dibujadas) + prompt de Claude + reglas fijas ("no dibujes cotas, medidas ni
+  textos inventados; respetá proporción y entorno"); `imageConfig: {aspectRatio (el de la foto), imageSize 1K|2K}`.
+  Se descartan las imágenes intermedias (`thought`). Errores 429 (cuota/créditos) y bloqueos se explican.
+  Gemini devuelve PNG (no deja pedir JPEG): **sharp** lo pasa a JPEG (grande para el ítem; copia ≤ 100 KB para Claude).
+- **`generar_render`** `{id, prompt, referencias?, base_render?, calidad?, aspecto?, tamano?}`: guarda en
+  `requerimientos/{id}/renders/{rid}` (Storage y base, con modelo, prompt, referencias y costo aproximado) y **devuelve la
+  imagen** para que Claude la revise y corrija (`base_render`). Máximo 20 por requerimiento.
+- **`aprobar_render`** `{id, render, cid, pid, conv, item, confirmacion}`: aprobación del dueño **posterior al render**; el
+  requerimiento asignado a ese proyecto; el ítem ya en el presupuesto. Copia la imagen a `presupuesto/render_req_…jpg` con
+  enlace de descarga (como las demás) → **`item.img`** (PDF y producción la usan); la anterior pasa a `item.cortes`;
+  respaldo en `respaldos_agente/…`; `requerimientos/{id}/matriz`.
+- `rubikMcp`: secreto `GEMINI_API_KEY`, **240 s** de tiempo máximo y **1 GiB**. Dependencia nueva: `sharp`.
+- App: en el requerimiento, sección **"Renders de Claude"** (miniaturas; el aprobado en verde; tocar lo abre grande).
+- Pruebas con Gemini **simulado** (no gastan): modelo fijo y caché de ListModels, referencias originales, reglas, imagen
+  ≤ 100 KB, corrección con Pro, error si falta el modelo (sin llamar a generar), 429, bloqueo, aprobación anterior al
+  render rechazada, `item.img` con token y la vieja en cortes, idempotencia, proyecto equivocado. `tools/mcp` 28/28.
+
+### Prueba de la entrega 5 (dueño; gasta ~US$0,03–0,15)
+1. En Claude, con un requerimiento asignado: *"generá un render de cómo quedaría"*. Tiene que mostrar la imagen y
+   decir qué ve; pedile una corrección ("el logo más grande") y que la vuelva a generar.
+2. En la app, el requerimiento muestra la sección **Renders de Claude**.
+3. Después de aplicar la cotización: *"usá este render como imagen del mostrador"* → en el presupuesto, el ítem tiene esa
+   imagen y sale en el PDF.
+4. Si Claude dice que la clave no tiene acceso al modelo: mandame el log `[render] modelos de imagen con esta clave`.
+
 ### Entrega 4 — Claude toma el requerimiento por el conector
 - `functions/mcp/requerimientos.js` (módulo aparte; `herramientas.js` solo lo suma a la lista):
   - **`listar_requerimientos`** `{estado?, texto?}`: pendientes por defecto.
@@ -77,7 +108,7 @@
   - **`asignar_requerimiento`** `{id, cid, pid, conv, confirmacion: dueño:<id>, cotizado?}`: pide la confirmación del dueño
     (un mensaje suyo registrado en esa cotización). La descripción queda en la conversación como **contexto (rol aviso), no como origen** (puede traer números del cliente; los que importan los confirma el dueño) y **los adjuntos se copian**
     a los del proyecto (archivos a `agente/{cid}/{pid}/…`, mismo formato que el Agente IA): `medicion_3d`, `escala_3d` y los
-    orígenes `dueño:<adjunto>` (cotas dibujadas), `cota_plano:` y `pieza3d:` funcionan igual. No copia dos veces (aunque se asigne desde otra cotización del mismo proyecto), no acepta confirmaciones copiadas de otra versión, el conector solo **lee** `requerimientos/…` (nunca escribe ahí) y no lo
+    orígenes `dueño:<adjunto>` (cotas dibujadas), `cota_plano:` y `pieza3d:` funcionan igual. No copia dos veces (aunque se asigne desde otra cotización del mismo proyecto), no acepta confirmaciones copiadas de otra versión, el conector solo **lee** `requerimientos/…` (salvo la carpeta `renders/` de la entrega 5) y no lo
     reasigna a otro proyecto. Con `cotizado: true` lo marca cotizado. Los "otros" (DWG…) no se copian (el agente no los lee).
 - `functions/mcp/index.js`: `/requerimientos` en el cerco del conector y Storage `requerimientos/…` (lectura) además de `agente/…`.
 - Skill: sección "Requerimientos" en `SKILL.md` y las 3 herramientas en `referencias/herramientas.md` (ZIP regenerado).

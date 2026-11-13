@@ -30,7 +30,10 @@ const RUTAS_MCP = [
     /^requerimientos(\/|$)/,   // sesión 6
 ];
 /** Storage: escribe y lee las del agente (adjuntos de las cotizaciones); las de los Requerimientos solo las LEE. */
-const ARCHIVOS_MCP = ARCHIVOS_AGENTE;
+const ARCHIVOS_MCP = ARCHIVOS_AGENTE.concat([
+    /^requerimientos\/[A-Za-z0-9_-]+\/renders\/[A-Za-z0-9_-]+\.jpg$/,   // renders de Gemini (entrega 5)
+    /^presupuesto\/render_req_[A-Za-z0-9_-]+\.jpg$/,                     // render aprobado → imagen del ítem
+]);
 const ARCHIVOS_MCP_LECTURA = REQ.ARCHIVOS;
 
 const INSTRUCCIONES = `Conector de la app de Rubik Bolivia (taller de stands, mobiliario, letreros). Con él cotizás en la app del dueño, con sus reglas:
@@ -176,10 +179,14 @@ async function atender(dep, req, res) {
     }
 }
 
-function crearFuncion({ admin, esHub }) {
+function crearFuncion({ admin, esHub, GEMINI_API_KEY }) {
     const { onRequest } = require("firebase-functions/v2/https");
     let dep = null;
-    return onRequest({ region: "us-central1", timeoutSeconds: 60, memory: "512MiB", invoker: "public", cors: false, concurrency: 20 }, async (req, res) => {
+    // 240 s: generar_render (Gemini) tarda 20–60 s o más; claude.ai espera hasta 240 s por herramienta.
+    // 1 GiB: sharp pasa el PNG de Gemini a JPEG.
+    return onRequest({ region: "us-central1", timeoutSeconds: 240, memory: "1GiB", invoker: "public", cors: false, concurrency: 20,
+        secrets: GEMINI_API_KEY ? [GEMINI_API_KEY] : [] }, async (req, res) => {
+        if (!dep && GEMINI_API_KEY) require("./render").configurar({ clave: () => GEMINI_API_KEY.value() });
         dep = dep || dependencias(admin, esHub);
         await atender(dep, req, res);
     });

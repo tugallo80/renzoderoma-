@@ -72,8 +72,14 @@ function crearAlmacen(admin, rutas = RUTAS_PERMITIDAS, archivos = ARCHIVOS_AGENT
             return { ok: r.committed, valor: r.snapshot.val() };
         },
         ahora() { return Date.now(); },
-        async subirArchivo(ruta, buffer, mime) {
-            await bucket().file(verificarRutaArchivo(ruta, archivos)).save(buffer, { contentType: mime, resumable: false, metadata: { cacheControl: "private, max-age=0" } });
+        /** op.token: deja un enlace de descarga con token (como los de la app) y lo devuelve. */
+        async subirArchivo(ruta, buffer, mime, op = {}) {
+            const r = verificarRutaArchivo(ruta, archivos);
+            const metadata = { cacheControl: "private, max-age=0" };
+            if (op.token) metadata.metadata = { firebaseStorageDownloadTokens: op.token };
+            await bucket().file(r).save(buffer, { contentType: mime, resumable: false, metadata });
+            if (op.token) return `https://firebasestorage.googleapis.com/v0/b/${bucket().name}/o/${encodeURIComponent(r)}?alt=media&token=${op.token}`;
+            return undefined;
         },
         async bajarArchivo(ruta) {
             const [buf] = await bucket().file(verificarRutaArchivo(ruta, archivos.concat(soloLectura))).download();
