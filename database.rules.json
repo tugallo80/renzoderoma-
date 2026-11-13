@@ -57,6 +57,15 @@
       ".write": false
     },
 
+    // ─── REQUERIMIENTOS (docs/sesiones/06-render-requerimiento.md) ──
+    // Lo que pidió el cliente: el hub lo lee; lo escribe solo la Function /api/requerimiento
+    // (valida la entrada) y el conector MCP. Archivos en Storage requerimientos/…, solo servidor.
+    "requerimientos": {
+      ".read":  "auth != null && root.child('acceso').child('hub').child(auth.uid).val() === true",
+      ".write": false,
+      ".indexOn": ["estado", "actualizado"]
+    },
+
     // ─── TODO LO DEMÁS: SOLO HUB ──────────────────────────────────
     // proyectos (pagos, compras, licitaciones), clientes, personal,
     // supervisores, caja_chica, ingresos, cobros, base_datos, config_ia,

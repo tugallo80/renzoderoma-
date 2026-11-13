@@ -61,6 +61,8 @@
         .b-fin { background: linear-gradient(135deg, var(--green), #30db5b); }
         .b-portfolio { background: linear-gradient(135deg, #ff9f0a, #ff6b00); }
         .b-ia { background: linear-gradient(135deg, var(--purple), #5856d6); }
+        .b-req { background: linear-gradient(135deg, #d97757, #b4532f); }
+        .b-req .req-badge { position: absolute; top: 12px; right: 12px; background: #fff; color: #b4532f; font-weight: 900; font-size: 13px; min-width: 24px; height: 24px; border-radius: 12px; display: none; align-items: center; justify-content: center; padding: 0 7px; }
         .b-tools { background: linear-gradient(135deg, #636366, #48484a); }
 
         .btn-logout { margin: 40px auto 0 auto; background: rgba(255, 59, 48, 0.1); color: var(--red); border: none; padding: 15px 30px; border-radius: 16px; font-weight: 900; font-size: 14px; cursor: pointer; display: flex; align-items: center; gap: 8px; justify-content: center; max-width: 200px; transition: 0.2s;}
@@ -250,10 +252,19 @@
             <i class="ph-fill ph-globe bg-ic"></i>
         </a>
 
-        <a href="#" class="app-btn b-ia" onclick="openAIChat(); return false;">
-            <img loading="lazy" decoding="async" src="LOGO-IA-RUBIK.jpg" alt="IA Logo" class="main-ic" style="width: 44px; height: 44px; border-radius: 50%; border: 2px solid rgba(255,255,255,0.4); object-fit: contain; background: #fff;" onerror="this.src='./LOGO-IA-RUBIK.jpg'">
-            <span>Cerebro<br>Ejecutivo</span>
-            <i class="ph-fill ph-robot bg-ic"></i>
+        <!-- Sesión 6: "Requerimiento nuevo" reemplaza a la tarjeta de Cerebro Ejecutivo (el dueño dice que nunca funcionó
+             bien). El código de Cerebro Ejecutivo sigue en la página sin tocar, hasta que el dueño confirme que se borra.
+             <a href="#" class="app-btn b-ia" onclick="openAIChat(); return false;">
+             <img loading="lazy" decoding="async" src="LOGO-IA-RUBIK.jpg" alt="IA Logo" class="main-ic" style="width: 44px; height: 44px; border-radius: 50%; border: 2px solid rgba(255,255,255,0.4); object-fit: contain; background: #fff;" onerror="this.src='./LOGO-IA-RUBIK.jpg'">
+             <span>Cerebro<br>Ejecutivo</span>
+             <i class="ph-fill ph-robot bg-ic"></i>
+             </a>
+        -->
+        <a href="requerimiento.html" class="app-btn b-req">
+            <i class="ph-fill ph-clipboard-text main-ic"></i>
+            <span>Requerimiento<br>nuevo</span>
+            <span class="req-badge" id="req-badge" title="Requerimientos pendientes"></span>
+            <i class="ph-fill ph-paperclip bg-ic"></i>
         </a>
 
     </div>
@@ -2113,5 +2124,18 @@ $$$QUOTE_DATA: [{"desc":"Nombre Item","feat":"Característica","cant":1,"und":"p
             </button>
         </div>
     </div>
+<script>
+    // Sesión 6: cantidad de requerimientos pendientes en la tarjeta "Requerimiento nuevo"
+    (function () {
+        firebase.auth().onAuthStateChanged(function (u) {
+            if (!u) return;
+            firebase.database().ref('requerimientos').orderByChild('estado').equalTo('pendiente').on('value', function (s) {
+                var n = s.numChildren(), b = document.getElementById('req-badge');
+                if (!b) return;
+                b.textContent = n; b.style.display = n ? 'flex' : 'none';
+            }, function () { /* sin acceso: no se muestra */ });
+        });
+    })();
+</script>
 </body>
 </html>

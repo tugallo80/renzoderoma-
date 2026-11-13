@@ -24,11 +24,49 @@
 | # | Qué | Estado |
 |---|---|---|
 | 1 | Herramienta `prueba_imagen` (devuelve un PNG hecho en el servidor) para confirmar que claude.ai le pasa la imagen a Claude | ✅ mergeada · falta la prueba del dueño |
-| 2 | Pantalla Requerimiento (formulario, adjuntos, anotador, lista de pendientes) + tarjeta en `index.html` + reglas | pendiente |
+| 2 | Pantalla Requerimiento (formulario, adjuntos, anotador, lista de pendientes) + tarjeta en `index.html` + reglas | ✅ PR listo · espera el OK de la maestra para mergear (toca `functions/`) |
 | 3 | Borrar `requerimiento-asistido` (sin tocar los datos) | pendiente |
 | 4 | Conector: `listar_requerimientos`, `leer_requerimiento`, `asignar_requerimiento` + skill | pendiente (toca `functions/`) |
 | 5 | Conector: `generar_render` (Nano Banana 2.1 / Pro fijo) y `aprobar_render` + skill | pendiente (toca `functions/`) |
 | 6 | Retirar Render y Medir; matriz en el ítem, PDF y producción | pendiente |
+
+### Entrega 2 — cómo quedó
+- **Pantalla** `public/requerimiento.html`, desde la tarjeta **"Requerimiento nuevo"** del inicio (reemplaza a Cerebro
+  Ejecutivo, cuyo código queda comentado en `index.html`; la tarjeta muestra cuántos hay pendientes).
+  - Cliente: uno de la app, un nombre nuevo (lo crea Claude al asignar) o ninguno.
+  - Descripción por texto o dictado 🎤 (el dictado del navegador; sin IA).
+  - Adjuntos todos juntos (elegir, arrastrar o pegar): fotos y capturas (se achican a 2000 px), PDF, 3D (FBX, GLB,
+    glTF, rubik.json o .zip: se mide en el navegador con `importar-3d.js` + `lector-3d.js` y se guardan la medición y dos
+    vistas), y cualquier otro archivo tal cual (DWG, Excel…; hasta 20 MB).
+  - Fotos: ✏️ abre el **anotador del agente** (`agente-anotador.js`); se guardan la foto original, la anotada, las
+    anotaciones como datos y el estado del editor (para volver a editarlas).
+  - De cada foto (y de la anotada) el navegador guarda además una **copia chica "para Claude"** (lado ≤ 1024 px,
+    ≤ 90 KB ≈ 120.000 caracteres en base64), para que el conector la devuelva como imagen sin pasarse del límite de
+    claude.ai. El servidor no tiene librerías de imagen. Probado con una foto de ruido de 3000×2000: 89 KB.
+  - Guardar deja el requerimiento **pendiente**. Lista con filtros (pendientes y asignados / cotizados / descartados);
+    tocar uno lo abre para editar (también con `requerimiento.html#<id>`). Descartar y reabrir.
+- **Function** `requerimientoApi` en `/api/requerimiento` (`functions/requerimientos/`): solo lista blanca hub, valida
+  todo (tipos, tamaños, anotaciones, miniaturas) y no deja archivos sueltos si algo falla. No llama a ninguna IA.
+- **Datos** `/requerimientos/{id}`: `estado` (pendiente → asignado → cotizado, o descartado), `cliente`
+  (`{cid, nombre}` o `{nombre, nuevo:true}`), `descripcion`, `titulo`, `adjuntos/{adj}` (tipo, nombre, rutas, anotaciones,
+  miniatura), `creado`, `actualizado`, `por`. Más adelante, `cid`/`pid` al asignar.
+  **Reglas:** el hub lee; **nadie escribe desde el navegador** (solo la Function y el conector).
+- **Archivos** en Storage `requerimientos/{id}/{adj}/…`, los escribe y lee solo el servidor. Las reglas de Storage están
+  en la consola: conviene agregar, igual que para el agente,
+  `match /requerimientos/{todo=**} { allow read, write: if false; }`.
+- `functions/agente/almacen.js`: `crearAlmacen` acepta otras carpetas de Storage (por defecto, las del agente, como antes)
+  y suma `borrarArchivo`. El Agente IA no cambia.
+- `public/js/vistas-3d.js`: copia de las vistas 3D del chat del agente (el agente no se tocó; puede pasar a usarlo).
+- Pruebas: `tools/requerimientos` (7, Firebase simulado), `tools/agente` (62) y `tools/mcp` (21) OK. En Chromium, con
+  Firebase simulado: crear con foto + PDF + DWG (un solo `crear` aunque suban en paralelo), anotar, reabrir por `#id`,
+  descartar y la tarjeta del inicio con el contador. **No se probó en el navegador la medición de un 3D real** (es el
+  mismo código del agente).
+
+### Prueba de la entrega 2 (dueño, en la app)
+1. Inicio → **Requerimiento nuevo**. Elegí un cliente, dictá o escribí el pedido, adjuntá una foto, un PDF y un 3D.
+2. En la foto, ✏️ → poné una cota y una nota → Listo. Tiene que decir "1 anotación" (o las que pusiste).
+3. **Guardar** → aparece en la lista como *pendiente* y el inicio muestra el número.
+4. Salí, volvé a entrar, tocá el requerimiento: tiene que estar todo. Volvé a anotar la foto: aparecen las cotas de antes.
 
 ### Prueba de la entrega 1 (dueño, en claude.ai)
 En un chat del proyecto RUBIK AGENTE APP: *"probá prueba_imagen"*. Claude tiene que decir un **número de 4 cifras** y los

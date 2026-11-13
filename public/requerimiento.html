@@ -1,0 +1,618 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Requerimiento - Rubik</title>
+    <!-- three.js para medir 3D en el navegador (versión fija, se descarga recién al subir un 3D) -->
+    <script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"}}</script>
+    <script src="https://unpkg.com/@phosphor-icons/web" defer></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.1.3/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.1.3/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.1.3/firebase-database-compat.js"></script>
+    <script>
+        window._rubikFirebaseConfig = window._rubikFirebaseConfig || {
+            apiKey: "AIzaSyDXYlofy31cDP14xVAVxWo_7TqXdSgsIjA",
+            authDomain: "rubik-bolivia.firebaseapp.com",
+            databaseURL: "https://rubik-bolivia-default-rtdb.firebaseio.com",
+            projectId: "rubik-bolivia",
+            storageBucket: "rubik-bolivia.firebasestorage.app",
+            messagingSenderId: "4153087958",
+            appId: "1:4153087958:web:cf2dd16106580ed6437677"
+        };
+        if (!firebase.apps.length) firebase.initializeApp(window._rubikFirebaseConfig);
+        // importar-3d.js usa estos globales (de presupuesto.html)
+        var db = firebase.database(), dbMats = {}, dbMo = {};
+    </script>
+    <script src="/js/auth-guard.js?v=3"></script>
+    <script src="/js/compartidos-3d.js?v=1"></script>
+    <script src="/js/lector-3d.js?v=1"></script>
+    <script src="/js/importar-3d.js?v=3" defer></script>
+    <script src="/js/vistas-3d.js?v=1" defer></script>
+    <script src="/js/agente-anotador.js?v=1" defer></script>
+    <style>
+        :root { --bg: #f4f4f7; --card: #fff; --text: #1a1a1a; --blue: #007aff; --green: #34c759; --red: #ff3b30; --orange: #ff9500; --gray: #8e8e93; --border: #d1d1d6; --accent: #d97757; }
+        body.dark-mode { --bg: #000; --card: #1c1c1e; --text: #fff; --border: #333; }
+        * { box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, system-ui, sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 16px; padding-bottom: 110px; -webkit-tap-highlight-color: transparent; }
+        .wrap { max-width: 760px; margin: 0 auto; }
+        .top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; gap: 8px; }
+        .btn-nav { background: var(--card); border: 1px solid var(--border); padding: 8px 14px; border-radius: 20px; font-weight: 700; color: var(--blue); cursor: pointer; display: inline-flex; align-items: center; gap: 6px; text-decoration: none; font-size: 14px; }
+        h1 { font-size: 24px; font-weight: 900; margin: 0 0 4px; letter-spacing: -0.4px; }
+        .sub { font-size: 13px; color: var(--gray); font-weight: 600; margin: 0 0 16px; }
+        .card { background: var(--card); border: 1px solid var(--border); border-radius: 18px; padding: 16px; margin-bottom: 16px; }
+        label.lbl { display: block; font-size: 12px; font-weight: 800; color: var(--gray); text-transform: uppercase; letter-spacing: .4px; margin: 0 0 6px; }
+        select, input[type=text], textarea { width: 100%; font: inherit; font-size: 16px; color: var(--text); background: var(--bg); border: 1px solid var(--border); border-radius: 12px; padding: 10px 12px; }
+        textarea { min-height: 120px; resize: vertical; line-height: 1.4; }
+        .fila { display: flex; gap: 8px; align-items: center; }
+        .campo { margin-bottom: 14px; }
+        .btn { border: none; border-radius: 12px; padding: 11px 16px; font-weight: 800; font-size: 15px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; justify-content: center; }
+        .btn:disabled { opacity: .5; cursor: default; }
+        .btn-prim { background: var(--blue); color: #fff; }
+        .btn-sec { background: var(--bg); color: var(--text); border: 1px solid var(--border); }
+        .btn-mic { width: 46px; height: 46px; border-radius: 50%; padding: 0; font-size: 20px; background: var(--bg); border: 1px solid var(--border); flex: none; }
+        .btn-mic.grabando { background: var(--red); color: #fff; border-color: var(--red); }
+        .zona { border: 2px dashed var(--border); border-radius: 14px; padding: 18px; text-align: center; color: var(--gray); font-weight: 600; font-size: 14px; cursor: pointer; }
+        .zona.activa { border-color: var(--blue); background: rgba(0,122,255,.06); color: var(--blue); }
+        .adjs { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; margin-top: 12px; }
+        .adj { position: relative; background: var(--bg); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; font-size: 12px; }
+        .adj .mini { height: 96px; display: flex; align-items: center; justify-content: center; font-size: 34px; background: #e9e9ee; }
+        body.dark-mode .adj .mini { background: #2c2c2e; }
+        .adj .mini img { width: 100%; height: 100%; object-fit: cover; }
+        .adj .nom { padding: 6px 8px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .adj .det { padding: 0 8px 8px; color: var(--gray); font-weight: 600; min-height: 16px; }
+        .adj.error { border-color: var(--red); }
+        .adj.error .det { color: var(--red); white-space: normal; }
+        .adj .acc { position: absolute; top: 4px; right: 4px; display: flex; gap: 4px; }
+        .adj .acc button { width: 30px; height: 30px; border-radius: 50%; border: none; background: rgba(0,0,0,.6); color: #fff; font-size: 15px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+        .spin { width: 22px; height: 22px; border: 3px solid var(--border); border-top-color: var(--blue); border-radius: 50%; animation: g 0.8s linear infinite; }
+        @keyframes g { to { transform: rotate(360deg); } }
+        .acciones { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; margin-top: 14px; }
+        .estado { display: inline-block; padding: 3px 9px; border-radius: 20px; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .3px; }
+        .e-pendiente { background: rgba(255,149,0,.15); color: var(--orange); }
+        .e-asignado { background: rgba(0,122,255,.12); color: var(--blue); }
+        .e-cotizado { background: rgba(52,199,89,.15); color: var(--green); }
+        .e-descartado { background: rgba(142,142,147,.18); color: var(--gray); }
+        .req { display: flex; gap: 12px; align-items: center; padding: 12px 0; border-bottom: 1px solid var(--border); cursor: pointer; }
+        .req:last-child { border-bottom: none; }
+        .req .rmini { width: 54px; height: 54px; border-radius: 10px; background: var(--bg); flex: none; overflow: hidden; display: flex; align-items: center; justify-content: center; font-size: 22px; color: var(--gray); }
+        .req .rmini img { width: 100%; height: 100%; object-fit: cover; }
+        .req .rtxt { flex: 1; min-width: 0; }
+        .req .rtit { font-weight: 800; font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .req .rsub { font-size: 12px; color: var(--gray); font-weight: 600; margin-top: 3px; }
+        .req.sel { background: rgba(0,122,255,.06); border-radius: 12px; }
+        .filtros { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; }
+        .filtros button { border: 1px solid var(--border); background: var(--bg); color: var(--text); border-radius: 20px; padding: 6px 12px; font-weight: 700; font-size: 13px; cursor: pointer; }
+        .filtros button.on { background: var(--text); color: var(--card); border-color: var(--text); }
+        .nota { font-size: 12px; color: var(--gray); font-weight: 600; margin-top: 8px; line-height: 1.4; }
+        .vacio { color: var(--gray); font-weight: 600; text-align: center; padding: 18px 0; font-size: 14px; }
+        .aviso { position: fixed; left: 50%; bottom: 80px; transform: translateX(-50%); background: #1c1c1e; color: #fff; padding: 10px 16px; border-radius: 12px; font-weight: 700; font-size: 14px; z-index: 10000; display: none; max-width: 90vw; text-align: center; }
+    </style>
+</head>
+<body>
+<div class="wrap">
+    <div class="top">
+        <a class="btn-nav" href="index.html"><i class="ph-bold ph-caret-left"></i> Inicio</a>
+        <button class="btn-nav" onclick="RQ.nuevo()"><i class="ph-bold ph-plus"></i> Nuevo</button>
+    </div>
+    <h1 id="rq-titulo">Requerimiento nuevo</h1>
+    <p class="sub">Cargá lo que pidió el cliente. No se ejecuta ninguna IA: después lo toma Claude desde el proyecto RUBIK AGENTE APP.</p>
+
+    <div class="card" id="rq-form">
+        <div class="campo">
+            <label class="lbl" for="rq-cliente">Cliente (opcional)</label>
+            <select id="rq-cliente" onchange="RQ.cambioCliente()">
+                <option value="">— Sin cliente todavía —</option>
+                <option value="__nuevo__">+ Cliente nuevo (escribir el nombre)</option>
+            </select>
+            <input type="text" id="rq-cliente-nuevo" placeholder="Nombre del cliente nuevo" maxlength="120" style="display:none;margin-top:8px;">
+        </div>
+        <div class="campo">
+            <label class="lbl" for="rq-desc">Qué pidió el cliente</label>
+            <div class="fila" style="align-items:flex-start;">
+                <textarea id="rq-desc" maxlength="20000" placeholder="Ej.: stand de 3×3 para la feria, con mostrador de melamina blanca y logo luminoso. Lo quieren para el 20."></textarea>
+                <button class="btn btn-mic" id="rq-mic" onclick="RQ.mic()" title="Dictar" aria-label="Dictar">🎤</button>
+            </div>
+        </div>
+        <div class="campo">
+            <label class="lbl">Adjuntos</label>
+            <div class="zona" id="rq-zona" onclick="document.getElementById('rq-file').click()">
+                <i class="ph-bold ph-paperclip" style="font-size:22px;"></i><br>
+                Fotos, capturas, renders, PDF, 3D (FBX, GLB, ZIP) u otros<br>
+                <span style="font-size:12px;">Tocá para elegir, arrastrá o pegá (Ctrl+V)</span>
+            </div>
+            <input type="file" id="rq-file" multiple style="display:none" onchange="RQ.archivos(this.files); this.value='';">
+            <div class="adjs" id="rq-adjs"></div>
+            <div class="nota">Las fotos se pueden anotar (✏️) con cotas y notas: quedan guardadas como datos para Claude. Los 3D se miden acá, en el navegador, y se guarda la medición con dos vistas.</div>
+        </div>
+        <div class="acciones">
+            <button class="btn btn-sec" id="rq-descartar" onclick="RQ.descartar()" style="display:none;"><i class="ph-bold ph-trash"></i> Descartar</button>
+            <button class="btn btn-sec" id="rq-reabrir" onclick="RQ.reabrir()" style="display:none;"><i class="ph-bold ph-arrow-counter-clockwise"></i> Reabrir</button>
+            <button class="btn btn-prim" id="rq-guardar" onclick="RQ.guardar()"><i class="ph-bold ph-floppy-disk"></i> Guardar</button>
+        </div>
+        <div class="nota" id="rq-estado-txt"></div>
+    </div>
+
+    <div class="card">
+        <div class="fila" style="justify-content:space-between;margin-bottom:8px;">
+            <strong style="font-size:17px;">Requerimientos</strong>
+        </div>
+        <div class="filtros" id="rq-filtros">
+            <button data-f="abiertos" class="on" onclick="RQ.filtro('abiertos')">Pendientes y asignados</button>
+            <button data-f="cotizado" onclick="RQ.filtro('cotizado')">Cotizados</button>
+            <button data-f="descartado" onclick="RQ.filtro('descartado')">Descartados</button>
+        </div>
+        <div id="rq-lista"><div class="vacio">Cargando…</div></div>
+    </div>
+</div>
+<div class="aviso" id="rq-aviso"></div>
+
+<script>
+/**
+ * Requerimientos (sesión 6, docs/sesiones/06-render-requerimiento.md): el punto de partida del proyecto.
+ * Todo se guarda con /api/requerimiento (la base /requerimientos no se escribe desde el navegador). Sin IA.
+ * Reusa del Agente IA, sin cambiarlos: el anotador de fotos (agente-anotador.js) y la medición 3D (importar-3d.js + lector-3d.js).
+ */
+window.RQ = (function () {
+    'use strict';
+    var MAX_IMG_LADO = 2000, MAX_MB = { pdf: 20, otro: 20 };
+    var $ = function (id) { return document.getElementById(id); };
+    var esc = function (s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); };
+    var actual = null;          // {id, ...datos} del requerimiento abierto (null = nuevo sin guardar)
+    var todos = {};             // /requerimientos en vivo
+    var clientes = {};
+    var subiendo = [];          // adjuntos en proceso o con error: {clave, nombre, tipo, estado, nota, error, miniatura, reintentar}
+    var fotos = {};             // adj → {blob, ancho, alto, canvas} para volver a anotar sin bajarla
+    var filtroActual = 'abiertos';
+    var creando = null;         // promesa de "crear" en curso
+
+    function aviso(t) { var a = $('rq-aviso'); a.textContent = t; a.style.display = 'block'; clearTimeout(aviso._t); aviso._t = setTimeout(function () { a.style.display = 'none'; }, 2600); }
+
+    async function llamar(cuerpo) {
+        var u = firebase.auth().currentUser;
+        if (!u) throw new Error('Sesión vencida: recargá la página.');
+        var body = JSON.stringify(cuerpo);
+        for (var intento = 0; ; intento++) {
+            var r = null, red = null;
+            try { r = await fetch('/api/requerimiento', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + await u.getIdToken() }, body: body }); }
+            catch (e) { red = e; }
+            var transitorio = red || [502, 503, 504].indexOf(r.status) >= 0;
+            // crear no se reintenta solo (podría duplicar); lo demás sí
+            if (transitorio && cuerpo.accion !== 'crear' && intento < 3) { await new Promise(function (ok) { setTimeout(ok, 1500 * (intento + 1)); }); continue; }
+            if (red) throw new Error('Sin conexión (' + (red.message || 'red') + ').');
+            var j = {};
+            try { j = await r.json(); } catch (e) { j = {}; }
+            if (!r.ok) throw new Error(j.error || ('Error ' + r.status + (r.status === 413 ? ' (archivo muy pesado)' : '')));
+            return j;
+        }
+    }
+
+    // ------------------------------------------------------------------ formulario
+    function clienteDelForm() {
+        var v = $('rq-cliente').value;
+        if (v === '__nuevo__') { var n = $('rq-cliente-nuevo').value.trim(); return n ? { nombre: n } : null; }
+        return v ? { cid: v } : null;
+    }
+    function cambioCliente() {
+        var nuevo = $('rq-cliente').value === '__nuevo__';
+        $('rq-cliente-nuevo').style.display = nuevo ? 'block' : 'none';
+        if (nuevo) $('rq-cliente-nuevo').focus();
+    }
+    function pintarClientes() {
+        var sel = $('rq-cliente'), v = sel.value;
+        var ops = Object.keys(clientes).filter(function (k) { return clientes[k] && clientes[k].nombre; })
+            .sort(function (a, b) { return String(clientes[a].nombre).localeCompare(String(clientes[b].nombre), 'es'); })
+            .map(function (k) { return '<option value="' + esc(k) + '">' + esc(clientes[k].nombre) + '</option>'; }).join('');
+        sel.innerHTML = '<option value="">— Sin cliente todavía —</option><option value="__nuevo__">+ Cliente nuevo (escribir el nombre)</option>' + ops;
+        sel.value = v;
+    }
+    function llenarForm() {
+        var r = actual || {};
+        $('rq-titulo').textContent = r.id ? (r.titulo || 'Requerimiento') : 'Requerimiento nuevo';
+        $('rq-desc').value = r.descripcion || '';
+        var c = r.cliente;
+        if (c && c.cid) { $('rq-cliente').value = c.cid; if ($('rq-cliente').value !== c.cid) { pintarClientes(); $('rq-cliente').value = c.cid; } $('rq-cliente-nuevo').style.display = 'none'; }
+        else if (c && c.nombre) { $('rq-cliente').value = '__nuevo__'; $('rq-cliente-nuevo').value = c.nombre; $('rq-cliente-nuevo').style.display = 'block'; }
+        else { $('rq-cliente').value = ''; $('rq-cliente-nuevo').value = ''; $('rq-cliente-nuevo').style.display = 'none'; }
+        pintarEstado();
+        pintarAdjuntos();
+    }
+    function pintarEstado() {
+        var r = actual || {};
+        var desc = r.estado === 'descartado';
+        $('rq-descartar').style.display = r.id && !desc ? 'inline-flex' : 'none';
+        $('rq-reabrir').style.display = desc ? 'inline-flex' : 'none';
+        $('rq-guardar').style.display = desc ? 'none' : 'inline-flex';
+        ['rq-cliente', 'rq-cliente-nuevo', 'rq-desc', 'rq-mic'].forEach(function (id) { $(id).disabled = desc; });
+        $('rq-zona').style.display = desc ? 'none' : 'block';
+        var t = '';
+        if (r.id) {
+            t = '<span class="estado e-' + esc(r.estado) + '">' + esc(r.estado) + '</span>';
+            if (r.pid) t += ' · asignado al proyecto <b>' + esc(r.proyecto_nombre || r.pid) + '</b>';
+            t += ' · id <code>' + esc(r.id) + '</code>';
+        }
+        $('rq-estado-txt').innerHTML = t;
+    }
+
+    async function asegurarId() {
+        if (actual && actual.id) return actual.id;
+        if (!creando) {
+            creando = llamar({ accion: 'crear', cliente: clienteDelForm(), descripcion: $('rq-desc').value })
+                .then(function (r) {
+                    actual = Object.assign({ id: r.id, estado: 'pendiente' }, todos[r.id] || {});
+                    actual.id = r.id;
+                    history.replaceState({}, '', '#' + r.id);
+                    pintarEstado(); pintarLista();
+                    return r.id;
+                })
+                .finally(function () { creando = null; });
+        }
+        return creando;
+    }
+
+    async function guardar() {
+        var b = $('rq-guardar');
+        b.disabled = true;
+        try {
+            if (!actual || !actual.id) {
+                if (!$('rq-desc').value.trim() && !clienteDelForm() && !subiendo.length) { aviso('Escribí qué pidió el cliente o adjuntá algo.'); return; }
+                await asegurarId();
+            } else {
+                await llamar({ accion: 'editar', id: actual.id, cliente: clienteDelForm(), descripcion: $('rq-desc').value });
+            }
+            if (subiendo.some(function (p) { return p.estado === 'procesando'; })) aviso('Guardado. Los adjuntos se siguen subiendo…');
+            else aviso('Guardado ✓ Queda pendiente para Claude.');
+        } catch (e) { alert('No se pudo guardar: ' + e.message); }
+        finally { b.disabled = false; }
+    }
+
+    function nuevo() {
+        if (subiendo.some(function (p) { return p.estado === 'procesando'; }) && !confirm('Hay adjuntos subiendo. ¿Empezar otro requerimiento igual? (los que están subiendo terminan solos)')) return;
+        actual = null; subiendo = []; fotos = {};
+        history.replaceState({}, '', location.pathname);
+        llenarForm(); pintarLista();
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+    function abrir(id) {
+        var r = todos[id];
+        if (!r) return;
+        actual = Object.assign({ id: id }, r);
+        subiendo = []; fotos = {};
+        history.replaceState({}, '', '#' + id);
+        llenarForm(); pintarLista();
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+    async function descartar() {
+        if (!actual || !actual.id || !confirm('¿Descartar este requerimiento? Queda en "Descartados" y se puede reabrir.')) return;
+        try { await llamar({ accion: 'descartar', id: actual.id }); aviso('Descartado'); } catch (e) { alert(e.message); }
+    }
+    async function reabrir() {
+        if (!actual || !actual.id) return;
+        try { await llamar({ accion: 'reabrir', id: actual.id }); aviso('Reabierto'); } catch (e) { alert(e.message); }
+    }
+
+    // ------------------------------------------------------------------ dictado (del navegador; sin IA)
+    var rec = null;
+    function mic() {
+        if (rec) { try { rec.stop(); } catch (e) { /* nada */ } return; }
+        var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+        if (!SR) { alert('Este navegador no permite dictar. Usá el micrófono del teclado del teléfono.'); return; }
+        dictar(SR, 'es-BO');
+    }
+    function dictar(SR, idioma) {
+        var t = $('rq-desc'), base = t.value ? t.value.replace(/\s+$/, '') + ' ' : '', finalTxt = '';
+        var r = new SR();
+        r.lang = idioma; r.continuous = true; r.interimResults = true;
+        r.onresult = function (ev) {
+            var interino = '';
+            for (var i = ev.resultIndex; i < ev.results.length; i++) {
+                if (ev.results[i].isFinal) finalTxt += ev.results[i][0].transcript + ' ';
+                else interino += ev.results[i][0].transcript;
+            }
+            t.value = base + finalTxt + interino;
+        };
+        r.onerror = function (ev) {
+            if (ev.error === 'language-not-supported' && idioma === 'es-BO') { rec = null; marcarMic(false); dictar(SR, 'es-419'); return; }
+            if (ev.error === 'not-allowed') alert('El navegador no dio permiso para el micrófono.');
+        };
+        r.onend = function () { rec = null; marcarMic(false); t.value = t.value.replace(/\s+$/, ''); };
+        try { r.start(); rec = r; marcarMic(true); } catch (e) { rec = null; alert('No se pudo usar el micrófono.'); }
+    }
+    function marcarMic(on) { var b = $('rq-mic'); b.classList.toggle('grabando', !!on); b.textContent = on ? '⏹' : '🎤'; }
+
+    // ------------------------------------------------------------------ adjuntos
+    function aBase64(blob) {
+        return new Promise(function (ok, ko) {
+            var fr = new FileReader();
+            fr.onload = function () { ok(String(fr.result).split(',')[1] || ''); };
+            fr.onerror = function () { ko(new Error('No se pudo leer el archivo.')); };
+            fr.readAsDataURL(blob);
+        });
+    }
+    function cargarImagen(blob) {
+        return new Promise(function (ok, ko) {
+            var url = URL.createObjectURL(blob), img = new Image();
+            img.onload = function () { ok(img); setTimeout(function () { URL.revokeObjectURL(url); }, 1000); };
+            img.onerror = function () { URL.revokeObjectURL(url); ko(new Error('No se pudo abrir la imagen.')); };
+            img.src = url;
+        });
+    }
+    /** Foto lista para guardar: lado mayor ≤ 2000 px, JPEG, < 4,5 MB (igual que el Agente IA). */
+    async function reducirImagen(archivo) {
+        var img = await cargarImagen(archivo);
+        var f = Math.min(1, MAX_IMG_LADO / Math.max(img.naturalWidth, img.naturalHeight));
+        var w = Math.max(1, Math.round(img.naturalWidth * f)), h = Math.max(1, Math.round(img.naturalHeight * f));
+        var cv = document.createElement('canvas'); cv.width = w; cv.height = h;
+        var cx = cv.getContext('2d'); cx.fillStyle = '#fff'; cx.fillRect(0, 0, w, h); cx.drawImage(img, 0, 0, w, h);
+        var calidad = 0.86, blob;
+        do { blob = await new Promise(function (r) { cv.toBlob(r, 'image/jpeg', calidad); }); calidad -= 0.12; } while (blob && blob.size > 4.5 * 1048576 && calidad > 0.3);
+        return { blob: blob, ancho: w, alto: h, canvas: cv };
+    }
+    function miniatura(fuente) {
+        var w = fuente.width, h = fuente.height, f = 240 / Math.max(w, h);
+        var cv = document.createElement('canvas'); cv.width = Math.max(1, Math.round(w * f)); cv.height = Math.max(1, Math.round(h * f));
+        cv.getContext('2d').drawImage(fuente, 0, 0, cv.width, cv.height);
+        return cv.toDataURL('image/jpeg', 0.6);
+    }
+
+    /**
+     * Copia chica para que Claude la vea por el conector: lado ≤ 1024 px y ≤ 90 KB (el resultado de una herramienta en
+     * claude.ai tiene un límite de ~150.000 caracteres; 90 KB en base64 son ~120.000).
+     */
+    async function paraClaude(fuente) {
+        var w0 = fuente.naturalWidth || fuente.width, h0 = fuente.naturalHeight || fuente.height;
+        var lados = [1024, 860, 720], blob = null;
+        for (var i = 0; i < lados.length; i++) {
+            var f = Math.min(1, lados[i] / Math.max(w0, h0));
+            var cv = document.createElement('canvas'); cv.width = Math.max(1, Math.round(w0 * f)); cv.height = Math.max(1, Math.round(h0 * f));
+            var cx = cv.getContext('2d'); cx.fillStyle = '#fff'; cx.fillRect(0, 0, cv.width, cv.height); cx.drawImage(fuente, 0, 0, cv.width, cv.height);
+            for (var q = 0.8; q >= 0.4; q -= 0.1) {
+                blob = await new Promise(function (r) { cv.toBlob(r, 'image/jpeg', q); });
+                if (blob && blob.size <= 90 * 1024) return aBase64(blob);
+            }
+        }
+        return blob ? aBase64(blob) : null;
+    }
+
+    function agregarPendiente(nombre, tipo, reintentar) {
+        var p = { clave: Math.random().toString(36).slice(2), nombre: nombre, tipo: tipo, estado: 'procesando', reintentar: reintentar || null, req: actual && actual.id };
+        subiendo.push(p); pintarAdjuntos();
+        return p;
+    }
+    function marcar(p, cambios) { Object.assign(p, cambios); pintarAdjuntos(); }
+    function terminar(p) { subiendo = subiendo.filter(function (x) { return x !== p; }); pintarAdjuntos(); }
+    function icono(t) { return t === '3d' ? '🧊' : t === 'pdf' ? '📄' : t === 'imagen' ? '🖼' : '📎'; }
+    function kb(n) { return n > 1048576 ? (n / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(n / 1024)) + ' KB'; }
+
+    function pintarAdjuntos() {
+        var el = $('rq-adjs');
+        var guardados = actual && actual.id && todos[actual.id] ? todos[actual.id].adjuntos || {} : {};
+        var desc = actual && actual.estado === 'descartado';
+        var html = Object.keys(guardados).sort(function (a, b) { return (guardados[a].orden || 0) - (guardados[b].orden || 0); }).map(function (k) {
+            var a = guardados[k];
+            var det = a.tipo === 'imagen' ? (a.anotaciones ? a.anotaciones.length + (a.anotaciones.length > 1 ? ' anotaciones' : ' anotación') : 'sin anotar') :
+                a.tipo === '3d' ? (a.piezas + ' piezas' + (a.tamano_m ? ' · ' + a.tamano_m.map(function (x) { return Math.round(x * 100) / 100; }).join('×') + ' m' : '')) : kb(a.bytes || 0);
+            return '<div class="adj"><div class="mini">' + (a.miniatura ? '<img src="' + esc(a.miniatura) + '" alt="">' : icono(a.tipo)) + '</div>' +
+                '<div class="nom" title="' + esc(a.nombre) + '">' + esc(a.nombre) + '</div><div class="det">' + esc(det) + '</div>' +
+                (desc ? '' : '<div class="acc">' + (a.tipo === 'imagen' && window.AgenteAnotador ? '<button onclick="RQ.anotar(\'' + k + '\')" title="Anotar cotas y notas" aria-label="Anotar">✏️</button>' : '') +
+                '<button onclick="RQ.quitar(\'' + k + '\')" title="Quitar" aria-label="Quitar">×</button></div>') + '</div>';
+        }).join('');
+        html += subiendo.filter(function (p) { return !p.req || !actual || p.req === actual.id; }).map(function (p) {
+            return '<div class="adj' + (p.estado === 'error' ? ' error' : '') + '"><div class="mini">' + (p.miniatura ? '<img src="' + esc(p.miniatura) + '" alt="">' : p.estado === 'procesando' ? '<div class="spin"></div>' : icono(p.tipo)) + '</div>' +
+                '<div class="nom">' + esc(p.nombre) + '</div><div class="det">' + esc(p.estado === 'error' ? p.error : (p.nota || 'Subiendo…')) + '</div>' +
+                (p.estado === 'error' ? '<div class="acc">' + (p.reintentar ? '<button onclick="RQ.reintentar(\'' + p.clave + '\')" title="Reintentar">↻</button>' : '') +
+                '<button onclick="RQ.descartarError(\'' + p.clave + '\')" title="Quitar">×</button></div>' : '') + '</div>';
+        }).join('');
+        el.innerHTML = html;
+    }
+
+    async function subirPDF(f, previo) {
+        var p = previo || agregarPendiente(f.name, 'pdf', function (pp) { return subirPDF(f, pp); });
+        marcar(p, { estado: 'procesando', error: null });
+        try {
+            if (f.size > MAX_MB.pdf * 1048576) throw new Error('pesa ' + kb(f.size) + ' (máximo ' + MAX_MB.pdf + ' MB)');
+            var id = await asegurarId(); p.req = id;
+            await llamar({ accion: 'adjuntar', id: id, tipo: 'pdf', nombre: f.name, datos: await aBase64(f) });
+            terminar(p);
+        } catch (e) { marcar(p, { estado: 'error', error: e.message }); }
+    }
+    async function subirOtro(f, previo) {
+        var p = previo || agregarPendiente(f.name, 'otro', function (pp) { return subirOtro(f, pp); });
+        marcar(p, { estado: 'procesando', error: null });
+        try {
+            if (f.size > MAX_MB.otro * 1048576) throw new Error('pesa ' + kb(f.size) + ' (máximo ' + MAX_MB.otro + ' MB)');
+            var id = await asegurarId(); p.req = id;
+            await llamar({ accion: 'adjuntar', id: id, tipo: 'otro', nombre: f.name, datos: await aBase64(f) });
+            terminar(p);
+        } catch (e) { marcar(p, { estado: 'error', error: e.message }); }
+    }
+    async function subirImagen(f, previo) {
+        var p = previo || agregarPendiente(f.name || 'foto.jpg', 'imagen', function (pp) { return subirImagen(f, pp); });
+        marcar(p, { estado: 'procesando', error: null });
+        try {
+            var red = await reducirImagen(f), mini = miniatura(red.canvas);
+            marcar(p, { miniatura: mini });
+            var id = await asegurarId(); p.req = id;
+            var r = await llamar({ accion: 'adjuntar', id: id, tipo: 'imagen', nombre: f.name || 'foto.jpg', datos: await aBase64(red.blob), ancho: red.ancho, alto: red.alto, miniatura: mini,
+                para_claude: await paraClaude(red.canvas) });
+            fotos[r.adj] = red;
+            terminar(p);
+        } catch (e) { marcar(p, { estado: 'error', error: e.message }); }
+    }
+    async function subir3D(modelo, archivos, json, previo) {
+        var nombre = (json || modelo).name;
+        var p = previo || agregarPendiente(nombre, '3d', function (pp) { return subir3D(modelo, archivos, json, pp); });
+        marcar(p, { estado: 'procesando', error: null });
+        var urls = [];
+        try {
+            if (!window.Importar3D) throw new Error('No cargó el lector 3D.');
+            marcar(p, { nota: 'Midiendo…' });
+            var eq = await window.Importar3D.equivalencias();
+            var res, tam = null, unidad = 'm', leido = null;
+            if (json) {
+                res = Lector3D.desdeRubikJson(JSON.parse(await json.text()), eq);
+            } else {
+                leido = await window.Importar3D.leerModelo(modelo, archivos, urls);
+                var det = Lector3D.detectarUnidad(leido.raiz, leido.tipo);
+                var factor = Lector3D.FACTORES[det.unidad];
+                res = Lector3D.analizar(leido.raiz, { factor: factor, equivalencias: eq, archivo: modelo.name, proyecto: modelo.name.replace(/\.[^.]+$/, '') });
+                tam = det.tamano.map(function (x) { return x * factor; });
+                unidad = det.unidad + (det.motivo ? ' (' + det.motivo + ')' : '');
+            }
+            if (!res.piezas || !res.piezas.length) throw new Error('El modelo no tiene piezas medibles.');
+            var vistas = [];
+            if (leido && window.Vistas3D) {
+                marcar(p, { nota: 'Dibujando las vistas…' });
+                try { vistas = await window.Vistas3D.render(leido.raiz, res); } catch (ev) { console.warn('[requerimiento] vistas del 3D', ev); vistas = []; }
+                if (vistas[0]) marcar(p, { miniatura: vistas[0].miniatura });
+            }
+            marcar(p, { nota: 'Subiendo la medición…' });
+            var id = await asegurarId(); p.req = id;
+            var miniV = vistas[0] && vistas[0].miniatura ? await achicarDataUrl(vistas[0].miniatura) : null;
+            await llamar({ accion: 'adjuntar', id: id, tipo: '3d', nombre: nombre, medicion: res, tamano_m: tam, unidad: unidad, miniatura: miniV,
+                vistas: vistas.map(function (v) { return { nombre: v.nombre, datos: v.datos }; }) });
+            terminar(p);
+        } catch (e) {
+            console.error('[requerimiento] 3D', e);
+            marcar(p, { estado: 'error', error: e.message || String(e) });
+        } finally { urls.forEach(function (u) { URL.revokeObjectURL(u); }); }
+    }
+    async function achicarDataUrl(d) { var img = await cargarImagen(await (await fetch(d)).blob()); return miniatura(img); }
+
+    async function archivos(lista) {
+        var originales = Array.from(lista || []);
+        if (!originales.length) return;
+        if (actual && actual.estado === 'descartado') return aviso('Está descartado: reabrilo para agregar.');
+        if (!window.Importar3D) { aviso('Todavía se está cargando la página. Probá de nuevo en un segundo.'); return; }
+        var norm = await window.Importar3D.normalizarArchivos(originales);
+        var lista2 = norm.archivos, ext = function (f) { return (f.name.split('.').pop() || '').toLowerCase(); };
+        var deZip = new Set();   // lo que salió de un .zip (si hay un 3D, sus imágenes y .bin son texturas del modelo)
+        for (var i = 0; i < lista2.length; i++) {
+            if (ext(lista2[i]) !== 'zip') continue;
+            try {
+                var dentro = await window.Importar3D.extraerZip(lista2[i], true);
+                // un .zip sin 3D, PDF ni fotos se guarda tal cual
+                if (!dentro.some(function (f) { return /\.(glb|gltf|fbx|json|pdf|jpe?g|png|webp)$/i.test(f.name); })) { subirOtro(lista2[i]); continue; }
+                dentro.forEach(function (f) { deZip.add(f); });
+                lista2 = lista2.concat(dentro);
+            } catch (e) { subirOtro(lista2[i]); }
+        }
+        lista2 = lista2.filter(function (f) { return ext(f) !== 'zip'; });
+        var modelos = lista2.filter(function (f) { return ['glb', 'gltf', 'fbx'].indexOf(ext(f)) >= 0; });
+        var jsons = lista2.filter(function (f) { return ext(f) === 'json'; });
+        var esFoto = function (f) { return /^image\/(jpeg|png|webp)$/.test(f.type || '') || /\.(jpe?g|png|webp)$/i.test(f.name); };
+        var usados = new Set();
+        var tareas = [];
+        modelos.forEach(function (m) { usados.add(m); tareas.push(subir3D(m, lista2, null)); });
+        if (!modelos.length) jsons.forEach(function (j) { usados.add(j); tareas.push(subir3D(null, lista2, j)); });
+        // texturas y .bin de un 3D van con el modelo, no sueltos
+        if (modelos.length) lista2.forEach(function (f) { if (deZip.has(f) && /\.(bin|png|jpe?g|webp)$/i.test(f.name)) usados.add(f); });
+        if (!modelos.length) lista2.forEach(function (f) { if (ext(f) === 'bin') usados.add(f); });
+        lista2.forEach(function (f) {
+            if (usados.has(f)) return;
+            if (ext(f) === 'pdf') tareas.push(subirPDF(f));
+            else if (esFoto(f)) tareas.push(subirImagen(f));
+            else if (ext(f) === 'skp') tareas.push(subirOtro(f).then(function () { aviso('El .skp se guardó como archivo: para medirlo, exportalo a FBX o glTF.'); }));
+            else tareas.push(subirOtro(f));
+        });
+        // lo que el lector no reconoció (DWG, Excel…) se guarda como archivo
+        norm.raros.forEach(function (f) { tareas.push(subirOtro(f)); });
+        await Promise.all(tareas);
+    }
+
+    async function anotar(adj) {
+        if (!actual || !actual.id || !window.AgenteAnotador) return;
+        var meta = ((todos[actual.id] || {}).adjuntos || {})[adj];
+        if (!meta) return;
+        var red = fotos[adj];
+        try {
+            if (!red) {
+                aviso('Abriendo la foto…');
+                var r = await llamar({ accion: 'archivo', id: actual.id, adj: adj });
+                var blob = await (await fetch('data:' + (meta.mime || 'image/jpeg') + ';base64,' + r.datos)).blob();
+                red = await reducirImagen(blob);
+                fotos[adj] = red;
+            }
+            var res = await window.AgenteAnotador.editar(red, meta.nombre, meta.anotaciones_editor || null);
+            if (!res || res.cancelado) return;
+            var lista = res.anotaciones || [];
+            var anotadaImg = lista.length && res.blob ? await cargarImagen(res.blob) : null;
+            await llamar({ accion: 'anotar', id: actual.id, adj: adj, anotaciones: lista, editor: lista.length ? res.editor : null,
+                anotada: lista.length ? await aBase64(res.blob) : null, anotada_claude: anotadaImg ? await paraClaude(anotadaImg) : null,
+                miniatura: anotadaImg ? miniatura(anotadaImg) : miniatura(red.canvas) });
+            aviso(lista.length ? 'Anotaciones guardadas ✓' : 'Sin anotaciones');
+        } catch (e) { alert('No se pudo anotar: ' + e.message); }
+    }
+    async function quitar(adj) {
+        if (!actual || !actual.id || !confirm('¿Quitar este adjunto?')) return;
+        try { await llamar({ accion: 'quitar', id: actual.id, adj: adj }); delete fotos[adj]; } catch (e) { alert(e.message); }
+    }
+
+    // ------------------------------------------------------------------ lista
+    function pintarLista() {
+        var ids = Object.keys(todos).filter(function (k) {
+            var e = todos[k].estado || 'pendiente';
+            return filtroActual === 'abiertos' ? (e === 'pendiente' || e === 'asignado') : e === filtroActual;
+        }).sort(function (a, b) { return (todos[b].actualizado || 0) - (todos[a].actualizado || 0); });
+        var el = $('rq-lista');
+        if (!ids.length) { el.innerHTML = '<div class="vacio">' + (filtroActual === 'abiertos' ? 'No hay requerimientos pendientes.' : 'Nada por acá.') + '</div>'; return; }
+        el.innerHTML = ids.map(function (k) {
+            var r = todos[k], adjs = r.adjuntos || {}, claves = Object.keys(adjs);
+            var conMini = claves.map(function (x) { return adjs[x]; }).find(function (a) { return a && a.miniatura; });
+            var cli = r.cliente ? (r.cliente.nombre || r.cliente.cid) + (r.cliente.nuevo ? ' (nuevo)' : '') : 'Sin cliente';
+            var f = new Date(r.actualizado || r.creado || 0);
+            return '<div class="req' + (actual && actual.id === k ? ' sel' : '') + '" onclick="RQ.abrir(\'' + k + '\')">' +
+                '<div class="rmini">' + (conMini ? '<img src="' + esc(conMini.miniatura) + '" alt="">' : '<i class="ph-bold ph-clipboard-text"></i>') + '</div>' +
+                '<div class="rtxt"><div class="rtit">' + esc(r.titulo || 'Requerimiento') + '</div>' +
+                '<div class="rsub"><span class="estado e-' + esc(r.estado || 'pendiente') + '">' + esc(r.estado || 'pendiente') + '</span> · ' + esc(cli) +
+                ' · ' + claves.length + ' adj. · ' + f.toLocaleDateString('es-BO', { day: '2-digit', month: 'short' }) + '</div></div></div>';
+        }).join('');
+    }
+    function filtro(f) {
+        filtroActual = f;
+        Array.prototype.forEach.call(document.querySelectorAll('#rq-filtros button'), function (b) { b.classList.toggle('on', b.getAttribute('data-f') === f); });
+        pintarLista();
+    }
+
+    // ------------------------------------------------------------------ inicio
+    function iniciar() {
+        var zona = $('rq-zona');
+        ['dragenter', 'dragover'].forEach(function (ev) { zona.addEventListener(ev, function (e) { e.preventDefault(); zona.classList.add('activa'); }); });
+        ['dragleave', 'drop'].forEach(function (ev) { zona.addEventListener(ev, function (e) { e.preventDefault(); zona.classList.remove('activa'); }); });
+        zona.addEventListener('drop', function (e) { archivos(e.dataTransfer.files); });
+        document.addEventListener('paste', function (e) {
+            var fs = Array.from((e.clipboardData && e.clipboardData.files) || []);
+            if (fs.length) { e.preventDefault(); archivos(fs); }
+        });
+        window.addEventListener('beforeunload', function (e) { if (subiendo.some(function (p) { return p.estado === 'procesando'; })) { e.preventDefault(); e.returnValue = ''; } });
+        firebase.auth().onAuthStateChanged(function (u) {
+            if (!u) return;
+            db.ref('clientes').once('value').then(function (s) { clientes = s.val() || {}; pintarClientes(); if (actual) llenarForm(); }).catch(function () {});
+            db.ref('requerimientos').orderByChild('actualizado').limitToLast(200).on('value', function (s) {
+                todos = s.val() || {};
+                var h = location.hash.slice(1);
+                if (!actual && h && todos[h]) { abrir(h); return; }
+                if (actual && actual.id && todos[actual.id]) {
+                    var r = todos[actual.id];
+                    // no pisar lo que el dueño está escribiendo: solo estado, título y adjuntos
+                    actual.estado = r.estado; actual.titulo = r.titulo; actual.pid = r.pid; actual.proyecto_nombre = r.proyecto_nombre;
+                    $('rq-titulo').textContent = r.titulo || 'Requerimiento';
+                    pintarEstado(); pintarAdjuntos();
+                }
+                pintarLista();
+            }, function (e) { $('rq-lista').innerHTML = '<div class="vacio">No se pudo leer: ' + esc(e.message) + '</div>'; });
+        });
+    }
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', iniciar); else iniciar();
+
+    return {
+        nuevo: nuevo, abrir: abrir, guardar: guardar, descartar: descartar, reabrir: reabrir, cambioCliente: cambioCliente, mic: mic,
+        archivos: archivos, anotar: anotar, quitar: quitar, filtro: filtro,
+        reintentar: function (c) { var p = subiendo.find(function (x) { return x.clave === c; }); if (p && p.reintentar) p.reintentar(p); },
+        descartarError: function (c) { subiendo = subiendo.filter(function (x) { return x.clave !== c; }); pintarAdjuntos(); }
+    };
+})();
+</script>
+</body>
+</html>

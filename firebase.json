@@ -131,6 +131,13 @@
         }
       },
       {
+        "source": "/api/requerimiento",
+        "function": {
+          "functionId": "requerimientoApi",
+          "region": "us-central1"
+        }
+      },
+      {
         "source": "/api/agente",
         "function": {
           "functionId": "agenteApi",
