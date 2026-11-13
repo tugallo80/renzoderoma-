@@ -57,6 +57,9 @@ corregí y reintentá; si falta un dato, preguntalo.
   receta nuevos o corregidos, con historial. Solo con la confirmación del dueño.
 - **`memoria`** `{accion: anotar|leer, tipo: nota|norma, texto?}` → notas del dueño y normas del taller, compartidas entre
   proyectos (las mismas del Agente IA de la app). Borrar: en la app (⚙).
+- **`prueba_imagen`** `{peso_kb?}` → solo para probar el conector cuando el dueño lo pida: devuelve una imagen de
+  prueba con un número de 4 cifras y una esquina de cada color. Decile el número y los colores que ves; si no ves la
+  imagen, decilo tal cual (no adivines).
 
 ## Ejemplo corto
 

@@ -16,6 +16,7 @@ const N = require("../agente/compartido/agente-nucleo.js");
 const R = require("../agente/rutas");
 const API = require("../agente/api");
 const { acotar } = require("../agente/almacen");
+const IMG = require("./imagen");
 
 const ID = /^[A-Za-z0-9_-]{1,64}$/;
 const esc = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -682,6 +683,25 @@ const HERRAMIENTAS = [
             return correrDelAgente("memoria", acotar(almacen, RUTAS.memoria()), uid, { cid: "claude", pid: "-" }, e);
         },
     },
+    // ---------- sesión 6: prueba de imágenes en el resultado (no lee ni escribe la base, no llama a ninguna API)
+    {
+        def: {
+            name: "prueba_imagen",
+            title: "Prueba: ¿ves imágenes del conector?",
+            description: "Solo para probar el conector: devuelve una imagen de prueba hecha en el servidor. Usala únicamente si el dueño pide probar las imágenes. Mirá la imagen y decile al dueño el número de 4 cifras que aparece y el color de cada esquina; el número NO está en el texto, así que si no ves la imagen, decilo tal cual. peso_kb (0–400) agrega una franja de ruido para probar imágenes más pesadas.",
+            inputSchema: { type: "object", properties: { peso_kb: { type: "integer", minimum: 0, maximum: 400, description: "Opcional: KB de ruido extra (por defecto 0)." } } },
+            annotations: { readOnlyHint: true },
+        },
+        async correr(almacen, uid, e) {
+            const im = IMG.imagenDePrueba(e.peso_kb || 0);
+            const b64 = im.buffer.toString("base64");
+            console.log("[rubikMcp] prueba_imagen", JSON.stringify({ codigo: im.codigo, bytes: im.buffer.length, base64: b64.length, ancho: im.ancho, alto: im.alto }));
+            return { __contenido: [
+                { type: "text", text: `Imagen de prueba PNG ${im.ancho}×${im.alto} px, ${Math.round(im.buffer.length / 1024)} KB (${b64.length} caracteres en base64). El número no está en este texto: leelo de la imagen.` },
+                { type: "image", data: b64, mimeType: "image/png" },
+            ] };
+        },
+    },
 ];
 
 // normaliza: input_schema (formato del agente) → inputSchema (MCP)
@@ -706,6 +726,8 @@ async function llamar(almacen, uid, nombre, entrada) {
     if (errores.length) return { content: txt({ entrada_invalida: errores.slice(0, 10) }), isError: true };
     try {
         const r = await h.correr(almacen, uid, e);
+        // Bloques MCP ya armados (texto + imagen): salen tal cual. Solo los usan las herramientas de imágenes.
+        if (r && Array.isArray(r.__contenido)) return { content: r.__contenido };
         let t = JSON.stringify(r);
         if (t.length > 120000) t = t.slice(0, 120000) + "…[recortado: pedí menos datos]";
         return { content: txt(t) };

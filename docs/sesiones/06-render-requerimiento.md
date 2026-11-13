@@ -1,6 +1,45 @@
 # Sesión 6 — IA de render y requerimiento visual
 
-**Fase 0 (13 nov 2026): inventario e investigación. No se cambió código.** Falta el visto bueno del dueño para construir.
+**Fase 0 (13 nov 2026): inventario e investigación** (abajo). **Visto bueno del dueño el 13 nov, con cambios** → ver "Decisiones".
+
+## Decisiones del dueño (13 nov 2026)
+1. Se llama **"Requerimiento"** (no "Ficha visual"): es el punto de partida del proyecto. El dueño carga lo que pidió el
+   cliente **sin ejecutar ninguna IA**: cliente (existente, nuevo u opcional), descripción (texto o dictado), adjuntos de
+   cualquier tipo (PDF, fotos, capturas, renders, 3D medido en el navegador), fotos anotadas con el anotador del agente.
+   Queda **pendiente** → asignado → cotizado. Datos en `/requerimientos/{id}`, archivos en Storage `requerimientos/{id}/…`,
+   solo la lista blanca del hub. Acceso desde `index.html`: la tarjeta "Requerimiento nuevo" **reemplaza a "Cerebro
+   Ejecutivo"** (su código queda comentado hasta que el dueño confirme). Lista de pendientes en la misma pantalla.
+2. Se **borra el módulo viejo `requerimiento-asistido`** (página, enlaces y botones, también en el portal del cliente).
+   **Los datos `/requerimientos_asistidos` NO se borran**: quedan como archivo.
+3. El trabajo lo hace **Claude desde su plataforma** (proyecto RUBIK AGENTE APP + conector + skill), no el Agente IA de la
+   app (que queda como está). Herramientas nuevas: `listar_requerimientos`, `leer_requerimiento` (imágenes como contenido
+   `image`), `asignar_requerimiento`, `generar_render`, `aprobar_render` (con confirmación del dueño). Claude divide en
+   ítems según el pedido.
+4. Gemini: **Nano Banana 2.1** por defecto, **Pro** como "alta calidad", modelo fijo en el servidor. Las cotas las dibuja
+   la app, nunca la IA.
+5. Se retiran el botón **Render** de Presupuesto (los dos generadores) y **Medir** de Diseños. **Presupuesto IA no se toca.**
+6. Primero una prueba mínima de imagen en el conector.
+
+## Entregas
+| # | Qué | Estado |
+|---|---|---|
+| 1 | Herramienta `prueba_imagen` (devuelve un PNG hecho en el servidor) para confirmar que claude.ai le pasa la imagen a Claude | ✅ mergeada · falta la prueba del dueño |
+| 2 | Pantalla Requerimiento (formulario, adjuntos, anotador, lista de pendientes) + tarjeta en `index.html` + reglas | pendiente |
+| 3 | Borrar `requerimiento-asistido` (sin tocar los datos) | pendiente |
+| 4 | Conector: `listar_requerimientos`, `leer_requerimiento`, `asignar_requerimiento` + skill | pendiente (toca `functions/`) |
+| 5 | Conector: `generar_render` (Nano Banana 2.1 / Pro fijo) y `aprobar_render` + skill | pendiente (toca `functions/`) |
+| 6 | Retirar Render y Medir; matriz en el ítem, PDF y producción | pendiente |
+
+### Prueba de la entrega 1 (dueño, en claude.ai)
+En un chat del proyecto RUBIK AGENTE APP: *"probá prueba_imagen"*. Claude tiene que decir un **número de 4 cifras** y los
+colores de las esquinas (rojo arriba a la izquierda, verde arriba a la derecha, azul abajo a la izquierda, amarillo abajo
+a la derecha). El número **no viaja en el texto**: si lo dice bien, la ve. Se puede comparar abriendo el desplegable de la
+herramienta en el chat, o en los logs (`[rubikMcp] prueba_imagen {"codigo":…}` del servicio `rubikmcp`).
+Después: *"probá prueba_imagen con peso_kb 100"* (≈143.000 caracteres, cerca del límite de claude.ai) y con 300, para
+saber hasta qué tamaño llega. Con eso se fija el tamaño de las imágenes que devuelven `leer_requerimiento` y `generar_render`.
+
+---
+
 
 ---
 
