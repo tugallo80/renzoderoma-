@@ -94,7 +94,9 @@ exports.requerimientoApi = require("./requerimientos").crearApi({ requireAuth, a
 
 // ── Conector MCP "Rubik" para claude.ai (docs/sesiones/05-rubik-agente-app.md) ─
 // OAuth con Firebase Auth + lista blanca hub; las cotizaciones las hace Claude con la suscripción del dueño.
-exports.rubikMcp = require("./mcp").crearFuncion({ admin, esHub, GEMINI_API_KEY });
+exports.rubikMcp = require("./mcp").crearFuncion({ admin, esHub });
+// Render con Gemini para los Requerimientos (sesión 6): cola /render_cola → renderTurno (secreto de Gemini, 300 s)
+exports.renderTurno = require("./render").crearTrigger({ GEMINI_API_KEY, esHub });
 
 // ── Claude helpers ────────────────────────────────────────────────────────────
 

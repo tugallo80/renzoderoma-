@@ -69,35 +69,42 @@
 4. Salí, volvé a entrar, tocá el requerimiento: tiene que estar todo. Volvé a anotar la foto: aparecen las cotas de antes.
 
 ### Entrega 5 — render con Gemini desde Claude
-- `functions/mcp/render.js`: **modelo fijo** — normal = `gemini-nano-banana-2.1` (Nano Banana 2.1, ~US$0,034 en 1K /
-  0,05 en 2K), alta = `gemini-3-pro-image` (Nano Banana Pro, ~US$0,134). Antes de generar revisa con **ListModels**
-  (gratis, caché de 6 h; la lista de modelos de imagen se loguea una vez: `[render] modelos de imagen con esta clave`).
-  Si la clave no tiene el modelo → error claro, **nunca usa otro**. Los ids salen de la investigación (no se pudo abrir
-  ai.google.dev desde la sesión): si el log muestra otros nombres, se corrigen acá.
+**Diseño (corregido con la sesión del conector y la maestra):** Firebase Hosting corta a los **60 s** los pedidos que
+reenvía a una Function, y el conector entra por `rubikbolivia.com/mcp`; además `rubikMcp` queda **sin secretos**. Por eso
+el render lo hace una Function aparte con cola, como el Agente IA:
+- **`generar_render`** (conector) valida, deja el estado `en_proceso` en `requerimientos/{id}/renders/{rid}` y el pedido en
+  **`/render_cola/{rid}`**, y espera hasta **~40 s**. Si terminó, devuelve la imagen; si no, `{render, estado: "en_proceso"}`.
+- **`ver_render`** `{id, render?}`: la imagen cuando está lista (o el estado / el error); sin `render`, la lista.
+- **`renderTurno`** (`functions/render/`): trigger de `/render_cola` con el secreto `GEMINI_API_KEY`, **300 s y 1 GiB**.
+  Revisa la lista blanca (uid del pedido), baja las referencias, llama a Gemini y pasa el PNG a JPEG con **sharp** (grande
+  para el ítem; copia ≤ 100 KB para Claude). Guarda en Storage `requerimientos/{id}/renders/{rid}.jpg` y deja `listo` o
+  `error` con el motivo. Si claude.ai se corta, el render igual termina.
+- **Modelo fijo** (`functions/render/gemini.js`): normal = `gemini-nano-banana-2.1` (~US$0,034 en 1K / 0,05 en 2K), alta =
+  `gemini-3-pro-image` (~US$0,134). Antes de generar revisa **ListModels** (gratis, caché de 6 h; loguea una vez
+  `[render] modelos de imagen con esta clave`). Si falta el modelo → error claro, **nunca usa otro**. Los ids salen de la
+  investigación (no se pudo abrir ai.google.dev desde la sesión): si el log muestra otros nombres, se corrigen ahí.
   Pedido: fotos originales (sin las cotas dibujadas) + prompt de Claude + reglas fijas ("no dibujes cotas, medidas ni
-  textos inventados; respetá proporción y entorno"); `imageConfig: {aspectRatio (el de la foto), imageSize 1K|2K}`.
-  Se descartan las imágenes intermedias (`thought`). Errores 429 (cuota/créditos) y bloqueos se explican.
-  Gemini devuelve PNG (no deja pedir JPEG): **sharp** lo pasa a JPEG (grande para el ítem; copia ≤ 100 KB para Claude).
-- **`generar_render`** `{id, prompt, referencias?, base_render?, calidad?, aspecto?, tamano?}`: guarda en
-  `requerimientos/{id}/renders/{rid}` (Storage y base, con modelo, prompt, referencias y costo aproximado) y **devuelve la
-  imagen** para que Claude la revise y corrija (`base_render`). Máximo 20 por requerimiento.
+  textos inventados; respetá proporción y entorno"); `imageConfig: {aspectRatio (el de la foto), imageSize 1K|2K}`. Se
+  descartan las imágenes intermedias (`thought`). 429 (cuota/créditos) y bloqueos se explican. Máx. 20 por requerimiento.
 - **`aprobar_render`** `{id, render, cid, pid, conv, item, confirmacion}`: aprobación del dueño **posterior al render**; el
   requerimiento asignado a ese proyecto; el ítem ya en el presupuesto. Copia la imagen a `presupuesto/render_req_…jpg` con
-  enlace de descarga (como las demás) → **`item.img`** (PDF y producción la usan); la anterior pasa a `item.cortes`;
-  respaldo en `respaldos_agente/…`; `requerimientos/{id}/matriz`.
-- `rubikMcp`: secreto `GEMINI_API_KEY`, **240 s** de tiempo máximo y **1 GiB**. Dependencia nueva: `sharp`.
-- App: en el requerimiento, sección **"Renders de Claude"** (miniaturas; el aprobado en verde; tocar lo abre grande).
-- Pruebas con Gemini **simulado** (no gastan): modelo fijo y caché de ListModels, referencias originales, reglas, imagen
-  ≤ 100 KB, corrección con Pro, error si falta el modelo (sin llamar a generar), 429, bloqueo, aprobación anterior al
-  render rechazada, `item.img` con token y la vieja en cortes, idempotencia, proyecto equivocado. `tools/mcp` 28/28.
+  enlace de descarga (como las demás) → **`item.img`** (PDF y producción); la anterior pasa a `item.cortes`; respaldo en
+  `respaldos_agente/…`; `requerimientos/{id}/matriz`.
+- Reglas: `/render_cola` cerrado para todos (solo Functions). El conector escribe la cola y solo **lee** Storage
+  `requerimientos/…`; los renders los escribe `renderTurno`.
+- App: en el requerimiento, sección **"Renders de Claude"** (generando / error / listo; el aprobado en verde; tocar lo abre).
+- Pruebas con Gemini y `renderTurno` **simulados** (reloj falso; no gastan): `tools/mcp` 29/29 — encolar y devolver la
+  imagen, modelo fijo y caché de ListModels, fotos originales, reglas, ≤ 100 KB, corrección con Pro, **más de 40 s →
+  id y `ver_render`**, un render a la vez, error sin modelo (sin llamar a generar), 429, bloqueo, uid fuera de la lista
+  blanca, aprobación anterior al render, `item.img` con token y la vieja en cortes, idempotencia, proyecto equivocado.
 
 ### Prueba de la entrega 5 (dueño; gasta ~US$0,03–0,15)
-1. En Claude, con un requerimiento asignado: *"generá un render de cómo quedaría"*. Tiene que mostrar la imagen y
-   decir qué ve; pedile una corrección ("el logo más grande") y que la vuelva a generar.
+1. En Claude, con un requerimiento asignado: *"generá un render de cómo quedaría"*. Tiene que mostrar la imagen (o, si
+   tarda, pedirla con `ver_render`) y decir qué ve; pedile una corrección ("el logo más grande") y que la vuelva a generar.
 2. En la app, el requerimiento muestra la sección **Renders de Claude**.
 3. Después de aplicar la cotización: *"usá este render como imagen del mostrador"* → en el presupuesto, el ítem tiene esa
    imagen y sale en el PDF.
-4. Si Claude dice que la clave no tiene acceso al modelo: mandame el log `[render] modelos de imagen con esta clave`.
+4. Si Claude dice que la clave no tiene acceso al modelo: el log `[render] modelos de imagen con esta clave` (servicio `renderturno`) dice cuáles tiene.
 
 ### Entrega 4 — Claude toma el requerimiento por el conector
 - `functions/mcp/requerimientos.js` (módulo aparte; `herramientas.js` solo lo suma a la lista):

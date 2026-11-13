@@ -74,7 +74,8 @@ cotas y notas dibujadas, PDF, 3D ya medido y otros archivos. No corre ninguna IA
 4. Proponé como experto del rubro: **dividí en ítems según lo que se entrega** (a veces es uno solo; a veces son muchas
    piezas), con la materialidad y el sistema constructivo. Seguí el flujo de siempre (preguntas, borrador, aplicar).
 5. **Render** (si hace falta mostrarle al cliente cómo va a quedar): `generar_render {id, prompt}` usa Gemini de la app con
-   las fotos originales y te devuelve la imagen. **Miralo**: si no respeta el pedido (proporciones, materiales, lo que se
+   las fotos originales y te devuelve la imagen (si tarda más de ~40 s, te da el id con `estado: en_proceso`: esperá
+   unos segundos y pedilo con `ver_render {id, render}`). **Miralo**: si no respeta el pedido (proporciones, materiales, lo que se
    conserva de la foto), corregí con `base_render` y una indicación concreta. Nunca pidas cotas ni medidas dibujadas (el
    modelo inventa números). Calidad normal por defecto (~US$0,03–0,05); `alta` (~US$0,13) solo para la versión final o
    si el dueño la pide. No generes de más.

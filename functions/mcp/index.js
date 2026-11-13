@@ -28,11 +28,11 @@ const RUTAS_MCP = [
     /^config\/agente(\/|$)/,
     /^respaldos_agente(\/|$)/,
     /^requerimientos(\/|$)/,   // sesión 6
+    /^render_cola(\/|$)/,      // sesión 6: pedidos de render para renderTurno
 ];
 /** Storage: escribe y lee las del agente (adjuntos de las cotizaciones); las de los Requerimientos solo las LEE. */
 const ARCHIVOS_MCP = ARCHIVOS_AGENTE.concat([
-    /^requerimientos\/[A-Za-z0-9_-]+\/renders\/[A-Za-z0-9_-]+\.jpg$/,   // renders de Gemini (entrega 5)
-    /^presupuesto\/render_req_[A-Za-z0-9_-]+\.jpg$/,                     // render aprobado → imagen del ítem
+    /^presupuesto\/render_req_[A-Za-z0-9_-]+\.jpg$/,   // render aprobado → imagen del ítem (aprobar_render)
 ]);
 const ARCHIVOS_MCP_LECTURA = REQ.ARCHIVOS;
 
@@ -179,14 +179,11 @@ async function atender(dep, req, res) {
     }
 }
 
-function crearFuncion({ admin, esHub, GEMINI_API_KEY }) {
+function crearFuncion({ admin, esHub }) {
     const { onRequest } = require("firebase-functions/v2/https");
     let dep = null;
-    // 240 s: generar_render (Gemini) tarda 20–60 s o más; claude.ai espera hasta 240 s por herramienta.
-    // 1 GiB: sharp pasa el PNG de Gemini a JPEG.
-    return onRequest({ region: "us-central1", timeoutSeconds: 240, memory: "1GiB", invoker: "public", cors: false, concurrency: 20,
-        secrets: GEMINI_API_KEY ? [GEMINI_API_KEY] : [] }, async (req, res) => {
-        if (!dep && GEMINI_API_KEY) require("./render").configurar({ clave: () => GEMINI_API_KEY.value() });
+    // Sin secretos: el render con Gemini lo hace la Function renderTurno (functions/render), con cola.
+    return onRequest({ region: "us-central1", timeoutSeconds: 60, memory: "512MiB", invoker: "public", cors: false, concurrency: 20 }, async (req, res) => {
         dep = dep || dependencias(admin, esHub);
         await atender(dep, req, res);
     });

@@ -24,9 +24,12 @@ corregí y reintentá; si falta un dato, preguntalo.
   (`adjuntos`: id nuevo y cómo citarlo). Repetirlo (aunque sea desde otra cotización del mismo proyecto) no copia de nuevo. Con `cotizado: true` lo marca cotizado.
 - **`generar_render`** `{id, prompt, referencias?, base_render?, calidad?="normal"|"alta", aspecto?, tamano?="1K"|"2K"}` →
   render con Gemini (modelo fijo: normal = Nano Banana 2.1 ~US$0,03–0,05; alta = Nano Banana Pro ~US$0,13) desde las
-  fotos originales del requerimiento (sin las cotas dibujadas); **devuelve la imagen** para que la revises. Para corregir,
+  fotos originales del requerimiento (sin las cotas dibujadas); **devuelve la imagen** para que la revises (si tarda más
+  de ~40 s, devuelve `{render, estado: "en_proceso"}`: pedila con `ver_render`). Para corregir,
   `base_render` + la corrección. Sin cotas ni textos inventados. Máximo 20 por requerimiento. Si la clave no tiene el
   modelo, da error (no usa otro).
+- **`ver_render`** `{id, render?}` → la imagen de un render cuando está listo (o su estado: `en_proceso`, `error` con el
+  motivo). Sin `render`, la lista de renders del requerimiento y cuál es la imagen del ítem.
 - **`aprobar_render`** `{id, render, cid, pid, conv, item, confirmacion: dueño:<id>}` → el render pasa a `item.img` del
   presupuesto (PDF y producción); la imagen anterior queda en las del ítem. La aprobación tiene que ser posterior al render.
 

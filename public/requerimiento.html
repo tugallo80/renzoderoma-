@@ -437,10 +437,11 @@ window.RQ = (function () {
         $('rq-renders-caja').style.display = ks.length ? 'block' : 'none';
         $('rq-renders').innerHTML = ks.map(function (k) {
             var x = ren[k], ap = x.aprobado;
-            return '<div class="adj" style="cursor:pointer;' + (ap ? 'border-color:var(--green);border-width:2px;' : '') + '" onclick="RQ.verRender(\'' + k + '\')">' +
-                '<div class="mini">' + (x.miniatura ? '<img src="' + esc(x.miniatura) + '" alt="">' : '🖼') + '</div>' +
+            var listo = !x.estado || x.estado === 'listo';
+            return '<div class="adj' + (x.estado === 'error' ? ' error' : '') + '" style="cursor:' + (listo ? 'pointer' : 'default') + ';' + (ap ? 'border-color:var(--green);border-width:2px;' : '') + '"' + (listo ? ' onclick="RQ.verRender(\'' + k + '\')"' : '') + '>' +
+                '<div class="mini">' + (x.miniatura ? '<img src="' + esc(x.miniatura) + '" alt="">' : x.estado === 'error' ? '⚠' : listo ? '🖼' : '<div class="spin"></div>') + '</div>' +
                 '<div class="nom">' + (ap ? '✅ ' + esc(ap.desc || 'Imagen del ítem') : esc((x.calidad === 'alta' ? 'Alta · ' : '') + (x.tamano || ''))) + '</div>' +
-                '<div class="det">' + esc(new Date(x.fecha || 0).toLocaleString('es-BO', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })) + '</div></div>';
+                '<div class="det">' + (x.estado === 'error' ? esc('Error: ' + (x.error || '')) + '<br>' : !listo ? 'Generando… · ' : '') + esc(new Date(x.fecha || 0).toLocaleString('es-BO', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })) + '</div></div>';
         }).join('');
     }
     async function verRender(k) {

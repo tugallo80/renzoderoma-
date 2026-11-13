@@ -1,5 +1,7 @@
 /**
- * Render con Gemini (Nano Banana) para los Requerimientos (sesión 6, entrega 5; docs/sesiones/06-render-requerimiento.md).
+ * Cliente de Gemini (Nano Banana) para los renders de los Requerimientos (sesión 6, entrega 5;
+ * docs/sesiones/06-render-requerimiento.md). Lo usa SOLO la Function renderTurno (functions/render/index.js), que tiene
+ * el secreto; el conector (rubikMcp) no tiene secretos.
  *
  * - El modelo está FIJO acá (no se elige de una lista): normal = Nano Banana 2.1, alta = Nano Banana Pro.
  * - Antes de generar se revisa con ListModels (gratis, con caché) que la clave tenga el modelo. Si no lo tiene, error claro:

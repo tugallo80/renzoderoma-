@@ -57,6 +57,12 @@
       ".write": false
     },
 
+    // ─── RENDER (sesión 6): la cola de pedidos la escribe el conector y la lee renderTurno (admin).
+    "render_cola": {
+      ".read":  false,
+      ".write": false
+    },
+
     // ─── REQUERIMIENTOS (docs/sesiones/06-render-requerimiento.md) ──
     // Lo que pidió el cliente: el hub lo lee; lo escribe solo la Function /api/requerimiento
     // (valida la entrada) y el conector MCP. Archivos en Storage requerimientos/…, solo servidor.

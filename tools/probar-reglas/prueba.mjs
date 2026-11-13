@@ -41,6 +41,12 @@ await chk('público lee portafolio', get(ref(nadie, 'portafolio')), true);
 // Agente IA: la cola solo la toca la Function; los costos los lee el hub y no los escribe nadie desde la app
 await chk('hub NO lee agente_cola', get(ref(hub, 'agente_cola')), false);
 await chk('hub NO escribe agente_cola', set(ref(hub, 'agente_cola/x'), { cid: 'c1' }), false);
+// Sesión 6: requerimientos (el hub lee, escribe solo la Function) y cola de renders (solo Functions)
+await chk('hub lee requerimientos', get(ref(hub, 'requerimientos')), true);
+await chk('hub NO escribe requerimientos', set(ref(hub, 'requerimientos/x'), { estado: 'pendiente' }), false);
+await chk('anónimo NO lee requerimientos', get(ref(anon, 'requerimientos')), false);
+await chk('hub NO lee render_cola', get(ref(hub, 'render_cola')), false);
+await chk('hub NO escribe render_cola', set(ref(hub, 'render_cola/x'), { req: 'r' }), false);
 await chk('hub lee agente_costos', get(ref(hub, 'agente_costos/2026-11/_total')), true);
 await chk('hub NO escribe agente_costos', set(ref(hub, 'agente_costos/2026-11/_total'), { usd: 0 }), false);
 await chk('anónimo NO lee agente_costos', get(ref(anon, 'agente_costos')), false);
