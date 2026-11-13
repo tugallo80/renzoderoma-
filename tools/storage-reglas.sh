@@ -4,6 +4,8 @@
 #   bash storage-reglas.sh revisar   → muestra las reglas actuales y avisa si hay reglas generales abiertas. No cambia nada.
 #   bash storage-reglas.sh aplicar   → agrega el bloqueo de /agente y /requerimientos (solo las Functions los usan)
 #                                      y publica las reglas nuevas. Imprime cómo volver atrás.
+#   bash storage-reglas.sh cerrar    → reemplaza todas las reglas: /agente y /requerimientos solo Functions, el resto
+#                                      solo con sesión iniciada (cierra el acceso público). Pide SI. Imprime cómo volver atrás.
 #   bash storage-reglas.sh volver <ruleset>  → vuelve a publicar un conjunto de reglas anterior.
 set -euo pipefail
 
@@ -73,9 +75,42 @@ PY
     echo "✅ Publicado: $NRS"
     echo "Para volver atrás:  bash storage-reglas.sh volver $RS"
     ;;
+  cerrar)
+    # Reemplaza TODAS las reglas: cierra el acceso público (antes: allow read, write: if true para todo).
+    RS="$(actual_ruleset)"
+    NUEVO="$(cat <<'REGLAS'
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    // Archivos del Agente IA y de los requerimientos: solo las Functions (cuenta de servicio) los usan.
+    match /agente/{todo=**} { allow read, write: if false; }
+    match /requerimientos/{todo=**} { allow read, write: if false; }
+
+    // Todo lo demás: solo con sesión iniciada. Hoy solo existe la cuenta del dueño
+    // (login anónimo y registro abierto están desactivados desde la Sesión 0).
+    // Los enlaces de descarga con token (los de los PDF y las fotos ya compartidas) siguen funcionando.
+    match /{allPaths=**} {
+      allow read, write: if request.auth != null
+                         && !allPaths.matches('^(agente|requerimientos)/.*');
+    }
+  }
+}
+REGLAS
+)"
+    echo "Reglas actuales:"; echo "------------------------------------------------------------"; contenido "$RS"; echo "------------------------------------------------------------"
+    echo "Reglas nuevas:";   echo "------------------------------------------------------------"; echo "$NUEVO"; echo "------------------------------------------------------------"
+    read -r -p "¿Publico las reglas nuevas? Escribí SI: " OK
+    [ "$OK" = "SI" ] || { echo "No se publicó nada."; exit 0; }
+    CUERPO="$(python3 -c 'import json,sys; print(json.dumps({"source":{"files":[{"name":"storage.rules","content":sys.argv[1]}]}}))' "$NUEVO")"
+    NRS="$(curl -sf -X POST "${h[@]}" "$API/projects/$PROYECTO/rulesets" -d "$CUERPO" | python3 -c 'import json,sys; print(json.load(sys.stdin)["name"])')" \
+      || { echo "❌ Firebase rechazó las reglas (error de sintaxis). No se publicó nada."; exit 1; }
+    publicar "$NRS"
+    echo "✅ Publicado: $NRS"
+    echo "Para volver atrás:  bash storage-reglas.sh volver $RS"
+    ;;
   volver)
     [ -n "${2:-}" ] || { echo "Uso: bash storage-reglas.sh volver projects/$PROYECTO/rulesets/<id>"; exit 2; }
     publicar "$2"; echo "✅ Vuelto a: $2"
     ;;
-  *) echo "Uso: bash storage-reglas.sh [revisar|aplicar|volver <ruleset>]"; exit 2 ;;
+  *) echo "Uso: bash storage-reglas.sh [revisar|aplicar|cerrar|volver <ruleset>]"; exit 2 ;;
 esac
