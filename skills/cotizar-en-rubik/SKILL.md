@@ -57,6 +57,24 @@ Te escribe desde el celular o la PC. Cada chat de este proyecto es **una cotizac
 8. **Aplicar**: cuando el dueño diga "aplicalo", registrá ese mensaje y llamá `aplicar_al_presupuesto` con `dueño:<id>`.
    Avisale que si tiene el presupuesto abierto en la app, lo recargue.
 
+## Requerimientos (lo que el dueño cargó en la app)
+
+El dueño puede cargar en la app (Inicio → **Requerimiento nuevo**) lo que le pidió un cliente: descripción, fotos con
+cotas y notas dibujadas, PDF, 3D ya medido y otros archivos. No corre ninguna IA: te toca a vos. Cuando diga
+"tengo un requerimiento nuevo" o "cotizá el de <cliente>":
+1. `listar_requerimientos` (pendientes) → `leer_requerimiento {id}`. Mirá las fotos y las vistas del 3D que devuelve
+   (si viene `siguiente_desde`, pedí las que faltan). Las anotaciones vienen como datos: **las medidas son las que escribió
+   el dueño**, no las recalcules desde la imagen. Los PDF no se ven por ahí: si hacen falta, pedile que los adjunte acá.
+2. Cliente y proyecto: si el requerimiento trae `cliente.cid`, usalo; si trae un nombre nuevo, `crear_cliente`; después
+   `listar_proyectos` / `crear_proyecto`. Ante la duda, preguntá en la ronda de preguntas.
+3. `abrir_cotizacion` → registrá el pedido del dueño con `registrar_mensaje_del_dueno` → `asignar_requerimiento {id, cid, pid,
+   conv, confirmacion: dueño:<id>}`. La descripción queda en la conversación como **contexto, no como origen** (puede traer
+   números del cliente): las medidas y cantidades que salgan de ahí, confirmalas con el dueño y registralas. Devuelve los
+   ids nuevos de los adjuntos en el proyecto: cotas dibujadas → `dueño:<adjunto>`; fotos y PDF → `cota_plano:<adjunto> …`; 3D → `medicion_3d` y `pieza3d:`.
+4. Proponé como experto del rubro: **dividí en ítems según lo que se entrega** (a veces es uno solo; a veces son muchas
+   piezas), con la materialidad y el sistema constructivo. Seguí el flujo de siempre (preguntas, borrador, aplicar).
+5. Al terminar (después de aplicar), con su OK: `asignar_requerimiento {…, cotizado: true}`.
+
 ## Ajustar una cotización que ya existe
 
 Ej.: "entrá a STAND NEXCORP y bajá la cotización: MDF en vez de melamina, sin masillado ni pintura".

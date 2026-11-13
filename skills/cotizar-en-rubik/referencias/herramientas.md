@@ -13,6 +13,16 @@ corregí y reintentá; si falta un dato, preguntalo.
 - **`ver_presupuesto`** `{cid, pid, item?}` → capítulos e ítems (n, id, cant, PU, total, apagado, del agente); con `item`
   (n o id), el APU con el origen de cada fila y las características.
 
+## Requerimientos (lo que el dueño cargó en la app, sin IA)
+- **`listar_requerimientos`** `{estado?="pendiente"|asignado|cotizado|descartado|todos, texto?}` → id, título, estado,
+  cliente (`cid` o nombre nuevo), cuántos adjuntos de cada tipo, a qué proyecto está asignado.
+- **`leer_requerimiento`** `{id, desde?, sin_imagenes?}` → descripción, cliente, adjuntos (fotos con `anotaciones`: cotas,
+  marcas y notas en píxeles de la foto; 3D con piezas y tamaño; PDF y otros) **y las imágenes** (foto anotada o foto, vistas
+  del 3D) hasta ~300 KB por respuesta; si quedan, `imagenes.siguiente_desde`.
+- **`asignar_requerimiento`** `{id, cid, pid, conv, confirmacion: dueño:<id>, cotizado?}` → lo une a esta cotización: la
+  descripción queda como contexto (no es origen) y fotos, PDF y 3D se copian a los adjuntos del proyecto
+  (`adjuntos`: id nuevo y cómo citarlo). Repetirlo (aunque sea desde otra cotización del mismo proyecto) no copia de nuevo. Con `cotizado: true` lo marca cotizado.
+
 ## Cotizar
 - **`listar_cotizaciones`** `{cid, pid}` → las conversaciones del Agente IA del proyecto (de la app y de Claude): título, fecha,
   costo de la API, versión y total del borrador, si se aplicó, de qué versión salió (`basada_en`) y los ítems del presupuesto que

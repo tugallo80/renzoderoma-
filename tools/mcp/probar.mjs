@@ -483,6 +483,139 @@ prueba('prueba_imagen: peso_kb agranda la imagen y se acota; entrada inválida s
     assert.equal(otra.content[0].type, 'text');
 });
 
+// ------------------------------------------------------------------ requerimientos (sesión 6, entrega 4)
+const REQ = require('../../functions/requerimientos/api.js');
+const JPGr = (n = 10) => Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.alloc(n, 7)]);
+const MED = { formato: 'rubik/1', archivo: 'stand.fbx', unidad: 'm', resumen: '1 pieza', piezas: [
+    { item: 'Mostrador demo', pieza: 'Tapa', material: 'MDF_18', cant: 1, largo: 1.8, ancho: 0.6, espesor: 0.018, tipo: 'plancha', area_m2: 2.2536, area_cara_m2: 1.08, perimetro_ml: 4.8, volumen_m3: 0.01944, acabados: [] }] };
+async function requerimientoDemo(ent, extra = {}) {
+    // la app (requerimientoApi) sí escribe en requerimientos/: mismo almacén, con su permiso de Storage
+    const app = Object.assign({}, ent.almacen, {
+        subirArchivo: async (r, buf, mime) => { assert.match(r, /^requerimientos\//); ent.almacen.archivos.set(r, { buf: Buffer.from(buf), mime }); },
+        borrarArchivo: async (r) => { ent.almacen.archivos.delete(r); },
+    });
+    const api = (b) => REQ.atender(app, b, 'renzo').then((r) => { assert.equal(r.status, 200, JSON.stringify(r.cuerpo)); return r.cuerpo; });
+    const { id } = await api({ accion: 'crear', cliente: { cid: 'cliDemo' }, descripcion: 'Mostrador de 1,80 m de largo en MDF blanco, con logo' });
+    const anot = [{ tipo: 'cota', n: 1, valor: '1,80 m', de: [10, 10], a: [500, 10] }];
+    const foto = await api({ accion: 'adjuntar', id, tipo: 'imagen', nombre: 'mostrador.jpg', datos: JPGr(500).toString('base64'), anotada: JPGr(400).toString('base64'), anotaciones: anot, ancho: 800, alto: 600, para_claude: JPGr(extra.kbClaude ? extra.kbClaude * 1024 : 50).toString('base64'), anotada_claude: JPGr(extra.kbClaude ? extra.kbClaude * 1024 : 40).toString('base64') });
+    const pdf = await api({ accion: 'adjuntar', id, tipo: 'pdf', nombre: 'plano.pdf', datos: Buffer.from('%PDF-1.4 inventado').toString('base64') });
+    const t3d = await api({ accion: 'adjuntar', id, tipo: '3d', nombre: 'stand.fbx', medicion: MED, tamano_m: [1.8, 0.9, 0.6], vistas: [{ nombre: 'isométrica', datos: JPGr(extra.kbClaude ? extra.kbClaude * 1024 : 30).toString('base64') }] });
+    const otro = await api({ accion: 'adjuntar', id, tipo: 'otro', nombre: 'planta.dwg', datos: Buffer.from('AC1032').toString('base64') });
+    return { id, foto: foto.adj, pdf: pdf.adj, t3d: t3d.adj, otro: otro.adj };
+}
+const contenido = (r) => ({ datos: JSON.parse(r.content[0].text), bloques: r.content.slice(1) });
+
+prueba('requerimientos: listar pendientes y leer con imágenes (foto anotada y vista del 3D)', async () => {
+    const ent = crearEntorno();
+    const q = await requerimientoDemo(ent);
+    const l = await ok(ent, 'listar_requerimientos', {});
+    assert.equal(l.requerimientos.length, 1);
+    assert.deepEqual(l.requerimientos[0].adjuntos, { imagen: 1, pdf: 1, '3d': 1, otro: 1 });
+    assert.equal((await ok(ent, 'listar_requerimientos', { texto: 'MOSTRADOR' })).requerimientos.length, 1);
+    assert.equal((await ok(ent, 'listar_requerimientos', { texto: 'trofeo' })).requerimientos.length, 0);
+    assert.equal((await ok(ent, 'listar_requerimientos', { estado: 'cotizado' })).requerimientos.length, 0);
+    const r = await H.llamar(ent.almacen, 'renzo', 'leer_requerimiento', { id: q.id });
+    assert.ok(!r.isError, JSON.stringify(r));
+    const { datos, bloques } = contenido(r);
+    assert.equal(datos.descripcion, 'Mostrador de 1,80 m de largo en MDF blanco, con logo');
+    assert.equal(datos.adjuntos.length, 4);
+    assert.deepEqual(datos.adjuntos[0].anotaciones[0].valor, '1,80 m');
+    const imgs = bloques.filter((b) => b.type === 'image');
+    assert.equal(imgs.length, 2);
+    // la foto que se muestra es la copia anotada "para Claude"
+    assert.equal(Buffer.from(imgs[0].data, 'base64').length, JPGr(40).length);
+    assert.match(bloques[0].text, /foto anotada/);
+    assert.match(bloques[2].text, /vista isométrica del 3D/);
+    assert.equal(datos.imagenes.siguiente_desde, undefined);
+    const sin = contenido(await H.llamar(ent.almacen, 'renzo', 'leer_requerimiento', { id: q.id, sin_imagenes: true }));
+    assert.equal(sin.bloques.length, 0);
+    assert.ok((await llamar(ent, 'leer_requerimiento', { id: 'noExiste' })).error);
+    assert.ok((await llamar(ent, 'leer_requerimiento', { id: '../x' })).error);
+});
+
+prueba('requerimientos: leer pagina las imágenes con un tope de ~300 KB por respuesta', async () => {
+    const ent = crearEntorno();
+    const q = await requerimientoDemo(ent, { kbClaude: 150 });
+    const a = contenido(await H.llamar(ent.almacen, 'renzo', 'leer_requerimiento', { id: q.id }));
+    assert.equal(a.bloques.filter((b) => b.type === 'image').length, 1);
+    assert.equal(a.datos.imagenes.siguiente_desde, 1);
+    const b = contenido(await H.llamar(ent.almacen, 'renzo', 'leer_requerimiento', { id: q.id, desde: 1 }));
+    assert.equal(b.bloques.filter((x) => x.type === 'image').length, 1);
+    assert.equal(b.datos.imagenes.siguiente_desde, undefined);
+});
+
+prueba('requerimientos: asignar pide confirmación, copia los adjuntos al proyecto y sirven como origen', async () => {
+    const ent = crearEntorno();
+    const q = await requerimientoDemo(ent);
+    const ab = await ok(ent, 'abrir_cotizacion', { cid: 'cliDemo', pid: 'proyOtro', titulo: 'Mostrador del requerimiento' });
+    const C = { cid: 'cliDemo', pid: 'proyOtro', conv: ab.conv };
+    assert.match((await llamar(ent, 'asignar_requerimiento', { ...C, id: q.id, confirmacion: 'dueño:-Kinventado' })).texto, /no hay un mensaje del dueño/);
+    assert.match((await llamar(ent, 'asignar_requerimiento', { ...C, id: q.id, confirmacion: 'sí' })).texto, /confirmacion/);
+    const m = await ok(ent, 'registrar_mensaje_del_dueno', { ...C, texto: 'cotizá el requerimiento del mostrador' });
+    const r = await ok(ent, 'asignar_requerimiento', { ...C, id: q.id, confirmacion: m.origen });
+    assert.ok(r.ok);
+    assert.equal(r.descripcion_origen, undefined);
+    // la descripción queda como contexto (aviso), no como mensaje del dueño
+    const msgs = Object.values(ent.almacen.datos.proyectos.cliDemo.proyOtro.agente.conversaciones[ab.conv].conversacion.mensajes);
+    assert.ok(msgs.some((x) => x.rol === 'aviso' && /Mostrador de 1,80 m/.test(x.texto)));
+    assert.ok(!msgs.some((x) => x.rol === 'dueno' && /Mostrador de 1,80 m/.test(x.texto)));
+    assert.deepEqual(Object.keys(r.adjuntos).sort(), [q.foto, q.pdf, q.t3d].sort());
+    assert.ok(r.sin_copiar.archivos.includes('planta.dwg'));
+    const raiz = ent.almacen.datos.proyectos.cliDemo.proyOtro.agente;
+    const fotoP = raiz.adjuntos[r.adjuntos[q.foto].adjunto];
+    assert.equal(fotoP.tipo, 'imagen'); assert.equal(fotoP.anotaciones[0].valor, '1,80 m');
+    assert.match(fotoP.ruta, /^agente\/cliDemo\/proyOtro\//);
+    assert.ok(ent.almacen.archivos.has(fotoP.ruta) && ent.almacen.archivos.has(fotoP.anotada_ruta));
+    const d3 = raiz.adjuntos[r.adjuntos[q.t3d].adjunto];
+    assert.ok(ent.almacen.archivos.has(d3.medicion_ruta) && ent.almacen.archivos.has(d3.vistas_rutas[0]));
+    const msg = raiz.conversaciones && Object.values(raiz.conversaciones)[0];
+    const req = ent.almacen.datos.requerimientos[q.id];
+    assert.equal(req.estado, 'asignado'); assert.equal(req.pid, 'proyOtro'); assert.equal(req.conv, ab.conv);
+    // medicion_3d lee el 3D copiado
+    const med = await ok(ent, 'medicion_3d', { ...C, adjunto: r.adjuntos[q.t3d].adjunto });
+    assert.ok(JSON.stringify(med).includes('Tapa'));
+    // la cota dibujada en la foto vale como origen dueño:<adjunto>; la descripción, como dueño:<mensaje>
+    const b = await ok(ent, 'armar_borrador', { ...C, operaciones: [
+        { op: 'capitulo', nombre: 'Mostrador' },
+        { op: 'item', capitulo: 'Mostrador', desc: 'Mostrador', und: 'pza', cant: 1, cant_origen: m.origen, caracteristicas: [{ texto: 'Mostrador en MDF blanco' }] },
+        { op: 'fila', item: 'Mostrador', tipo: 'mat', d: 'MDF 18', clave: 'MDF_18', q: 1.8, origen_q: `dueño:${r.adjuntos[q.foto].adjunto}` },
+    ] });
+    assert.equal(b.rechazadas.length, 0, JSON.stringify(b.rechazadas));
+    // repetir (también desde otra cotización del mismo proyecto): no copia de nuevo; otro proyecto: no
+    const r2 = await ok(ent, 'asignar_requerimiento', { ...C, id: q.id, confirmacion: m.origen });
+    assert.ok(r2.ya_asignado);
+    const abB = await ok(ent, 'abrir_cotizacion', { cid: 'cliDemo', pid: 'proyOtro', titulo: 'otra del mismo proyecto' });
+    const mB = await ok(ent, 'registrar_mensaje_del_dueno', { cid: 'cliDemo', pid: 'proyOtro', conv: abB.conv, texto: 'asignalo' });
+    const r3 = await ok(ent, 'asignar_requerimiento', { cid: 'cliDemo', pid: 'proyOtro', conv: abB.conv, id: q.id, confirmacion: mB.origen });
+    assert.ok(r3.ya_asignado && r3.aviso);
+    assert.equal(Object.keys(raiz.adjuntos).length, 3);
+    // el conector nunca escribe en la carpeta de los requerimientos
+    await assert.rejects(ent.almacen.subirArchivo(`requerimientos/${q.id}/x/y.jpg`, JPGr(), 'image/jpeg'), /fuera/);
+    const ab2 = await ok(ent, 'abrir_cotizacion', { cid: 'cliDemo', pid: 'proyDemo', titulo: 'otra' });
+    const m2 = await ok(ent, 'registrar_mensaje_del_dueno', { cid: 'cliDemo', pid: 'proyDemo', conv: ab2.conv, texto: 'asignalo acá' });
+    assert.match((await llamar(ent, 'asignar_requerimiento', { cid: 'cliDemo', pid: 'proyDemo', conv: ab2.conv, id: q.id, confirmacion: m2.origen })).texto, /ya está asignado a otro proyecto/);
+    // marcar cotizado
+    const m3 = await ok(ent, 'registrar_mensaje_del_dueno', { ...C, texto: 'listo, quedó' });
+    await ok(ent, 'asignar_requerimiento', { ...C, id: q.id, confirmacion: m3.origen, cotizado: true });
+    assert.equal(ent.almacen.datos.requerimientos[q.id].estado, 'cotizado');
+    assert.equal((await ok(ent, 'listar_requerimientos', { estado: 'cotizado' })).requerimientos.length, 1);
+});
+
+prueba('requerimientos: descartado no se asigna; el conector no toca otras carpetas de Storage', async () => {
+    const ent = crearEntorno();
+    const q = await requerimientoDemo(ent);
+    await REQ.atender(ent.almacen, { accion: 'descartar', id: q.id }, 'renzo');
+    const ab = await ok(ent, 'abrir_cotizacion', { cid: 'cliDemo', pid: 'proyOtro', titulo: 'x' });
+    const C = { cid: 'cliDemo', pid: 'proyOtro', conv: ab.conv };
+    const m = await ok(ent, 'registrar_mensaje_del_dueno', { ...C, texto: 'cotizalo' });
+    assert.match((await llamar(ent, 'asignar_requerimiento', { ...C, id: q.id, confirmacion: m.origen })).texto, /descartado/);
+    // una confirmación copiada de otra versión no vale
+    ent.almacen.datos.proyectos.cliDemo.proyOtro.agente.conversaciones[ab.conv].conversacion.mensajes[m.id].copiado_de = 'otra';
+    await REQ.atender(ent.almacen, { accion: 'reabrir', id: q.id }, 'renzo');
+    assert.match((await llamar(ent, 'asignar_requerimiento', { ...C, id: q.id, confirmacion: m.origen })).texto, /otra versión/);
+    await assert.rejects(ent.almacen.subirArchivo('compras/x/y.jpg', JPGr(), 'image/jpeg'), /fuera/);
+});
+
 // ------------------------------------------------------------------ correr
 let bien = 0;
 for (const [n, fn] of pruebas) {

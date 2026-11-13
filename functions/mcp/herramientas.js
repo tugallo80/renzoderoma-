@@ -704,6 +704,9 @@ const HERRAMIENTAS = [
     },
 ];
 
+// ---------- sesión 6: Requerimientos (lo que el dueño cargó en la app, sin IA) — functions/mcp/requerimientos.js
+HERRAMIENTAS.push(...require("./requerimientos")({ falla, proyecto, acotar, RUTAS }));
+
 // normaliza: input_schema (formato del agente) → inputSchema (MCP)
 HERRAMIENTAS.forEach((h) => {
     if (h.def.input_schema && !h.def.inputSchema) h.def.inputSchema = h.def.input_schema;

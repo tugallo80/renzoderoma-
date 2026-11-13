@@ -129,6 +129,7 @@
         <div class="acciones">
             <button class="btn btn-sec" id="rq-descartar" onclick="RQ.descartar()" style="display:none;"><i class="ph-bold ph-trash"></i> Descartar</button>
             <button class="btn btn-sec" id="rq-reabrir" onclick="RQ.reabrir()" style="display:none;"><i class="ph-bold ph-arrow-counter-clockwise"></i> Reabrir</button>
+            <button class="btn btn-sec" id="rq-claude" onclick="RQ.pedirAClaude()" style="display:none;color:#b4532f;border-color:#d97757;" title="Copia el pedido y abre el proyecto de Claude"><i class="ph-bold ph-sparkle"></i> Pedile a Claude</button>
             <button class="btn btn-prim" id="rq-guardar" onclick="RQ.guardar()"><i class="ph-bold ph-floppy-disk"></i> Guardar</button>
         </div>
         <div class="nota" id="rq-estado-txt"></div>
@@ -223,6 +224,7 @@ window.RQ = (function () {
         var desc = r.estado === 'descartado';
         $('rq-descartar').style.display = r.id && !desc ? 'inline-flex' : 'none';
         $('rq-reabrir').style.display = desc ? 'inline-flex' : 'none';
+        $('rq-claude').style.display = r.id && (r.estado === 'pendiente' || r.estado === 'asignado') ? 'inline-flex' : 'none';
         $('rq-guardar').style.display = desc ? 'none' : 'inline-flex';
         ['rq-cliente', 'rq-cliente-nuevo', 'rq-desc', 'rq-mic'].forEach(function (id) { $(id).disabled = desc; });
         $('rq-zona').style.display = desc ? 'none' : 'block';
@@ -290,6 +292,23 @@ window.RQ = (function () {
     async function reabrir() {
         if (!actual || !actual.id) return;
         try { await llamar({ accion: 'reabrir', id: actual.id }); aviso('Reabierto'); } catch (e) { alert(e.message); }
+    }
+
+    /** Copia el pedido para pegar en el chat del proyecto RUBIK AGENTE APP y abre Claude (el dueño lo envía). */
+    async function pedirAClaude() {
+        if (!actual || !actual.id) return;
+        if (subiendo.some(function (p) { return p.estado === 'procesando'; })) return aviso('Esperá a que terminen de subir los adjuntos.');
+        await guardar();
+        var r = todos[actual.id] || actual;
+        var cli = r.cliente ? (r.cliente.nombre || r.cliente.cid) + (r.cliente.nuevo ? ' (cliente nuevo)' : '') : 'sin cliente asignado';
+        var texto = 'Tengo un requerimiento nuevo en la app: "' + (r.titulo || 'Requerimiento') + '" · ' + cli + ' (id ' + actual.id + ').\n' +
+            'Leelo con leer_requerimiento, mirá las fotos y proponé cómo resolverlo y cotizarlo.';
+        var copiado = false;
+        try { await navigator.clipboard.writeText(texto); copiado = true; } catch (e) { copiado = false; }
+        if (!copiado) { window.prompt('Copiá este texto y pegalo en el chat de Claude:', texto); }
+        else aviso('Copiado ✓ Pegalo en el chat nuevo de Claude.');
+        if (window.RubikClaude) setTimeout(function () { window.RubikClaude.abrir(); }, copiado ? 700 : 0);
+        else alert('Abrí el proyecto RUBIK AGENTE APP en Claude y pegá el texto.');
     }
 
     // ------------------------------------------------------------------ dictado (del navegador; sin IA)
@@ -607,7 +626,7 @@ window.RQ = (function () {
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', iniciar); else iniciar();
 
     return {
-        nuevo: nuevo, abrir: abrir, guardar: guardar, descartar: descartar, reabrir: reabrir, cambioCliente: cambioCliente, mic: mic,
+        nuevo: nuevo, abrir: abrir, guardar: guardar, pedirAClaude: pedirAClaude, descartar: descartar, reabrir: reabrir, cambioCliente: cambioCliente, mic: mic,
         archivos: archivos, anotar: anotar, quitar: quitar, filtro: filtro,
         reintentar: function (c) { var p = subiendo.find(function (x) { return x.clave === c; }); if (p && p.reintentar) p.reintentar(p); },
         descartarError: function (c) { subiendo = subiendo.filter(function (x) { return x.clave !== c; }); pintarAdjuntos(); }

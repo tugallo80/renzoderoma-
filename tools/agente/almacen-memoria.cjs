@@ -1,7 +1,7 @@
 // Almacén en memoria con la misma interfaz que functions/agente/almacen.js (y sus mismas rutas permitidas).
 const { verificarRuta: verificarRutaBase, verificarRutaArchivo } = require("../../functions/agente/almacen.js");
 
-function crearAlmacenMemoria(inicial, rutas, carpetas) {
+function crearAlmacenMemoria(inicial, rutas, carpetas, soloLectura) {
     const verificarRuta = (r) => verificarRutaBase(r, rutas);
     const raiz = JSON.parse(JSON.stringify(inicial || {}));
     const archivos = new Map();
@@ -32,7 +32,7 @@ function crearAlmacenMemoria(inicial, rutas, carpetas) {
         },
         ahora() { reloj += 1; return reloj; },
         async subirArchivo(r, buf, mime) { archivos.set(verificarRutaArchivo(r, carpetas), { buf: Buffer.from(buf), mime }); },
-        async bajarArchivo(r) { const f = archivos.get(verificarRutaArchivo(r, carpetas)); if (!f) throw new Error("no existe " + r); return f.buf; },
+        async bajarArchivo(r) { const f = archivos.get(verificarRutaArchivo(r, carpetas && soloLectura ? carpetas.concat(soloLectura) : carpetas)); if (!f) throw new Error("no existe " + r); return f.buf; },
         async borrarArchivo(r) { archivos.delete(verificarRutaArchivo(r, carpetas)); },
     };
     return a;
