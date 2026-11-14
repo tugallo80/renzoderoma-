@@ -73,8 +73,12 @@ corregí y reintentá; si falta un dato, preguntalo.
   **propuesta** con la lista exacta y devuelve su id. Apagar = el ojo del presupuesto: no suma ni sale en el PDF, **no se borra**.
 - **`confirmar_propuesta`** `{cid, pid, conv, propuesta, confirmacion: "dueño:<id>"}` → paso 2: solo con la respuesta del dueño
   registrada **después** de la propuesta. Verifica que el presupuesto no haya cambiado, guarda respaldo y avisa en la app.
-- **`guardar_en_base`** `{cid, pid, conv, nodo, clave, datos, confirmacion}` → material, mano de obra, oficio, rendimiento o
-  receta nuevos o corregidos, con historial. Solo con la confirmación del dueño.
+- **`guardar_en_base`** `{cid, pid, conv, nodo, clave, datos, confirmacion, reemplaza?}` → material, mano de obra, oficio,
+  rendimiento o receta nuevos o corregidos, con historial. Solo con la confirmación del dueño.
+  **Actualizar precios de un proveedor:** usá la clave tal cual la da `buscar_base` (con espacios si los tiene): se
+  actualiza ese registro, no se crea otro. El precio nuevo reemplaza al anterior: si el mismo producto está repetido
+  con otras claves (la respuesta los trae en `posibles_repetidos`), mostráselos al dueño y, con su sí, pasalos en
+  `reemplaza` para borrarlos (quedan en el historial). Nunca dejes dos registros del mismo producto con precios distintos.
 - **`memoria`** `{accion: anotar|leer, tipo: nota|norma, texto?}` → notas del dueño y normas del taller, compartidas entre
   proyectos (las mismas del Agente IA de la app). Borrar: en la app (⚙).
 - **`prueba_imagen`** `{peso_kb?}` → solo para probar el conector cuando el dueño lo pida: devuelve una imagen de
