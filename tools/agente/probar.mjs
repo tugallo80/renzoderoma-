@@ -576,6 +576,35 @@ prueba('guardar_en_base: sin confirmación del dueño no guarda; con ella guarda
     assert.equal(cliente.pedidos[3].messages.at(-1).content[0].is_error, true, 'receta con mano de obra inexistente');
 });
 
+prueba('guardar_en_base: actualiza la clave con espacios (no crea repetido) y reemplaza borra los repetidos', async () => {
+    const alm = await proyectoConBase();
+    alm.datos.base_datos.materiales['LIJA GRANO 220'] = { n: 'LIJA GRANO 220', u: 'hoja', p: 13 };
+    alm.datos.base_datos.materiales['PINTURA DUCO BLANCO'] = { n: 'PINTURA DUCO BLANCO', u: 'ltr', p: 85, proveedor: 'FERRETERIA X', mo_receta: [{ mo: 'PINTADO', medida: 'm2', factor: 1 }] };
+    alm.datos.base_datos.materiales.PINTURA_DUCO_BLANCO = { n: 'PINTURA DUCO BLANCO', u: 'ltr', p: 80 };
+    const p1 = await turnoListo(alm, 'La lija 220 ahora sale 5 la hoja y el duco blanco 80, dejá uno solo');
+    const msg = Object.keys(alm.datos.proyectos[CID][PID].agente.conversacion.mensajes)[0];
+    const cliente = clienteFalso([
+        herramienta('guardar_en_base', { nodo: 'materiales', clave: 'LIJA GRANO 220', datos: { p: 5 }, confirmacion: `dueño:${msg}` }, 't1'),
+        herramienta('guardar_en_base', { nodo: 'materiales', clave: 'PINTURA_DUCO_BLANCO', datos: { p: 80 }, confirmacion: `dueño:${msg}` }, 't2'),
+        herramienta('guardar_en_base', { nodo: 'materiales', clave: 'PINTURA_DUCO_BLANCO', datos: { p: 80 }, reemplaza: ['PINTURA DUCO BLANCO'], confirmacion: `dueño:${msg}` }, 't3'),
+        herramienta('guardar_en_base', { nodo: 'materiales', clave: 'LIJA GRANO 220', datos: { p: 5 }, reemplaza: ['NO EXISTE'], confirmacion: `dueño:${msg}` }, 't4'),
+        texto('Listo.'),
+    ]);
+    await ejecutarTurno({ almacen: alm, cliente }, p1);
+    const M = alm.datos.base_datos.materiales;
+    assert.equal(M['LIJA GRANO 220'].p, 5);
+    assert.equal(M.LIJA_GRANO_220, undefined, 'no crea el repetido con guion bajo');
+    const r2 = JSON.parse(cliente.pedidos[2].messages.at(-1).content[0].content);
+    assert.equal(r2.posibles_repetidos[0].clave, 'PINTURA DUCO BLANCO');
+    assert.equal(M['PINTURA DUCO BLANCO'], undefined, 'reemplaza borra el viejo');
+    assert.equal(M.PINTURA_DUCO_BLANCO.p, 80);
+    assert.equal(M.PINTURA_DUCO_BLANCO.proveedor, 'FERRETERIA X', 'hereda el proveedor del borrado');
+    assert.equal(M.PINTURA_DUCO_BLANCO.mo_receta[0].mo, 'PINTADO', 'hereda la receta del borrado');
+    assert.equal(M.PINTURA_DUCO_BLANCO.u, 'ltr');
+    assert.ok(Object.values(alm.datos.base_datos.historial_cambios).some((h) => h.borrado && h.borrado.p === 85));
+    assert.equal(cliente.pedidos[4].messages.at(-1).content[0].is_error, true, 'reemplaza con clave inexistente');
+});
+
 prueba('escala_3d: con una cota del plano escala todas las piezas; con un supuesto no', async () => {
     const alm = await proyectoConBase();
     const id3d = await adjuntar3D(alm);
