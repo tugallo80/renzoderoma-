@@ -387,9 +387,24 @@ Operaciones (campo "op"):
             Object.keys(cambios).forEach((k) => { resumen[k] = { antes: antes && antes[k] !== undefined ? antes[k] : null, despues: cambios[k] === undefined ? null : cambios[k] }; });
             await ctx.almacen.agregar("base_datos/historial_cambios", { ruta, que: `agente: ${e.nodo}`, cambios: JSON.parse(JSON.stringify(resumen)), fecha: ctx.almacen.ahora(), por: ctx.uid || null, confirmacion: o.texto, proyecto: `${ctx.cid}/${ctx.pid}` });
             const borrados = [];
+            // Antes de borrar los repetidos, el que queda hereda lo que solo tenían ellos (receta de mano de obra, espesor,
+            // plancha, proveedor…). Nombre, unidad y precio quedan los del que se guarda.
+            const viejos = {};
+            for (const k of reemplaza) viejos[k] = await ctx.almacen.leer(`base_datos/${e.nodo}/${k}`);
+            const tiene = Object.assign({}, antes || {}, cambios);
+            const heredados = {};
+            Object.keys(viejos).forEach((k) => Object.keys(viejos[k] || {}).forEach((c) => {
+                if (["n", "u", "p", "falta_precio", "fecha_mod", "origen"].includes(c)) return;
+                if ((tiene[c] === undefined || tiene[c] === null) && heredados[c] === undefined) heredados[c] = viejos[k][c];
+            }));
+            if (heredados.mo_receta !== undefined) delete heredados.mo_receta_ninguna;
+            if (Object.keys(heredados).length) {
+                await ctx.almacen.actualizar(ruta, heredados);
+                await ctx.almacen.agregar("base_datos/historial_cambios", { ruta, que: `agente: ${e.nodo} hereda datos de ${Object.keys(viejos).join(", ")}`, cambios: JSON.parse(JSON.stringify(Object.fromEntries(Object.keys(heredados).map((c) => [c, { antes: null, despues: heredados[c] }])))), fecha: ctx.almacen.ahora(), por: ctx.uid || null, confirmacion: o.texto, proyecto: `${ctx.cid}/${ctx.pid}` });
+            }
             for (const k of reemplaza) {
                 const rv = `base_datos/${e.nodo}/${k}`;
-                const viejo = await ctx.almacen.leer(rv);
+                const viejo = viejos[k];
                 if (!viejo) continue;
                 await ctx.almacen.borrar(rv);
                 await ctx.almacen.agregar("base_datos/historial_cambios", { ruta: rv, que: `agente: ${e.nodo} reemplazado por ${clave}`, borrado: JSON.parse(JSON.stringify(viejo)), fecha: ctx.almacen.ahora(), por: ctx.uid || null, confirmacion: o.texto, proyecto: `${ctx.cid}/${ctx.pid}` });
@@ -398,6 +413,7 @@ Operaciones (campo "op"):
             ctx._base = null;
             const r = { ok: true, guardado: ruta, origen: `base:${e.nodo === "receta" ? "materiales" : e.nodo}/${clave}` };
             if (borrados.length) r.reemplazados = borrados;
+            if (Object.keys(heredados).length) r.heredo = Object.keys(heredados);
             if (e.nodo === "materiales" || e.nodo === "mano_obra") {
                 const nombre = norm(cambios.n || (antes && antes.n) || "");
                 const rep = nombre ? Object.keys(dicNodo).filter((k) => k !== clave && !reemplaza.includes(k) && norm(dicNodo[k] && dicNodo[k].n) === nombre)
