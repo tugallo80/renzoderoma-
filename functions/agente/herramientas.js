@@ -49,6 +49,23 @@ async function cargarMedicion(ctx, id) {
 
 // ---------------------------------------------------------------- contexto para validar orígenes
 const NODOS = ["materiales", "mano_obra", "oficios", "rendimientos", "equivalencias_vw"];
+const norm = (t) => String(t || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9]+/g, " ").trim();
+
+/**
+ * Clave de la base a usar para guardar: si el registro ya existe (tal cual, con espacios, o con espacios ↔ guiones bajos),
+ * la suya, para ACTUALIZARLO en vez de crear un repetido. Si es nuevo: MAYÚSCULAS_CON_GUIONES.
+ */
+function resolverClave(dic, crudo) {
+    const t = String(crudo == null ? "" : crudo).trim();
+    if (!t) return { clave: "", existe: false };
+    const segura = t.replace(/[.#$[\]/]+/g, "_").slice(0, 80);
+    const nueva = t.toUpperCase().replace(/[.#$[\]/\s]+/g, "_").replace(/_+/g, "_").replace(/^_|_$/g, "").slice(0, 80);
+    for (const k of [segura, segura.toUpperCase(), nueva]) if (k && dic && Object.prototype.hasOwnProperty.call(dic, k)) return { clave: k, existe: true };
+    const comp = (k) => String(k).toUpperCase().replace(/[.#$[\]/\s_]+/g, "_").replace(/^_|_$/g, "");
+    const hit = Object.keys(dic || {}).find((k) => comp(k) === nueva);
+    return hit ? { clave: hit, existe: true } : { clave: nueva, existe: false };
+}
+
 async function base(ctx) {
     if (!ctx._base) {
         ctx._base = {};
@@ -306,12 +323,13 @@ Operaciones (campo "op"):
     {
         def: {
             name: "guardar_en_base",
-            description: "Guarda en la base algo NUEVO o una corrección que el dueño CONFIRMÓ explícitamente en este chat: un material (con o sin precio), una mano de obra, un oficio con su costo por jornal, un rendimiento o la receta de mano de obra de un material. Deja historial del cambio. Sin la confirmación del dueño (su id de mensaje) no se guarda nada.",
+            description: "Guarda en la base algo NUEVO o una corrección que el dueño CONFIRMÓ explícitamente en este chat: un material (con o sin precio), una mano de obra, un oficio con su costo por jornal, un rendimiento o la receta de mano de obra de un material. Deja historial del cambio. Sin la confirmación del dueño (su id de mensaje) no se guarda nada.\nPara ACTUALIZAR un precio usá la clave tal cual la devolvió buscar_base (lo que va después de base:<nodo>/): se actualiza ese mismo registro, no se crea otro. Si el mismo producto está repetido con otras claves, pasalas en reemplaza: se borran (con historial) y queda solo el que guardás. La respuesta trae posibles_repetidos (mismo nombre, otra clave): mostráselos al dueño y, si confirma, volvé a llamar con reemplaza.",
             input_schema: {
                 type: "object",
                 properties: {
                     nodo: { type: "string", enum: ["materiales", "mano_obra", "oficios", "rendimientos", "receta"] },
-                    clave: { type: "string", description: "Clave (MAYÚSCULAS_CON_GUIONES). Para receta: la clave del material." },
+                    clave: { type: "string", description: "Clave del registro. Si ya existe, la de buscar_base tal cual (con espacios si los tiene). Si es nuevo: MAYÚSCULAS_CON_GUIONES. Para receta: la clave del material." },
+                    reemplaza: { type: "array", items: { type: "string" }, description: "Solo materiales/mano_obra: claves de registros repetidos del mismo producto que este reemplaza. Se borran después de guardar. Requiere la confirmación del dueño." },
                     datos: { type: "object", description: "materiales/mano_obra: {n, u, p?, espesor_mm?, plancha_largo?, plancha_ancho?, barra_largo?} · oficios: {nombre, costo_jornal?} · rendimientos: {oficio, indicador, por_jornal, trabajo?} · receta: {pasos: [{mo, medida, factor?}]} o {ninguna: true}" },
                     confirmacion: { type: "string", description: "dueño:<id del mensaje donde el dueño lo confirma>." },
                 },
@@ -323,8 +341,15 @@ Operaciones (campo "op"):
             const v = await contexto(ctx);
             const o = N.parsearOrigen(e.confirmacion);
             if (!o || o.tipo !== "dueño" || !v.mensajesDueno[o.ref.split(/\s/)[0]]) throw new Error("hace falta la confirmación del dueño: dueño:<id de su mensaje>");
-            const clave = String(e.clave).toUpperCase().trim().replace(/[.#$[\]/\s]+/g, "_").slice(0, 80);
+            const dicNodo = v.base[e.nodo === "receta" ? "materiales" : e.nodo] || {};
+            const { clave } = resolverClave(dicNodo, e.clave);
             if (!clave) throw new Error("clave inválida");
+            const reemplaza = Array.isArray(e.reemplaza) ? [...new Set(e.reemplaza.map((k) => resolverClave(dicNodo, k)).filter((r) => r.existe && r.clave !== clave).map((r) => r.clave))] : [];
+            if (reemplaza.length && !(e.nodo === "materiales" || e.nodo === "mano_obra")) throw new Error("reemplaza solo vale para materiales y mano_obra");
+            if (Array.isArray(e.reemplaza) && e.reemplaza.length !== reemplaza.length) {
+                const malas = e.reemplaza.filter((k) => { const r = resolverClave(dicNodo, k); return !r.existe || r.clave === clave; });
+                throw new Error("en reemplaza hay claves que no existen o son la misma que guardás: " + malas.join(", "));
+            }
             const d = e.datos || {};
             const numOk = (x) => x == null || (isFinite(parseFloat(x)) && parseFloat(x) >= 0);
             let ruta, cambios = {};
@@ -361,8 +386,25 @@ Operaciones (campo "op"):
             const resumen = {};
             Object.keys(cambios).forEach((k) => { resumen[k] = { antes: antes && antes[k] !== undefined ? antes[k] : null, despues: cambios[k] === undefined ? null : cambios[k] }; });
             await ctx.almacen.agregar("base_datos/historial_cambios", { ruta, que: `agente: ${e.nodo}`, cambios: JSON.parse(JSON.stringify(resumen)), fecha: ctx.almacen.ahora(), por: ctx.uid || null, confirmacion: o.texto, proyecto: `${ctx.cid}/${ctx.pid}` });
+            const borrados = [];
+            for (const k of reemplaza) {
+                const rv = `base_datos/${e.nodo}/${k}`;
+                const viejo = await ctx.almacen.leer(rv);
+                if (!viejo) continue;
+                await ctx.almacen.borrar(rv);
+                await ctx.almacen.agregar("base_datos/historial_cambios", { ruta: rv, que: `agente: ${e.nodo} reemplazado por ${clave}`, borrado: JSON.parse(JSON.stringify(viejo)), fecha: ctx.almacen.ahora(), por: ctx.uid || null, confirmacion: o.texto, proyecto: `${ctx.cid}/${ctx.pid}` });
+                borrados.push({ clave: k, n: viejo.n || null, u: viejo.u || null, p: viejo.p != null ? viejo.p : null });
+            }
             ctx._base = null;
-            return { ok: true, guardado: ruta, origen: `base:${e.nodo === "receta" ? "materiales" : e.nodo}/${clave}` };
+            const r = { ok: true, guardado: ruta, origen: `base:${e.nodo === "receta" ? "materiales" : e.nodo}/${clave}` };
+            if (borrados.length) r.reemplazados = borrados;
+            if (e.nodo === "materiales" || e.nodo === "mano_obra") {
+                const nombre = norm(cambios.n || (antes && antes.n) || "");
+                const rep = nombre ? Object.keys(dicNodo).filter((k) => k !== clave && !reemplaza.includes(k) && norm(dicNodo[k] && dicNodo[k].n) === nombre)
+                    .map((k) => ({ clave: k, n: dicNodo[k].n, u: dicNodo[k].u || null, p: dicNodo[k].p != null ? dicNodo[k].p : null })) : [];
+                if (rep.length) { r.posibles_repetidos = rep; r.aviso = "Hay otros registros con el mismo nombre. Si el dueño confirma que son el mismo producto, volvé a llamar con reemplaza para dejar uno solo."; }
+            }
+            return r;
         },
     },
     {
