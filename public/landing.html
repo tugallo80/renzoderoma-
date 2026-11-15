@@ -218,6 +218,22 @@
     .service-card h3 { font-size: 18px; font-weight: 700; margin-bottom: 10px; }
     .service-card p { color: var(--muted); font-size: 14px; line-height: 1.6; }
 
+    /* ── VISOR DE FOTOS DEL PORTAFOLIO ─────────────────── */
+    #visor { position: fixed; inset: 0; z-index: 1000; background: rgba(0,0,0,.94); display: none; flex-direction: column; align-items: center; justify-content: center; padding: 56px 12px 16px; touch-action: pan-y; }
+    #visor.on { display: flex; }
+    #visor img { max-width: 100%; max-height: calc(100vh - 190px); object-fit: contain; border-radius: 10px; box-shadow: 0 10px 40px rgba(0,0,0,.6); user-select: none; -webkit-user-drag: none; }
+    #visor .v-info { max-width: 820px; text-align: center; color: #fff; margin-top: 14px; padding: 0 8px; }
+    #visor .v-info h3 { margin: 0 0 6px; font-size: 18px; }
+    #visor .v-info p { margin: 0; color: rgba(255,255,255,.75); font-size: 14px; line-height: 1.5; }
+    #visor .v-cat { display: inline-block; margin-bottom: 8px; font-size: 11px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: var(--orange); }
+    #visor button { position: absolute; background: rgba(255,255,255,.12); border: 1px solid rgba(255,255,255,.2); color: #fff; border-radius: 50%; width: 46px; height: 46px; font-size: 22px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+    #visor button:hover { background: rgba(255,255,255,.22); }
+    #visor .v-cerrar { top: 12px; right: 12px; }
+    #visor .v-ant { left: 12px; top: 50%; transform: translateY(-50%); }
+    #visor .v-sig { right: 12px; top: 50%; transform: translateY(-50%); }
+    #visor .v-cuenta { position: absolute; top: 24px; left: 20px; color: rgba(255,255,255,.6); font-size: 13px; }
+    @media (max-width: 600px) { #visor .v-ant, #visor .v-sig { top: auto; bottom: 14px; transform: none; } #visor img { max-height: calc(100vh - 230px); } }
+
     /* ── PORTAFOLIO ──────────────────────────────────── */
     #portafolio { background: var(--bg); }
     .portfolio-filter {
@@ -619,13 +635,14 @@
         </div>`;
       return;
     }
+    portItems = items;
     grid.innerHTML = items.map((item, i) => {
       const catLabel = CAT_LABELS[item.categoria] || item.categoria || '';
       const imgContent = item.imagen
         ? `<img src="${item.imagen}" alt="${item.titulo}" loading="lazy">`
         : `<div class="portfolio-placeholder">🏗️</div>`;
       return `
-        <div class="portfolio-card" data-cat="${item.categoria || 'otro'}" style="transition-delay:${Math.min(i,12) * 50}ms">
+        <div class="portfolio-card" data-i="${i}" role="button" tabindex="0" aria-label="Ver ${item.titulo || 'proyecto'}" data-cat="${item.categoria || 'otro'}" style="transition-delay:${Math.min(i,12) * 50}ms">
           ${imgContent}
           ${catLabel ? `<div class="portfolio-cat-tag">${catLabel}</div>` : ''}
           <div class="portfolio-overlay">
@@ -660,6 +677,60 @@
           <p>Proyectos próximamente</p>
         </div>`;
     });
+
+  // ── Visor de fotos: tocar una tarjeta abre la foto grande ──
+  let portItems = [], visorLista = [], visorPos = 0;
+  const visor = document.createElement('div');
+  visor.id = 'visor';
+  visor.setAttribute('role', 'dialog');
+  visor.setAttribute('aria-modal', 'true');
+  visor.innerHTML = '<span class="v-cuenta"></span><button class="v-cerrar" aria-label="Cerrar">✕</button>' +
+    '<button class="v-ant" aria-label="Anterior">‹</button><img alt=""><button class="v-sig" aria-label="Siguiente">›</button>' +
+    '<div class="v-info"><span class="v-cat"></span><h3></h3><p></p></div>';
+  document.body.appendChild(visor);
+  function visorMostrar() {
+    const it = portItems[visorLista[visorPos]] || {};
+    const img = visor.querySelector('img');
+    img.src = it.imagen || ''; img.alt = it.titulo || 'Proyecto';
+    visor.querySelector('.v-cat').textContent = CAT_LABELS[it.categoria] || it.categoria || '';
+    visor.querySelector('h3').textContent = it.titulo || '';
+    visor.querySelector('p').textContent = it.descripcion || '';
+    visor.querySelector('.v-cuenta').textContent = visorLista.length > 1 ? (visorPos + 1) + ' / ' + visorLista.length : '';
+    const varios = visorLista.length > 1;
+    visor.querySelector('.v-ant').style.display = varios ? '' : 'none';
+    visor.querySelector('.v-sig').style.display = varios ? '' : 'none';
+  }
+  function visorAbrir(i) {
+    // Solo los proyectos visibles con el filtro actual y con foto
+    visorLista = [...document.querySelectorAll('.portfolio-card:not(.hidden)')].map(c => +c.dataset.i).filter(k => portItems[k] && portItems[k].imagen);
+    visorPos = Math.max(0, visorLista.indexOf(i));
+    if (!visorLista.length) return;
+    visorMostrar();
+    visor.classList.add('on');
+    document.body.style.overflow = 'hidden';
+  }
+  function visorCerrar() { visor.classList.remove('on'); document.body.style.overflow = ''; }
+  function visorMover(d) { if (visorLista.length < 2) return; visorPos = (visorPos + d + visorLista.length) % visorLista.length; visorMostrar(); }
+  visor.querySelector('.v-cerrar').onclick = visorCerrar;
+  visor.querySelector('.v-ant').onclick = (e) => { e.stopPropagation(); visorMover(-1); };
+  visor.querySelector('.v-sig').onclick = (e) => { e.stopPropagation(); visorMover(1); };
+  visor.addEventListener('click', (e) => { if (e.target === visor) visorCerrar(); });
+  document.addEventListener('keydown', (e) => {
+    if (!visor.classList.contains('on')) return;
+    if (e.key === 'Escape') visorCerrar();
+    if (e.key === 'ArrowLeft') visorMover(-1);
+    if (e.key === 'ArrowRight') visorMover(1);
+  });
+  let toqueX = null;
+  visor.addEventListener('touchstart', (e) => { toqueX = e.touches.length === 1 ? e.touches[0].clientX : null; }, { passive: true });
+  visor.addEventListener('touchend', (e) => {
+    if (toqueX === null) return;
+    const dx = e.changedTouches[0].clientX - toqueX; toqueX = null;
+    if (Math.abs(dx) > 50) visorMover(dx < 0 ? 1 : -1);
+  });
+  const gridEl = document.getElementById('portfolio-grid');
+  gridEl.addEventListener('click', (e) => { const c = e.target.closest('.portfolio-card'); if (c) visorAbrir(+c.dataset.i); });
+  gridEl.addEventListener('keydown', (e) => { const c = e.target.closest('.portfolio-card'); if (c && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); visorAbrir(+c.dataset.i); } });
 
   // ── Portfolio filter ───────────────────────────────────────
   document.getElementById('portfolio-filter').addEventListener('click', e => {
