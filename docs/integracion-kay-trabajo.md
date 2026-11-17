@@ -6,6 +6,8 @@ repo `tugallo80/renzoderoma-`, proyecto `rubik-bolivia`). Este documento está i
 
 Estado (2026-10-14): conexión desplegada con una sola acción de prueba, de solo lectura:
 `listar_proyectos_activos` ("Kay, ¿qué proyectos tengo activos?").
+2026-11-17: `buscar_proyecto`, `detalle_proyecto` y `requerimientos_pendientes` (solo lectura), para el modo dueño de
+Kay recepcionista por WhatsApp ("¿cómo va el stand de X?", "¿cuánto me pagó?", "¿qué está atrasado?").
 
 ## Principios
 
@@ -75,6 +77,9 @@ detalle queda en los logs de `kayApi`, no se le devuelve a Kay).
 | Acción | Solo lectura | Params | Resultado |
 |---|---|---|---|
 | `listar_proyectos_activos` | sí | — | `{ total, proyectos: [{ cliente, nombre, estado, fecha, tipo }], terminados: { entregado, cancelado }, clientesLeidos }` |
+| `buscar_proyecto` | sí | `{ texto }` | `{ total, proyectos: [{ cid, pid, cliente, nombre, estado, fecha }] }` (nombre del proyecto o del cliente, todos los estados, 10 más nuevos) |
+| `detalle_proyecto` | sí | `{ cid, pid }` | `{ cliente, nombre, estado, fecha, inicio, presupuesto: { items, total_bs, capitulos }, monto_cierre_bs, gasto_total_bs, cobrado_bs, ultimos_pagos, cronograma: { tareas, avance_promedio, atrasadas, proximas } }` |
+| `requerimientos_pendientes` | sí | — | `{ total, requerimientos: [{ titulo, cliente, descripcion, actualizado }] }` (sin proyecto, 20 más nuevos) |
 
 `listar_proyectos_activos`: recorre `/proyectos/$cid/$pid` de todos los clientes y devuelve los que **no** están
 `entregado` ni `cancelado`. El ciclo de vida completo de un proyecto es `requerimiento` → `cotizacion` →

@@ -114,11 +114,136 @@ async function listarProyectosActivos() {
     return { total: proyectos.length, proyectos, terminados, clientesLeidos: cids.length };
 }
 
+// ── Detalle de proyectos (Kay recepcionista en modo dueño, por WhatsApp) ──────
+
+const sinAcentos = (t) => String(t || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
+const ID_RTDB = /^[A-Za-z0-9_-]{1,64}$/;
+const r2 = (n) => Math.round(n * 100) / 100;
+const listaDe = (v) => (Array.isArray(v) ? v : v && typeof v === "object" ? Object.values(v) : []).filter(Boolean);
+const nombreCliente = async (cid) => {
+    const [empresa, nombre] = await Promise.all([
+        leerRest(`clientes/${cid}/empresa`, false).catch(() => null),
+        leerRest(`clientes/${cid}/nombre`, false).catch(() => null),
+    ]);
+    return [empresa, nombre].find((n) => typeof n === "string" && n) || "Sin cliente";
+};
+
+// Busca proyectos por nombre del proyecto o del cliente (todos los estados).
+async function buscarProyecto(params) {
+    const q = sinAcentos(params.texto).slice(0, 80);
+    if (q.length < 2) throw new Error("texto muy corto");
+    const cids = Object.keys(await leerShallow("proyectos"));
+    const porCliente = await mapConLimite(cids, 8, async (cid) => {
+        const [cliente, pidsObj] = await Promise.all([nombreCliente(cid), leerShallow(`proyectos/${cid}`)]);
+        const pids = Object.keys(pidsObj).filter((pid) => pidsObj[pid] === true);
+        const deCliente = sinAcentos(cliente).includes(q);
+        const proyectos = await mapConLimite(pids, 8, async (pid) => ({ pid, ...(await leerShallow(`proyectos/${cid}/${pid}`)) }));
+        return proyectos
+            .filter((p) => typeof p.nombre === "string" && (deCliente || sinAcentos(p.nombre).includes(q)))
+            .map((p) => ({
+                cid, pid: p.pid, cliente, nombre: p.nombre, estado: p.estado || "planificacion",
+                fecha: typeof p.fecha_creacion === "string" ? p.fecha_creacion.slice(0, 10) : null,
+            }));
+    });
+    const proyectos = porCliente.flat().sort((a, b) => (b.fecha || "").localeCompare(a.fecha || "")).slice(0, 10);
+    return { total: proyectos.length, proyectos };
+}
+
+// Estado, plata y avance de un proyecto (de buscar_proyecto: cid + pid). Solo lectura.
+async function detalleProyecto(params) {
+    const { cid, pid } = params;
+    if (!ID_RTDB.test(String(cid || "")) || !ID_RTDB.test(String(pid || ""))) throw new Error("cid/pid inválidos");
+    const base = `proyectos/${cid}/${pid}`;
+    const [simple, cliente, pres, gantt, pagos] = await Promise.all([
+        leerShallow(base),
+        nombreCliente(cid),
+        leerRest(`${base}/presupuesto/items`, false).catch(() => null),
+        leerRest(`${base}/gantt`, false).catch(() => null),
+        leerRest(`${base}/pagos`, false).catch(() => null),
+    ]);
+    if (typeof simple.nombre !== "string") throw new Error("no existe ese proyecto");
+    const items = listaDe(pres);
+    let total = 0;
+    let nItems = 0;
+    const capitulos = [];
+    for (const x of items) {
+        if (x.type === "chapter") { if (x.name) capitulos.push(String(x.name)); continue; }
+        nItems++;
+        if (x.activo !== false) total += (parseFloat(x.pu) || 0) * (parseFloat(x.cant) || 0);
+    }
+    const hoy = new Date(Date.now() - 4 * 3600 * 1000).toISOString().slice(0, 10); // Bolivia
+    const tareas = [];
+    const gItems = gantt && typeof gantt === "object" ? gantt : {};
+    Object.keys(gItems).forEach((idx) => {
+        const g = gItems[idx];
+        if (!g || !g.subtasks) return;
+        const it = items[Number(idx)];
+        Object.values(g.subtasks).forEach((t) => {
+            if (!t) return;
+            tareas.push({
+                item: (it && it.desc) || null, tarea: t.name || null,
+                inicio: typeof t.start === "string" ? t.start.slice(0, 10) : null,
+                fin: typeof t.end === "string" ? t.end.slice(0, 10) : null,
+                avance: parseInt(t.progress || 0, 10) || 0,
+            });
+        });
+    });
+    const avance = tareas.length ? Math.round(tareas.reduce((a, t) => a + t.avance, 0) / tareas.length) : null;
+    const atrasadas = tareas.filter((t) => t.fin && t.fin < hoy && t.avance < 100).slice(0, 5);
+    const proximas = tareas.filter((t) => t.avance < 100 && (!t.fin || t.fin >= hoy))
+        .sort((a, b) => (a.inicio || a.fin || "9").localeCompare(b.inicio || b.fin || "9")).slice(0, 5);
+    const listaPagos = listaDe(pagos).filter((p) => parseFloat(p.monto) > 0)
+        .map((p) => ({ monto: r2(parseFloat(p.monto)), fecha: typeof p.fecha === "string" ? p.fecha.slice(0, 10) : null, nota: p.nota || p.descripcion || null }))
+        .sort((a, b) => (b.fecha || "").localeCompare(a.fecha || ""));
+    const num = (v) => (Number.isFinite(parseFloat(v)) ? r2(parseFloat(v)) : null);
+    return {
+        cliente, nombre: simple.nombre, estado: simple.estado || "planificacion",
+        fecha: typeof simple.fecha_creacion === "string" ? simple.fecha_creacion.slice(0, 10) : null,
+        inicio: typeof simple.fecha_inicio === "string" ? simple.fecha_inicio.slice(0, 10) : null,
+        presupuesto: { items: nItems, total_bs: r2(total), capitulos: capitulos.slice(0, 15) },
+        monto_cierre_bs: num(simple.monto_cierre), gasto_total_bs: num(simple.gasto_total),
+        cobrado_bs: r2(listaPagos.reduce((a, p) => a + p.monto, 0)), ultimos_pagos: listaPagos.slice(0, 3),
+        cronograma: { tareas: tareas.length, avance_promedio: avance, atrasadas, proximas },
+    };
+}
+
+// Requerimientos que cargó el dueño y todavía no tienen proyecto.
+async function requerimientosPendientes() {
+    const todos = (await leerRest("requerimientos", false).catch(() => null)) || {};
+    const res = Object.keys(todos).filter((k) => todos[k] && typeof todos[k] === "object" && (todos[k].estado || "pendiente") === "pendiente")
+        .sort((a, b) => (todos[b].actualizado || 0) - (todos[a].actualizado || 0)).slice(0, 20)
+        .map((k) => {
+            const r = todos[k];
+            return {
+                titulo: r.titulo || null,
+                cliente: (r.cliente && (r.cliente.nombre || r.cliente.empresa)) || null,
+                descripcion: String(r.descripcion || "").slice(0, 300) || null,
+                actualizado: r.actualizado ? new Date(r.actualizado).toISOString().slice(0, 10) : null,
+            };
+        });
+    return { total: res.length, requerimientos: res };
+}
+
 const ACCIONES = {
     listar_proyectos_activos: {
         soloLectura: true,
         descripcion: "Proyectos que no están entregados ni cancelados, de todos los clientes.",
         ejecutar: listarProyectosActivos,
+    },
+    buscar_proyecto: {
+        soloLectura: true,
+        descripcion: "Proyectos (de cualquier estado) cuyo nombre o cliente contiene { texto }.",
+        ejecutar: buscarProyecto,
+    },
+    detalle_proyecto: {
+        soloLectura: true,
+        descripcion: "Estado, presupuesto, cobros y avance del cronograma de un proyecto { cid, pid }.",
+        ejecutar: detalleProyecto,
+    },
+    requerimientos_pendientes: {
+        soloLectura: true,
+        descripcion: "Requerimientos cargados que todavía no tienen proyecto.",
+        ejecutar: requerimientosPendientes,
     },
 };
 
