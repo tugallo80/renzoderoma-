@@ -72,6 +72,69 @@ async function mapConLimite(items, limite, fn) {
     return out;
 }
 
+// ── Conector de Claude (mismas herramientas, mismo código y mismas rutas permitidas) ──
+// Kay (modo dueño por WhatsApp) usa las herramientas del conector MCP "Rubik" en vez de lecturas propias:
+// así sabe lo mismo que Claude. Corren con el usuario hub del dueño (por su email) y el almacén del
+// conector (functions/mcp/index.js → RUTAS_MCP). Etapa 1: solo las de lectura (readOnlyHint).
+const EMAIL_DUENO = "renzoderoma@gmail.com";
+// Devuelven imágenes grandes o son de prueba: no sirven por WhatsApp.
+const HERRAMIENTAS_EXCLUIDAS = new Set(["prueba_imagen", "ver_render"]);
+let contextoConector = null;
+async function conector() {
+    if (contextoConector) return contextoConector;
+    const admin = require("firebase-admin");
+    const H = require("./mcp/herramientas");
+    const M = require("./mcp");
+    const { crearAlmacen } = require("./agente/almacen");
+    const { esHub } = require("./acceso");
+    const u = await admin.auth().getUserByEmail(EMAIL_DUENO);
+    if (!(await esHub(u.uid))) throw new Error("el dueño no está en la lista blanca hub");
+    contextoConector = { H, uid: u.uid, almacen: crearAlmacen(admin, M.RUTAS_MCP, M.ARCHIVOS_MCP, M.ARCHIVOS_MCP_LECTURA) };
+    return contextoConector;
+}
+const permitida = (d) => d && !HERRAMIENTAS_EXCLUIDAS.has(d.name) && d.annotations && d.annotations.readOnlyHint === true;
+
+async function herramientasConector() {
+    const { H } = await conector();
+    return {
+        herramientas: H.definiciones().filter(permitida).map((d) => ({ name: d.name, description: d.description, inputSchema: d.inputSchema })),
+    };
+}
+
+async function usarConector(params) {
+    const { H, uid, almacen } = await conector();
+    const nombre = String(params.nombre || "");
+    if (!permitida(H.definiciones().find((d) => d.name === nombre))) return { error: true, texto: `Herramienta no permitida: ${nombre}` };
+    const r = await H.llamar(almacen, uid, nombre, params.args && typeof params.args === "object" ? params.args : {});
+    const contenido = Array.isArray(r.content) ? r.content : [];
+    const imagenes = contenido.filter((c) => c.type === "image").length;
+    return {
+        error: !!r.isError,
+        texto: contenido.filter((c) => c.type === "text").map((c) => c.text).join("\n").slice(0, 60000),
+        ...(imagenes ? { imagenes_omitidas: imagenes } : {}),
+    };
+}
+
+// Proyectos de todos los clientes, leídos como el conector (Admin SDK), solo los campos simples.
+async function proyectosDeTodos() {
+    const { almacen } = await conector();
+    const clientes = (await almacen.leer("clientes")) || {};
+    const cids = Object.keys(clientes).filter((k) => clientes[k] && typeof clientes[k] === "object");
+    const porCliente = await mapConLimite(cids, 6, async (cid) => {
+        const ps = (await almacen.leer(`proyectos/${cid}`).catch(() => null)) || {};
+        const cliente = clientes[cid].empresa || clientes[cid].nombre || "Sin cliente";
+        return Object.keys(ps)
+            .filter((pid) => ps[pid] && typeof ps[pid] === "object" && typeof ps[pid].nombre === "string")
+            .map((pid) => ({
+                cid, pid, cliente, nombre: ps[pid].nombre, estado: typeof ps[pid].estado === "string" ? ps[pid].estado : "planificacion",
+                fecha: typeof ps[pid].fecha_creacion === "string" ? ps[pid].fecha_creacion.slice(0, 10) : null, tipo: ps[pid].tipo || null,
+            }));
+    });
+    const todos = porCliente.flat();
+    console.log(`[kayApi] proyectos: clientes=${cids.length} proyectos=${todos.length}`);
+    return { todos, clientesLeidos: cids.length };
+}
+
 // ── Acciones ──────────────────────────────────────────────────────────────────
 
 // Ciclo de vida de un proyecto (cliente-view.html, interno/dashboard.html,
@@ -81,42 +144,14 @@ async function mapConLimite(items, limite, fn) {
 const ESTADOS_TERMINADOS = new Set(["entregado", "cancelado"]);
 
 async function listarProyectosActivos() {
-    const cids = Object.keys(await leerShallow("proyectos"));
-    if (cids[0]) {
-        const muestra = await leerShallow(`proyectos/${cids[0]}`).catch((e) => ({ error: e.message }));
-        console.log(`[kayApi] muestra proyectos/${cids[0]}: ${JSON.stringify(muestra).slice(0, 300)}`);
-    }
-    const porCliente = await mapConLimite(cids, 8, async (cid) => {
-        // Solo el nombre (empresa o nombre, como el hub): el nodo del cliente
-        // puede traer el logo embebido.
-        const [empresa, nombreCliente, pidsObj] = await Promise.all([
-            leerRest(`clientes/${cid}/empresa`, false).catch(() => null),
-            leerRest(`clientes/${cid}/nombre`, false).catch(() => null),
-            leerShallow(`proyectos/${cid}`),
-        ]);
-        const pids = Object.keys(pidsObj).filter((pid) => pidsObj[pid] === true);
-        const proyectos = await mapConLimite(pids, 8, (pid) => leerShallow(`proyectos/${cid}/${pid}`));
-        const cliente = [empresa, nombreCliente].find((n) => typeof n === "string" && n) || "Sin cliente";
-        return proyectos
-            .filter((p) => typeof p.nombre === "string" && p.nombre)
-            .map((p) => ({
-                cliente,
-                nombre: p.nombre,
-                estado: p.estado || "planificacion",
-                fecha: typeof p.fecha_creacion === "string" ? p.fecha_creacion.slice(0, 10) : null,
-                tipo: p.tipo || null,
-            }));
-    });
-    const todos = porCliente.flat();
-    console.log(`[kayApi] listar: clientes=${cids.length} proyectos=${todos.length} estados=${JSON.stringify(todos.reduce((a, p) => ((a[p.estado] = (a[p.estado] || 0) + 1), a), {}))}`);
+    const { todos, clientesLeidos } = await proyectosDeTodos();
     const proyectos = todos
         .filter((p) => !ESTADOS_TERMINADOS.has(p.estado))
-        .sort((a, b) => (b.fecha || "").localeCompare(a.fecha || ""));
-    // Conteo de los que quedaron afuera: si Kay dice "0 activos", esto muestra
-    // si es que de verdad están todos terminados o si no se leyó nada.
+        .sort((a, b) => (b.fecha || "").localeCompare(a.fecha || ""))
+        .map(({ cid, pid, ...p }) => p);
     const terminados = {};
     for (const p of todos) if (ESTADOS_TERMINADOS.has(p.estado)) terminados[p.estado] = (terminados[p.estado] || 0) + 1;
-    return { total: proyectos.length, proyectos, terminados, clientesLeidos: cids.length };
+    return { total: proyectos.length, proyectos, terminados, clientesLeidos };
 }
 
 // ── Detalle de proyectos (Kay recepcionista en modo dueño, por WhatsApp) ──────
@@ -137,21 +172,12 @@ const nombreCliente = async (cid) => {
 async function buscarProyecto(params) {
     const q = sinAcentos(params.texto).slice(0, 80);
     if (q.length < 2) throw new Error("texto muy corto");
-    const cids = Object.keys(await leerShallow("proyectos"));
-    const porCliente = await mapConLimite(cids, 8, async (cid) => {
-        const [cliente, pidsObj] = await Promise.all([nombreCliente(cid), leerShallow(`proyectos/${cid}`)]);
-        const pids = Object.keys(pidsObj).filter((pid) => pidsObj[pid] === true);
-        const deCliente = sinAcentos(cliente).includes(q);
-        const proyectos = await mapConLimite(pids, 8, async (pid) => ({ pid, ...(await leerShallow(`proyectos/${cid}/${pid}`)) }));
-        return proyectos
-            .filter((p) => typeof p.nombre === "string" && (deCliente || sinAcentos(p.nombre).includes(q)))
-            .map((p) => ({
-                cid, pid: p.pid, cliente, nombre: p.nombre, estado: p.estado || "planificacion",
-                fecha: typeof p.fecha_creacion === "string" ? p.fecha_creacion.slice(0, 10) : null,
-            }));
-    });
-    const proyectos = porCliente.flat().sort((a, b) => (b.fecha || "").localeCompare(a.fecha || "")).slice(0, 10);
-    console.log(`[kayApi] buscar "${q}": clientes=${cids.length} coincidencias=${proyectos.length}`);
+    const { todos } = await proyectosDeTodos();
+    const proyectos = todos
+        .filter((p) => sinAcentos(p.cliente).includes(q) || sinAcentos(p.nombre).includes(q))
+        .sort((a, b) => (b.fecha || "").localeCompare(a.fecha || ""))
+        .slice(0, 10)
+        .map(({ tipo, ...p }) => p);
     return { total: proyectos.length, proyectos };
 }
 
@@ -161,7 +187,7 @@ async function detalleProyecto(params) {
     if (!ID_RTDB.test(String(cid || "")) || !ID_RTDB.test(String(pid || ""))) throw new Error("cid/pid inválidos");
     const base = `proyectos/${cid}/${pid}`;
     const [simple, cliente, pres, gantt, pagos] = await Promise.all([
-        leerShallow(base),
+        conector().then(({ almacen }) => almacen.leer(base)).then((v) => v || {}),
         nombreCliente(cid),
         leerRest(`${base}/presupuesto/items`, false).catch(() => null),
         leerRest(`${base}/gantt`, false).catch(() => null),
@@ -246,6 +272,16 @@ const ACCIONES = {
         descripcion: "Estado, presupuesto, cobros y avance del cronograma de un proyecto { cid, pid }.",
         ejecutar: detalleProyecto,
     },
+    herramientas_conector: {
+        soloLectura: true,
+        descripcion: "Definiciones de las herramientas de lectura del conector de Claude (las mismas que usa Claude).",
+        ejecutar: herramientasConector,
+    },
+    usar_conector: {
+        soloLectura: true,
+        descripcion: "Corre una herramienta de lectura del conector { nombre, args } con el usuario hub del dueño.",
+        ejecutar: usarConector,
+    },
     requerimientos_pendientes: {
         soloLectura: true,
         descripcion: "Requerimientos cargados que todavía no tienen proyecto.",
@@ -259,7 +295,7 @@ exports.kayApi = onRequest({
     region: "us-central1",
     invoker: [KAY_SA],
     timeoutSeconds: 60,
-    memory: "256MiB",
+    memory: "512MiB",
     cors: false,
 }, async (req, res) => {
     if (req.method !== "POST") return res.status(405).json({ ok: false, error: "Método no permitido" });
