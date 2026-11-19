@@ -1,0 +1,137 @@
+// Pruebas de functions/licitaciones/api.js con la base EN MEMORIA (imita al Admin SDK). Datos inventados.
+// Uso: cd tools/licitaciones && npm test
+import assert from 'node:assert/strict';
+import { createRequire } from 'node:module';
+const require = createRequire(import.meta.url);
+const L = require('../../functions/licitaciones/api.js');
+const { crearAlmacenMemoria } = require('../agente/almacen-memoria.cjs');
+
+const pruebas = [];
+const prueba = (n, fn) => pruebas.push([n, fn]);
+const DUENO = { uid: 'renzo', rol: 'dueño', nombre: 'Dueño', via: 'app' };
+const KAY = { rol: 'dueño', nombre: 'Dueño', telefono: '+59170000000', via: 'whatsapp' };
+const JPG = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0, 16, 74, 70, 73, 70]).toString('base64');
+const P = { cid: 'cliA', pid: 'proyA' };
+let n = 0; const clave = () => 'prueba-' + (++n);
+
+function base() {
+    return crearAlmacenMemoria({
+        clientes: { cliA: { nombre: 'Cliente Demo' } },
+        personal: { wPollo: { nombre: 'Pollo Demo' }, wOtro: { nombre: 'Otro Demo' } },
+        proyectos: { cliA: { proyA: { nombre: 'Stand Demo', gasto_total: 500,
+            presupuesto: { items: [{ desc: 'Mostrador', prod_resp: '' }, { desc: 'Letrero' }] },
+            licitaciones: {
+                L1: { id: 'L1', worker_id: 'wPollo', worker_name: 'Pollo Demo', estado: 'aprobado', precio_propuesto: 2548.5, precio_final: 2548.5,
+                    tareas: { t1: { task_name: 'Armado', subtotal: 2548.5, originIdx: 0 } }, pagos: { p0: { monto: 500, fecha: '2026-11-01' } } },
+                L2: { id: 'L2', worker_id: 'wOtro', worker_name: 'Otro Demo', estado: 'enviado', precio_propuesto: 800, tareas: {} },
+            } } } },
+    }, L.RUTAS, L.ARCHIVOS);
+}
+function conEspejo(alm) {
+    alm.datos.personal.wPollo.solicitudes = { L1: JSON.parse(JSON.stringify(alm.datos.proyectos.cliA.proyA.licitaciones.L1)) };
+    alm.datos.personal.wOtro.solicitudes = { L2: JSON.parse(JSON.stringify(alm.datos.proyectos.cliA.proyA.licitaciones.L2)) };
+    return alm;
+}
+const op = (alm, accion, b, q) => L.atender(alm, Object.assign({ accion, idempotencia: clave() }, P, b), q || DUENO);
+const ok = (r) => { assert.equal(r.status, 200, JSON.stringify(r.cuerpo)); return r.cuerpo; };
+const err = (r, re) => { assert.notEqual(r.status, 200, 'debía fallar'); if (re) assert.match(r.cuerpo.error, re); };
+const hist = (alm) => Object.values(alm.datos.proyectos.cliA.proyA.historial_operaciones || {});
+const lic = (alm, k) => alm.datos.proyectos.cliA.proyA.licitaciones[k];
+
+prueba('cambiar_monto en una aprobada: precio final 2.548,50 → 3.000, copia del trabajador e historial; reintentar no repite', async () => {
+    const alm = conEspejo(base());
+    const b = { accion: 'cambiar_monto', idempotencia: 'wamid.POLLO1', ...P, lid: 'L1', monto: 3000, motivo: 'acordado con Pollo' };
+    const r = ok(await L.atender(alm, b, KAY));
+    assert.equal(r.licitacion.contrato, 3000);
+    assert.equal(r.licitacion.saldo, 2500);
+    assert.equal(lic(alm, 'L1').precio_final, 3000);
+    assert.equal(lic(alm, 'L1').precio_propuesto, 2548.5, 'el propuesto queda');
+    assert.equal(alm.datos.personal.wPollo.solicitudes.L1.precio_final, 3000);
+    const h = hist(alm);
+    assert.equal(h.length, 1);
+    assert.deepEqual([h[0].antes.precio_final, h[0].despues.precio_final], [2548.5, 3000]);
+    assert.equal(h[0].por.via, 'whatsapp'); assert.equal(h[0].por.telefono, '+59170000000'); assert.equal(h[0].motivo, 'acordado con Pollo');
+    const z = ok(await L.atender(alm, b, KAY));
+    assert.equal(z.repetida, true);
+    assert.equal(hist(alm).length, 1);
+    assert.equal(alm.datos.proyectos.cliA.proyA.gasto_total, 500, 'no toca gasto_total');
+});
+
+prueba('cambiar_monto en una no aprobada cambia el propuesto; aprobar fija el final y marca el responsable en el presupuesto', async () => {
+    const alm = conEspejo(base());
+    ok(await op(alm, 'cambiar_monto', { lid: 'L2', monto: 900 }));
+    assert.equal(lic(alm, 'L2').precio_propuesto, 900); assert.equal(lic(alm, 'L2').precio_final, undefined);
+    ok(await op(alm, 'aprobar', { lid: 'L1' }));
+    assert.equal(alm.datos.proyectos.cliA.proyA.presupuesto.items[0].prod_resp, 'Pollo Demo');
+    const r = ok(await op(alm, 'aprobar', { lid: 'L2' }));
+    assert.equal(r.licitacion.precio_final, 900); assert.equal(lic(alm, 'L2').estado, 'aprobado');
+    err(await op(alm, 'contra_oferta', { lid: 'L1', precio: 2000 }), /aprobada/);
+    ok(await op(alm, 'terminar', { lid: 'L1' }));
+    assert.equal(lic(alm, 'L1').estado, 'terminado');
+});
+
+prueba('pagos: registrar (con comprobante y caja chica) y anular con motivo; extras; saldo', async () => {
+    const alm = conEspejo(base());
+    const r = ok(await op(alm, 'registrar_pago', { lid: 'L1', monto: 700, tipo: 'adelanto', fecha: '2026-11-19', foto: { datos_base64: JPG }, pagado_con: { medio: 'caja_chica', persona: 'Encargado' } }, KAY));
+    const pg = lic(alm, 'L1').pagos[r.pago];
+    assert.equal(pg.tipo, 'adelanto'); assert.equal(pg.nota, 'Adelanto'); assert.equal(pg.pagado_con.medio, 'caja_chica');
+    assert.ok(alm.archivos.has(`comprobantes/cliA/proyA/L1/${r.pago}.jpg`)); assert.match(r.comprobante, /token=/);
+    assert.equal(alm.datos.personal.wPollo.solicitudes.L1.pagos[r.pago].monto, 700);
+    assert.equal(r.licitacion.pagado, 1200);
+    const e = ok(await op(alm, 'agregar_extra', { lid: 'L1', monto: 150, descripcion: 'Pintura extra' }));
+    assert.equal(e.licitacion.saldo, 2548.5 + 150 - 1200);
+    err(await op(alm, 'anular_pago', { lid: 'L1', pago: r.pago }), /motivo/);
+    ok(await op(alm, 'anular_pago', { lid: 'L1', pago: r.pago, motivo: 'cargado dos veces' }));
+    assert.equal(lic(alm, 'L1').pagos[r.pago], undefined);
+    assert.equal(alm.datos.personal.wPollo.solicitudes.L1.pagos[r.pago], undefined);
+    assert.ok(hist(alm).some((h) => h.op === 'anular_pago' && h.antes.monto === 700));
+});
+
+prueba('cambiar_contratista mueve la copia del trabajador; anular quita todo, guarda la copia y no toca gasto_total', async () => {
+    const alm = conEspejo(base());
+    ok(await op(alm, 'cambiar_contratista', { lid: 'L1', worker_id: 'wOtro' }));
+    assert.equal(lic(alm, 'L1').worker_name, 'Otro Demo');
+    assert.equal(alm.datos.personal.wPollo.solicitudes.L1, undefined);
+    assert.equal(alm.datos.personal.wOtro.solicitudes.L1.worker_id, 'wOtro');
+    err(await op(alm, 'anular', { lid: 'L1' }), /motivo/);
+    const r = ok(await op(alm, 'anular', { lid: 'L1', motivo: 'se canceló el ítem' }));
+    assert.equal(lic(alm, 'L1'), undefined);
+    assert.equal(alm.datos.personal.wOtro.solicitudes.L1, undefined);
+    assert.equal(alm.datos.proyectos.cliA.proyA.gasto_total, 500);
+    const copia = alm.datos.proyectos.cliA.proyA.historial_operaciones[r.copia_en_historial];
+    assert.equal(copia.antes.precio_final, 2548.5);
+});
+
+prueba('guardar desde la pantalla: crea con la copia del trabajador y conserva pagos al editar', async () => {
+    const alm = conEspejo(base());
+    const c = ok(await op(alm, 'guardar', { licitacion: { worker_id: 'wPollo', estado: 'aprobado', precio_propuesto: 1200, lic_mode: 'mo', tareas: { a: { task_name: 'Letrero', subtotal: 1200, originIdx: 1 } } } }));
+    const nueva = lic(alm, c.lid);
+    assert.equal(nueva.worker_name, 'Pollo Demo'); assert.equal(nueva.cid, 'cliA');
+    assert.equal(alm.datos.personal.wPollo.solicitudes[c.lid].precio_propuesto, 1200);
+    assert.equal(alm.datos.proyectos.cliA.proyA.presupuesto.items[1].prod_resp, 'Pollo Demo');
+    ok(await op(alm, 'guardar', { lid: 'L1', licitacion: { worker_id: 'wOtro', estado: 'aprobado', precio_propuesto: 2600, tareas: {} } }));
+    assert.equal(lic(alm, 'L1').pagos.p0.monto, 500, 'los pagos no se pierden al editar');
+    assert.equal(alm.datos.personal.wPollo.solicitudes.L1, undefined, 'la copia del trabajador anterior se quita');
+    err(await op(alm, 'guardar', { licitacion: { worker_id: 'noExiste', tareas: {} } }), /trabajador/);
+});
+
+prueba('validaciones y listar (por proyecto y buscando al trabajador en todos)', async () => {
+    const alm = base();
+    err(await L.atender(alm, { accion: 'cambiar_monto', ...P, lid: 'L1', monto: 10 }, DUENO), /idempotencia/);
+    err(await op(alm, 'cambiar_monto', { lid: 'L1', monto: 0 }), /Monto/);
+    err(await op(alm, 'cambiar_monto', { lid: 'noExiste', monto: 10 }), /No existe/);
+    err(await op(alm, 'cambiar_monto', { pid: 'noExiste', lid: 'L1', monto: 10 }), /proyecto/);
+    err(await op(alm, 'borrar_todo', { lid: 'L1' }), /desconocida/);
+    const l = ok(await L.atender(alm, { accion: 'listar', ...P }, DUENO));
+    assert.equal(l.licitaciones.length, 2);
+    const p = ok(await L.atender(alm, { accion: 'listar', texto: 'pollo' }, DUENO));
+    assert.equal(p.licitaciones.length, 1); assert.equal(p.licitaciones[0].pid, 'proyA'); assert.equal(p.licitaciones[0].contrato, 2548.5); assert.equal(p.licitaciones[0].saldo, 2048.5);
+    err(await L.atender(alm, { accion: 'listar' }, DUENO), /texto/);
+});
+
+let bien = 0;
+for (const [nombre, fn] of pruebas) {
+    try { await fn(); bien++; console.log('ok  ', nombre); }
+    catch (e) { console.log('FALLA', nombre, '\n', e); process.exitCode = 1; }
+}
+console.log(`\n${bien}/${pruebas.length} pruebas OK`);

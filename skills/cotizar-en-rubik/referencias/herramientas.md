@@ -100,3 +100,15 @@ buscar_base {texto:"mdf negro"} · buscar_base {texto:"acrilico"}
 armar_borrador {…, operaciones:[capitulo, item {desc:"Trofeo", cant:3, cant_origen:"dueño:-N1", caracteristicas:[…]}, fila…, fila…]}
 "aplicalo" → registrar_mensaje_del_dueno → dueño:-N3 → aplicar_al_presupuesto {…, confirmacion:"dueño:-N3"}
 ```
+
+## Operar los proyectos (licitaciones)
+
+Las mismas operaciones de servidor que usan las pantallas: dejan historial (antes → después, quién, motivo) y son
+idempotentes. **Antes de cada cambio, decile al dueño qué vas a hacer y esperá su sí.**
+- **`listar_licitaciones`** `{cid, pid}` o `{texto}` (nombre del trabajador, en todos los proyectos) → trabajador, estado,
+  contrato, extras, pagado y saldo de cada licitación.
+- **`modificar_licitacion`** `{cid, pid, lid, operacion, idempotencia, registrado_por: {rol, nombre}, …}` →
+  `cambiar_monto` (aprobada: precio final; si no, el propuesto), `cambiar_contratista`, `aprobar`, `contra_oferta`,
+  `terminar`, `registrar_pago` (pago, adelanto o descuento por compra; `pagado_con` caja chica, QR…), `anular_pago`,
+  `agregar_extra`, `anular` (con motivo; la copia queda en el historial). No toca `gasto_total`.
+

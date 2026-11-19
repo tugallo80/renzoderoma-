@@ -25,6 +25,7 @@
     </script>
     <script src="/js/firecache.js?v=7"></script>
     <script src="/js/auth-guard.js?v=3"></script>
+    <script src="/js/operaciones-api.js?v=1"></script>
     <style>
         :root { --bg: #f4f4f7; --card: #fff; --text: #1a1a1a; --blue: #007aff; --green: #34c759; --red: #ff3b30; --orange: #ff9500; --purple: #af52de; --gold: #f1c40f; --gray: #8e8e93; --border: #d1d1d6; }
         body.dark-mode { --bg: #000; --card: #1c1c1e; --text: #fff; --border: #333; }
@@ -1742,15 +1743,13 @@ ${reqTxt}<div style="margin-top:4px;">${badgeMo}</div>
         } else {
             delete payload.periodo_split;
         }
-        if(editingLicId && oldLic && oldLic.worker_id !== workerId) { await db.ref(`personal/${oldLic.worker_id}/solicitudes/${editingLicId}`).remove(); }
-
-        await db.ref(`proyectos/${cid}/${pid}/licitaciones/${finalLicKey}`).set(payload); await db.ref(`personal/${workerId}/solicitudes/${finalLicKey}`).set(payload);
+        // El servidor guarda la licitación y la copia del trabajador, marca los responsables en el presupuesto y deja
+        // historial (functions/licitaciones). El cronograma lo sigue asignando esta pantalla (etapa Gantt).
+        try {
+            await RubikOps.licitaciones('guardar', { cid, pid, lid: editingLicId || null, licitacion: payload });
+        } catch(e) { return alert('No se pudo guardar la licitación: ' + e.message); }
 
         if(payload.estado === 'aprobado' || payload.estado === 'adjudicado' || payload.estado === 'terminado') {
-            countedIndices.forEach(idx => {
-                let targetField = isGraphic ? 'print_resp' : 'prod_resp';
-                db.ref(`proyectos/${cid}/${pid}/presupuesto/items/${idx}/${targetField}`).once('value').then(s => { let currentResp = s.val() || ''; if(!currentResp.includes(worker.nombre)) { let newResp = currentResp ? currentResp + ', ' + worker.nombre : worker.nombre; db.ref(`proyectos/${cid}/${pid}/presupuesto/items/${idx}/${targetField}`).set(newResp); } });
-            });
             await autoAssignGantt(worker.nombre, tareas); alert("¡Asignación editada y sincronizada al Cronograma Gantt!");
         } else { alert("¡Licitación Guardada / Enviada exitosamente!"); }
 
@@ -1789,10 +1788,14 @@ ${reqTxt}<div style="margin-top:4px;">${badgeMo}</div>
         loadWorkers(); document.getElementById('mod-new-lic').style.display = 'flex'; document.getElementById('tit-modal-lic').innerText = "Copiar Licitación (Selecciona Destinatario)";
     }
 
-    window.eliminarLicitacion = function(licId, workerId, estado, precio) {
-        if(!confirm("¿Estás seguro de ANULAR/ELIMINAR esta asignación?\nEsto la borrará del panel del trabajador y revertirá los saldos financieros.")) return;
-        db.ref(`proyectos/${cid}/${pid}/licitaciones/${licId}`).remove(); db.ref(`personal/${workerId}/solicitudes/${licId}`).remove();
-        if(estado === 'aprobado' || estado === 'adjudicado' || estado === 'terminado') { db.ref(`proyectos/${cid}/${pid}/gasto_total`).once('value', s => { let actual = parseFloat(s.val()) || 0; let resta = actual - parseFloat(precio || 0); db.ref(`proyectos/${cid}/${pid}/gasto_total`).set(resta < 0 ? 0 : resta); }); }
+    // Anular: la quita de la obra y del panel del trabajador; la copia completa queda en el historial del proyecto.
+    // Ya no resta de gasto_total: las licitaciones nunca se le sumaban (el dashboard las cuenta aparte).
+    window.eliminarLicitacion = async function(licId, workerId, estado, precio) {
+        const motivo = prompt("¿Por qué se anula esta asignación? (se quita del panel del trabajador; queda en el historial)");
+        if (motivo === null) return;
+        if (!motivo.trim()) return alert('Escribí el motivo.');
+        try { await RubikOps.licitaciones('anular', { cid, pid, lid: licId, motivo: motivo.trim() }); }
+        catch(e) { alert('No se pudo anular: ' + e.message); }
     };
 
     function loadLicitaciones() {
@@ -1910,9 +1913,8 @@ ${reqTxt}<div style="margin-top:4px;">${badgeMo}</div>
 
     window.marcarTerminado = async function(licId, workerId) {
         if(!confirm('¿Marcar esta licitación como TERMINADA?')) return;
-        let upd = { estado: 'terminado', fecha_terminado: Date.now() };
-        await db.ref(`proyectos/${cid}/${pid}/licitaciones/${licId}`).update(upd);
-        await db.ref(`personal/${workerId}/solicitudes/${licId}`).update(upd);
+        try { await RubikOps.licitaciones('terminar', { cid, pid, lid: licId }); }
+        catch(e) { alert('No se pudo marcar terminada: ' + e.message); }
     };
 
     // ─────────────────────────────────────────────
@@ -1969,15 +1971,10 @@ ${reqTxt}<div style="margin-top:4px;">${badgeMo}</div>
         let precio = parseFloat(document.getElementById('review-total').value) || 0;
         if (precio <= 0) return alert('Ingresa el precio final aprobado.');
         showLoader('Aprobando...');
-        let upd = { estado: 'aprobado', precio_final: precio, fecha_aprobacion: Date.now() };
         try {
-            await db.ref(`proyectos/${cid}/${pid}/licitaciones/${currentReviewLicId}`).update(upd);
+            await RubikOps.licitaciones('aprobar', { cid, pid, lid: currentReviewLicId, precio_final: precio });
         } catch(e) {
             hideLoader(); alert('Error al guardar la aprobación: ' + e.message); return;
-        }
-        // Write to personal (best-effort — puede fallar por reglas Firebase pero no bloquea)
-        if (currentReviewWorkerId) {
-            db.ref(`personal/${currentReviewWorkerId}/solicitudes/${currentReviewLicId}`).update(upd).catch(() => {});
         }
         hideLoader();
         document.getElementById('mod-review').style.display = 'none';
@@ -1988,9 +1985,8 @@ ${reqTxt}<div style="margin-top:4px;">${badgeMo}</div>
         let precio = parseFloat(document.getElementById('review-total').value) || 0;
         if (precio <= 0) return alert('Ingresa tu contra oferta.');
         showLoader('Enviando contra oferta...');
-        let upd = { estado: 'contra_oferta', precio_contra: precio };
-        await db.ref(`proyectos/${cid}/${pid}/licitaciones/${currentReviewLicId}`).update(upd);
-        if (currentReviewWorkerId) await db.ref(`personal/${currentReviewWorkerId}/solicitudes/${currentReviewLicId}`).update(upd);
+        try { await RubikOps.licitaciones('contra_oferta', { cid, pid, lid: currentReviewLicId, precio }); }
+        catch(e) { hideLoader(); return alert('No se pudo enviar la contra oferta: ' + e.message); }
         hideLoader();
         document.getElementById('mod-review').style.display = 'none';
     };
@@ -2944,16 +2940,10 @@ LICITACIONES ACTUALES DEL PROYECTO:
         const concepto = document.getElementById('pago-lic-concepto').value || 'Pago';
         const fecha = document.getElementById('pago-lic-fecha').value || new Date().toISOString().split('T')[0];
         const { cid: c, pid: p, licId } = _pagoLicCtx;
-        let urlComp = null;
-        if (_pagoLicFile) {
-            try {
-                const storageRef = firebase.storage().ref(`comprobantes/${c}/${p}/${licId}/${Date.now()}_${_pagoLicFile.name}`);
-                await storageRef.put(_pagoLicFile);
-                urlComp = await storageRef.getDownloadURL();
-            } catch(e) { console.warn('No se pudo subir comprobante:', e); }
-        }
-        const pagoRef = db.ref(`proyectos/${c}/${p}/licitaciones/${licId}/pagos`).push();
-        await pagoRef.set({ monto, concepto, fecha, comprobante: urlComp || null, timestamp: new Date().toISOString() });
+        try {
+            const foto = _pagoLicFile ? await RubikOps.archivoABase64(_pagoLicFile) : null;
+            await RubikOps.licitaciones('registrar_pago', { cid: c, pid: p, lid: licId, monto, concepto, fecha, foto });
+        } catch(e) { return alert('No se pudo registrar el pago: ' + e.message); }
         document.getElementById('mod-pago-lic').style.display = 'none';
         _pagoLicCtx = null; _pagoLicFile = null;
     };
@@ -3093,9 +3083,7 @@ LICITACIONES ACTUALES DEL PROYECTO:
         const btn = document.querySelector('#mod-extras-lic button[onclick="guardarExtraLic()"]');
         if (btn) { btn.disabled = true; btn.textContent = 'Guardando...'; }
         try {
-            await db.ref(`proyectos/${cid}/${pid}/licitaciones/${licId}/extras`).push({
-                descripcion: desc, monto, fecha, timestamp: Date.now()
-            });
+            await RubikOps.licitaciones('agregar_extra', { cid, pid, lid: licId, monto, descripcion: desc, fecha });
             document.getElementById('mod-extras-lic').style.display = 'none';
         } catch(e) {
             alert('Error: ' + e.message);

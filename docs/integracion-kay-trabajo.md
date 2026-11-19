@@ -12,6 +12,10 @@ Kay recepcionista por WhatsApp ("¿cómo va el stand de X?", "¿cuánto me pagó
 (mismo código y rutas). Los proyectos se leen con el Admin SDK, como el conector (la lectura REST `shallow` devolvía vacío).
 2026-11-19: **compras** — `registrar_compra`, `anular_compra` (escriben) y `balance_mensual`, `balance_proyecto` (lectura),
 con el mismo módulo que usa la app (`functions/compras/api.js`, `/api/compras`). Detalle en `docs/sesiones/07-compras.md`.
+2026-11-19: **operar proyectos por el conector — licitaciones (etapa 1)**: `herramientas_conector` devuelve también las
+herramientas de **escritura** permitidas a Kay (hoy `modificar_licitacion`, con `annotations.readOnlyHint: false`) y
+`usar_conector` las acepta solo con `registrado_por`. Misma lógica que la pantalla (`functions/licitaciones/api.js`).
+Siguen Gantt, Producción y Diseño. Detalle en `docs/sesiones/08-operaciones-kay.md`.
 2026-11-19: `buscar_contacto` (lectura): Kay por WhatsApp busca por nombre el teléfono de alguien del personal,
 un proveedor o un cliente cuando el dueño le pide "mandale a José Luis…" y no está en su agenda.
 
@@ -85,8 +89,8 @@ detalle queda en los logs de `kayApi`, no se le devuelve a Kay).
 | `listar_proyectos_activos` | sí | — | `{ total, proyectos: [{ cliente, nombre, estado, fecha, tipo }], terminados: { entregado, cancelado }, clientesLeidos }` |
 | `buscar_proyecto` | sí | `{ texto }` | `{ total, proyectos: [{ cid, pid, cliente, nombre, estado, fecha }] }` (nombre del proyecto o del cliente, todos los estados, 10 más nuevos) |
 | `detalle_proyecto` | sí | `{ cid, pid }` | `{ cliente, nombre, estado, fecha, inicio, presupuesto: { items, total_bs, capitulos }, monto_cierre_bs, gasto_total_bs, cobrado_bs, ultimos_pagos, cronograma: { tareas, avance_promedio, atrasadas, proximas } }` |
-| `herramientas_conector` | sí | — | `{ herramientas: [{ name, description, inputSchema }] }`: las de lectura del conector MCP "Rubik" (las mismas de Claude), sin `prueba_imagen` ni `ver_render` |
-| `usar_conector` | sí | `{ nombre, args }` | `{ error, texto, imagenes_omitidas? }`: corre esa herramienta con el usuario hub del dueño y el almacén del conector (`RUTAS_MCP`) |
+| `herramientas_conector` | sí | — | `{ herramientas: [{ name, description, inputSchema, annotations: { readOnlyHint } }] }`: las de lectura del conector MCP "Rubik" (las mismas de Claude), sin `prueba_imagen` ni `ver_render`, **más las de escritura permitidas a Kay** (`ESCRITURA_KAY` en `kay-api.js`: hoy `modificar_licitacion`), marcadas `readOnlyHint: false`. Kay pide el sí del dueño antes de usar una de escritura |
+| `usar_conector` | sí* | `{ nombre, args }` | `{ error, texto, imagenes_omitidas? }`: corre esa herramienta con el usuario hub del dueño y el almacén del conector (`RUTAS_MCP`). *Con una herramienta de escritura, `args.registrado_por: {rol, nombre, telefono}` es obligatorio (va al historial; la vía la pone el servidor: `whatsapp`) y conviene `args.idempotencia` = id del mensaje de WhatsApp |
 | `requerimiento` | **no** | `{ accion: crear\|editar\|adjuntar, … }` (los mismos campos que `/api/requerimiento`; adjuntar solo `pdf` o `imagen`) | `{ error, id? }`: corre `requerimientos/api.js → atender` con el usuario hub del dueño. Kay confirma con el dueño antes |
 | `cotizar_requerimiento` | **no** | `{ id, cid?, pid?, cliente_nombre?, proyecto_nombre?, nota? }` | `{ error, cid, pid, conv, turno, proyecto, adjuntos }`: crea cliente/proyecto si faltan, abre una cotización nueva, registra la confirmación del dueño, `asignar_requerimiento` y encola el turno del Agente IA (Claude, API de Anthropic) |
 | `estado_cotizacion` | sí | `{ cid, pid, conv }` | `{ fase: en_cola\|trabajando\|listo\|esperando_dueno\|tope\|error, texto, ultimo_mensaje?, borrador? }` |
@@ -153,3 +157,15 @@ solo `/clientes/$cid/nombre`. Ordenado por fecha, más nuevo primero.
   `llamarApiTrabajo` en `desarrollo-personal`.
 - La cuenta `claude-code` de las sesiones de Claude no tiene permisos en `rubik-bolivia`, así que desde la
   sesión no se pueden leer esos logs.
+
+## Herramientas de escritura del conector (operar proyectos)
+
+| Herramienta | Qué hace | Args |
+|---|---|---|
+| `listar_licitaciones` (lectura) | Licitaciones de un proyecto, o de todos buscando al trabajador: estado, contrato, extras, pagado, saldo | `{ cid, pid }` o `{ texto }` |
+| `modificar_licitacion` | Misma lógica que la pantalla de Licitaciones: copia del trabajador, responsables en el presupuesto, historial antes → después en `proyectos/{cid}/{pid}/historial_operaciones`. No toca `gasto_total` | `{ cid, pid, lid, operacion: cambiar_monto\|cambiar_contratista\|aprobar\|contra_oferta\|terminar\|registrar_pago\|anular_pago\|agregar_extra\|anular, …, idempotencia, registrado_por }` |
+
+Ejemplo (Kay, después del sí del dueño): `usar_conector { nombre: "modificar_licitacion", args: { cid, pid, lid,
+operacion: "cambiar_monto", monto: 3000, motivo: "acordado con Pollo", idempotencia: "<id del mensaje>",
+registrado_por: { rol: "dueño", nombre: "Renzo", telefono: "+591…" } } }`.
+

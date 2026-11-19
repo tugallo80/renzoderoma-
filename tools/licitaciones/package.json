@@ -1,0 +1,7 @@
+{
+  "name": "probar-licitaciones",
+  "private": true,
+  "type": "module",
+  "description": "Pruebas de las operaciones de licitaciones (functions/licitaciones) con la base en memoria.",
+  "scripts": { "test": "node probar.mjs" }
+}
