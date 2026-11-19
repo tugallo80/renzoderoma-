@@ -706,6 +706,8 @@ const HERRAMIENTAS = [
 
 // ---------- sesión 6: Requerimientos (lo que el dueño cargó en la app, sin IA) — functions/mcp/requerimientos.js
 HERRAMIENTAS.push(...require("./requerimientos")({ falla, proyecto, acotar, RUTAS }));
+// ---------- operar los proyectos (licitaciones…): las mismas operaciones de servidor que las pantallas — functions/mcp/operaciones.js
+HERRAMIENTAS.push(...require("./operaciones")({ falla, acotar }));
 
 // normaliza: input_schema (formato del agente) → inputSchema (MCP)
 HERRAMIENTAS.forEach((h) => {

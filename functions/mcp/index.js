@@ -30,11 +30,13 @@ const RUTAS_MCP = [
     /^requerimientos(\/|$)/,   // sesión 6
     /^render_cola(\/|$)/,      // sesión 6: pedidos de render para renderTurno
     /^pdf_cola(\/|$)/,         // páginas de los PDF de los requerimientos (functions/pdf)
+    /^personal\/[^/]+\/(nombre|solicitudes)(\/|$)/,   // copia de las licitaciones del trabajador (functions/licitaciones)
+    /^operaciones_idem(\/|$)/,  // idempotencia de las operaciones (functions/operaciones)
 ];
 /** Storage: escribe y lee las del agente (adjuntos de las cotizaciones); las de los Requerimientos solo las LEE. */
 const ARCHIVOS_MCP = ARCHIVOS_AGENTE.concat([
     /^presupuesto\/render_req_[A-Za-z0-9_-]+\.jpg$/,   // render aprobado → imagen del ítem (aprobar_render)
-]);
+], require("../licitaciones/api").ARCHIVOS);   // comprobantes de pagos de licitaciones
 const ARCHIVOS_MCP_LECTURA = REQ.ARCHIVOS;
 
 const INSTRUCCIONES = `Conector de la app de Rubik Bolivia (taller de stands, mobiliario, letreros). Con él cotizás en la app del dueño, con sus reglas:

@@ -89,6 +89,12 @@
       ".write": false
     },
 
+    // Idempotencia de las operaciones por área (functions/operaciones): solo Functions
+    "operaciones_idem": {
+      ".read":  false,
+      ".write": false
+    },
+
     "compras_idem": {
       ".read":  false,
       ".write": false

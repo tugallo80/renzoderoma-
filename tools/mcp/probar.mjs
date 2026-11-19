@@ -893,6 +893,28 @@ prueba('PDF: asignar_requerimiento copia las páginas al proyecto y leer muestra
     assert.match(l.datos.adjuntos[0].cita, new RegExp(`cota_plano:${nuevo}`));
 });
 
+// ------------------------------------------------------------------ operar proyectos: licitaciones (docs/sesiones/08-operaciones-kay.md)
+prueba('licitaciones por el conector: listar buscando al trabajador y modificar_licitacion con registrado_por e idempotencia', async () => {
+    const ent = crearEntorno();
+    const D = ent.almacen.datos;
+    D.personal = { wPollo: { nombre: 'Pollo Demo', solicitudes: { LP: { worker_id: 'wPollo', estado: 'aprobado', precio_final: 2548.5 } } } };
+    D.proyectos.cliDemo.proyDemo.licitaciones = { LP: { worker_id: 'wPollo', worker_name: 'Pollo Demo', estado: 'aprobado', precio_propuesto: 2548.5, precio_final: 2548.5, tareas: {} } };
+    const l = await ok(ent, 'listar_licitaciones', { texto: 'pollo' });
+    assert.equal(l.licitaciones.length, 1); assert.equal(l.licitaciones[0].contrato, 2548.5);
+    const def = H.definiciones().find((d) => d.name === 'modificar_licitacion');
+    assert.equal(def.annotations.readOnlyHint, false);
+    assert.ok((await llamar(ent, 'modificar_licitacion', { cid: 'cliDemo', pid: 'proyDemo', lid: 'LP', operacion: 'cambiar_monto', monto: 3000, idempotencia: 'wamid.x1' })).error, 'sin registrado_por no');
+    const args = { cid: 'cliDemo', pid: 'proyDemo', lid: 'LP', operacion: 'cambiar_monto', monto: 3000, motivo: 'acordado', idempotencia: 'wamid.x1', registrado_por: { rol: 'dueño', nombre: 'Renzo' } };
+    const r = await ok(ent, 'modificar_licitacion', args);
+    assert.equal(r.licitacion.contrato, 3000);
+    assert.equal(D.proyectos.cliDemo.proyDemo.licitaciones.LP.precio_final, 3000);
+    assert.equal(D.personal.wPollo.solicitudes.LP.precio_final, 3000);
+    const h = Object.values(D.proyectos.cliDemo.proyDemo.historial_operaciones);
+    assert.equal(h[0].por.via, 'claude'); assert.equal(h[0].antes.precio_final, 2548.5);
+    assert.equal((await ok(ent, 'modificar_licitacion', args)).repetida, true);
+    assert.equal(Object.keys(D.proyectos.cliDemo.proyDemo.historial_operaciones).length, 1);
+});
+
 // ------------------------------------------------------------------ correr
 let bien = 0;
 for (const [n, fn] of pruebas) {

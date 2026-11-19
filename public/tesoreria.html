@@ -31,6 +31,7 @@
     <script src="/js/firecache.js?v=7"></script>
     <script src="/js/auth-guard.js?v=3"></script>
     <script src="/js/compras-api.js?v=1"></script>
+    <script src="/js/operaciones-api.js?v=1"></script>
     <script src="/js/viewmode.js?v=1"></script>
 
     <style>
@@ -3179,25 +3180,10 @@
         const btn = document.getElementById('btn-guardar-anticipo');
         if (btn) { btn.disabled = true; btn.innerHTML = '<i class="ph-bold ph-spinner"></i> Guardando...'; }
 
-        let comprobanteUrl = null;
-        if (_antFile) {
-            try {
-                const ref = storage.ref(`anticipos/${Date.now()}_${_antFile.name}`);
-                await ref.put(_antFile);
-                comprobanteUrl = await ref.getDownloadURL();
-            } catch(e) { console.warn('No se pudo subir comprobante:', e.message); }
-        }
-
-        const trab = document.getElementById('ant-trabajador').value;
         try {
-            await db.ref(`proyectos/${cid}/${pid}/licitaciones/${licId}/pagos`).push({
-                monto,
-                fecha,
-                nota,
-                comprobante: comprobanteUrl,
-                wid: trab,
-                timestamp: Date.now(),
-            });
+            // mismo registro que Licitaciones, Compras y Kay (functions/licitaciones): pago + copia del trabajador + historial
+            const foto = _antFile ? await RubikOps.archivoABase64(_antFile) : null;
+            await RubikOps.licitaciones('registrar_pago', { cid, pid, lid: licId, monto, fecha, concepto: nota, tipo: 'adelanto', foto });
             document.getElementById('mod-anticipo').style.display = 'none';
             renderPlanillas();
             alert('Anticipo registrado correctamente.');
@@ -3457,15 +3443,10 @@
         const concepto = document.getElementById('ct-pay-concepto').value || 'Pago';
         const fecha = document.getElementById('ct-pay-fecha').value || new Date().toISOString().split('T')[0];
         const { cid, pid, licId } = _ctPayData;
-        let urlComp = null;
-        if (_ctPayFile) {
-            try {
-                const storageRef = firebase.storage().ref(`comprobantes/${cid}/${pid}/${licId}/${Date.now()}_${_ctPayFile.name}`);
-                await storageRef.put(_ctPayFile);
-                urlComp = await storageRef.getDownloadURL();
-            } catch(e) { console.warn('No se pudo subir comprobante:', e); }
-        }
-        await db.ref(`proyectos/${cid}/${pid}/licitaciones/${licId}/pagos`).push({ monto, concepto, fecha, comprobante: urlComp||null, timestamp: new Date().toISOString() });
+        try {
+            const foto = _ctPayFile ? await RubikOps.archivoABase64(_ctPayFile) : null;
+            await RubikOps.licitaciones('registrar_pago', { cid, pid, lid: licId, monto, concepto, fecha, foto });
+        } catch(e) { return alert('No se pudo registrar el pago: ' + e.message); }
         document.getElementById('mod-pago-ct').style.display = 'none';
         // Refresh proyectosData cache so the new payment shows immediately
         const updLic = await db.ref(`proyectos/${cid}/${pid}/licitaciones/${licId}`).once('value');

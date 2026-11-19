@@ -92,20 +92,33 @@ async function conector() {
     contextoConector = { H, uid: u.uid, almacen: crearAlmacen(admin, M.RUTAS_MCP, M.ARCHIVOS_MCP, M.ARCHIVOS_MCP_LECTURA) };
     return contextoConector;
 }
-const permitida = (d) => d && !HERRAMIENTAS_EXCLUIDAS.has(d.name) && d.annotations && d.annotations.readOnlyHint === true;
+// Escritura (docs/sesiones/08-operaciones-kay.md): solo estas, con registrado_por; Kay pide el sí del dueño antes de cada una.
+const ESCRITURA_KAY = new Set(["modificar_licitacion"]);
+const esEscritura = (d) => d && ESCRITURA_KAY.has(d.name) && d.annotations && d.annotations.readOnlyHint === false;
+const permitida = (d) => d && !HERRAMIENTAS_EXCLUIDAS.has(d.name) && d.annotations && (d.annotations.readOnlyHint === true || esEscritura(d));
 
 async function herramientasConector() {
     const { H } = await conector();
     return {
-        herramientas: H.definiciones().filter(permitida).map((d) => ({ name: d.name, description: d.description, inputSchema: d.inputSchema })),
+        herramientas: H.definiciones().filter(permitida).map((d) => ({ name: d.name, description: d.description, inputSchema: d.inputSchema,
+            annotations: { readOnlyHint: d.annotations.readOnlyHint === true } })),
     };
 }
 
 async function usarConector(params) {
     const { H, uid, almacen } = await conector();
     const nombre = String(params.nombre || "");
-    if (!permitida(H.definiciones().find((d) => d.name === nombre))) return { error: true, texto: `Herramienta no permitida: ${nombre}` };
-    const r = await H.llamar(almacen, uid, nombre, params.args && typeof params.args === "object" ? params.args : {});
+    const def = H.definiciones().find((d) => d.name === nombre);
+    if (!permitida(def)) return { error: true, texto: `Herramienta no permitida: ${nombre}` };
+    const args = params.args && typeof params.args === "object" ? Object.assign({}, params.args) : {};
+    if (esEscritura(def)) {
+        // escritura: siempre con quién la pide (va al historial); la vía la pone el servidor
+        const rp = args.registrado_por && typeof args.registrado_por === "object" ? args.registrado_por : (params.registrado_por || null);
+        if (!rp || !rp.rol || !rp.nombre) return { error: true, texto: "Falta registrado_por {rol, nombre, telefono} para modificar." };
+        args.registrado_por = { rol: String(rp.rol), nombre: String(rp.nombre), telefono: rp.telefono ? String(rp.telefono) : undefined, via: "whatsapp" };
+        console.log(`[kayApi] usar_conector ${nombre} ${args.operacion || ""} por ${args.registrado_por.rol}`);
+    }
+    const r = await H.llamar(almacen, uid, nombre, args);
     const contenido = Array.isArray(r.content) ? r.content : [];
     const imagenes = contenido.filter((c) => c.type === "image").length;
     return {

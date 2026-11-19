@@ -28,6 +28,7 @@
     <script src="/js/firecache.js?v=7"></script>
     <script src="/js/auth-guard.js?v=3"></script>
     <script src="/js/compras-api.js?v=1"></script>
+    <script src="/js/operaciones-api.js?v=1"></script>
 
     <style>
         :root { --bg: #f4f4f7; --card: #fff; --text: #1a1a1a; --blue: #007aff; --green: #34c759; --red: #ff3b30; --orange: #ff9500; --purple: #af52de; --gray: #8e8e93; --border: #d1d1d6; }
@@ -468,21 +469,22 @@
         let amt = parseFloat(document.getElementById('pay-amt').value); let date = document.getElementById('pay-date').value;
         if(!amt || amt <= 0) return alert("Ingrese un monto válido.");
         document.getElementById('loader-title').innerText = "Registrando Pago..."; document.getElementById('global-loader').style.display = 'flex';
-        let urlComp = null;
-        if(tempB64Receipt) { try { let snap = await storage.ref(`comprobantes/${pid}_${Date.now()}.jpg`).putString(tempB64Receipt, 'data_url'); urlComp = await snap.ref.getDownloadURL(); } catch(e) {} }
-        const payload = { monto: amt, fecha: date, comprobante: urlComp, timestamp: Date.now(), nota: "Abono de Matriz" };
-        const newPayRef = db.ref(`proyectos/${cid}/${pid}/licitaciones/${targetLicId}/pagos`).push();
-        await newPayRef.set(payload); await db.ref(`personal/${targetWorkerId}/solicitudes/${targetLicId}/pagos/${newPayRef.key}`).set(payload);
+        // mismo registro que Licitaciones, Tesorería y Kay (functions/licitaciones): pago + copia del trabajador + historial
+        try {
+            await RubikOps.licitaciones('registrar_pago', { cid, pid, lid: targetLicId, monto: amt, fecha: date, concepto: 'Abono de Matriz',
+                foto: tempB64Receipt ? RubikOps.dataUrlABase64(tempB64Receipt) : null });
+        } catch(e) { document.getElementById('global-loader').style.display = 'none'; return alert('No se pudo registrar el pago: ' + e.message); }
         document.getElementById('global-loader').style.display = 'none'; document.getElementById('mod-pago').style.display = 'none';
     }
 
     async function eliminarPago(licId, pagoKey, workerId) {
-        if (!confirm('¿Eliminar este pago del historial?')) return;
+        const motivo = prompt('¿Por qué se elimina este pago? (queda una copia en el historial del proyecto)');
+        if (motivo === null) return;
+        if (!motivo.trim()) return alert('Escribí el motivo.');
         document.getElementById('loader-title').innerText = "Eliminando pago...";
         document.getElementById('global-loader').style.display = 'flex';
         try {
-            await db.ref(`proyectos/${cid}/${pid}/licitaciones/${licId}/pagos/${pagoKey}`).remove();
-            if (workerId) await db.ref(`personal/${workerId}/solicitudes/${licId}/pagos/${pagoKey}`).remove();
+            await RubikOps.licitaciones('anular_pago', { cid, pid, lid: licId, pago: pagoKey, motivo: motivo.trim() });
         } catch(e) { alert('Error al eliminar: ' + e.message); }
         document.getElementById('global-loader').style.display = 'none';
         renderContratos();
@@ -518,12 +520,16 @@
         let licIdToDeduct = document.getElementById('req-lic-select').value;
         if(isDescuento && !licIdToDeduct) return alert("El trabajador no tiene contratos activos para descontar.");
         document.getElementById('loader-title').innerText = "Procesando..."; document.getElementById('global-loader').style.display = 'flex';
-        let urlComp = null; if(tempB64Receipt) { try { let snap = await storage.ref(`comprobantes/${pid}_compra_${Date.now()}.jpg`).putString(tempB64Receipt, 'data_url'); urlComp = await snap.ref.getDownloadURL(); } catch(e) {} }
+        let urlComp = null;
         if(isDescuento) {
-            const payload = { monto: amt, fecha: new Date().toISOString().split('T')[0], comprobante: urlComp, timestamp: Date.now(), nota: "Compra Materiales (Anticipo)" };
-            const newPayRef = db.ref(`proyectos/${cid}/${pid}/licitaciones/${licIdToDeduct}/pagos`).push();
-            await newPayRef.set(payload); await db.ref(`personal/${targetReqWorker}/solicitudes/${licIdToDeduct}/pagos/${newPayRef.key}`).set(payload);
-        } else { await db.ref(`proyectos/${cid}/${pid}/gastos_adicionales_compras`).set(globalGastosAdicionales + amt); }
+            // descuento del contrato del trabajador: mismo registro de pago que Licitaciones (functions/licitaciones)
+            try {
+                const r = await RubikOps.licitaciones('registrar_pago', { cid, pid, lid: licIdToDeduct, monto: amt, concepto: 'Compra Materiales (Anticipo)', tipo: 'descuento_compra',
+                    foto: tempB64Receipt ? RubikOps.dataUrlABase64(tempB64Receipt) : null });
+                urlComp = r && r.comprobante ? r.comprobante : null;
+            } catch(e) { document.getElementById('global-loader').style.display = 'none'; return alert('No se pudo registrar el descuento: ' + e.message); }
+        } else {
+            if(tempB64Receipt) { try { let snap = await storage.ref(`comprobantes/${pid}_compra_${Date.now()}.jpg`).putString(tempB64Receipt, 'data_url'); urlComp = await snap.ref.getDownloadURL(); } catch(e) {} } await db.ref(`proyectos/${cid}/${pid}/gastos_adicionales_compras`).set(globalGastosAdicionales + amt); }
         await db.ref(`proyectos/${cid}/${pid}/solicitudes_compra/${targetReqId}`).update({ estado: 'pagado', comprobante: urlComp, monto_pagado: amt, tipo_pago: isDescuento ? 'descuento' : 'gasto' });
         document.getElementById('global-loader').style.display = 'none'; document.getElementById('mod-req').style.display = 'none'; alert("Compra procesada.");
     }
