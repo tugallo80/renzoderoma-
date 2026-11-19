@@ -25,11 +25,19 @@ function crearAlmacenMemoria(inicial, rutas, carpetas, soloLectura) {
         async agregar(r, v) { r = verificarRuta(r); const k = clave(); a.escrituras.push(r + "/" + k); set(r + "/" + k, v); return k; },
         nuevaClave: clave,
         async borrar(r) { r = verificarRuta(r); set(r, null); },
+        // Como el Admin SDK: la primera pasada ve el valor LOCAL (vacío, sin caché). Si fn devuelve undefined ahí, la
+        // transacción se cancela sin consultar al servidor; si devuelve algo y el servidor tiene otro valor, se reintenta
+        // con el valor real.
         async transaccion(r, fn) {
             r = verificarRuta(r);
-            const v = fn(JSON.parse(JSON.stringify(get(r))));
-            if (v === undefined) return { ok: false, valor: get(r) };
-            set(r, v); return { ok: true, valor: v };
+            const real = get(r);
+            let v = fn(null);
+            if (v === undefined) return { ok: false, valor: null };
+            if (real !== null && real !== undefined) {
+                v = fn(JSON.parse(JSON.stringify(real)));
+                if (v === undefined) return { ok: false, valor: JSON.parse(JSON.stringify(real)) };
+            }
+            set(r, v); return { ok: true, valor: v === undefined ? null : v };
         },
         ahora() { reloj += 1; return reloj; },
         async subirArchivo(r, buf, mime, op = {}) {

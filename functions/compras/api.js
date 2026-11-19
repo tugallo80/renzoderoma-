@@ -249,8 +249,10 @@ async function registrar(almacen, b, quienCrudo) {
  * transacción y solo quien la cambia toca gasto_total (también con transacción). Reintentos y anulaciones dobles no duplican.
  */
 async function aplicarGasto(almacen, id, c, signo) {
-    const t = await almacen.transaccion(`compras/${id}/gasto_total_aplicado`, (v) => (signo > 0 ? (v ? undefined : true) : (v ? false : undefined)));
-    if (!t.ok) return false;
+    // Ojo (Admin SDK): la primera pasada de una transacción ve el valor LOCAL, que suele estar vacío. Devolver undefined ahí
+    // la cancela sin preguntarle al servidor: ante null se devuelve null para que el servidor compare y la reintente.
+    const t = await almacen.transaccion(`compras/${id}/gasto_total_aplicado`, (v) => (signo > 0 ? (v ? undefined : true) : (v === true ? false : v == null ? null : undefined)));
+    if (!t.ok || t.valor !== (signo > 0)) return false;
     await almacen.transaccion(`proyectos/${c.proyecto.cid}/${c.proyecto.pid}/gasto_total`, (v) => Math.max(0, r2((parseFloat(v) || 0) + signo * c.total)));
     return true;
 }
@@ -271,11 +273,9 @@ async function anular(almacen, b, quienCrudo) {
     if (!motivo) falla("Falta el motivo de la anulación.");
     const ahora = almacen.ahora();
     // la transacción marca la compra: dos anulaciones a la vez no restan dos veces
-    const t = await almacen.transaccion(`compras/${b.id}/estado`, (v) => (v === "registrada" ? "anulada" : undefined));
-    if (!t.ok) {
-        if (t.valor == null) falla("No existe la compra.", 404);
-        return { ok: true, id: b.id, ya_estaba_anulada: true };
-    }
+    const t = await almacen.transaccion(`compras/${b.id}/estado`, (v) => (v === "registrada" ? "anulada" : v == null ? null : undefined));
+    if (t.valor == null) falla("No existe la compra.", 404);
+    if (!t.ok) return { ok: true, id: b.id, ya_estaba_anulada: true };
     const c = await almacen.leer(`compras/${b.id}`);
     const m = {};
     m[`compras/${b.id}/anulada`] = { por: quien, fecha: ahora, motivo };

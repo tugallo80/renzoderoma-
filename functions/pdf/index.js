@@ -35,8 +35,10 @@ async function procesar(dep, pedido) {
     if (!ID.test(String(p.req || "")) || !ID.test(String(p.adj || ""))) { console.warn("[pdfPaginas] pedido inválido"); return { fin: "invalido" }; }
     const ruta = `requerimientos/${p.req}/adjuntos/${p.adj}`;
     // solo uno lo procesa: procesando → generando con transacción
-    const t = await almacen.transaccion(`${ruta}/paginas_estado`, (v) => (v === "procesando" ? "generando" : undefined));
-    if (!t.ok) return { fin: "ya_procesado" };
+    // Ojo (Admin SDK): la primera pasada ve el valor LOCAL (vacío): ante null se devuelve null para que el servidor compare
+    // y la reintente con el valor real; devolver undefined la cancelaba sin preguntar (el PDF quedaba "procesando").
+    const t = await almacen.transaccion(`${ruta}/paginas_estado`, (v) => (v === "procesando" ? "generando" : v == null ? null : undefined));
+    if (!t.ok || t.valor !== "generando") return { fin: "ya_procesado" };
     const meta = await almacen.leer(ruta);
     if (!meta || meta.tipo !== "pdf" || !meta.ruta) {
         await almacen.actualizar(ruta, { paginas_estado: "error", paginas_error: "el adjunto no es un PDF" }).catch(() => {});
