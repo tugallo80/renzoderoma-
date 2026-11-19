@@ -131,6 +131,13 @@
         }
       },
       {
+        "source": "/api/compras",
+        "function": {
+          "functionId": "comprasApi",
+          "region": "us-central1"
+        }
+      },
+      {
         "source": "/api/requerimiento",
         "function": {
           "functionId": "requerimientoApi",

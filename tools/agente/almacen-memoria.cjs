@@ -21,6 +21,7 @@ function crearAlmacenMemoria(inicial, rutas, carpetas, soloLectura) {
         async leer(r) { return JSON.parse(JSON.stringify(get(verificarRuta(r)))); },
         async escribir(r, v) { r = verificarRuta(r); a.escrituras.push(r); set(r, v); },
         async actualizar(r, v) { r = verificarRuta(r); a.escrituras.push(r); Object.keys(v).forEach((k) => set(r + "/" + k, v[k])); },
+        async actualizarVarios(m) { const ks = Object.keys(m || {}).map((r) => [verificarRuta(r), m[r]]); ks.forEach(([r, v]) => { a.escrituras.push(r); set(r, v); }); },
         async agregar(r, v) { r = verificarRuta(r); const k = clave(); a.escrituras.push(r + "/" + k); set(r + "/" + k, v); return k; },
         nuevaClave: clave,
         async borrar(r) { r = verificarRuta(r); set(r, null); },

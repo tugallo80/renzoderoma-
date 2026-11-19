@@ -352,6 +352,20 @@ async function requerimientosPendientes() {
     return { total: res.length, requerimientos: res };
 }
 
+// ── Compras: el mismo módulo que /api/compras (functions/compras/api.js, docs/sesiones/07-compras.md) ──
+// Kay dice quién la registra (registrado_por: {rol, nombre, telefono}); la operación es idempotente por `idempotencia`
+// (usar el id del mensaje de WhatsApp): reintentar no duplica.
+async function compras(accion, params) {
+    const C = require("./compras/api");
+    const { almacenCompras } = require("./compras");
+    const { registrado_por, ...resto } = params || {};
+    const rp = registrado_por && typeof registrado_por === "object" ? registrado_por : {};
+    const quien = { rol: rp.rol || "dueño", nombre: rp.nombre || null, telefono: rp.telefono || null, via: "whatsapp" };
+    const r = await C.atender(almacenCompras(), { ...resto, accion }, quien);
+    console.log(`[kayApi] compras ${accion}: ${r.status}`);
+    return r.status === 200 ? { error: false, ...r.cuerpo } : { error: true, texto: (r.cuerpo && r.cuerpo.error) || `Error ${r.status}` };
+}
+
 const ACCIONES = {
     listar_proyectos_activos: {
         soloLectura: true,
@@ -397,6 +411,29 @@ const ACCIONES = {
         soloLectura: false,
         descripcion: "Le manda un mensaje del dueño al Agente IA en esa cotización { cid, pid, conv, texto }.",
         ejecutar: mensajeAgente,
+    },
+    registrar_compra: {
+        soloLectura: false,
+        descripcion: "Registra una compra (gasto del proyecto, egreso, crédito fiscal si es factura, proveedor y precios) "
+            + "{ idempotencia, total?, fecha?, cid?, pid?, proveedor?: {nombre, nit?, contacto?}, factura?: {nit, razon_social?, nro, cuf?, fecha?, monto?}, "
+            + "items?: [{material, cantidad, unidad?, precio}], nota?, foto?: {datos_base64, mime?}, pagado_con?: {medio, persona?}, "
+            + "registrado_por: {rol, nombre, telefono} } → { id, repetida, proveedor_id, resumen }",
+        ejecutar: (p) => compras("registrar", p),
+    },
+    anular_compra: {
+        soloLectura: false,
+        descripcion: "Anula una compra (no se borra; resta del gasto del proyecto y marca la factura) { id, motivo, registrado_por }.",
+        ejecutar: (p) => compras("anular", p),
+    },
+    balance_mensual: {
+        soloLectura: true,
+        descripcion: "Ingresos, egresos (compras, contratistas, cancheos), resultado e IVA de compras de un mes { mes: \"AAAA-MM\" }.",
+        ejecutar: (p) => compras("balance_mensual", p),
+    },
+    balance_proyecto: {
+        soloLectura: true,
+        descripcion: "Monto de cierre, cobrado y gastos (compras, contratistas) de un proyecto { cid, pid }.",
+        ejecutar: (p) => compras("balance_proyecto", p),
     },
     requerimientos_pendientes: {
         soloLectura: true,

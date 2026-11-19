@@ -47,6 +47,13 @@ await chk('hub NO escribe requerimientos', set(ref(hub, 'requerimientos/x'), { e
 await chk('anónimo NO lee requerimientos', get(ref(anon, 'requerimientos')), false);
 await chk('hub NO lee render_cola', get(ref(hub, 'render_cola')), false);
 await chk('hub NO escribe render_cola', set(ref(hub, 'render_cola/x'), { req: 'r' }), false);
+// Compras (docs/sesiones/07-compras.md): el hub lee, escribe solo la Function; la idempotencia nadie desde el navegador
+await chk('hub lee compras', get(ref(hub, 'compras')), true);
+await chk('hub NO escribe compras', set(ref(hub, 'compras/x'), { total: 1 }), false);
+await chk('anónimo NO lee compras', get(ref(anon, 'compras')), false);
+await chk('hub NO lee compras_idem', get(ref(hub, 'compras_idem')), false);
+await chk('hub NO escribe compras_idem', set(ref(hub, 'compras_idem/x'), { id: 'y' }), false);
+await chk('hub sigue escribiendo compras_facturadas (hasta la etapa 2)', set(ref(hub, 'compras_facturadas/x'), { monto: 1 }), true);
 await chk('hub lee agente_costos', get(ref(hub, 'agente_costos/2026-11/_total')), true);
 await chk('hub NO escribe agente_costos', set(ref(hub, 'agente_costos/2026-11/_total'), { usd: 0 }), false);
 await chk('anónimo NO lee agente_costos', get(ref(anon, 'agente_costos')), false);

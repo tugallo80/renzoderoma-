@@ -76,6 +76,18 @@
     // proyectos (pagos, compras, licitaciones), clientes, personal,
     // supervisores, caja_chica, ingresos, cobros, base_datos, config_ia,
     // notificaciones, whatsapp_*, gantt, etc.
+    // ─── COMPRAS (docs/sesiones/07-compras.md) ─────────────────────
+    // Las escribe solo la Function comprasApi (/api/compras y kayApi). La lista blanca hub lee.
+    "compras": {
+      ".read":  "auth != null && root.child('acceso').child('hub').child(auth.uid).val() === true",
+      ".write": false,
+      ".indexOn": ["mes", "fecha"]
+    },
+    "compras_idem": {
+      ".read":  false,
+      ".write": false
+    },
+
     "$other": {
       ".read":  "auth != null && root.child('acceso').child('hub').child(auth.uid).val() === true",
       ".write": "auth != null && root.child('acceso').child('hub').child(auth.uid).val() === true"

@@ -92,6 +92,9 @@ exports.agenteTurno = agente.crearTrigger({ ANTHROPIC_API_KEY });
 // ── Requerimientos: lo que pidió el cliente, sin IA (docs/sesiones/06-render-requerimiento.md) ──
 exports.requerimientoApi = require("./requerimientos").crearApi({ requireAuth, applyCors });
 
+// ── Compras: una sola regla para compras y facturas de compra (docs/sesiones/07-compras.md) ──
+exports.comprasApi = require("./compras").crearApi({ requireAuth, applyCors });
+
 // ── Conector MCP "Rubik" para claude.ai (docs/sesiones/05-rubik-agente-app.md) ─
 // OAuth con Firebase Auth + lista blanca hub; las cotizaciones las hace Claude con la suscripción del dueño.
 exports.rubikMcp = require("./mcp").crearFuncion({ admin, esHub });

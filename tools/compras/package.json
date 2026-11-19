@@ -1,0 +1,7 @@
+{
+  "name": "probar-compras",
+  "private": true,
+  "type": "module",
+  "description": "Pruebas del módulo de compras (functions/compras) con la base en memoria.",
+  "scripts": { "test": "node probar.mjs" }
+}
