@@ -84,6 +84,9 @@ detalle queda en los logs de `kayApi`, no se le devuelve a Kay).
 | `herramientas_conector` | sí | — | `{ herramientas: [{ name, description, inputSchema }] }`: las de lectura del conector MCP "Rubik" (las mismas de Claude), sin `prueba_imagen` ni `ver_render` |
 | `usar_conector` | sí | `{ nombre, args }` | `{ error, texto, imagenes_omitidas? }`: corre esa herramienta con el usuario hub del dueño y el almacén del conector (`RUTAS_MCP`) |
 | `requerimiento` | **no** | `{ accion: crear\|editar\|adjuntar, … }` (los mismos campos que `/api/requerimiento`; adjuntar solo `pdf` o `imagen`) | `{ error, id? }`: corre `requerimientos/api.js → atender` con el usuario hub del dueño. Kay confirma con el dueño antes |
+| `cotizar_requerimiento` | **no** | `{ id, cid?, pid?, cliente_nombre?, proyecto_nombre?, nota? }` | `{ error, cid, pid, conv, turno, proyecto, adjuntos }`: crea cliente/proyecto si faltan, abre una cotización nueva, registra la confirmación del dueño, `asignar_requerimiento` y encola el turno del Agente IA (Claude, API de Anthropic) |
+| `estado_cotizacion` | sí | `{ cid, pid, conv }` | `{ fase: en_cola\|trabajando\|listo\|esperando_dueno\|tope\|error, texto, ultimo_mensaje?, borrador? }` |
+| `mensaje_agente` | **no** | `{ cid, pid, conv, texto }` | `{ error, turno }`: respuesta o cambio del dueño al Agente IA (otro turno) |
 | `requerimientos_pendientes` | sí | — | `{ total, requerimientos: [{ titulo, cliente, descripcion, actualizado }] }` (sin proyecto, 20 más nuevos) |
 
 `listar_proyectos_activos`: recorre `/proyectos/$cid/$pid` de todos los clientes y devuelve los que **no** están
