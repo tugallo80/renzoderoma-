@@ -8,6 +8,8 @@ Estado (2026-10-14): conexión desplegada con una sola acción de prueba, de sol
 `listar_proyectos_activos` ("Kay, ¿qué proyectos tengo activos?").
 2026-11-17: `buscar_proyecto`, `detalle_proyecto` y `requerimientos_pendientes` (solo lectura), para el modo dueño de
 Kay recepcionista por WhatsApp ("¿cómo va el stand de X?", "¿cuánto me pagó?", "¿qué está atrasado?").
+2026-11-19: `herramientas_conector` y `usar_conector`: Kay usa las mismas herramientas de lectura que el conector de Claude
+(mismo código y rutas). Los proyectos se leen con el Admin SDK, como el conector (la lectura REST `shallow` devolvía vacío).
 
 ## Principios
 
@@ -79,6 +81,8 @@ detalle queda en los logs de `kayApi`, no se le devuelve a Kay).
 | `listar_proyectos_activos` | sí | — | `{ total, proyectos: [{ cliente, nombre, estado, fecha, tipo }], terminados: { entregado, cancelado }, clientesLeidos }` |
 | `buscar_proyecto` | sí | `{ texto }` | `{ total, proyectos: [{ cid, pid, cliente, nombre, estado, fecha }] }` (nombre del proyecto o del cliente, todos los estados, 10 más nuevos) |
 | `detalle_proyecto` | sí | `{ cid, pid }` | `{ cliente, nombre, estado, fecha, inicio, presupuesto: { items, total_bs, capitulos }, monto_cierre_bs, gasto_total_bs, cobrado_bs, ultimos_pagos, cronograma: { tareas, avance_promedio, atrasadas, proximas } }` |
+| `herramientas_conector` | sí | — | `{ herramientas: [{ name, description, inputSchema }] }`: las de lectura del conector MCP "Rubik" (las mismas de Claude), sin `prueba_imagen` ni `ver_render` |
+| `usar_conector` | sí | `{ nombre, args }` | `{ error, texto, imagenes_omitidas? }`: corre esa herramienta con el usuario hub del dueño y el almacén del conector (`RUTAS_MCP`) |
 | `requerimientos_pendientes` | sí | — | `{ total, requerimientos: [{ titulo, cliente, descripcion, actualizado }] }` (sin proyecto, 20 más nuevos) |
 
 `listar_proyectos_activos`: recorre `/proyectos/$cid/$pid` de todos los clientes y devuelve los que **no** están
