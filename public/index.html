@@ -1089,6 +1089,7 @@ Recuerda aplicar siempre: [REGLA_UTILIDAD].`
                 if(comprasSnap.exists()) {
                     comprasSnap.forEach(c => {
                         const d = c.val();
+                        if (!d || d.anulada) return;   // facturas de compra anuladas (docs/sesiones/07-compras.md)
                         const monto = parseFloat(d.monto||d.total||0);
                         contextDB.compras_total += monto;
                         if(d.proveedor||d.descripcion) contextDB.compras_recientes.push(`${d.proveedor||d.descripcion||'compra'}: ${monto} Bs${d.fecha?' ('+d.fecha.substring(0,10)+')':''}`);

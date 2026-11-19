@@ -30,6 +30,7 @@
     </script>
     <script src="/js/firecache.js?v=7"></script>
     <script src="/js/auth-guard.js?v=3"></script>
+    <script src="/js/compras-api.js?v=1"></script>
     <script src="/js/viewmode.js?v=1"></script>
 
     <style>
@@ -830,6 +831,8 @@
         } catch(e) { alert('Error: ' + e.message); }
     };
 
+    // Las facturas y compras anuladas (no se borran) no cuentan en ningún total
+    function _sinAnuladas(o) { const r = {}; Object.entries(o || {}).forEach(([k, v]) => { if (v && !v.anulada && v.estado !== 'anulada') r[k] = v; }); return r; }
     let proyectosData = {}; let personalData = {}; let ingresosData = {}; let comprasFacturadasData = {}; let cancheosData = {};
     let editFacturaId = null;
     window.tempComprobanteUrl = null;
@@ -850,7 +853,7 @@
             ]);
             proyectosData         = proySnap.val()  || {};
             ingresosData          = ingSnap.val()   || {};
-            comprasFacturadasData = compSnap.val()  || {};
+            comprasFacturadasData = _sinAnuladas(compSnap.val());
             cancheosData          = cancSnap.val()  || {};
             personalData          = personalSnap.val() || {}; // fix: assign to outer let, not shadow it
             const rawSup          = supSnap.val()   || {};
@@ -873,7 +876,10 @@
         finally { document.getElementById('global-loader').style.display = 'none'; }
     }
     db.ref('ingresos').on('value', snap => { ingresosData = snap.val() || {}; calcularBalancesGlobales(); renderIngresos(); });
-    db.ref('compras_facturadas').on('value', snap => { comprasFacturadasData = snap.val() || {}; renderImpuestos(); });
+    db.ref('compras_facturadas').on('value', snap => { comprasFacturadasData = _sinAnuladas(snap.val()); renderImpuestos(); });
+    // Compras registradas con /api/compras (docs/sesiones/07-compras.md): cuentan como egreso en el balance
+    var comprasData = {};   // var: calcularBalancesGlobales puede correr antes de esta línea
+    db.ref('compras').on('value', snap => { comprasData = _sinAnuladas(snap.val()); calcularBalancesGlobales(); }, () => {});
     cargarTesoreraData().then(_escucharProyectosEnVivo);
 
     // Proyectos en vivo: los pagos cargados en Compras (u otra pestaña) entran sin recargar la página,
@@ -910,6 +916,7 @@
             });
         });
         Object.values(cancheosData).forEach(c => { if(c.pagos) { Object.values(c.pagos).forEach(pay => { totalEgresos += parseFloat(pay.monto || 0); }); } });
+        Object.values(comprasData || {}).forEach(c => { totalEgresos += parseFloat(c.total || 0); });
 
         let utilidad = totalIngresos - totalEgresos;
         const kpiUt = document.getElementById('kpi-utilidad');
@@ -2284,6 +2291,10 @@
         reader.readAsDataURL(file);
     };
 
+    // Una factura de compra se registra con /api/compras (functions/compras): el servidor la guarda en el crédito fiscal,
+    // la cuenta como egreso y actualiza el proveedor. La clave de idempotencia vale para este formulario hasta guardarlo:
+    // si se toca Guardar dos veces o se corta la red, no se duplica.
+    window._fcIdem = null;
     window.registrarFacturaCompra = async function() {
         const nit    = document.getElementById('fc-nit').value.trim();
         const nro    = document.getElementById('fc-nro').value.trim();
@@ -2292,32 +2303,21 @@
         if (!nro)             return alert('El número de factura es requerido.');
         if (!monto || monto <= 0) return alert('Ingresa un monto válido.');
         if (!fecha)           return alert('Selecciona una fecha.');
-
-        let comprobanteUrl = null;
-        if (window._fcComprobanteFile) {
-            try {
-                const ref = storage.ref('facturas_compra/' + Date.now() + '_' + window._fcComprobanteFile.name);
-                await ref.put(window._fcComprobanteFile);
-                comprobanteUrl = await ref.getDownloadURL();
-            } catch(e) { console.warn('No se pudo subir comprobante:', e); }
-        }
-
-        const payload = {
-            nit:         nit || '',
-            proveedor:   document.getElementById('fc-proveedor').value.trim() || '',
-            nro_factura: nro,
-            cuf:         document.getElementById('fc-cuf').value.trim() || '',
-            monto,
-            fecha,
-            descripcion: document.getElementById('fc-descripcion').value.trim() || '',
-            comprobante: comprobanteUrl,
-            timestamp:   Date.now()
-        };
-
+        if (nit.replace(/\D/g, '').length < 5) return alert('Ingresa el NIT del proveedor (es una factura).');
+        if (!window.RubikCompras) return alert('Todavía se está cargando la página. Probá de nuevo en un segundo.');
+        const btn = document.querySelector('[onclick="registrarFacturaCompra()"]');
+        if (btn) btn.disabled = true;
+        window._fcIdem = window._fcIdem || RubikCompras.nuevaClave();
+        const proveedor = document.getElementById('fc-proveedor').value.trim();
+        const descripcion = document.getElementById('fc-descripcion').value.trim();
         try {
-            const newRef = await db.ref('compras_facturadas').push(payload);
-            await syncFacturaCompraABD(payload, newRef.key);
-            // Reset form
+            const r = await RubikCompras.registrar({
+                idempotencia: window._fcIdem, fecha, total: monto, nota: descripcion || null,
+                proveedor: { nombre: proveedor, nit },
+                factura: { nit, razon_social: proveedor, nro, cuf: document.getElementById('fc-cuf').value.trim(), fecha, monto },
+                foto: window._fcComprobanteB64 ? RubikCompras.dataUrlABase64(window._fcComprobanteB64) : null,
+            });
+            window._fcIdem = null;
             ['fc-nit','fc-nro','fc-cuf','fc-monto','fc-proveedor','fc-descripcion'].forEach(id => {
                 document.getElementById(id).value = '';
             });
@@ -2325,54 +2325,22 @@
             window._fcComprobanteFile = null;
             window._fcComprobanteB64 = null;
             limpiarFacturaScan();
-            alert('Factura de compra guardada y sincronizada con BD.');
-        } catch(e) { alert('Error: ' + e.message); }
+            alert(r.repetida ? 'Esa factura ya estaba guardada.' : 'Factura de compra guardada: ' + r.resumen);
+        } catch(e) { alert('No se pudo guardar: ' + e.message); }
+        finally { if (btn) btn.disabled = false; }
     };
 
-    async function syncFacturaCompraABD(factura, facturaId) {
-        try {
-            const bdSnap = await db.ref('base_datos/proveedores').once('value');
-            const proveedores = bdSnap.val() || {};
-            // Buscar por NIT primero, luego por nombre
-            let matchKey = null;
-            Object.entries(proveedores).forEach(([k, p]) => {
-                if (!p) return;
-                if (factura.nit && p.nit && String(p.nit).trim() === String(factura.nit).trim()) matchKey = k;
-            });
-            if (!matchKey && factura.proveedor) {
-                Object.entries(proveedores).forEach(([k, p]) => {
-                    if (!p) return;
-                    if ((p.nombre||'').toLowerCase().trim() === factura.proveedor.toLowerCase().trim()) matchKey = k;
-                });
-            }
-            if (matchKey) {
-                await db.ref('base_datos/proveedores/' + matchKey + '/facturas/' + facturaId).set({
-                    nro_factura: factura.nro_factura,
-                    fecha:       factura.fecha,
-                    monto:       factura.monto,
-                    descripcion: factura.descripcion || '',
-                    cuf:         factura.cuf || ''
-                });
-            } else {
-                // Crear nuevo proveedor
-                await db.ref('base_datos/proveedores').push({
-                    nombre:  factura.proveedor || 'S/N',
-                    nit:     factura.nit || '',
-                    facturas: {
-                        [facturaId]: {
-                            nro_factura: factura.nro_factura,
-                            fecha:       factura.fecha,
-                            monto:       factura.monto,
-                            descripcion: factura.descripcion || '',
-                            cuf:         factura.cuf || ''
-                        }
-                    }
-                });
-            }
-        } catch(e) { console.warn('syncFacturaCompraABD error:', e); }
-    }
-
-    window.eliminarFacturaCompra = function(id) {
+    // Las facturas registradas con /api/compras se ANULAN (quedan en el historial y dejan de contar);
+    // las anteriores al cambio (sin compra_id) se siguen borrando como antes hasta la migración.
+    window.eliminarFacturaCompra = async function(id) {
+        const c = comprasFacturadasData[id] || {};
+        if (c.compra_id) {
+            const motivo = prompt('¿Por qué se anula esta factura de compra? (queda en el historial)');
+            if (motivo === null) return;
+            if (!motivo.trim()) return alert('Escribí el motivo.');
+            try { await RubikCompras.anular(c.compra_id, motivo.trim()); } catch(e) { alert('No se pudo anular: ' + e.message); }
+            return;
+        }
         if (confirm('¿Eliminar esta factura de compra?')) db.ref('compras_facturadas/' + id).remove();
     };
 

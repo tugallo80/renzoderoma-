@@ -141,6 +141,16 @@ prueba('balances: mensual (ingresos, compras, contratistas, IVA) y por proyecto,
     err(await C.atender(alm, { accion: 'balance_mensual', mes: 'noviembre' }, DUENO), /Mes/);
 });
 
+prueba('comprobante PDF e ítems de referencia que no suman exacto', async () => {
+    const alm = base();
+    const pdf = Buffer.from('%PDF-1.4 demo').toString('base64');
+    const c = ok(await reg(alm, { idempotencia: 'pdf-0001', total: 95, proveedor: { nombre: 'Kiosco' }, foto: { datos_base64: pdf },
+        items_referencia: true, items: [{ material: 'Lija 220', cantidad: 10, precio: 10 }] }));
+    assert.ok(alm.archivos.has(`compras/${alm.datos.compras[c.id].mes}/${c.id}.pdf`));
+    assert.equal(alm.datos.compras[c.id].items_diferencia, -5);
+    assert.equal(alm.datos.base_datos.materiales.LIJA_220.p, 10);
+});
+
 prueba('clave de proveedor: NIT o nombre normalizado; alias de la migración', async () => {
     assert.equal(C.claveProveedor('Ferretería  El Sol', ''), 'NOM_FERRETERIA_EL_SOL');
     assert.equal(C.claveProveedor('x', '12.345-67'), 'NIT_1234567');
