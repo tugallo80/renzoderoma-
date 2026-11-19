@@ -83,6 +83,12 @@
       ".write": false,
       ".indexOn": ["mes", "fecha"]
     },
+    // Pedidos de páginas de los PDF de los requerimientos (functions/pdf): solo Functions
+    "pdf_cola": {
+      ".read":  false,
+      ".write": false
+    },
+
     "compras_idem": {
       ".read":  false,
       ".write": false

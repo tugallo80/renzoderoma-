@@ -17,8 +17,11 @@ corregí y reintentá; si falta un dato, preguntalo.
 - **`listar_requerimientos`** `{estado?="pendiente"|asignado|cotizado|descartado|todos, texto?}` → id, título, estado,
   cliente (`cid` o nombre nuevo), cuántos adjuntos de cada tipo, a qué proyecto está asignado.
 - **`leer_requerimiento`** `{id, desde?, sin_imagenes?}` → descripción, cliente, adjuntos (fotos con `anotaciones`: cotas,
-  marcas y notas en píxeles de la foto; 3D con piezas y tamaño; PDF y otros) **y las imágenes** (foto anotada o foto, vistas
-  del 3D) hasta ~300 KB por respuesta; si quedan, `imagenes.siguiente_desde`.
+  marcas y notas en píxeles de la foto; 3D con piezas y tamaño; PDF con `paginas: {total, texto: [{p, texto}]}`; otros)
+  **y las imágenes** (foto anotada o foto, vistas del 3D, **páginas de los PDF** a ~2000 px, legibles para las cotas) hasta
+  ~300 KB por respuesta; si quedan, `imagenes.siguiente_desde`. Si un PDF dice `procesando` (recién cargado o viejo), sus
+  páginas se están generando: volvé a llamar en un minuto. Asignado el requerimiento, la leyenda de cada página dice cómo
+  citarla: `cota_plano:<adjunto del proyecto> p.<n>`.
 - **`asignar_requerimiento`** `{id, cid, pid, conv, confirmacion: dueño:<id>, cotizado?}` → lo une a esta cotización: la
   descripción queda como contexto (no es origen) y fotos, PDF y 3D se copian a los adjuntos del proyecto
   (`adjuntos`: id nuevo y cómo citarlo). Repetirlo (aunque sea desde otra cotización del mismo proyecto) no copia de nuevo. Con `cotizado: true` lo marca cotizado.

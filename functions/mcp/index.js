@@ -29,6 +29,7 @@ const RUTAS_MCP = [
     /^respaldos_agente(\/|$)/,
     /^requerimientos(\/|$)/,   // sesión 6
     /^render_cola(\/|$)/,      // sesión 6: pedidos de render para renderTurno
+    /^pdf_cola(\/|$)/,         // páginas de los PDF de los requerimientos (functions/pdf)
 ];
 /** Storage: escribe y lee las del agente (adjuntos de las cotizaciones); las de los Requerimientos solo las LEE. */
 const ARCHIVOS_MCP = ARCHIVOS_AGENTE.concat([
@@ -43,7 +44,7 @@ const INSTRUCCIONES = `Conector de la app de Rubik Bolivia (taller de stands, mo
 - Los recargos (cargas sociales, indirectos, utilidad) los decide el dueño: no los cambies por tu cuenta.
 Flujo: listar_clientes → listar_proyectos (o crear_cliente / crear_proyecto) → abrir_cotizacion (una por chat; guardá cid, pid y conv) → registrar_mensaje_del_dueno y registrar_lectura_de_archivo para tener orígenes → buscar_base / medicion_3d → armar_borrador → ver_borrador → aplicar_al_presupuesto (con la confirmación del dueño).
 Para ajustar una cotización existente: listar_cotizaciones o abrir_cotizacion con item; para no perder la anterior, nueva_version. Apagar ítems solo con proponer_apagar_items → sí del dueño → confirmar_propuesta (nunca se borra).
-Requerimientos (lo que el dueño cargó en la app: descripción, fotos anotadas, PDF, 3D): listar_requerimientos → leer_requerimiento (ves las fotos) → cliente/proyecto → abrir_cotizacion → asignar_requerimiento (con confirmación del dueño) → cotizar citando los adjuntos copiados.
+Requerimientos (lo que el dueño cargó en la app: descripción, fotos anotadas, PDF, 3D): listar_requerimientos → leer_requerimiento (ves las fotos, las vistas del 3D y las páginas de los PDF) → cliente/proyecto → abrir_cotizacion → asignar_requerimiento (con confirmación del dueño) → cotizar citando los adjuntos copiados.
 Si está el skill "cotizar-en-rubik", seguilo. Respondé en español de Bolivia, corto.`;
 
 function dependencias(admin, esHub) {

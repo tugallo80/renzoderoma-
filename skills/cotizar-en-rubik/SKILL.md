@@ -64,7 +64,8 @@ cotas y notas dibujadas, PDF, 3D ya medido y otros archivos. No corre ninguna IA
 "tengo un requerimiento nuevo" o "cotizá el de <cliente>":
 1. `listar_requerimientos` (pendientes) → `leer_requerimiento {id}`. Mirá las fotos y las vistas del 3D que devuelve
    (si viene `siguiente_desde`, pedí las que faltan). Las anotaciones vienen como datos: **las medidas son las que escribió
-   el dueño**, no las recalcules desde la imagen. Los PDF no se ven por ahí: si hacen falta, pedile que los adjunte acá.
+   el dueño**, no las recalcules desde la imagen. Los PDF vienen como **páginas** (imagen de ~2000 px, legible para cotas)
+   y con el texto de cada página si son vectoriales; si dicen "procesando", volvé a leer en un minuto.
 2. Cliente y proyecto: si el requerimiento trae `cliente.cid`, usalo; si trae un nombre nuevo, `crear_cliente`; después
    `listar_proyectos` / `crear_proyecto`. Ante la duda, preguntá en la ronda de preguntas.
 3. `abrir_cotizacion` → registrá el pedido del dueño con `registrar_mensaje_del_dueno` → `asignar_requerimiento {id, cid, pid,

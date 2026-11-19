@@ -15,7 +15,8 @@
  * Se arma con las ayudas de herramientas.js (sin require circular).
  */
 const R = require("../agente/rutas");
-const REN = require("../render/gemini");   // solo constantes (modelos, aspectos): la llamada a Gemini la hace renderTurno
+const REN = require("../render/gemini");
+const PDF = require("../pdf");   // cola de páginas de los PDF (el render lo hace pdfPaginas)   // solo constantes (modelos, aspectos): la llamada a Gemini la hace renderTurno
 
 /** Espera de generar_render: Hosting corta a los 60 s, así que se espera ~40 s y si no, se devuelve el id (ver_render). */
 let ESPERA = { ms: 40000, cada: 2500, dormir: (ms) => new Promise((ok) => setTimeout(ok, ms)), ahora: () => Date.now() };
@@ -25,7 +26,11 @@ const ESTADOS = ["pendiente", "asignado", "cotizado", "descartado"];
 /** Lo que devuelve leer_requerimiento por llamada: unos 300 KB de imágenes (probado en claude.ai hasta ~300 KB). */
 const TOPE_IMAGENES = 300 * 1024;
 /** Nodos de la base que tocan estas herramientas (además del cerco del conector). */
-const RUTAS_REQ = [/^requerimientos(\/|$)/];
+const RUTAS_REQ = [/^requerimientos(\/|$)/, /^pdf_cola(\/|$)/];
+/** Espera de leer_requerimiento cuando hay PDF generando páginas (Hosting corta a los 60 s). */
+const ESPERA_PDF_MS = 25000;
+/** Texto de cada página que se devuelve (el resto, en la imagen). */
+const MAX_TEXTO_PAGINA = 3000;
 /** Un render que sigue "en proceso" después de esto se considera cortado (renderTurno tiene 300 s). */
 const COLGADO_MS = 6 * 60000;
 /** Renders por requerimiento (para no gastar de más por error). */
@@ -47,7 +52,7 @@ module.exports = function crear({ falla, proyecto, acotar, RUTAS }) {
     const ordenados = (adj) => Object.keys(adj || {}).filter((k) => adj[k]).sort((a, b) => (adj[a].orden || 0) - (adj[b].orden || 0));
     const fecha = (ms) => (ms ? new Date(ms - 4 * 3600 * 1000).toISOString().slice(0, 16).replace("T", " ") : undefined);
 
-    function resumenAdjunto(k, a, n) {
+    function resumenAdjunto(k, a, n, cita) {
         const o = { n, adj: k, tipo: a.tipo, nombre: a.nombre };
         if (a.tipo === "imagen") {
             o.tamano_px = a.ancho && a.alto ? `${a.ancho}×${a.alto}` : undefined;
@@ -55,17 +60,56 @@ module.exports = function crear({ falla, proyecto, acotar, RUTAS }) {
         }
         if (a.tipo === "3d") { o.piezas = a.piezas; o.tamano_m = a.tamano_m; o.unidad = a.unidad; o.resumen = a.resumen; }
         if (a.tipo === "pdf" || a.tipo === "otro") o.kb = Math.round((a.bytes || 0) / 1024);
+        if (a.tipo === "pdf") {
+            const est = a.paginas_estado || "sin_generar";
+            o.paginas = est === "listo"
+                ? { total: a.paginas_total, como_imagen: (a.paginas_claude_rutas || []).length, tamano_px: a.paginas_px,
+                    aviso: a.paginas_total > (a.paginas_claude_rutas || []).length ? `se muestran las primeras ${(a.paginas_claude_rutas || []).length} páginas de ${a.paginas_total}` : undefined,
+                    texto: a.paginas_texto ? a.paginas_texto.map((t, i) => ({ p: i + 1, texto: String(t || "").slice(0, MAX_TEXTO_PAGINA) || "(sin texto: plano escaneado o solo dibujo; mirá la imagen)" })) : undefined }
+                : est === "error" ? { estado: "error", motivo: a.paginas_error || "no se pudieron generar" }
+                : { estado: "procesando", siguiente: "Las páginas se están generando: volvé a llamar leer_requerimiento en un minuto." };
+            if (cita) o.cita = `${cita} (página n: cota_plano:<adjunto> p.<n>)`;
+        }
         return o;
     }
 
+    /** Adjunto del proyecto al que se copió (después de asignar_requerimiento): con ese id se citan las páginas. */
+    const citaDe = (mapa, k) => (mapa && mapa[k] && mapa[k].adjunto) || null;
+
+    /**
+     * PDF sin páginas (cargados antes de que existieran, o un pedido que quedó colgado): se encolan para pdfPaginas.
+     * Si hay alguno generándose, se espera un rato (hasta ESPERA_PDF_MS) y se relee; si no termina, sale "procesando".
+     */
+    async function asegurarPaginas(almacen, id, r) {
+        const adj = r.adjuntos || {};
+        const ahora = ESPERA.ahora();
+        let encolados = 0;
+        for (const k of Object.keys(adj)) {
+            if (PDF.necesitaPaginas(adj[k], ahora)) { await PDF.encolar(alReq(almacen), id, k); encolados++; }
+        }
+        const generando = (x) => Object.values(x.adjuntos || {}).some((a) => a && a.tipo === "pdf" && (a.paginas_estado === "procesando" || a.paginas_estado === "generando"));
+        if (!encolados && !generando(r)) return r;
+        const hasta = ESPERA.ahora() + ESPERA_PDF_MS;
+        let act = await alReq(almacen).leer(`requerimientos/${id}`);
+        while (act && generando(act) && ESPERA.ahora() < hasta) {
+            await ESPERA.dormir(ESPERA.cada);
+            act = await alReq(almacen).leer(`requerimientos/${id}`);
+        }
+        return act || r;
+    }
+
     /** Imágenes que se pueden mostrar de un adjunto, en orden: anotada (si hay) o la foto; del 3D, las vistas. */
-    function imagenesDe(k, a) {
+    function imagenesDe(k, a, mapa) {
         if (a.tipo === "imagen") {
             if (a.anotada_claude_ruta) return [{ adj: k, ruta: a.anotada_claude_ruta, que: "foto anotada por el dueño (las cotas y notas también van como datos)" }];
             if (a.claude_ruta) return [{ adj: k, ruta: a.claude_ruta, que: "foto" }];
             return [{ adj: k, ruta: a.ruta, que: "foto (original)", original: true }];
         }
         if (a.tipo === "3d") return (a.vistas_rutas || []).map((ruta, i) => ({ adj: k, ruta, que: `vista ${(a.vistas_nombres || [])[i] || i + 1} del 3D (números = piezas de medicion_3d)` }));
+        if (a.tipo === "pdf" && a.paginas_estado === "listo") {
+            const total = a.paginas_total || (a.paginas_claude_rutas || []).length;
+            return (a.paginas_claude_rutas || []).map((ruta, i) => ({ adj: k, ruta, que: `página ${i + 1} de ${total} de ${a.nombre}${citaDe(mapa, k) ? ` (cita: cota_plano:${citaDe(mapa, k)} p.${i + 1})` : ""}` }));
+        }
         return [];
     }
 
@@ -127,7 +171,7 @@ module.exports = function crear({ falla, proyecto, acotar, RUTAS }) {
             def: {
                 name: "leer_requerimiento",
                 title: "Leer un requerimiento",
-                description: "Devuelve un Requerimiento completo: descripción del dueño, cliente, adjuntos (fotos con sus anotaciones como datos: cotas, marcas y notas en píxeles de la foto; 3D medido con su tamaño; PDF y otros archivos) y las IMÁGENES para que las mires (fotos anotadas y vistas del 3D, en copias chicas). Si no entran todas, viene \"siguiente_desde\": llamalo de nuevo con desde. Los PDF no se ven por acá: si hace falta leerlos, pedile al dueño que los adjunte en este chat. Para cotizar, después de abrir_cotizacion usá asignar_requerimiento.",
+                description: "Devuelve un Requerimiento completo: descripción del dueño, cliente, adjuntos (fotos con sus anotaciones como datos: cotas, marcas y notas en píxeles de la foto; 3D medido con su tamaño; PDF y otros archivos) y las IMÁGENES para que las mires (fotos anotadas, vistas del 3D y las PÁGINAS de los PDF —planos a ~2000 px, legibles para las cotas— con el texto de cada página si el PDF es vectorial). Si no entran todas, viene \"siguiente_desde\": llamalo de nuevo con desde. Si un PDF dice \"procesando\", sus páginas se están generando: volvé a llamar en un minuto. Para cotizar, después de abrir_cotizacion usá asignar_requerimiento.",
                 inputSchema: { type: "object", properties: {
                     id: { type: "string", description: "Id del requerimiento (de listar_requerimientos)." },
                     desde: { type: "integer", minimum: 0, description: "Opcional: desde qué imagen seguir (lo da siguiente_desde)." },
@@ -136,19 +180,20 @@ module.exports = function crear({ falla, proyecto, acotar, RUTAS }) {
                 annotations: { readOnlyHint: true },
             },
             async correr(almacen, uid, e) {
-                const r = await leerReq(almacen, e.id);
+                const r = await asegurarPaginas(almacen, e.id, await leerReq(almacen, e.id));
+                const mapa = r.adjuntos_proyecto || {};
                 const adj = r.adjuntos || {};
                 const claves = ordenados(adj);
                 const datos = {
                     id: e.id, titulo: r.titulo, estado: r.estado || "pendiente", cliente: r.cliente || null,
                     descripcion: r.descripcion || "", creado: fecha(r.creado),
                     asignado: r.pid ? { cid: r.cid, pid: r.pid, proyecto: r.proyecto_nombre, conv: r.conv, adjuntos_en_proyecto: r.adjuntos_proyecto || undefined } : undefined,
-                    adjuntos: claves.map((k, i) => resumenAdjunto(k, adj[k], i + 1)),
+                    adjuntos: claves.map((k, i) => resumenAdjunto(k, adj[k], i + 1, citaDe(mapa, k) ? `cota_plano:${citaDe(mapa, k)}` : null)),
                     nota: "Las anotaciones están en píxeles de la foto (de, a, en = [x, y]). Las medidas de las cotas son las que escribió el dueño: no las recalcules desde la imagen.",
                 };
                 const bloques = [];
                 if (!e.sin_imagenes) {
-                    const lista = [].concat(...claves.map((k) => imagenesDe(k, adj[k])));
+                    const lista = [].concat(...claves.map((k) => imagenesDe(k, adj[k], mapa)));
                     const desde = Math.min(Math.max(e.desde || 0, 0), lista.length);
                     let usados = 0, i = desde;
                     for (; i < lista.length; i++) {
@@ -232,6 +277,13 @@ module.exports = function crear({ falla, proyecto, acotar, RUTAS }) {
                         if (a.ancho && a.alto) { meta.ancho = a.ancho; meta.alto = a.alto; }
                     } else if (a.tipo === "pdf") {
                         meta.ruta = await copiar(a.ruta, a.ruta.split("/").pop());
+                        // las páginas (copias que se ven por el conector), para citar cota_plano:<adjunto> p.<n> mirando la imagen
+                        if (a.paginas_estado === "listo" && a.paginas_claude_rutas) {
+                            meta.paginas_rutas = [];
+                            for (let i = 0; i < a.paginas_claude_rutas.length; i++) meta.paginas_rutas.push(await copiar(a.paginas_claude_rutas[i], `pagina-${i + 1}.jpg`));
+                            meta.paginas_total = a.paginas_total;
+                            if (a.paginas_texto) meta.paginas_texto = a.paginas_texto;
+                        }
                     } else {
                         meta.medicion_ruta = await copiar(a.medicion_ruta, "medicion.json");
                         meta.resumen = a.resumen; meta.piezas = a.piezas;

@@ -17,6 +17,7 @@
  *   descartar {id} · reabrir {id}
  * cliente: {cid} de un cliente existente o {nombre} de uno que todavía no está en la app (lo crea Claude al asignar).
  */
+const { encolar } = require("../pdf");
 const ID = /^[A-Za-z0-9_-]{1,64}$/;
 const MAX = { pdf: 20 * 1024 * 1024, imagen: 5 * 1024 * 1024, medicion: 8 * 1024 * 1024, otro: 20 * 1024 * 1024, miniatura: 60 * 1024, claude: 200 * 1024 };
 const MAX_ADJUNTOS = 40;
@@ -24,7 +25,7 @@ const ESTADOS = ["pendiente", "asignado", "cotizado", "descartado"];
 /** Carpetas de Storage de esta Function (para crearAlmacen). */
 const ARCHIVOS = [/^requerimientos\/[^/]+\/[^/]+\/[^/]+$/];
 /** Nodos de la base que toca esta Function. */
-const RUTAS = [/^requerimientos(\/|$)/, /^clientes\/[^/]+\/nombre$/];
+const RUTAS = [/^requerimientos(\/|$)/, /^clientes\/[^/]+\/nombre$/, /^pdf_cola(\/|$)/];
 
 class ErrorPedido extends Error { constructor(msg, status) { super(msg); this.status = status || 400; } }
 const falla = (m, s) => { throw new ErrorPedido(m, s); };
@@ -184,6 +185,11 @@ async function adjuntar(almacen, b) {
         meta.orden = meta.fecha;
         await almacen.escribir(`requerimientos/${b.id}/adjuntos/${adj}`, meta);
         await almacen.actualizar(`requerimientos/${b.id}`, { actualizado: almacen.ahora() });
+        // PDF: las páginas como imágenes (para que Claude lea los planos) se generan en segundo plano (functions/pdf)
+        if (meta.tipo === "pdf") {
+            try { await encolar(almacen, b.id, adj); meta.paginas_estado = "procesando"; }
+            catch (e) { console.warn("[requerimientoApi] no se pudo encolar las páginas del PDF:", e.message); }
+        }
     } catch (e) {
         for (const ruta of subidos) await almacen.borrarArchivo(ruta).catch(() => {});
         throw e;
@@ -223,7 +229,8 @@ async function anotar(almacen, b) {
 }
 
 function rutasDe(meta) {
-    return [meta.ruta, meta.anotada_ruta, meta.claude_ruta, meta.anotada_claude_ruta, meta.medicion_ruta].concat(meta.vistas_rutas || []).filter(Boolean);
+    return [meta.ruta, meta.anotada_ruta, meta.claude_ruta, meta.anotada_claude_ruta, meta.medicion_ruta]
+        .concat(meta.vistas_rutas || [], meta.paginas_rutas || [], meta.paginas_claude_rutas || []).filter(Boolean);
 }
 
 async function quitar(almacen, b) {

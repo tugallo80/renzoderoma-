@@ -298,3 +298,25 @@ Herramientas nuevas: `crear_ficha` (desde una foto ya subida a la app), `leer_fi
 2. Herramientas del conector y skill (`skills/cotizar-en-rubik` + ZIP).
 3. Matriz en el ítem, el PDF y producción.
 4. 3D con three.js, si se aprueba.
+
+## PDF como páginas (19 nov 2026)
+
+Antes `leer_requerimiento` no mostraba los PDF: Claude le pedía al dueño que los volviera a adjuntar en el chat.
+Ahora los PDF se ven como las vistas del 3D:
+
+- **Al adjuntar un PDF** (`requerimientos/api.js`, desde la app o desde Kay) se encola en `/pdf_cola` y el adjunto queda
+  `paginas_estado: procesando`.
+- **`pdfPaginas`** (`functions/pdf/`, trigger de `/pdf_cola`, 2 GiB, 540 s, de a uno): pdfjs-dist (build legacy) +
+  @napi-rs/canvas renderizan hasta **20 páginas** con el lado mayor a **2000 px** (`pagina-{n}.jpg`) y una copia para el
+  conector de ≤ ~280 KB (`pagina-{n}_claude.jpg`, sharp baja calidad y después tamaño, mínimo 1400 px). Extrae el texto de
+  cada página si el PDF es vectorial. Deja `paginas_rutas`, `paginas_claude_rutas`, `paginas_texto`, `paginas_total`,
+  `paginas_px` y `paginas_estado: listo` (o `error` con `paginas_error`: contraseña, dañado…). Solo uno lo procesa
+  (transacción `procesando → generando`).
+- **`leer_requerimiento`**: las páginas entran en la lista de imágenes ("página N de M de <nombre>") con el mismo tope de
+  ~300 KB y `siguiente_desde`; el resumen del PDF trae `paginas.total` y el texto por página. Los PDF viejos (sin páginas) o
+  colgados (más de 12 min procesando) se encolan en la primera lectura y se esperan hasta 25 s.
+- **`asignar_requerimiento`** copia las páginas (copias del conector) al adjunto del proyecto (`paginas_rutas`,
+  `paginas_texto`) y, desde entonces, la leyenda de cada página dice cómo citarla: `cota_plano:<adjunto> p.<n>`.
+- Quitar el adjunto borra también las páginas. Reglas: `/pdf_cola` cerrado (solo Functions).
+- Prueba de carga (PDF de 21 MB con 16 láminas escaneadas con ruido, el peor caso): 61 s y 530 MB.
+- Pruebas: `tools/mcp` 34/34 con el render real sobre `tools/mcp/plano-demo.pdf` (3 láminas inventadas).
