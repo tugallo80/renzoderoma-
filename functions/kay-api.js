@@ -82,6 +82,10 @@ const ESTADOS_TERMINADOS = new Set(["entregado", "cancelado"]);
 
 async function listarProyectosActivos() {
     const cids = Object.keys(await leerShallow("proyectos"));
+    if (cids[0]) {
+        const muestra = await leerShallow(`proyectos/${cids[0]}`).catch((e) => ({ error: e.message }));
+        console.log(`[kayApi] muestra proyectos/${cids[0]}: ${JSON.stringify(muestra).slice(0, 300)}`);
+    }
     const porCliente = await mapConLimite(cids, 8, async (cid) => {
         // Solo el nombre (empresa o nombre, como el hub): el nodo del cliente
         // puede traer el logo embebido.
@@ -104,6 +108,7 @@ async function listarProyectosActivos() {
             }));
     });
     const todos = porCliente.flat();
+    console.log(`[kayApi] listar: clientes=${cids.length} proyectos=${todos.length} estados=${JSON.stringify(todos.reduce((a, p) => ((a[p.estado] = (a[p.estado] || 0) + 1), a), {}))}`);
     const proyectos = todos
         .filter((p) => !ESTADOS_TERMINADOS.has(p.estado))
         .sort((a, b) => (b.fecha || "").localeCompare(a.fecha || ""));
@@ -146,6 +151,7 @@ async function buscarProyecto(params) {
             }));
     });
     const proyectos = porCliente.flat().sort((a, b) => (b.fecha || "").localeCompare(a.fecha || "")).slice(0, 10);
+    console.log(`[kayApi] buscar "${q}": clientes=${cids.length} coincidencias=${proyectos.length}`);
     return { total: proyectos.length, proyectos };
 }
 
