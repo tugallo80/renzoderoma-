@@ -27,6 +27,7 @@
     </script>
     <script src="/js/firecache.js?v=7"></script>
     <script src="/js/auth-guard.js?v=3"></script>
+    <script src="/js/compras-api.js?v=1"></script>
 
     <style>
         :root { --bg: #f4f4f7; --card: #fff; --text: #1a1a1a; --blue: #007aff; --green: #34c759; --red: #ff3b30; --orange: #ff9500; --purple: #af52de; --gray: #8e8e93; --border: #d1d1d6; }
@@ -1127,6 +1128,21 @@
     window.removeAIImageIndex = function(index) { window.aiImageStore.splice(index, 1); renderAIImages(); }
     window.removeAIImage = function() { window.aiImageStore = []; renderAIImages(); }
 
+    /** Comprobante para /api/compras: JPEG de hasta 1600 px (el servidor acepta hasta 8 MB). */
+    function _comprimirParaCompra(dataUrl) {
+        return new Promise(res => {
+            const img = new Image();
+            img.onload = () => {
+                const f = Math.min(1, 1600 / Math.max(img.width, img.height));
+                const c = document.createElement('canvas'); c.width = Math.round(img.width * f); c.height = Math.round(img.height * f);
+                c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+                res(RubikCompras.dataUrlABase64(c.toDataURL('image/jpeg', 0.85)));
+            };
+            img.onerror = () => res(null);
+            img.src = dataUrl;
+        });
+    }
+
     window.sendAIMessage = async function() {
         const input = document.getElementById('ai-user-input'); const text = input.value.trim();
         if(!text && window.aiImageStore.length === 0) return;
@@ -1153,7 +1169,7 @@ JSON REQUERIDO:
 
         try {
             // modelo IA via proxy — siempre disponible
-            let parts = []; let uploadedImageUrl = null;
+            let parts = [];
 
             for (let i = 0; i < imagesToSend.length; i++) {
                 const b64Full = imagesToSend[i].data;
@@ -1161,16 +1177,10 @@ JSON REQUERIDO:
                 const mimeType = b64Full.split(';')[0].split(':')[1];
                 parts.push({ inlineData: { data: base64Data, mimeType: mimeType } });
 
-                if (i === 0) {
-                    try {
-                        document.getElementById('loader-title').innerText = "Subiendo respaldo..."; 
-                        document.getElementById('global-loader').style.display = 'flex';
-                        const snap = await firebase.storage().ref(`comprobantes/${pid}_compraIA_${Date.now()}.jpg`).putString(b64Full, 'data_url');
-                        uploadedImageUrl = await snap.ref.getDownloadURL();
-                        document.getElementById('global-loader').style.display = 'none';
-                    } catch(e) { console.log(e); document.getElementById('global-loader').style.display = 'none'; }
-                }
             }
+            // El comprobante lo guarda el servidor al registrar la compra (/api/compras), ya no se sube acá
+            const idemCompra = window.RubikCompras ? RubikCompras.nuevaClave() : null;
+            const fotoCompra = imagesToSend.length ? await _comprimirParaCompra(imagesToSend[0].data) : null;
             
             parts.push({ text: sysPrompt + "\n\nUSUARIO DICE: " + (text || "Registra esta compra y extrae los datos.") });
 
@@ -1198,37 +1208,27 @@ JSON REQUERIDO:
                 try {
                     let cleanJson = partsData[1].replace(/```json/gi, '').replace(/```/g, '').trim();
                     let p = JSON.parse(cleanJson);
-                    let cleanProv = p.proveedor.toUpperCase().replace(/[.#$\[\]/]/g, "").trim();
-
-                    await firebase.database().ref(`base_datos/proveedores/${cleanProv}`).update({ nombre: p.proveedor, nit: p.nit, contacto: p.contacto });
-
-                    if(p.materiales && p.materiales.length > 0) {
-                        p.materiales.forEach(async (m) => {
-                            let cleanMat = m.mat.toUpperCase().replace(/[.#$\[\]/]/g, "").trim();
-                            await firebase.database().ref(`base_datos/proveedores/${cleanProv}/materiales/${cleanMat}`).update({ precio: m.pu, und: m.u, fecha_act: new Date().toISOString() });
-                            await firebase.database().ref(`base_datos/materiales/${cleanMat}`).update({ n: m.mat, p: m.pu, u: m.u, proveedor_ref: p.proveedor });
-                        });
-                    }
-
-                    if(p.total > 0) {
-                        let snapGastos = await firebase.database().ref(`proyectos/${cid}/${pid}/gasto_total`).once('value');
-                        let gastosActuales = parseFloat(snapGastos.val() || 0);
-                        await firebase.database().ref(`proyectos/${cid}/${pid}/gasto_total`).set(gastosActuales + p.total);
-
-                        await firebase.database().ref(`proyectos/${cid}/${pid}/historial_compras`).push({
-                            proveedor: p.proveedor, total: p.total, fecha: p.fecha || new Date().toISOString().split('T')[0],
-                            comprobante: uploadedImageUrl, nota: text || "Compra por IA"
-                        });
-                    }
-
-                    if(p.es_factura && p.total > 0) {
-                        let tMes = (p.fecha || new Date().toISOString()).substring(0, 7); 
-                        await firebase.database().ref(`tesoreria/iva_compras/${tMes}`).push({
-                            nit: p.nit, factura: p.factura_nro, monto: p.total, fecha: p.fecha, proveedor: p.proveedor, comprobante: uploadedImageUrl, proyecto: window.pName
-                        });
-                    }
+                    // Una sola operación en el servidor (/api/compras): gasto del proyecto, egreso, crédito fiscal si es
+                    // factura, proveedor, precios y comprobante. Reintentar con la misma clave no duplica.
+                    const sn = (v) => (v && !/^s\/?n$/i.test(String(v).trim()) ? String(v).trim() : '');
+                    const nitIA = sn(p.nit).replace(/\D/g, '');
+                    const esFactura = !!p.es_factura && nitIA.length >= 5 && !!sn(p.factura_nro);
+                    const fechaIA = /^\d{4}-\d{2}-\d{2}$/.test(String(p.fecha || '')) ? p.fecha : null;
+                    const r = await RubikCompras.registrar({
+                        idempotencia: idemCompra, cid, pid, fecha: fechaIA, total: parseFloat(p.total) || 0,
+                        nota: text || 'Compra por IA',
+                        proveedor: { nombre: p.proveedor, nit: nitIA, contacto: sn(p.contacto) },
+                        factura: esFactura ? { nit: nitIA, razon_social: p.proveedor, nro: sn(p.factura_nro), fecha: fechaIA, monto: parseFloat(p.total) || 0 } : null,
+                        items: (p.materiales || []).filter(m => m && m.mat).map(m => ({ material: m.mat, cantidad: parseFloat(m.cant) || 1, unidad: m.u || 'und', precio: parseFloat(m.pu) || 0 })),
+                        items_referencia: true,
+                        foto: fotoCompra,
+                    });
+                    if (r.repetida) displayHtml += '<br><br><small>Esta compra ya estaba registrada.</small>';
                     displayHtml += `<br><br><div style="background:rgba(52,199,89,0.1); border:1px solid var(--green); padding:10px; border-radius:8px; color:var(--green); font-size:11px;"><b><i class="ph-bold ph-check-circle"></i> Operación Contable Exitosa</b></div>`;
-                } catch(errJson) { console.log(errJson); }
+                } catch(errJson) {
+                    console.log(errJson);
+                    displayHtml += `<br><br><div style="background:rgba(255,59,48,0.1); border:1px solid var(--red); padding:10px; border-radius:8px; color:var(--red); font-size:11px;"><b>No se registró la compra:</b> ${String(errJson.message || errJson).replace(/</g, '&lt;')}</div>`;
+                }
             }
 
             typing.style.display = 'none';
@@ -1248,8 +1248,9 @@ JSON REQUERIDO:
         if(snap.exists()) {
             snap.forEach(child => {
                 const key = child.key; const c = child.val();
+                if (!c || c.anulada) return;   // las anuladas quedan en el historial de la base, no en la lista
                 let docBtn = c.comprobante ? `<a href="${c.comprobante}" target="_blank" class="btn-main" style="padding:6px 10px; font-size:11px; background:var(--blue-light); color:var(--blue); text-decoration:none; width:auto;"><i class="ph-bold ph-image"></i> Foto</a>` : '';
-                let delBtn = `<button onclick="eliminarCompraIA('${key}', ${c.total || 0})" class="btn-main" style="padding:6px 10px; font-size:11px; background:rgba(255,59,48,0.1); color:var(--red); border:none; cursor:pointer; width:auto;"><i class="ph-bold ph-trash"></i></button>`;
+                let delBtn = `<button onclick="eliminarCompraIA('${key}', ${c.total || 0}, '${c.compra_id || ''}')" class="btn-main" style="padding:6px 10px; font-size:11px; background:rgba(255,59,48,0.1); color:var(--red); border:none; cursor:pointer; width:auto;"><i class="ph-bold ph-trash"></i></button>`;
 
                 cont.innerHTML += `<div class="pay-row" style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid var(--border); padding:10px 0; gap:10px;">
                     <div style="flex:1;">
@@ -1268,22 +1269,34 @@ JSON REQUERIDO:
         }
     });
 
-    window.eliminarCompraIA = async function(key, monto) {
+    // Las compras registradas con /api/compras se ANULAN en el servidor (resta del gasto una sola vez y queda en el historial).
+    // Las anteriores al cambio (sin compra_id) se borran: antes solo se restaba el monto y el registro quedaba, así que cada
+    // clic volvía a restar. Ahora se borra el registro y se resta una vez, con transacción.
+    window.eliminarCompraIA = async function(key, monto, compraId) {
+        if (compraId) {
+            const motivo = prompt("¿Por qué se anula esta compra? (se descuenta del gasto del proyecto y queda en el historial)");
+            if (motivo === null) return;
+            if (!motivo.trim()) return alert("Escribí el motivo.");
+            try {
+                document.getElementById('global-loader').style.display = 'flex';
+                await RubikCompras.anular(compraId, motivo.trim());
+            } catch(e) { alert("No se pudo anular: " + e.message); }
+            finally { document.getElementById('global-loader').style.display = 'none'; }
+            return;
+        }
         if(!confirm("¿Borrar este registro? El monto se descontará del balance del Dashboard automáticamente.")) return;
         try {
             document.getElementById('global-loader').style.display = 'flex';
-            if(monto > 0) {
-                let snapGastos = await firebase.database().ref(`proyectos/${cid}/${pid}/gasto_total`).once('value');
-                let gastosActuales = parseFloat(snapGastos.val() || 0);
-                let nuevoGasto = gastosActuales - monto;
-                if(nuevoGasto < 0) nuevoGasto = 0;
-                await firebase.database().ref(`proyectos/${cid}/${pid}/gasto_total`).set(nuevoGasto);
+            const ref = firebase.database().ref(`proyectos/${cid}/${pid}/historial_compras/${key}`);
+            const snap = await ref.once('value');
+            if (snap.exists()) {
+                await ref.remove();
+                if (monto > 0) await firebase.database().ref(`proyectos/${cid}/${pid}/gasto_total`).transaction(v => Math.max(0, (parseFloat(v) || 0) - monto));
             }
-            } catch(e) {
+        } catch(e) {
             console.error("Error al eliminar la compra IA:", e);
             alert("Hubo un problema al intentar eliminar el registro. Revisa tu conexión.");
-            document.getElementById('global-loader').style.display = 'none';
-        }
+        } finally { document.getElementById('global-loader').style.display = 'none'; }
     };
 </script>
     <script src="/js/viewmode.js?v=1">

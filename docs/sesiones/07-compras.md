@@ -63,9 +63,24 @@ Reglas de la operación:
 | Etapa | Qué | Estado |
 |---|---|---|
 | 1 | Módulo, `/api/compras`, acciones de Kay, reglas, pruebas (`tools/compras`, 8/8; reglas 187 OK) | ✅ |
-| 2 | Tesorería y el chat de Compras usan `/api/compras` (anular en vez de borrar); el balance de Tesorería suma `/compras` | ⏳ |
+| 2 | Tesorería y el chat de Compras usan `/api/compras` (`public/js/compras-api.js`); anular en vez de borrar; el balance de Tesorería suma `/compras`; Impuestos e inicio no cuentan las anuladas | ✅ |
 | 3 | Migración en Cloud Shell: `revisar` (dry-run con informe) → `respaldar` → `aplicar` (pide SI). `iva_compras` → `compras_facturadas`; `historial_compras` → `/compras` (`origen: migrada`); proveedores a `NIT_…`/`NOM_…` con `proveedores_alias`. Después se cierran en las reglas las escrituras del navegador sobre compras y facturas | ⏳ (necesita OK) |
 | 4 | Documento de Kay igual en los dos repos | 🟡 este repo hecho; falta copiarlo a `desarrollo-personal` |
+
+### Etapa 2 en detalle
+
+- **Tesorería → Cargar factura de compra:** llama a `registrar` con la factura y el comprobante (foto o PDF). Ahora pide el
+  NIT (≥5 dígitos): una factura sin NIT no sirve como crédito fiscal. La clave de idempotencia vale hasta que se guarda,
+  así que dos toques en Guardar no duplican. Eliminar una factura nueva la **anula** (pide el motivo); las viejas, sin
+  `compra_id`, se siguen borrando como antes hasta la migración.
+- **Compras → chat con IA:** la IA lee el recibo como antes y la app manda una sola operación con `items_referencia: true`
+  (los precios leídos pueden no sumar exacto al total). El comprobante lo guarda el servidor (ya no `comprobantes/` desde
+  el navegador). Si el servidor rechaza algo, el chat lo muestra en rojo.
+- **Borrar compra:** las nuevas se anulan en el servidor; las viejas se borran **y** restan una sola vez con transacción
+  (antes restaban en cada clic y el registro quedaba).
+- **Balance de Tesorería:** suma `/compras` como egreso. Pestaña Impuestos e inicio: filtran las anuladas.
+- `compras_facturadas` sigue escribible desde el navegador solo para las facturas viejas (borrar y adjuntar foto); se
+  cierra en la etapa 3, después de migrarlas.
 
 ## 5. Lo que viene (diseño, sin construir)
 

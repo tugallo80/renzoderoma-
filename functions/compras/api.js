@@ -14,7 +14,8 @@
  * Acciones:
  *   registrar        {idempotencia, total?, fecha?, cid?, pid?, proveedor?: {nombre, nit?, contacto?},
  *                     factura?: {nit, razon_social?, nro, cuf?, fecha?, monto?}, items?: [{material, cantidad, unidad?, precio}],
- *                     nota?, foto?: {datos_base64, mime?}, pagado_con?: {medio, persona?}, origen?: {tipo, ref?}}
+ *                     nota?, foto?: {datos_base64, mime?} (JPG/PNG/WEBP/PDF), pagado_con?: {medio, persona?}, origen?: {tipo, ref?},
+ *                     items_referencia?: true (precios leídos de un recibo: no tienen que sumar exacto al total)}
  *                    → {id, repetida, proveedor_id, resumen}
  *   anular           {id, motivo} → {ok, id}
  *   balance_mensual  {mes: "AAAA-MM"}   ·   balance_proyecto {cid, pid}
@@ -40,7 +41,7 @@ const RUTAS = [
     /^proyectos\/[^/]+\/[^/]+\/(nombre|estado|monto_cierre|gasto_total|gastos_adicionales_compras|historial_compras|licitaciones)(\/|$)/,
     /^proyectos\/[^/]+$/, /^clientes$/, /^ingresos$/, /^cancheos$/,
 ];
-const ARCHIVOS = [/^compras\/\d{4}-\d{2}\/[A-Za-z0-9_-]+\.(jpg|png|webp)$/];
+const ARCHIVOS = [/^compras\/\d{4}-\d{2}\/[A-Za-z0-9_-]+\.(jpg|png|webp|pdf)$/];
 
 class ErrorPedido extends Error { constructor(msg, status) { super(msg); this.status = status || 400; } }
 const falla = (m, s) => { throw new ErrorPedido(m, s); };
@@ -124,11 +125,12 @@ function leerFoto(foto) {
     if (!datos) falla("La foto está vacía.");
     const buf = Buffer.from(datos, "base64");
     if (!buf.length) falla("La foto está vacía.");
-    if (buf.length > MAX_FOTO) falla("La foto pesa más de 8 MB.", 413);
+    if (buf.length > MAX_FOTO) falla("El comprobante pesa más de 8 MB.", 413);
     const ext = buf[0] === 0xff && buf[1] === 0xd8 ? "jpg" : buf[0] === 0x89 && buf[1] === 0x50 ? "png"
-        : buf.slice(0, 4).toString() === "RIFF" && buf.slice(8, 12).toString() === "WEBP" ? "webp" : null;
-    if (!ext) falla("La foto tiene que ser JPG, PNG o WEBP.");
-    return { buf, ext, mime: ext === "jpg" ? "image/jpeg" : "image/" + ext };
+        : buf.slice(0, 4).toString() === "RIFF" && buf.slice(8, 12).toString() === "WEBP" ? "webp"
+        : buf.slice(0, 5).toString() === "%PDF-" ? "pdf" : null;
+    if (!ext) falla("El comprobante tiene que ser JPG, PNG, WEBP o PDF.");
+    return { buf, ext, mime: ext === "jpg" ? "image/jpeg" : ext === "pdf" ? "application/pdf" : "image/" + ext };
 }
 const claveIdem = (s) => crypto.createHash("sha256").update(String(s)).digest("hex").slice(0, 40);
 
@@ -144,7 +146,10 @@ async function registrar(almacen, b, quienCrudo) {
     const suma = r2(items.reduce((s, it) => s + it.subtotal, 0));
     let total = b.total == null || b.total === "" ? null : numero(b.total, "Total");
     if (total == null) { if (!(suma > 0)) falla("Falta el total de la compra."); total = suma; }
-    if (items.length && suma > 0 && Math.abs(suma - total) > TOLERANCIA_BS) falla(`La suma de los ítems (${suma} Bs) no coincide con el total (${total} Bs).`);
+    // items_referencia: los ítems son precios leídos de un recibo (por IA) y pueden no sumar exacto al total (descuentos,
+    // redondeos): se guardan igual y se marca la diferencia. Sin esa marca, tienen que coincidir.
+    const itemsRef = b.items_referencia === true;
+    if (!itemsRef && items.length && suma > 0 && Math.abs(suma - total) > TOLERANCIA_BS) falla(`La suma de los ítems (${suma} Bs) no coincide con el total (${total} Bs).`);
     const factura = limpiarFactura(b.factura, total, ahora);
     const f = fecha(b.fecha || (factura && factura.fecha), "Fecha", ahora);
     const prov = b.proveedor && typeof b.proveedor === "object" ? b.proveedor : {};
@@ -200,6 +205,7 @@ async function registrar(almacen, b, quienCrudo) {
         pagado_con: medio ? { medio, persona: texto(b.pagado_con.persona, 80) || null } : null,
         origen: { tipo: origenTipo, ref: b.origen && b.origen.ref ? texto(b.origen.ref, 120) : null },
         registrado_por: quien, idempotencia: ki, creado: ahora, estado: "registrada",
+        items_diferencia: itemsRef && items.length && Math.abs(suma - total) > TOLERANCIA_BS ? r2(total - suma) : null,
     };
 
     const m = {};
