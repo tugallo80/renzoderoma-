@@ -36,6 +36,7 @@ function acotar(almacen, rutas) {
         leer: async (r) => almacen.leer(v(r)),
         escribir: async (r, x) => almacen.escribir(v(r), x),
         actualizar: async (r, x) => almacen.actualizar(v(r), x),
+        actualizarVarios: async (m) => { Object.keys(m || {}).forEach(v); return almacen.actualizarVarios(m); },
         agregar: async (r, x) => almacen.agregar(v(r), x),
         borrar: async (r) => almacen.borrar(v(r)),
         transaccion: async (r, fn) => almacen.transaccion(v(r), fn),
@@ -64,6 +65,12 @@ function crearAlmacen(admin, rutas = RUTAS_PERMITIDAS, archivos = ARCHIVOS_AGENT
         async leer(ruta) { return (await db.ref(verificarRuta(ruta)).once("value")).val(); },
         async escribir(ruta, valor) { await db.ref(verificarRuta(ruta)).set(valor); },
         async actualizar(ruta, valor) { await db.ref(verificarRuta(ruta)).update(valor); },
+        /** Escritura atómica de varias rutas a la vez ({ "ruta/a": valor, … }; null borra). Todas tienen que estar permitidas. */
+        async actualizarVarios(mapa) {
+            const limpio = {};
+            Object.keys(mapa || {}).forEach((r) => { limpio[verificarRuta(r)] = mapa[r] === undefined ? null : mapa[r]; });
+            if (Object.keys(limpio).length) await db.ref().update(limpio);
+        },
         async agregar(ruta, valor) { const ref = db.ref(verificarRuta(ruta)).push(); await ref.set(valor); return ref.key; },
         nuevaClave() { return db.ref().push().key; },
         async borrar(ruta) { await db.ref(verificarRuta(ruta)).remove(); },
