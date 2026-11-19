@@ -10,6 +10,8 @@ Estado (2026-10-14): conexión desplegada con una sola acción de prueba, de sol
 Kay recepcionista por WhatsApp ("¿cómo va el stand de X?", "¿cuánto me pagó?", "¿qué está atrasado?").
 2026-11-19: `herramientas_conector` y `usar_conector`: Kay usa las mismas herramientas de lectura que el conector de Claude
 (mismo código y rutas). Los proyectos se leen con el Admin SDK, como el conector (la lectura REST `shallow` devolvía vacío).
+2026-11-19: **compras** — `registrar_compra`, `anular_compra` (escriben) y `balance_mensual`, `balance_proyecto` (lectura),
+con el mismo módulo que usa la app (`functions/compras/api.js`, `/api/compras`). Detalle en `docs/sesiones/07-compras.md`.
 
 ## Principios
 
@@ -88,6 +90,10 @@ detalle queda en los logs de `kayApi`, no se le devuelve a Kay).
 | `estado_cotizacion` | sí | `{ cid, pid, conv }` | `{ fase: en_cola\|trabajando\|listo\|esperando_dueno\|tope\|error, texto, ultimo_mensaje?, borrador? }` |
 | `mensaje_agente` | **no** | `{ cid, pid, conv, texto }` | `{ error, turno }`: respuesta o cambio del dueño al Agente IA (otro turno) |
 | `requerimientos_pendientes` | sí | — | `{ total, requerimientos: [{ titulo, cliente, descripcion, actualizado }] }` (sin proyecto, 20 más nuevos) |
+| `registrar_compra` | **no** | `{ idempotencia, total?, fecha?, cid?, pid?, proveedor?: {nombre, nit?, contacto?}, factura?: {nit, razon_social?, nro, cuf?, fecha?, monto?}, items?: [{material, cantidad, unidad?, precio}], nota?, foto?: {datos_base64, mime?}, pagado_con?: {medio, persona?}, registrado_por: {rol, nombre, telefono} }` | `{ error, id, repetida, proveedor_id, proveedor_nuevo?, resumen }`. Una sola operación: `/compras`, gasto del proyecto (`historial_compras` + `gasto_total` con transacción), crédito fiscal en `/compras_facturadas` si hay factura, proveedor (`NIT_…`/`NOM_…`) y precios, foto en Storage. **`idempotencia` = id del mensaje de WhatsApp**: reintentar devuelve la misma compra (`repetida: true`). Kay confirma con quien la carga antes |
+| `anular_compra` | **no** | `{ id, motivo, registrado_por }` | `{ error, ok, id, ya_estaba_anulada? }`: no borra; resta del gasto del proyecto una sola vez y marca la factura como anulada |
+| `balance_mensual` | sí | `{ mes: "AAAA-MM" }` | `{ mes, ingresos: {total, facturas}, egresos: {total, compras, pagos_contratistas, pagos_cancheos, cantidad_compras}, resultado, impuestos: {compras_con_factura, monto_facturado, credito_fiscal_iva_13}, nota }` |
+| `balance_proyecto` | sí | `{ cid, pid }` | `{ proyecto, monto_cierre, cobrado, gastos: {compras, cantidad_compras, gasto_total_registrado, gastos_adicionales_compras, contratistas_contratado, contratistas_pagado}, ultimas_compras }` |
 
 `listar_proyectos_activos`: recorre `/proyectos/$cid/$pid` de todos los clientes y devuelve los que **no** están
 `entregado` ni `cancelado`. El ciclo de vida completo de un proyecto es `requerimiento` → `cotizacion` →
