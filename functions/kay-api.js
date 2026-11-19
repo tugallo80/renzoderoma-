@@ -130,6 +130,87 @@ async function requerimiento(params) {
     return r.status === 200 ? { error: false, ...r.cuerpo } : { error: true, texto: (r.cuerpo && r.cuerpo.error) || `Error ${r.status}` };
 }
 
+// ── Cotizar desde WhatsApp (etapa 3) ──
+// El mismo circuito que Claude con el conector: cliente → proyecto → conversación nueva del Agente IA →
+// mensaje del dueño (confirmación) → asignar_requerimiento (copia los adjuntos) → turno del Agente IA
+// (agente/api.js → enviar, que encola en /agente_cola; lo corre agenteTurno con Claude).
+async function herramienta(nombre, args) {
+    const { H, uid, almacen } = await conector();
+    const r = await H.llamar(almacen, uid, nombre, args);
+    const texto = (r.content || []).filter((c) => c.type === "text").map((c) => c.text)[0] || "";
+    if (r.isError) throw new Error(`${nombre}: ${texto.slice(0, 300)}`);
+    try { return JSON.parse(texto); } catch { return { texto }; }
+}
+function almacenAgente() {
+    const admin = require("firebase-admin");
+    const { crearAlmacen } = require("./agente/almacen");
+    return crearAlmacen(admin);
+}
+
+async function cotizarRequerimiento(params) {
+    const { uid, almacen } = await conector();
+    const id = String(params.id || "");
+    if (!ID_RTDB.test(id)) return { error: true, texto: "Falta el id del requerimiento." };
+    const req = await almacen.leer(`requerimientos/${id}`);
+    if (!req) return { error: true, texto: "No existe ese requerimiento." };
+    if (req.estado === "descartado") return { error: true, texto: "El requerimiento está descartado." };
+    const nota = String(params.nota || "").trim().slice(0, 2000);
+    let cid = params.cid || (req.cliente && req.cliente.cid) || req.cid;
+    let pid = params.pid || req.pid;
+    if (!cid) {
+        const nombre = String(params.cliente_nombre || (req.cliente && req.cliente.nombre) || "").trim();
+        if (!nombre) return { error: true, texto: "El requerimiento no tiene cliente: decime de qué cliente es." };
+        const c = await herramienta("crear_cliente", { nombre });
+        cid = c.cid || (c.ya_existe && c.ya_existe.cid);
+    }
+    if (!pid) {
+        const p = await herramienta("crear_proyecto", { cid, nombre: String(params.proyecto_nombre || req.titulo || "Proyecto desde WhatsApp").slice(0, 120) });
+        pid = p.pid || (p.ya_existe && p.ya_existe.pid);
+    }
+    if (!ID_RTDB.test(String(cid)) || !ID_RTDB.test(String(pid))) return { error: true, texto: "No pude armar el cliente o el proyecto." };
+    const ab = await herramienta("abrir_cotizacion", { cid, pid, titulo: `WhatsApp: ${String(req.titulo || "cotización").slice(0, 45)}` });
+    const conv = ab.conv;
+    const conf = await herramienta("registrar_mensaje_del_dueno", { cid, pid, conv, texto: `(Por WhatsApp, a Kay) Cotizá el requerimiento ${id}.${nota ? ` ${nota}` : ""}` });
+    const asig = await herramienta("asignar_requerimiento", { id, cid, pid, conv, confirmacion: conf.origen });
+    const adjuntos = Object.values(asig.adjuntos || {}).map((a) => a && a.adjunto).filter(Boolean);
+    const API = require("./agente/api");
+    const env = await API.enviar(almacenAgente(), {
+        cid, pid, conv, adjuntos,
+        texto: `Cotizá el requerimiento ${id} (${req.titulo || ""}), que está en esta conversación con sus adjuntos. Lo pidió el dueño por WhatsApp.${nota ? ` Nota del dueño: ${nota}` : ""} Armá el borrador con la base de precios; lo que no esté claro, dejalo como supuesto o "por confirmar" y preguntame lo indispensable en una sola ronda.`,
+    }, uid);
+    console.log(`[kayApi] cotizar ${id}: ${cid}/${pid}/${conv} turno ${env.turno}`);
+    return { error: false, cid, pid, conv, turno: env.turno, proyecto: asig.proyecto || ab.proyecto, adjuntos: adjuntos.length };
+}
+
+// Estado del turno del Agente IA en esa conversación y, si terminó, el borrador y su último mensaje.
+async function estadoCotizacion(params) {
+    const { cid, pid, conv } = params;
+    if (![cid, pid, conv].every((x) => ID_RTDB.test(String(x || "")))) return { error: true, texto: "Faltan cid, pid o conv." };
+    const R = require("./agente/rutas");
+    const al = almacenAgente();
+    const est = (await al.leer(`${R.RAIZ(cid, pid)}/estado`)) || {};
+    const fase = est.conv && est.conv !== conv ? "listo" : est.fase || "en_cola";
+    const salida = { error: false, fase, texto: est.texto || "" };
+    if (["listo", "esperando_dueno", "tope", "error"].includes(fase)) {
+        const msgs = (await al.leer(`${R.raizConv(cid, pid, conv)}/conversacion/mensajes`)) || {};
+        const ultimo = Object.keys(msgs).sort().reverse().map((k) => msgs[k]).find((m) => m && m.rol !== "dueno" && m.rol !== "aviso");
+        if (ultimo) salida.ultimo_mensaje = String(ultimo.texto || "").slice(0, 3000);
+        try { salida.borrador = await herramienta("ver_borrador", { cid, pid, conv }); } catch (e) { salida.borrador = null; }
+    }
+    return salida;
+}
+
+// El dueño le contesta al Agente IA (cuando pregunta algo) o le pide un cambio: otro turno en la misma conversación.
+async function mensajeAgente(params) {
+    const { uid } = await conector();
+    const { cid, pid, conv } = params;
+    const texto = String(params.texto || "").trim().slice(0, 4000);
+    if (![cid, pid, conv].every((x) => ID_RTDB.test(String(x || ""))) || !texto) return { error: true, texto: "Faltan datos." };
+    const API = require("./agente/api");
+    const env = await API.enviar(almacenAgente(), { cid, pid, conv, texto: `(Por WhatsApp) ${texto}` }, uid);
+    return { error: false, turno: env.turno };
+}
+
 // Proyectos de todos los clientes, leídos como el conector (Admin SDK), solo los campos simples.
 async function proyectosDeTodos() {
     const { almacen } = await conector();
@@ -301,6 +382,21 @@ const ACCIONES = {
         soloLectura: false,
         descripcion: "Crea, edita o adjunta (pdf/imagen) un requerimiento, con la API de la app { accion, ... }.",
         ejecutar: requerimiento,
+    },
+    cotizar_requerimiento: {
+        soloLectura: false,
+        descripcion: "Manda un requerimiento a cotizar al Agente IA { id, cid?, pid?, cliente_nombre?, proyecto_nombre?, nota? }.",
+        ejecutar: cotizarRequerimiento,
+    },
+    estado_cotizacion: {
+        soloLectura: true,
+        descripcion: "Estado del turno del Agente IA { cid, pid, conv } y, si terminó, el borrador.",
+        ejecutar: estadoCotizacion,
+    },
+    mensaje_agente: {
+        soloLectura: false,
+        descripcion: "Le manda un mensaje del dueño al Agente IA en esa cotización { cid, pid, conv, texto }.",
+        ejecutar: mensajeAgente,
     },
     requerimientos_pendientes: {
         soloLectura: true,
