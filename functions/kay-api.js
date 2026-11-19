@@ -115,6 +115,21 @@ async function usarConector(params) {
     };
 }
 
+// Requerimientos desde WhatsApp (etapa 2): la misma API de la app (requerimientos/api.js → atender), con el
+// usuario hub del dueño. Solo crear, editar y adjuntar (pdf o imagen); Kay confirma con el dueño antes.
+async function requerimiento(params) {
+    const { uid } = await conector();
+    const admin = require("firebase-admin");
+    const REQ = require("./requerimientos/api");
+    const { crearAlmacen } = require("./agente/almacen");
+    const accion = String(params.accion || "");
+    if (!["crear", "editar", "adjuntar"].includes(accion)) return { error: true, texto: `Acción no permitida: ${accion}` };
+    if (accion === "adjuntar" && !["pdf", "imagen"].includes(params.tipo)) return { error: true, texto: "Solo se adjuntan PDF o imágenes." };
+    const r = await REQ.atender(crearAlmacen(admin, REQ.RUTAS, REQ.ARCHIVOS), { ...params, accion }, uid);
+    console.log(`[kayApi] requerimiento ${accion}: ${r.status}`);
+    return r.status === 200 ? { error: false, ...r.cuerpo } : { error: true, texto: (r.cuerpo && r.cuerpo.error) || `Error ${r.status}` };
+}
+
 // Proyectos de todos los clientes, leídos como el conector (Admin SDK), solo los campos simples.
 async function proyectosDeTodos() {
     const { almacen } = await conector();
@@ -281,6 +296,11 @@ const ACCIONES = {
         soloLectura: true,
         descripcion: "Corre una herramienta de lectura del conector { nombre, args } con el usuario hub del dueño.",
         ejecutar: usarConector,
+    },
+    requerimiento: {
+        soloLectura: false,
+        descripcion: "Crea, edita o adjunta (pdf/imagen) un requerimiento, con la API de la app { accion, ... }.",
+        ejecutar: requerimiento,
     },
     requerimientos_pendientes: {
         soloLectura: true,
