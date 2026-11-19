@@ -435,12 +435,54 @@ const ACCIONES = {
         descripcion: "Monto de cierre, cobrado y gastos (compras, contratistas) de un proyecto { cid, pid }.",
         ejecutar: (p) => compras("balance_proyecto", p),
     },
+    buscar_contacto: {
+        soloLectura: true,
+        descripcion: "Busca un contacto por nombre en personal, proveedores y clientes { nombre } → { encontrados: [{nombre, telefono, origen, detalle}] } (hasta 5, el mejor primero).",
+        ejecutar: buscarContacto,
+    },
     requerimientos_pendientes: {
         soloLectura: true,
         descripcion: "Requerimientos cargados que todavía no tienen proyecto.",
         ejecutar: requerimientosPendientes,
     },
 };
+
+// ── Contactos de la base de Rubik (Kay por WhatsApp: "mandale a José Luis…") ──────────────────────
+// Busca por nombre en /personal (trabajadores, supervisores, contratistas), /base_datos/proveedores y
+// /clientes. Solo devuelve nombre, teléfono y de dónde sale: nada de sueldos ni datos internos.
+const sinTildes = (t) => String(t || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9ñ ]+/g, " ").replace(/\s+/g, " ").trim();
+
+async function buscarContacto(params) {
+    const buscado = sinTildes(params.nombre).slice(0, 80);
+    if (!buscado) throw new Error("Falta el nombre");
+    const admin = require("firebase-admin");
+    const db = admin.database();
+    const [personal, proveedores, clientes] = await Promise.all(
+        ["personal", "base_datos/proveedores", "clientes"].map((r) => db.ref(r).get().then((s) => s.val() || {}).catch(() => ({}))));
+    const lista = [];
+    const sumar = (obj, origen, arma) => Object.keys(obj).forEach((k) => {
+        const v = obj[k];
+        if (v && typeof v === "object") { const c = arma(v, k); if (c.nombre && c.telefono) lista.push(Object.assign({ origen }, c)); }
+    });
+    sumar(personal, "personal", (v, k) => ({ nombre: v.nombre || k.replace(/_/g, " "), telefono: String(v.telefono || v.whatsapp || v.phone || "").trim(), detalle: [v.tipo, v.especialidad].filter(Boolean).join(" · ") || null }));
+    sumar(proveedores, "proveedor", (v) => ({ nombre: v.nombre || v.razon_social || "", telefono: String(v.telefono || v.contacto || "").replace(/^S\/N$/i, "").trim(), detalle: v.categoria || null }));
+    sumar(clientes, "cliente", (v, k) => ({ nombre: [v.nombre, v.empresa].filter(Boolean).join(" · ") || k, telefono: String(v.wsp || v.whatsapp || v.telefono || "").trim(), detalle: null }));
+    const palabras = buscado.split(" ");
+    const encontrados = lista
+        .map((c) => {
+            const n = sinTildes(c.nombre);
+            const exacto = n === buscado;
+            const todas = palabras.every((p) => new RegExp(`\\b${p}\\b`).test(n));
+            const algunas = palabras.filter((p) => p.length > 2 && new RegExp(`\\b${p}\\b`).test(n)).length;
+            return { c, puntos: exacto ? 1000 : todas ? 100 + palabras.length : algunas };
+        })
+        .filter((x) => x.puntos > 0)
+        .sort((a, b) => b.puntos - a.puntos)
+        .slice(0, 5)
+        .map((x) => x.c);
+    console.log(`[kayApi] buscar_contacto: ${lista.length} contactos, ${encontrados.length} coincidencias`);
+    return { encontrados };
+}
 
 // ── Endpoint ──────────────────────────────────────────────────────────────────
 // POST { accion, params } → 200 { ok: true, accion, resultado } | { ok: false, error }

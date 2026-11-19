@@ -12,6 +12,8 @@ Kay recepcionista por WhatsApp ("¿cómo va el stand de X?", "¿cuánto me pagó
 (mismo código y rutas). Los proyectos se leen con el Admin SDK, como el conector (la lectura REST `shallow` devolvía vacío).
 2026-11-19: **compras** — `registrar_compra`, `anular_compra` (escriben) y `balance_mensual`, `balance_proyecto` (lectura),
 con el mismo módulo que usa la app (`functions/compras/api.js`, `/api/compras`). Detalle en `docs/sesiones/07-compras.md`.
+2026-11-19: `buscar_contacto` (lectura): Kay por WhatsApp busca por nombre el teléfono de alguien del personal,
+un proveedor o un cliente cuando el dueño le pide "mandale a José Luis…" y no está en su agenda.
 
 ## Principios
 
@@ -94,6 +96,7 @@ detalle queda en los logs de `kayApi`, no se le devuelve a Kay).
 | `anular_compra` | **no** | `{ id, motivo, registrado_por }` | `{ error, ok, id, ya_estaba_anulada? }`: no borra; resta del gasto del proyecto una sola vez y marca la factura como anulada |
 | `balance_mensual` | sí | `{ mes: "AAAA-MM" }` | `{ mes, ingresos: {total, facturas}, egresos: {total, compras, pagos_contratistas, pagos_cancheos, cantidad_compras}, resultado, impuestos: {compras_con_factura, monto_facturado, credito_fiscal_iva_13}, nota }` |
 | `balance_proyecto` | sí | `{ cid, pid }` | `{ proyecto, monto_cierre, cobrado, gastos: {compras, cantidad_compras, gasto_total_registrado, gastos_adicionales_compras, contratistas_contratado, contratistas_pagado}, ultimas_compras }` |
+| `buscar_contacto` | sí | `{ nombre }` | `{ encontrados: [{ nombre, telefono, origen: personal\|proveedor\|cliente, detalle }] }` (hasta 5, el mejor primero; sin sueldos ni datos internos) |
 
 `listar_proyectos_activos`: recorre `/proyectos/$cid/$pid` de todos los clientes y devuelve los que **no** están
 `entregado` ni `cancelado`. El ciclo de vida completo de un proyecto es `requerimiento` → `cotizacion` →
