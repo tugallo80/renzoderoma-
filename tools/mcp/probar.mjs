@@ -485,6 +485,8 @@ prueba('prueba_imagen: peso_kb agranda la imagen y se acota; entrada inválida s
 
 // ------------------------------------------------------------------ requerimientos (sesión 6, entrega 4)
 const REQ = require('../../functions/requerimientos/api.js');
+// Reloj falso para las esperas del conector (PDF generando páginas, renders): ninguna prueba espera de verdad
+{ let t0 = 1762900000000; require('../../functions/mcp/requerimientos.js').configurarEspera({ ahora: () => t0, dormir: async (ms) => { t0 += ms; } }); }
 const JPGr = (n = 10) => Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.alloc(n, 7)]);
 const MED = { formato: 'rubik/1', archivo: 'stand.fbx', unidad: 'm', resumen: '1 pieza', piezas: [
     { item: 'Mostrador demo', pieza: 'Tapa', material: 'MDF_18', cant: 1, largo: 1.8, ancho: 0.6, espesor: 0.018, tipo: 'plancha', area_m2: 2.2536, area_cara_m2: 1.08, perimetro_ml: 4.8, volumen_m3: 0.01944, acabados: [] }] };
@@ -758,6 +760,137 @@ prueba('aprobar_render: con la aprobación del dueño posterior, pasa a item.img
     const g2 = JSON.parse((await H.llamar(ent.almacen, 'renzo', 'generar_render', { id: q2.id, prompt: 'Otro mostrador blanco' })).content[0].text);
     const si2 = await ok(ent, 'registrar_mensaje_del_dueno', { ...C, texto: 'sí' });
     assert.match((await llamar(ent, 'aprobar_render', { ...C, id: q2.id, render: g2.render, item: 'itExistente', confirmacion: si2.origen })).texto, /no está asignado a este proyecto/);
+});
+
+// ------------------------------------------------------------------ PDF de los requerimientos: páginas como imágenes (functions/pdf)
+const PDFQ = require('../../functions/pdf/index.js');
+const PDFR = require('../../functions/pdf/paginas.js');
+const PLANO = (await import('node:fs')).readFileSync(new URL('./plano-demo.pdf', import.meta.url));
+/** pdfPaginas simulado con el render REAL (pdfjs + canvas): procesa la cola con su propio permiso de Storage. */
+function pdfPaginasReal(ent) {
+    const alP = Object.assign({}, ent.almacen, {
+        subirArchivo: async (r, buf, mime) => { assert.ok(PDFQ.ARCHIVOS.some((re) => re.test(r)), 'pdfPaginas escribe fuera de sus páginas: ' + r); ent.almacen.archivos.set(r, { buf: Buffer.from(buf), mime }); },
+    });
+    const correr = async () => {
+        const cola = ent.almacen.datos.pdf_cola || {};
+        const res = [];
+        for (const k of Object.keys(cola)) { const p = cola[k]; delete cola[k]; res.push(await PDFQ.procesar({ almacen: alP, renderizar: PDFR.renderizar }, p)); }
+        return res;
+    };
+    let t = 1762900000000;
+    REQMCP.configurarEspera({ ms: 40000, cada: 2500, ahora: () => t, dormir: async (ms) => { t += ms; await correr(); } });
+    return { correr, avanzar: (ms) => { t += ms; } };
+}
+async function reqConPlano(ent) {
+    const app = Object.assign({}, ent.almacen, {
+        subirArchivo: async (r, buf, mime) => { ent.almacen.archivos.set(r, { buf: Buffer.from(buf), mime }); },
+        borrarArchivo: async (r) => { ent.almacen.archivos.delete(r); },
+    });
+    const api = (b) => REQ.atender(app, b, 'renzo').then((r) => { assert.equal(r.status, 200, JSON.stringify(r.cuerpo)); return r.cuerpo; });
+    const { id } = await api({ accion: 'crear', cliente: { cid: 'cliDemo' }, descripcion: 'Vallas publicitarias para cancha (demo)' });
+    const pdf = await api({ accion: 'adjuntar', id, tipo: 'pdf', nombre: 'plano-demo.pdf', datos: PLANO.toString('base64') });
+    return { id, pdf: pdf.adj, api };
+}
+
+prueba('PDF: al adjuntarlo se encola; pdfPaginas (render real) deja las páginas a ~2000 px y el texto', async () => {
+    const ent = crearEntorno();
+    const pp = pdfPaginasReal(ent);
+    const q = await reqConPlano(ent);
+    const meta = () => ent.almacen.datos.requerimientos[q.id].adjuntos[q.pdf];
+    assert.equal(meta().paginas_estado, 'procesando');
+    assert.equal(Object.keys(ent.almacen.datos.pdf_cola || {}).length, 1);
+    const [r] = await pp.correr();
+    assert.equal(r.fin, 'listo', JSON.stringify(r));
+    const m = meta();
+    assert.equal(m.paginas_estado, 'listo');
+    assert.equal(m.paginas_total, 3);
+    assert.equal(m.paginas_rutas.length, 3);
+    assert.match(m.paginas_px, /^2000×/);
+    assert.match(m.paginas_texto[0], /6,00 m/);
+    const pg = ent.almacen.archivos.get(m.paginas_claude_rutas[0]);
+    assert.equal(pg.buf[0], 0xff); assert.ok(pg.buf.length <= PDFR.TOPE_CLAUDE);
+    // un segundo pedido del mismo PDF no lo vuelve a procesar
+    ent.almacen.datos.pdf_cola = { x: { req: q.id, adj: q.pdf } };
+    assert.equal((await pp.correr())[0].fin, 'ya_procesado');
+    // quitar el adjunto borra también las páginas
+    await q.api({ accion: 'quitar', id: q.id, adj: q.pdf });
+    assert.ok(!ent.almacen.archivos.has(m.paginas_rutas[0]) && !ent.almacen.archivos.has(m.paginas_claude_rutas[0]));
+});
+
+prueba('PDF: leer_requerimiento muestra las páginas como imágenes ("página N de …") con el texto, y pagina con siguiente_desde', async () => {
+    const ent = crearEntorno();
+    const pp = pdfPaginasReal(ent);
+    const q = await reqConPlano(ent);
+    await pp.correr();
+    const r = await H.llamar(ent.almacen, 'renzo', 'leer_requerimiento', { id: q.id });
+    assert.ok(!r.isError, JSON.stringify(r));
+    const { datos, bloques } = contenido(r);
+    const a = datos.adjuntos[0];
+    assert.equal(a.paginas.total, 3);
+    assert.equal(a.paginas.texto.length, 3);
+    assert.match(a.paginas.texto[1].texto, /PLANO 2/);
+    const imgs = bloques.filter((b) => b.type === 'image');
+    assert.ok(imgs.length >= 1);
+    assert.match(bloques[0].text, /página 1 de 3 de plano-demo\.pdf/);
+    const total = datos.imagenes.total;
+    assert.equal(total, 3);
+    // todas las páginas se pueden leer siguiendo siguiente_desde
+    let vistas = imgs.length, desde = datos.imagenes.siguiente_desde;
+    while (desde !== undefined) {
+        const c = contenido(await H.llamar(ent.almacen, 'renzo', 'leer_requerimiento', { id: q.id, desde }));
+        vistas += c.bloques.filter((b) => b.type === 'image').length;
+        desde = c.datos.imagenes.siguiente_desde;
+    }
+    assert.equal(vistas, 3);
+    // la descripción de la herramienta ya no dice que los PDF no se ven
+    const def = H.HERRAMIENTAS.find((h) => h.def.name === 'leer_requerimiento').def;
+    assert.doesNotMatch(def.description, /no se ven por acá/);
+});
+
+prueba('PDF viejo (sin páginas): la primera lectura lo encola y, si termina en la espera, ya devuelve las páginas', async () => {
+    const ent = crearEntorno();
+    const pp = pdfPaginasReal(ent);
+    const q = await reqConPlano(ent);
+    // como un PDF cargado antes del cambio: sin estado de páginas y sin pedido en la cola
+    const m = ent.almacen.datos.requerimientos[q.id].adjuntos[q.pdf];
+    delete m.paginas_estado; delete m.paginas_pedido; delete ent.almacen.datos.pdf_cola;
+    const r = contenido(await H.llamar(ent.almacen, 'renzo', 'leer_requerimiento', { id: q.id }));
+    assert.equal(r.datos.adjuntos[0].paginas.total, 3);
+    assert.ok(r.bloques.some((b) => b.type === 'image'));
+    // un pedido colgado (más de 12 min "procesando") se vuelve a encolar; uno reciente no
+    assert.equal(PDFQ.necesitaPaginas({ tipo: 'pdf', paginas_estado: 'procesando', paginas_pedido: 0 }, PDFQ.CORTADO_MS + 1), true);
+    assert.equal(PDFQ.necesitaPaginas({ tipo: 'pdf', paginas_estado: 'procesando', paginas_pedido: 100 }, 200), false);
+    assert.equal(PDFQ.necesitaPaginas({ tipo: 'imagen' }, 0), false);
+});
+
+prueba('PDF dañado: queda en error con el motivo y leer_requerimiento lo dice (no se queda esperando)', async () => {
+    const ent = crearEntorno();
+    pdfPaginasReal(ent);
+    const q = await requerimientoDemo(ent);   // su PDF es "%PDF-1.4 inventado"
+    const r = contenido(await H.llamar(ent.almacen, 'renzo', 'leer_requerimiento', { id: q.id }));
+    const p = r.datos.adjuntos.find((a) => a.tipo === 'pdf');
+    assert.equal(p.paginas.estado, 'error');
+    assert.match(p.paginas.motivo, /dañado|no se pudieron/);
+});
+
+prueba('PDF: asignar_requerimiento copia las páginas al proyecto y leer muestra cómo citarlas', async () => {
+    const ent = crearEntorno();
+    const pp = pdfPaginasReal(ent);
+    const q = await reqConPlano(ent);
+    await pp.correr();
+    const ab = await ok(ent, 'abrir_cotizacion', { cid: 'cliDemo', pid: 'proyDemo', titulo: 'Vallas' });
+    const C = { cid: 'cliDemo', pid: 'proyDemo', conv: ab.conv };
+    const msg = await ok(ent, 'registrar_mensaje_del_dueno', { ...C, texto: 'cotizá las vallas' });
+    const r = await ok(ent, 'asignar_requerimiento', { ...C, id: q.id, confirmacion: msg.origen });
+    const nuevo = r.adjuntos[q.pdf].adjunto;
+    const metaP = ent.almacen.datos.proyectos.cliDemo.proyDemo.agente.adjuntos[nuevo];
+    assert.equal(metaP.paginas_rutas.length, 3);
+    assert.equal(metaP.paginas_total, 3);
+    assert.match(metaP.paginas_texto[0], /6,00 m/);
+    metaP.paginas_rutas.forEach((x) => { assert.match(x, new RegExp(`^agente/cliDemo/proyDemo/${nuevo}/pagina-\\d\\.jpg$`)); assert.ok(ent.almacen.archivos.has(x)); });
+    const l = contenido(await H.llamar(ent.almacen, 'renzo', 'leer_requerimiento', { id: q.id }));
+    assert.match(l.bloques[0].text, new RegExp(`cita: cota_plano:${nuevo} p\\.1`));
+    assert.match(l.datos.adjuntos[0].cita, new RegExp(`cota_plano:${nuevo}`));
 });
 
 // ------------------------------------------------------------------ correr

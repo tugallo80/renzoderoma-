@@ -100,6 +100,8 @@ exports.comprasApi = require("./compras").crearApi({ requireAuth, applyCors });
 exports.rubikMcp = require("./mcp").crearFuncion({ admin, esHub });
 // Render con Gemini para los Requerimientos (sesión 6): cola /render_cola → renderTurno (secreto de Gemini, 300 s)
 exports.renderTurno = require("./render").crearTrigger({ GEMINI_API_KEY, esHub });
+// Páginas de los PDF de los requerimientos como imágenes + texto, para que Claude lea los planos (functions/pdf)
+exports.pdfPaginas = require("./pdf").crearTrigger();
 
 // ── Claude helpers ────────────────────────────────────────────────────────────
 

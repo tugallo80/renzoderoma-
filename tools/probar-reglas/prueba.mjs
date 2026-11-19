@@ -48,6 +48,8 @@ await chk('anónimo NO lee requerimientos', get(ref(anon, 'requerimientos')), fa
 await chk('hub NO lee render_cola', get(ref(hub, 'render_cola')), false);
 await chk('hub NO escribe render_cola', set(ref(hub, 'render_cola/x'), { req: 'r' }), false);
 // Compras (docs/sesiones/07-compras.md): el hub lee, escribe solo la Function; la idempotencia nadie desde el navegador
+await chk('hub NO lee pdf_cola', get(ref(hub, 'pdf_cola')), false);
+await chk('hub NO escribe pdf_cola', set(ref(hub, 'pdf_cola/x'), { req: 'r', adj: 'a' }), false);
 await chk('hub lee compras', get(ref(hub, 'compras')), true);
 await chk('hub NO escribe compras', set(ref(hub, 'compras/x'), { total: 1 }), false);
 await chk('anónimo NO lee compras', get(ref(anon, 'compras')), false);
