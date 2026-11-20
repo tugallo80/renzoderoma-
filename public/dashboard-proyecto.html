@@ -36,6 +36,13 @@
         .finance-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-bottom: 25px; }
         .fin-card { background: var(--card); border-radius: 16px; padding: 15px; border: 1px solid var(--border); box-shadow: 0 4px 10px rgba(0,0,0,0.02); }
         .fin-card.highlight { border-left: 4px solid var(--blue); }
+.fin-sub { font-size: 11px; color: var(--gray); margin-top: 4px; font-weight: 600; }
+        .fin-detalle { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 10px 14px; margin: -8px 0 18px; font-size: 13px; }
+        .fin-detalle summary { cursor: pointer; font-weight: 800; color: var(--blue); }
+        .fin-detalle table { width: 100%; border-collapse: collapse; margin-top: 8px; }
+        .fin-detalle td { padding: 5px 2px; border-bottom: 1px solid var(--border); }
+        .fin-detalle td:last-child { text-align: right; font-weight: 800; white-space: nowrap; }
+        .fin-detalle .tit td { font-weight: 900; color: var(--text); padding-top: 12px; border-bottom: 2px solid var(--border); }
         .fin-lbl { font-size: 10px; font-weight: 800; color: var(--gray); text-transform: uppercase; margin-bottom: 5px; }
         .fin-val { font-size: 20px; font-weight: 900; }
         .val-green { color: var(--green); } .val-red { color: var(--red); }
@@ -103,9 +110,13 @@
     <div class="finance-grid">
         <div class="fin-card highlight"><div class="fin-lbl">Venta Base (Ppto)</div><div class="fin-val" id="val-venta">0,00</div></div>
         <div class="fin-card"><div class="fin-lbl">Cierre + Extras</div><div class="fin-val val-green" id="val-final">0,00</div></div>
-        <div class="fin-card"><div class="fin-lbl">Gasto Real (Costos)</div><div class="fin-val val-red" id="val-gasto">0,00</div></div>
-        <div class="fin-card highlight" style="border-left-color: var(--green);"><div class="fin-lbl">Utilidad Neta</div><div class="fin-val" id="val-utilidad">0,00</div></div>
+        <div class="fin-card"><div class="fin-lbl">Gasto (con lo contratado)</div><div class="fin-val val-red" id="val-gasto">0,00</div><div class="fin-sub" id="val-gasto-sub"></div></div>
+        <div class="fin-card highlight" style="border-left-color: var(--green);"><div class="fin-lbl">Utilidad esperada</div><div class="fin-val" id="val-utilidad">0,00</div><div class="fin-sub" id="val-utilidad-sub"></div></div>
     </div>
+    <details id="fin-detalle" class="fin-detalle" style="display:none;">
+        <summary>Ver de dónde sale el gasto y lo cobrado</summary>
+        <div id="fin-detalle-cuerpo"></div>
+    </details>
 
     <div class="modules-grid">
         <div class="mod-item" onclick="abrirModulo('disenos')"><div class="mod-icon ic-dis"><i class="ph-fill ph-palette"></i></div><div class="mod-label">Diseños &<br>Archivos</div></div>
@@ -368,16 +379,10 @@
             let valorFinal = montoCierre ? parseFloat(montoCierre) : totalVentaBase;
             valorFinal += totalExtras;
             document.getElementById('val-final').innerText = fMoney(valorFinal);
-            let gastoCajaChica = 0;
-            let cc = snaps[7].val();
-            if(cc) { Object.values(cc).forEach(w => { if(w.gastos) { Object.values(w.gastos).forEach(g => { if(g.proyecto === pname) gastoCajaChica += parseFloat(g.monto_total || g.monto || 0); }); } }); }
-            let gastoLicitaciones = 0; let lic = snaps[2].val();
-            if(lic) { Object.values(lic).forEach(l => { if(l.estado === 'adjudicado' && l.precio_final) gastoLicitaciones += parseFloat(l.precio_final); }); }
-            let gastoTotalBase = snaps[3].val() ? parseFloat(snaps[3].val()) : 0;
-            let gastoReal = gastoTotalBase + gastoLicitaciones + gastoCajaChica;
-            document.getElementById('val-gasto').innerText = fMoney(gastoReal);
-            document.getElementById('val-utilidad').innerText = fMoney(valorFinal - gastoReal);
-            _saveDashCache({ venta:fMoney(totalVentaBase), final:fMoney(valorFinal), gasto:fMoney(gastoReal), utilidad:fMoney(valorFinal-gastoReal) });
+            // Gasto y utilidad: la fórmula única del servidor (functions/proyectos/finanzas.js, Sesión 9 Lote 2), la misma
+            // que usan Tesorería y Kay. Antes acá se sumaba gasto_total + licitaciones solo "adjudicadas" + caja chica (que
+            // ya estaba dentro de gasto_total, y además contaba pedidos pendientes): la utilidad salía inflada.
+            cargarFinanzasServidor();
             let nego = snaps[5].val();
             if(nego && nego.propuesta && !montoCierre) {
                 document.getElementById('negociacion-alerta').style.display = 'block'; document.getElementById('txt-oferta').innerText = fMoney(nego.propuesta) + ' Bs';
@@ -393,6 +398,44 @@
             escucharFacturasEmitidas();
         });
     } // fin cargarDashboard
+
+    async function cargarFinanzasServidor() {
+        try {
+            const u = firebase.auth().currentUser;
+            if (!u) return;
+            const r = await fetch('/api/proyectos', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + await u.getIdToken() }, body: JSON.stringify({ accion: 'finanzas', cid, pid }) });
+            const f = await r.json();
+            if (!r.ok) throw new Error(f.error || ('Error ' + r.status));
+            const g = f.gasto;
+            document.getElementById('val-venta').innerText = fMoney(f.venta.presupuesto);
+            document.getElementById('val-final').innerText = fMoney(f.venta.final);
+            document.getElementById('val-gasto').innerText = fMoney(g.esperado);
+            document.getElementById('val-gasto-sub').innerText = 'Con lo ya pagado: ' + fMoney(g.con_pagado);
+            document.getElementById('val-utilidad').innerText = fMoney(f.utilidad_esperada);
+            document.getElementById('val-utilidad').style.color = f.utilidad_esperada < 0 ? 'var(--red)' : '';
+            document.getElementById('val-utilidad-sub').innerText = 'Con lo ya pagado: ' + fMoney(f.utilidad_con_pagado);
+            const fila = (t, v, extra) => `<tr><td>${t}${extra ? ' <span style="color:var(--gray);font-weight:600;">' + extra + '</span>' : ''}</td><td>${fMoney(v)}</td></tr>`;
+            let h = '<table>';
+            h += '<tr class="tit"><td>Gasto</td><td></td></tr>';
+            h += fila('Compras de materiales', g.compras);
+            if (g.compras_adicionales) h += fila('Gastos adicionales de compras', g.compras_adicionales);
+            h += fila('Caja chica gastada', g.caja_chica, g.caja_chica_pendiente ? '(+ ' + fMoney(g.caja_chica_pendiente) + ' pedido pendiente, no cuenta)' : '');
+            if (g.supervisores_gastos || g.supervisores_extras) h += fila('Rendiciones de supervisores', g.supervisores_gastos + g.supervisores_extras);
+            h += fila('Mano de obra contratada', g.mano_obra_contratada + g.mano_obra_extras, g.mano_obra_extras ? '(incluye ' + fMoney(g.mano_obra_extras) + ' de extras)' : '');
+            h += fila('Mano de obra ya pagada', g.mano_obra_pagada);
+            (f.contratistas || []).forEach(c => { h += fila('· ' + (c.trabajador || 'Contratista'), c.saldo, 'saldo de ' + fMoney(c.contrato + c.extras)); });
+            h += '<tr class="tit"><td>Cobrado al cliente</td><td></td></tr>';
+            h += fila('Pagos registrados en este proyecto', f.cobrado.pagos_proyecto);
+            h += fila('Facturado en Tesorería', f.cobrado.facturado_tesoreria, '(cobrado ' + fMoney(f.cobrado.cobrado_tesoreria) + ')');
+            h += '</table><div style="font-size:11px;color:var(--gray);margin-top:8px;">Las dos fuentes de cobro se muestran por separado hasta unificar el registro de cobros. El contador viejo de gasto (' + fMoney(f.referencia.gasto_total_viejo) + ') ya no se usa.</div>';
+            document.getElementById('fin-detalle-cuerpo').innerHTML = h;
+            document.getElementById('fin-detalle').style.display = 'block';
+            _saveDashCache({ venta: fMoney(f.venta.presupuesto), final: fMoney(f.venta.final), gasto: fMoney(g.esperado), utilidad: fMoney(f.utilidad_esperada) });
+        } catch (e) {
+            console.warn('[dashboard] finanzas del servidor:', e);
+            document.getElementById('val-gasto-sub').innerText = 'No se pudo calcular el gasto: ' + e.message;
+        }
+    }
 
     async function toggleVisibleCliente() {
         const snap = await db.ref(`proyectos/${cid}/${pid}/visible_cliente`).once('value');

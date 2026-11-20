@@ -445,8 +445,12 @@ const ACCIONES = {
     },
     balance_proyecto: {
         soloLectura: true,
-        descripcion: "Monto de cierre, cobrado y gastos (compras, contratistas) de un proyecto { cid, pid }.",
-        ejecutar: (p) => compras("balance_proyecto", p),
+        descripcion: "Finanzas de un proyecto { cid, pid } con la fórmula única del panel (functions/proyectos/finanzas.js): venta, gasto (compras, caja chica, supervisores, mano de obra contratada y pagada), utilidad esperada y con lo pagado, cobrado y saldo por contratista.",
+        ejecutar: async (p) => {
+            const P = require("./proyectos");
+            const r = await P.atender(P.almacenFinanzas(), { accion: "finanzas", cid: p && p.cid, pid: p && p.pid });
+            return r.status === 200 ? { error: false, ...r.cuerpo } : { error: true, texto: r.cuerpo.error };
+        },
     },
     buscar_contacto: {
         soloLectura: true,

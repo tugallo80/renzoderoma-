@@ -116,7 +116,7 @@ prueba('anular: resta del gasto, marca la factura y el espejo; anular dos veces 
     assert.equal(D.proyectos.cliA.proyA.gasto_total, 100);
 });
 
-prueba('balances: mensual (ingresos, compras, contratistas, IVA) y por proyecto, sin contar anuladas', async () => {
+prueba('balance mensual (ingresos, compras, contratistas, IVA), sin contar anuladas', async () => {
     const alm = base({ proyectos: { cliA: { proyA: { nombre: 'Stand Demo', monto_cierre: 10000, gasto_total: 0,
         licitaciones: { l1: { estado: 'adjudicado', precio_final: 3000, pagos: { p1: { monto: 1000, fecha: '2026-11-20' }, p2: { monto: 500, fecha: '2026-10-02' } } } } } } } });
     const a = ok(await reg(alm, { idempotencia: 'b-0001', cid: 'cliA', pid: 'proyA', total: 1000, fecha: '2026-11-03', factura: { nit: '1234567', nro: '1', fecha: '2026-11-03' } }));
@@ -131,13 +131,6 @@ prueba('balances: mensual (ingresos, compras, contratistas, IVA) y por proyecto,
     assert.equal(m.resultado, 2800);
     assert.equal(m.impuestos.monto_facturado, 1000);
     assert.equal(m.impuestos.credito_fiscal_iva_13, 130);
-    const p = ok(await C.atender(alm, { accion: 'balance_proyecto', cid: 'cliA', pid: 'proyA' }, DUENO));
-    assert.equal(p.gastos.compras, 1000);
-    assert.equal(p.gastos.gasto_total_registrado, 1000);
-    assert.equal(p.gastos.contratistas_contratado, 3000);
-    assert.equal(p.gastos.contratistas_pagado, 1500);
-    assert.equal(p.cobrado, 5000);
-    assert.equal(p.ultimas_compras[0].id, a.id);
     err(await C.atender(alm, { accion: 'balance_mensual', mes: 'noviembre' }, DUENO), /Mes/);
 });
 

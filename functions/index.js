@@ -96,6 +96,8 @@ exports.requerimientoApi = require("./requerimientos").crearApi({ requireAuth, a
 exports.comprasApi = require("./compras").crearApi({ requireAuth, applyCors });
 // Licitaciones: una sola lógica en el servidor para la app, Kay y Claude (docs/sesiones/08-operaciones-kay.md)
 exports.licitacionesApi = require("./licitaciones").crearApi({ requireAuth, applyCors });
+// Finanzas del proyecto: una sola fórmula de gasto, cobrado y utilidad (Sesión 9, Lote 2)
+exports.proyectosApi = require("./proyectos").crearApi({ requireAuth, applyCors });
 
 // ── Conector MCP "Rubik" para claude.ai (docs/sesiones/05-rubik-agente-app.md) ─
 // OAuth con Firebase Auth + lista blanca hub; las cotizaciones las hace Claude con la suscripción del dueño.

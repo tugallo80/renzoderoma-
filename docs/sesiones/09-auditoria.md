@@ -300,3 +300,16 @@ personas que tengan licitaciones** (se pierden sus copias y pagos).
 - Si hay datos en `/gantt` (raíz), `caja_chica/*/depositos`, `personal/*/pagos`, `cancheos`, `interfaz_wa`.
 - Si el dueño carga los cobros en `ingresos` **y** en los pagos del proyecto (doble) o solo en uno.
 - Si algún programa externo escribe en `interfaz_wa/entrada`.
+
+## Avance (maestra)
+
+- e5 (bot de WhatsApp de Rubik mostraba todos los proyectos a cualquier número): corregido, PR #345.
+- e4 (editar persona borraba licitaciones y pagos) y e5-presupuesto (guardar pisaba a otros): corregidos, PR #346.
+- Lote 1: PR #347 (subsesión).
+- **Lote 2 — fórmula única de finanzas del proyecto** (`functions/proyectos/finanzas.js`, `/api/proyectos`): venta (sin ítems
+  con el ojo apagado) + extras; gasto = compras sin anuladas + gastos adicionales + caja chica GASTADA (por pid o nombre, sin
+  pendientes) + rendiciones de supervisores + mano de obra de licitaciones aprobadas/adjudicadas/terminadas. Decisión del
+  dueño: la mano de obra se muestra **contratada** (utilidad esperada) y **pagada** (utilidad con lo pagado). Cobrado: las dos
+  fuentes por separado hasta definir el registro de cobros (un pago puede cubrir varios proyectos con varias facturas).
+  `gasto_total` queda solo como referencia. La usan el panel del proyecto y Kay (`balance_proyecto`); Tesorería, después.
+
