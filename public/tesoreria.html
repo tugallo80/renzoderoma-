@@ -834,6 +834,10 @@
 
     // Las facturas y compras anuladas (no se borran) no cuentan en ningún total
     function _sinAnuladas(o) { const r = {}; Object.entries(o || {}).forEach(([k, v]) => { if (v && !v.anulada && v.estado !== 'anulada') r[k] = v; }); return r; }
+    // Proyectos archivados (archivar-proyectos.html) no entran en Tesorería: ni balances, ni contratos, ni estado de cuenta.
+    // Las facturas (/ingresos) y compras siguen todas: son registros fiscales.
+    const _sinArchivados = (cli) => { if (!cli || typeof cli !== 'object') return cli; const o = {}; Object.keys(cli).forEach(k => { const p = cli[k]; if (!(p && p.archivado === true)) o[k] = p; }); return o; };
+    const _proyectosSinArchivados = (todo) => { const o = {}; Object.keys(todo || {}).forEach(c => { o[c] = _sinArchivados(todo[c]); }); return o; };
     let proyectosData = {}; let personalData = {}; let ingresosData = {}; let comprasFacturadasData = {}; let cancheosData = {};
     let editFacturaId = null;
     window.tempComprobanteUrl = null;
@@ -852,7 +856,7 @@
                 safe('supervisores'),
                 safe('personal')
             ]);
-            proyectosData         = proySnap.val()  || {};
+            proyectosData         = _proyectosSinArchivados(proySnap.val() || {});
             ingresosData          = ingSnap.val()   || {};
             comprasFacturadasData = _sinAnuladas(compSnap.val());
             cancheosData          = cancSnap.val()  || {};
@@ -901,7 +905,7 @@
     }
     function _escucharProyectosEnVivo() {
         const ref = db.ref('proyectos');
-        const poner = snap => { proyectosData[snap.key] = snap.val(); _reRenderTesoreria(); };
+        const poner = snap => { proyectosData[snap.key] = _sinArchivados(snap.val()); _reRenderTesoreria(); };
         ref.on('child_added', poner);
         ref.on('child_changed', poner);
         ref.on('child_removed', snap => { delete proyectosData[snap.key]; _reRenderTesoreria(); });
@@ -1409,7 +1413,7 @@
                 timeout8s()
             ]);
             const [proySnap, persSnap] = await Promise.all([safe('proyectos'), safe('personal')]);
-            proyectosData = proySnap.val() || proyectosData;
+            proyectosData = proySnap.val() ? _proyectosSinArchivados(proySnap.val()) : proyectosData;
             personalData  = persSnap.val() || personalData;
         } catch(e) { console.warn('Recarga parcial:', e); }
         if (btn) { btn.disabled = false; btn.innerHTML = '<i class="ph-bold ph-arrows-clockwise"></i>'; }
@@ -3894,7 +3898,7 @@
                 const proyectos = [];
 
                 Object.entries(proysPorCliente).forEach(([pid, p]) => {
-                    if (!p || typeof p !== 'object') return;
+                    if (!p || typeof p !== 'object' || p.archivado === true) return;
                     // Excluir proyectos en cotización/propuesta
                     if (ESTADOS_COTIZACION.has((p.estado||'').toLowerCase())) return;
                     const contrato = parseFloat(p.monto_cierre || p.presupuesto_total || 0);

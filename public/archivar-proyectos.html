@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Archivar proyectos - Rubik</title>
+    <script src="https://unpkg.com/@phosphor-icons/web" defer></script>
+    <script src="https://www.gstatic.com/firebasejs/9.1.3/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.1.3/firebase-database-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.1.3/firebase-auth-compat.js"></script>
+    <script>
+        window._rubikFirebaseConfig = window._rubikFirebaseConfig || {
+            apiKey: "AIzaSyDXYlofy31cDP14xVAVxWo_7TqXdSgsIjA",
+            authDomain: "rubik-bolivia.firebaseapp.com",
+            databaseURL: "https://rubik-bolivia-default-rtdb.firebaseio.com",
+            projectId: "rubik-bolivia",
+            storageBucket: "rubik-bolivia.firebasestorage.app",
+            messagingSenderId: "4153087958",
+            appId: "1:4153087958:web:cf2dd16106580ed6437677"
+        };
+        if (!firebase.apps.length) firebase.initializeApp(window._rubikFirebaseConfig);
+    </script>
+    <script src="/js/auth-guard.js?v=3"></script>
+    <script src="/js/operaciones-api.js?v=2"></script>
+    <style>
+        :root { --bg: #f4f4f7; --card: #fff; --text: #1a1a1a; --blue: #007aff; --green: #34c759; --red: #ff3b30; --orange: #ff9500; --gray: #8e8e93; --border: #d1d1d6; --sel: #e8f1ff; }
+        @media (prefers-color-scheme: dark) { :root { --bg: #000; --card: #1c1c1e; --text: #fff; --border: #333; --sel: #0a2a4d; } }
+        * { box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 16px; padding-bottom: 150px; -webkit-tap-highlight-color: transparent; }
+        .nav { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; gap: 10px; }
+        .btn-nav { background: var(--card); border: 1px solid var(--border); padding: 8px 14px; border-radius: 20px; font-weight: 700; color: var(--blue); cursor: pointer; display: flex; align-items: center; gap: 5px; font-size: 14px; }
+        h1 { font-size: 24px; font-weight: 900; margin: 0 0 4px; letter-spacing: -.5px; }
+        .sub { color: var(--gray); font-size: 13px; margin-bottom: 14px; line-height: 1.4; }
+        .tabs { display: flex; gap: 6px; margin-bottom: 10px; }
+        .tab { flex: 1; text-align: center; padding: 9px; border-radius: 12px; border: 1px solid var(--border); background: var(--card); font-weight: 800; font-size: 13px; cursor: pointer; }
+        .tab.on { background: var(--blue); color: #fff; border-color: var(--blue); }
+        .filtros { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 8px; }
+        .filtros select, .filtros input, .corte input { width: 100%; padding: 10px; border-radius: 10px; border: 1px solid var(--border); background: var(--card); color: var(--text); font-size: 14px; }
+        .filtros .full { grid-column: 1 / -1; }
+        .corte { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 10px; margin-bottom: 10px; font-size: 13px; }
+        .corte .fila { display: flex; gap: 8px; align-items: center; margin-top: 6px; }
+        .btn { border: none; border-radius: 10px; padding: 10px 12px; font-weight: 800; font-size: 13px; cursor: pointer; white-space: nowrap; }
+        .btn-sec { background: var(--card); border: 1px solid var(--border); color: var(--blue); }
+        .btn-ok { background: var(--blue); color: #fff; }
+        .btn-rojo { background: var(--orange); color: #fff; }
+        .btn:disabled { opacity: .45; }
+        .acciones { display: flex; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; align-items: center; font-size: 12px; color: var(--gray); }
+        .lista { display: flex; flex-direction: column; gap: 6px; }
+        .fila-p { display: grid; grid-template-columns: 28px 1fr auto; gap: 8px; align-items: center; background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 10px; cursor: pointer; }
+        .fila-p.sel { background: var(--sel); border-color: var(--blue); }
+        .fila-p input { width: 20px; height: 20px; accent-color: var(--blue); pointer-events: none; }
+        .nom { font-weight: 800; font-size: 14px; line-height: 1.25; word-break: break-word; }
+        .meta { font-size: 12px; color: var(--gray); margin-top: 2px; }
+        .monto { text-align: right; font-size: 12px; color: var(--gray); }
+        .monto b { display: block; color: var(--text); font-size: 13px; }
+        .vacio { text-align: center; color: var(--gray); padding: 40px 10px; }
+        .barra { position: fixed; left: 0; right: 0; bottom: 0; background: var(--card); border-top: 1px solid var(--border); padding: 10px 16px calc(10px + env(safe-area-inset-bottom)); display: none; flex-direction: column; gap: 8px; box-shadow: 0 -4px 20px rgba(0,0,0,.08); }
+        .barra.on { display: flex; }
+        .barra .fila { display: flex; gap: 8px; align-items: center; }
+        .barra input { flex: 1; padding: 10px; border-radius: 10px; border: 1px solid var(--border); background: var(--bg); color: var(--text); font-size: 14px; min-width: 0; }
+        .aviso { position: fixed; top: 16px; left: 16px; right: 16px; background: #1c1c1e; color: #fff; padding: 12px 14px; border-radius: 12px; font-size: 14px; display: none; z-index: 10; }
+    </style>
+</head>
+<body>
+    <div class="nav">
+        <button class="btn-nav" onclick="location.href='clientes.html'"><i class="ph-bold ph-caret-left"></i> Clientes</button>
+        <button class="btn-nav" onclick="cargar()"><i class="ph-bold ph-arrows-clockwise"></i></button>
+    </div>
+    <h1>🗄️ Archivar proyectos</h1>
+    <div class="sub">Los archivados no se borran: dejan de aparecer en la lista del cliente, Tesorería, el inicio y Kay. Las facturas y compras siguen en Impuestos. Se pueden desarchivar cuando quieras.</div>
+
+    <div class="tabs">
+        <div class="tab on" id="tab-activos" onclick="setVista('activos')">Activos <span id="n-activos"></span></div>
+        <div class="tab" id="tab-archivados" onclick="setVista('archivados')">Archivados <span id="n-archivados"></span></div>
+    </div>
+
+    <div class="filtros">
+        <select id="f-anio" onchange="render()"><option value="">Todos los años</option></select>
+        <select id="f-etapa" onchange="render()"><option value="">Todas las etapas</option></select>
+        <select id="f-cliente" class="full" onchange="render()"><option value="">Todos los clientes</option></select>
+        <input id="f-texto" class="full" type="search" placeholder="Buscar por nombre…" oninput="render()">
+    </div>
+
+    <div class="corte" id="caja-corte">
+        <b>Arranque limpio:</b> elegir de una vez todos los proyectos creados antes de
+        <div class="fila">
+            <input type="date" id="f-corte">
+            <button class="btn btn-sec" onclick="elegirAntesDe()">Elegir</button>
+        </div>
+    </div>
+
+    <div class="acciones">
+        <button class="btn btn-sec" onclick="elegirVisibles(true)">Elegir los que se ven</button>
+        <button class="btn btn-sec" onclick="elegirVisibles(false)">Ninguno</button>
+        <span id="cuenta-vis"></span>
+    </div>
+
+    <div class="lista" id="lista"><div class="vacio">Cargando proyectos…</div></div>
+
+    <div class="barra" id="barra">
+        <div class="fila" id="fila-motivo"><input id="motivo" maxlength="200" placeholder="Motivo (opcional), ej.: proyectos 2025"></div>
+        <div class="fila">
+            <div style="flex:1;font-weight:800;font-size:14px;" id="barra-texto"></div>
+            <button class="btn btn-sec" onclick="elegirTodos(false)">Quitar</button>
+            <button class="btn btn-ok" id="btn-aplicar" onclick="aplicar()"></button>
+        </div>
+    </div>
+    <div class="aviso" id="aviso"></div>
+
+<script>
+    const db = firebase.database();
+    const ETAPAS = { requerimiento: '📝 Requerimiento', cotizacion: '🧮 Cotización', propuesta_enviada: '📤 Propuesta enviada', negociando: '🤝 Negociando',
+        contrato_firmado: '✍️ Contrato firmado', planificacion: '⚪ Planificación', produccion: '🔵 Producción', entregado: '🟢 Entregado',
+        cerrado: '✅ Cerrado / pagado', cancelado: '⛔ Cancelado' };
+    let todos = [];            // {cid, pid, cliente, nombre, etapa, fecha, venta, cobrado, archivado}
+    let vista = 'activos';
+    const elegidos = new Set(); // "cid/pid"
+
+    const esc = (t) => String(t == null ? '' : t).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    const num = (x) => { const n = parseFloat(String(x == null ? '' : x).replace(',', '.')); return isFinite(n) ? n : 0; };
+    const bs = (n) => n ? n.toLocaleString('es-BO', { minimumFractionDigits: 0, maximumFractionDigits: 0 }) + ' Bs' : '—';
+    const clave = (p) => p.cid + '/' + p.pid;
+    const vals = (o) => (o && typeof o === 'object' ? Object.values(o) : []).filter((x) => x && typeof x === 'object');
+
+    // Fecha del proyecto: fecha_creacion; si no tiene, la que trae el código del proyecto (los códigos de Firebase llevan la hora de creación).
+    const PUSH = '-0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz';
+    function fechaDeCodigo(k) {
+        if (!k || k.length < 20) return null;
+        let ms = 0;
+        for (let i = 0; i < 8; i++) { const v = PUSH.indexOf(k[i]); if (v < 0) return null; ms = ms * 64 + v; }
+        if (ms < Date.UTC(2015, 0, 1) || ms > Date.now() + 864e5) return null;
+        return new Date(ms).toISOString().slice(0, 10);
+    }
+    function fechaDe(pid, p) {
+        const f = typeof p.fecha_creacion === 'string' ? p.fecha_creacion.slice(0, 10) : '';
+        return /^\d{4}-\d{2}-\d{2}$/.test(f) ? f : fechaDeCodigo(pid);
+    }
+
+    function aviso(t, ms) {
+        const a = document.getElementById('aviso'); a.textContent = t; a.style.display = 'block';
+        clearTimeout(aviso._t); aviso._t = setTimeout(() => { a.style.display = 'none'; }, ms || 3500);
+    }
+
+    async function cargar() {
+        document.getElementById('lista').innerHTML = '<div class="vacio">Cargando proyectos…</div>';
+        try {
+            const [cs, ps] = await Promise.all([db.ref('clientes').once('value'), db.ref('proyectos').once('value')]);
+            const clientes = cs.val() || {}, proyectos = ps.val() || {};
+            todos = [];
+            Object.entries(proyectos).forEach(([cid, lista]) => {
+                if (!lista || typeof lista !== 'object') return;
+                const c = clientes[cid] || {};
+                const cliente = c.empresa || c.nombre || '(cliente borrado)';
+                Object.entries(lista).forEach(([pid, p]) => {
+                    if (!p || typeof p !== 'object') return;
+                    const items = vals(p.presupuesto && p.presupuesto.items).filter((it) => it.type !== 'chapter' && it.activo !== false);
+                    const subtotal = items.reduce((s, it) => s + num(it.cant) * num(it.pu), 0);
+                    todos.push({
+                        cid, pid, cliente,
+                        nombre: typeof p.nombre === 'string' && p.nombre.trim() ? p.nombre.trim() : null,
+                        etapa: typeof p.estado === 'string' && p.estado ? p.estado : 'planificacion',
+                        fecha: fechaDe(pid, p),
+                        venta: num(p.monto_cierre) > 0 ? num(p.monto_cierre) : subtotal,
+                        cobrado: vals(p.pagos).reduce((s, x) => s + num(x.monto), 0),
+                        archivado: p.archivado === true,
+                    });
+                });
+            });
+            todos.sort((a, b) => String(b.fecha || '').localeCompare(String(a.fecha || '')));
+            [...elegidos].forEach((k) => { if (!todos.some((p) => clave(p) === k)) elegidos.delete(k); });
+            armarFiltros();
+            render();
+        } catch (e) {
+            document.getElementById('lista').innerHTML = `<div class="vacio">No se pudo cargar: ${esc(e.message)}</div>`;
+        }
+    }
+
+    function opciones(id, pares, primero) {
+        const s = document.getElementById(id), actual = s.value;
+        s.innerHTML = `<option value="">${primero}</option>` + pares.map(([v, t]) => `<option value="${esc(v)}">${esc(t)}</option>`).join('');
+        if (pares.some(([v]) => v === actual)) s.value = actual;
+    }
+    function armarFiltros() {
+        const anios = [...new Set(todos.map((p) => (p.fecha || '').slice(0, 4) || 'sin'))].sort().reverse();
+        opciones('f-anio', anios.map((a) => [a, a === 'sin' ? 'Sin fecha' : a]), 'Todos los años');
+        const etapas = [...new Set(todos.map((p) => p.etapa))];
+        opciones('f-etapa', etapas.map((e) => [e, ETAPAS[e] || e]), 'Todas las etapas');
+        const clis = [...new Map(todos.map((p) => [p.cid, p.cliente])).entries()].sort((a, b) => a[1].localeCompare(b[1]));
+        opciones('f-cliente', clis, 'Todos los clientes');
+        document.getElementById('n-activos').textContent = `(${todos.filter((p) => !p.archivado).length})`;
+        document.getElementById('n-archivados').textContent = `(${todos.filter((p) => p.archivado).length})`;
+    }
+
+    function visibles() {
+        const anio = document.getElementById('f-anio').value, etapa = document.getElementById('f-etapa').value;
+        const cli = document.getElementById('f-cliente').value;
+        const q = document.getElementById('f-texto').value.trim().toLowerCase();
+        return todos.filter((p) => (vista === 'archivados') === p.archivado
+            && (!anio || (anio === 'sin' ? !p.fecha : (p.fecha || '').startsWith(anio)))
+            && (!etapa || p.etapa === etapa) && (!cli || p.cid === cli)
+            && (!q || (p.nombre || '').toLowerCase().includes(q) || p.cliente.toLowerCase().includes(q)));
+    }
+
+    function render() {
+        const vis = visibles();
+        const el = document.getElementById('lista');
+        document.getElementById('cuenta-vis').textContent = `${vis.length} en la lista`;
+        if (!vis.length) {
+            el.innerHTML = `<div class="vacio">${vista === 'archivados' ? 'No hay proyectos archivados con estos filtros.' : 'No hay proyectos activos con estos filtros.'}</div>`;
+        } else {
+            el.innerHTML = vis.map((p) => {
+                const k = clave(p), sel = elegidos.has(k);
+                const nombre = p.nombre ? esc(p.nombre) : `<span style="color:var(--orange)">(sin nombre · ${esc(p.pid)})</span>`;
+                return `<div class="fila-p ${sel ? 'sel' : ''}" data-k="${esc(k)}" onclick="alternar(this.dataset.k)">
+                    <input type="checkbox" ${sel ? 'checked' : ''} tabindex="-1">
+                    <div><div class="nom">${nombre}</div><div class="meta">${esc(p.cliente)} · ${esc(ETAPAS[p.etapa] || p.etapa)} · ${p.fecha ? esc(p.fecha) : 'sin fecha'}</div></div>
+                    <div class="monto"><b>${bs(p.venta)}</b>cobrado ${bs(p.cobrado)}</div>
+                </div>`;
+            }).join('');
+        }
+        barra();
+    }
+
+    function barra() {
+        const n = [...elegidos].filter((k) => todos.some((p) => clave(p) === k && p.archivado === (vista === 'archivados'))).length;
+        document.getElementById('barra').classList.toggle('on', n > 0);
+        document.getElementById('barra-texto').textContent = `${n} elegido${n === 1 ? '' : 's'}`;
+        const b = document.getElementById('btn-aplicar');
+        b.textContent = vista === 'archivados' ? 'Desarchivar' : 'Archivar';
+        b.className = 'btn ' + (vista === 'archivados' ? 'btn-ok' : 'btn-rojo');
+        document.getElementById('fila-motivo').style.display = vista === 'archivados' ? 'none' : 'flex';
+        document.getElementById('caja-corte').style.display = vista === 'archivados' ? 'none' : 'block';
+    }
+
+    function alternar(k) { elegidos.has(k) ? elegidos.delete(k) : elegidos.add(k); render(); }
+    function elegirVisibles(si) { visibles().forEach((p) => si ? elegidos.add(clave(p)) : elegidos.delete(clave(p))); render(); }
+    function elegirTodos(si) { if (!si) elegidos.clear(); render(); }
+    function setVista(v) {
+        vista = v; elegidos.clear();
+        document.getElementById('tab-activos').classList.toggle('on', v === 'activos');
+        document.getElementById('tab-archivados').classList.toggle('on', v === 'archivados');
+        render();
+    }
+    function elegirAntesDe() {
+        const f = document.getElementById('f-corte').value;
+        if (!f) return aviso('Elegí una fecha.');
+        const lista = visibles().filter((p) => p.fecha && p.fecha < f);
+        lista.forEach((p) => elegidos.add(clave(p)));
+        render();
+        aviso(`${lista.length} proyecto${lista.length === 1 ? '' : 's'} creado${lista.length === 1 ? '' : 's'} antes del ${f} elegido${lista.length === 1 ? '' : 's'} (con los filtros de arriba). Revisá la lista y tocá Archivar.`, 5000);
+    }
+
+    async function aplicar() {
+        const archivar = vista === 'activos';
+        const lista = todos.filter((p) => elegidos.has(clave(p)) && p.archivado === !archivar).map((p) => ({ cid: p.cid, pid: p.pid }));
+        if (!lista.length) return;
+        const txt = archivar
+            ? `¿Archivar ${lista.length} proyecto${lista.length === 1 ? '' : 's'}?\n\nNo se borra nada: dejan de verse en la lista del cliente, Tesorería, el inicio y Kay. Se pueden desarchivar.`
+            : `¿Desarchivar ${lista.length} proyecto${lista.length === 1 ? '' : 's'}? Vuelven a aparecer en todas las pantallas.`;
+        if (!confirm(txt)) return;
+        const b = document.getElementById('btn-aplicar'); b.disabled = true; b.textContent = 'Guardando…';
+        try {
+            let hechos = 0;
+            for (let i = 0; i < lista.length; i += 500) {
+                const r = await RubikOps.proyectos(archivar ? 'archivar' : 'desarchivar', { proyectos: lista.slice(i, i + 500), motivo: document.getElementById('motivo').value });
+                hechos += (archivar ? r.archivados : r.desarchivados) || 0;
+            }
+            elegidos.clear();
+            document.getElementById('motivo').value = '';
+            aviso(`✅ ${hechos} proyecto${hechos === 1 ? '' : 's'} ${archivar ? 'archivado' : 'desarchivado'}${hechos === 1 ? '' : 's'}.`);
+            await cargar();
+        } catch (e) {
+            aviso('❌ ' + e.message, 6000);
+        } finally { b.disabled = false; barra(); }
+    }
+
+    (window.rubikAuthReady || Promise.resolve()).then(cargar).catch(() => {});
+</script>
+</body>
+</html>

@@ -196,7 +196,8 @@ const HERRAMIENTAS = [
             name: "listar_proyectos",
             title: "Listar proyectos de un cliente",
             description: "Lista los proyectos de un cliente con su estado (cotizacion, planificacion, produccion, entregado, cerrado), mes, cantidad de ítems y total del presupuesto (sin impuestos ni descuento; los ítems apagados no suman), y cuántas cotizaciones del agente tiene.",
-            inputSchema: { type: "object", properties: { cid: P_CID, estado: { type: "string", enum: ["cotizacion", "planificacion", "produccion", "entregado", "cerrado"] }, texto: { type: "string" } }, required: ["cid"] },
+            inputSchema: { type: "object", properties: { cid: P_CID, estado: { type: "string", enum: ["cotizacion", "planificacion", "produccion", "entregado", "cerrado"] }, texto: { type: "string" },
+                incluir_archivados: { type: "boolean", description: "Los proyectos archivados por el dueño (viejos) no se listan salvo con true." } }, required: ["cid"] },
             annotations: { readOnlyHint: true },
         },
         async correr(almacen, uid, e) {
@@ -210,9 +211,9 @@ const HERRAMIENTAS = [
                 const p = ps[k], pres = p.presupuesto || {};
                 const ag = p.agente || {};
                 return Object.assign({ pid: k, nombre: p.nombre || "(sin nombre)", estado: typeof p.estado === "string" ? p.estado : "planificacion",
-                    mes: String(p.fecha_creacion || "").slice(0, 7) || undefined, tipo: p.tipo || undefined },
+                    mes: String(p.fecha_creacion || "").slice(0, 7) || undefined, tipo: p.tipo || undefined, archivado: p.archivado === true || undefined },
                 totalItems(pres.items), { cotizaciones_agente: Object.keys(ag.conversaciones_meta || {}).length || undefined });
-            }).filter((p) => (!e.estado || p.estado === e.estado) && (!q || norm(p.nombre).includes(q)))
+            }).filter((p) => (e.incluir_archivados === true || !p.archivado) && (!e.estado || p.estado === e.estado) && (!q || norm(p.nombre).includes(q)))
                 .sort((a, b) => String(b.mes || "").localeCompare(String(a.mes || "")));
             return { cliente: cli.nombre, proyectos: res };
         },

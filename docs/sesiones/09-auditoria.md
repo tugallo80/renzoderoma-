@@ -313,3 +313,19 @@ personas que tengan licitaciones** (se pierden sus copias y pagos).
   fuentes por separado hasta definir el registro de cobros (un pago puede cubrir varios proyectos con varias facturas).
   `gasto_total` queda solo como referencia. La usan el panel del proyecto y Kay (`balance_proyecto`); Tesorería, después.
 
+
+### Archivar proyectos viejos (arranque limpio)
+
+El dueño cargó pocas ventas y pagos en la app vieja: en vez de reconstruir todo, archiva lo viejo y arranca limpio.
+- Pantalla `archivar-proyectos.html` (botón **Archivar** en Clientes): todos los proyectos de todos los clientes, filtros por
+  año, etapa, cliente y texto, "elegir los que se ven" y **"elegir todos los creados antes de <fecha>"**; un toque archiva
+  todos los elegidos. Pestaña Archivados para desarchivar. Los nodos sin nombre aparecen como "(sin nombre · código)".
+  Sin `fecha_creacion`, la fecha sale del código del proyecto (los códigos de Firebase llevan la hora de creación).
+- Servidor: `/api/proyectos` acciones `archivar` / `desarchivar` (`functions/proyectos/archivo.js`): hasta 500 por pedido,
+  una sola escritura, idempotente, entrada `archivar`/`desarchivar` en `historial_operaciones` de cada proyecto.
+  Marca `archivado: true` + `archivado_info {fecha, por, motivo}`; la etapa (`estado`) no cambia. Nada se borra.
+- Dejan de verse en: lista del cliente (chip "🗄️ Archivados" para verlos), Tesorería (balances, contratos, estado de
+  cuenta), inicio (contexto del chat IA), dashboard interno, supervisores, Kay (contexto de WhatsApp y
+  `listar_proyectos_activos`, que además ya no cuenta los `cerrado`) y `listar_proyectos` del conector (salvo
+  `incluir_archivados`). Las facturas (`/ingresos`) y compras siguen en Impuestos: son registros fiscales.
+- Pruebas: `tools/proyectos` 4/4.

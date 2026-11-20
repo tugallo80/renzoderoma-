@@ -237,6 +237,7 @@ async function proyectosDeTodos() {
             .map((pid) => ({
                 cid, pid, cliente, nombre: ps[pid].nombre, estado: typeof ps[pid].estado === "string" ? ps[pid].estado : "planificacion",
                 fecha: typeof ps[pid].fecha_creacion === "string" ? ps[pid].fecha_creacion.slice(0, 10) : null, tipo: ps[pid].tipo || null,
+                archivado: ps[pid].archivado === true || undefined,
             }));
     });
     const todos = porCliente.flat();
@@ -250,17 +251,18 @@ async function proyectosDeTodos() {
 // index.html): requerimiento → cotizacion → propuesta_enviada → negociando →
 // contrato_firmado → planificacion → produccion → entregado (o cancelado).
 // Activo = todo lo que no terminó. Sin estado se muestra como "Planificación".
-const ESTADOS_TERMINADOS = new Set(["entregado", "cancelado"]);
+const ESTADOS_TERMINADOS = new Set(["entregado", "cerrado", "cancelado"]);
 
 async function listarProyectosActivos() {
     const { todos, clientesLeidos } = await proyectosDeTodos();
     const proyectos = todos
-        .filter((p) => !ESTADOS_TERMINADOS.has(p.estado))
+        .filter((p) => !p.archivado && !ESTADOS_TERMINADOS.has(p.estado))   // archivados: proyectos viejos que el dueño guardó
         .sort((a, b) => (b.fecha || "").localeCompare(a.fecha || ""))
-        .map(({ cid, pid, ...p }) => p);
+        .map(({ cid, pid, archivado, ...p }) => p);
     const terminados = {};
-    for (const p of todos) if (ESTADOS_TERMINADOS.has(p.estado)) terminados[p.estado] = (terminados[p.estado] || 0) + 1;
-    return { total: proyectos.length, proyectos, terminados, clientesLeidos };
+    for (const p of todos) if (!p.archivado && ESTADOS_TERMINADOS.has(p.estado)) terminados[p.estado] = (terminados[p.estado] || 0) + 1;
+    const archivados = todos.filter((p) => p.archivado).length;
+    return { total: proyectos.length, proyectos, terminados, archivados, clientesLeidos };
 }
 
 // ── Detalle de proyectos (Kay recepcionista en modo dueño, por WhatsApp) ──────

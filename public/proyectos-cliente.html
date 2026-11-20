@@ -321,7 +321,9 @@
     ];
     const _TERMINADAS = ['entregado', 'cerrado', 'cancelado'];
     const _etapaDe = (p) => (p && typeof p.estado === 'string' && p.estado) ? p.estado : 'planificacion';
-    let activeStageFilter = 'todas';   // 'todas' | 'en_curso' | una etapa
+    let activeStageFilter = 'todas';   // 'todas' | 'en_curso' | 'archivados' | una etapa
+    // Archivados (pantalla archivar-proyectos.html): no se muestran salvo con el chip "Archivados"
+    const _esArch = (p) => !!(p && p.archivado === true);
     let _editorImg = null; let _editorRotation = 0; let _iaGeneratedDataUrl = null;
 
     // Mostrar "Cargando..." inmediatamente — visible mientras auth resuelve
@@ -372,7 +374,8 @@
                     img: typeof p.img === 'string' ? p.img : null,
                     orden: typeof p.orden === 'number' ? p.orden : null,
                     visible_cliente: p.visible_cliente === false ? false : null,
-                    tipo: typeof p.tipo === 'string' ? p.tipo : null
+                    tipo: typeof p.tipo === 'string' ? p.tipo : null,
+                    archivado: p.archivado === true ? true : null
                 };
             });
             if (Object.keys(slim).length > 0) {
@@ -435,7 +438,7 @@
         return Object.entries(dataObj)
             .filter(([, p]) => p && typeof p === 'object' && typeof p.nombre === 'string')
             // orden y fecha también: si no, los datos reales no reemplazaban a la copia vieja del dispositivo
-            .map(([pid, p]) => `${pid}:${p.nombre}:${p.estado||''}:${p.img||''}:${p.tipo||''}:${p.orden ?? ''}:${p.fecha_creacion||''}`)
+            .map(([pid, p]) => `${pid}:${p.nombre}:${p.estado||''}:${p.img||''}:${p.tipo||''}:${p.orden ?? ''}:${p.fecha_creacion||''}:${p.archivado === true ? 'A' : ''}`)
             .sort().join('|');
     }
 
@@ -479,12 +482,18 @@
                 }
             }
             renderStageFilter(globalProjectsArr);
-            if (activeStageFilter !== 'todas') {
+            if (activeStageFilter === 'archivados') globalProjectsArr = globalProjectsArr.filter(_esArch);
+            else globalProjectsArr = globalProjectsArr.filter(p => !_esArch(p));
+            if (activeStageFilter !== 'todas' && activeStageFilter !== 'archivados') {
                 globalProjectsArr = globalProjectsArr.filter(p => activeStageFilter === 'en_curso' ? !_TERMINADAS.includes(_etapaDe(p)) : _etapaDe(p) === activeStageFilter);
                 if (globalProjectsArr.length === 0) {
                     grid.innerHTML = `<div style="grid-column:1/-1;text-align:center;color:var(--gray);padding:40px;">No hay proyectos en esta etapa${activeMonthFilter !== 'todos' ? ' este mes' : ''}.</div>`;
                     return;
                 }
+            }
+            if (globalProjectsArr.length === 0) {
+                grid.innerHTML = `<div style="grid-column:1/-1;text-align:center;color:var(--gray);padding:40px;">${activeStageFilter === 'archivados' ? 'No hay proyectos archivados' : 'No hay proyectos activos (los demás están archivados)'}${activeMonthFilter !== 'todos' ? ' este mes' : ''}.</div>`;
+                return;
             }
 
             const wrap = document.createElement('div');
@@ -865,14 +874,17 @@
         const bar = document.getElementById('stage-filter-bar');
         if (!bar) return;
         const cuenta = {};
-        (lista || []).forEach(p => { const e = _etapaDe(p); cuenta[e] = (cuenta[e] || 0) + 1; });
-        const enCurso = (lista || []).filter(p => !_TERMINADAS.includes(_etapaDe(p))).length;
+        const archivados = (lista || []).filter(_esArch).length;
+        lista = (lista || []).filter(p => !_esArch(p));
+        lista.forEach(p => { const e = _etapaDe(p); cuenta[e] = (cuenta[e] || 0) + 1; });
+        const enCurso = lista.filter(p => !_TERMINADAS.includes(_etapaDe(p))).length;
         const chip = (val, txt, n) => `<span class="stage-chip ${activeStageFilter === val ? 'active' : ''}" onclick="setStageFilter('${val}')">${txt}<b>${n}</b></span>`;
         const etapas = ETAPAS.filter(e => cuenta[e[0]] || activeStageFilter === e[0]);
         const otras = Object.keys(cuenta).filter(k => !ETAPAS.some(e => e[0] === k));   // estados que no están en el ciclo
         bar.innerHTML = chip('todas', 'Todas', (lista || []).length) + chip('en_curso', '⏳ En curso', enCurso)
             + etapas.map(e => chip(e[0], `${e[1]} ${e[2]}`, cuenta[e[0]] || 0)).join('')
-            + otras.map(k => String(k).replace(/[^\w-]/g, '')).filter(Boolean).map(k => chip(k, k, cuenta[k] || 0)).join('');
+            + otras.map(k => String(k).replace(/[^\w-]/g, '')).filter(Boolean).map(k => chip(k, k, cuenta[k] || 0)).join('')
+            + (archivados || activeStageFilter === 'archivados' ? chip('archivados', '🗄️ Archivados', archivados) : '');
     }
     function setStageFilter(etapa) {
         activeStageFilter = etapa;

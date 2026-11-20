@@ -1062,6 +1062,7 @@ Recuerda aplicar siempre: [REGLA_UTILIDAD].`
                         const clienteNombre = clienteNombres[cid] || cid;
                         cliNode.forEach(proyNode => {
                             const p = proyNode.val();
+                            if (!p || p.archivado === true) return;   // archivados (archivar-proyectos.html): fuera del contexto
                             let ppto = 0;
                             if(p.presupuesto && p.presupuesto.items) {
                                 const items = Array.isArray(p.presupuesto.items) ? p.presupuesto.items : Object.values(p.presupuesto.items);
@@ -1699,6 +1700,7 @@ $$$QUOTE_DATA: [{"desc":"Nombre Item","feat":"Característica","cant":1,"und":"p
                             ]);
                             if(pSnap.exists()) pSnap.forEach(cli => cli.forEach(proy => {
                                 let p = proy.val();
+                                if (!p || p.archivado === true) return;
                                 contextDB.proyectos.push({ nombre: p.nombre, estado: p.estado, monto: p.monto_cierre || 0 });
                             }));
                             if(cSnap.exists()) cSnap.forEach(c => contextDB.clientes.push({nombre: c.val().empresa||c.val().nombre, id: c.key}));

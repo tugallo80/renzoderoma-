@@ -297,6 +297,7 @@
             if(snap.exists()) {
                 snap.forEach(client => { client.forEach(proy => {
                     const p = proy.val();
+                    if (!p || p.archivado === true) return;
                     if(p.estado !== 'entregado') activos++;
                     gastoTotal += parseFloat(p.gasto_total || 0);
                     if(p.fecha_creacion) proyectosFeed.push({ type: 'proyecto', title: `Nuevo Proyecto: ${p.nombre}`, sub: 'Cliente asignado', date: new Date(p.fecha_creacion) });
@@ -517,6 +518,7 @@
                 clientSnap.forEach(proySnap => {
                     const pid = proySnap.key;
                     const p = proySnap.val();
+                    if (!p || p.archivado === true) return;
                     const estadosPendientes = ['requerimiento', 'propuesta_enviada', 'negociando'];
                     if (estadosPendientes.includes(p.estado)) {
                         _contratos.push({ cid, pid, p });

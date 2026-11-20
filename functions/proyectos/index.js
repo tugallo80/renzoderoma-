@@ -1,19 +1,27 @@
 /**
  * Proyectos (Sesión 9, Lote 2): /api/proyectos (lista blanca hub).
  *   finanzas {cid, pid} → la fórmula única de venta, gasto, cobrado y utilidad (functions/proyectos/finanzas.js).
+ *   archivar / desarchivar {proyectos: [{cid, pid}], motivo?, idempotencia} → functions/proyectos/archivo.js.
  * Kay usa la misma fórmula (kayApi → balance_proyecto).
  */
 const { onRequest } = require("firebase-functions/v2/https");
 const admin = require("firebase-admin");
 const { crearAlmacen } = require("../agente/almacen");
 const F = require("./finanzas");
+const A = require("./archivo");
+const C = require("../operaciones/comun");
 
-const almacenFinanzas = () => crearAlmacen(admin, F.RUTAS, []);
+const almacenFinanzas = () => crearAlmacen(admin, F.RUTAS.concat(A.RUTAS), []);
 
-async function atender(almacen, b) {
+async function atender(almacen, b, quien) {
     try {
-        if (!b || b.accion !== "finanzas") return { status: 400, cuerpo: { error: "Acción desconocida." } };
-        return { status: 200, cuerpo: await F.calcular(almacen, b.cid, b.pid) };
+        const accion = b && b.accion;
+        if (accion === "finanzas") return { status: 200, cuerpo: await F.calcular(almacen, b.cid, b.pid) };
+        if (accion === "archivar" || accion === "desarchivar") {
+            const q = C.limpiarQuien(quien, "app");
+            return { status: 200, cuerpo: await (accion === "archivar" ? A.archivar : A.desarchivar)(almacen, b, q) };
+        }
+        return { status: 400, cuerpo: { error: "Acción desconocida." } };
     } catch (e) {
         if (e.status) return { status: e.status, cuerpo: { error: e.message } };
         console.error("[proyectosApi]", e);
@@ -28,7 +36,8 @@ function crearApi({ requireAuth, applyCors }) {
         if (req.method !== "POST") return res.status(405).json({ error: "Método no permitido" });
         const usuario = await requireAuth(req, res);
         if (!usuario) return;
-        const r = await atender(almacenFinanzas(), req.body || {});
+        const quien = { uid: usuario.uid, rol: "dueño", nombre: usuario.name || usuario.email || null, via: "app" };
+        const r = await atender(almacenFinanzas(), req.body || {}, quien);
         res.status(r.status).json(r.cuerpo);
     });
 }
