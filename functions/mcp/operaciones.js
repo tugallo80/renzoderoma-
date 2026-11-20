@@ -4,6 +4,8 @@
  * kayApi → usar_conector). Las de escritura piden registrado_por e idempotencia y dejan historial en el proyecto.
  */
 const L = require("../licitaciones/api");
+const P = require("../proyectos");
+const E = require("../proyectos/estado");
 
 const REGISTRADO_POR = {
     type: "object", description: "Quién pide el cambio: {rol: dueño|supervisor|compras|…, nombre, telefono?}. Va al historial.",
@@ -23,9 +25,60 @@ function correrModulo(falla, mod, almacenDe) {
 
 module.exports = function crear({ falla, acotar }) {
     const lic = correrModulo(falla, L, (a) => acotar(a, L.RUTAS));
+    const proy = correrModulo(falla, P, (a) => acotar(a, P.RUTAS));
     const quienDe = (uid, rp) => ({ uid, rol: rp && rp.rol, nombre: rp && rp.nombre, telefono: rp && rp.telefono, via: (rp && rp.via) || "claude" });
 
     return [
+        {
+            def: {
+                name: "buscar_trabajador",
+                title: "Buscar trabajador o proveedor",
+                description: "Busca en la base de personal (trabajadores, contratistas y proveedores como imprentas) por nombre, empresa o especialidad {texto}. Devuelve worker_id, nombre, tipo y especialidad: usalo para crear_licitacion o cambiar_contratista.",
+                inputSchema: { type: "object", properties: { texto: { type: "string", maxLength: 80 } } },
+                annotations: { readOnlyHint: true },
+            },
+            async correr(almacen, uid, e) { return lic(almacen, uid, "trabajadores", e, null); },
+        },
+        {
+            def: {
+                name: "crear_licitacion",
+                title: "Crear una licitación",
+                description: "Crea una licitación (encargo a un trabajador o proveedor de la base) con la misma lógica que la pantalla de Licitaciones: copia para el trabajador, responsable en los ítems del presupuesto si queda aprobada, historial. PEDÍ EL SÍ DEL DUEÑO ANTES (a quién, qué y por cuánto). alcance: renglones {item?: índice del ítem del presupuesto (ver_presupuesto), descripcion?, cant?, und?, monto}; el total es la suma de los montos. estado: enviado (propuesta al trabajador, por defecto) o aprobado (adjudicación directa). tipo: mano_de_obra (por defecto), grafico (imprenta), llave_en_mano, supervision. Trabajador por worker_id (buscar_trabajador) o por nombre si hay uno solo que coincide.",
+                inputSchema: { type: "object", properties: {
+                    cid: { type: "string" }, pid: { type: "string" },
+                    worker_id: { type: "string" }, trabajador: { type: "string", maxLength: 80, description: "Nombre (si no tenés worker_id)." },
+                    alcance: { type: "array", minItems: 1, maxItems: 60, items: { type: "object", properties: {
+                        item: { type: "integer", minimum: 0 }, descripcion: { type: "string", maxLength: 200 }, cant: { type: "number", minimum: 0.0001 },
+                        und: { type: "string", maxLength: 20 }, monto: { type: "number", minimum: 0.01 } }, required: ["monto"] } },
+                    tipo: { type: "string", enum: ["mano_de_obra", "grafico", "llave_en_mano", "supervision"] },
+                    estado: { type: "string", enum: ["enviado", "aprobado"] },
+                    periodo: { type: "string", description: "Mes de planilla AAAA-MM (por defecto el actual)." },
+                    nota: { type: "string", maxLength: 500 },
+                    idempotencia: IDEM, registrado_por: REGISTRADO_POR,
+                }, required: ["cid", "pid", "alcance", "idempotencia", "registrado_por"] },
+                annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
+            },
+            async correr(almacen, uid, e) {
+                const { registrado_por, ...args } = e;
+                return lic(almacen, uid, "crear", args, quienDe(uid, registrado_por));
+            },
+        },
+        {
+            def: {
+                name: "cambiar_estado_proyecto",
+                title: "Cambiar la etapa de un proyecto",
+                description: "Cambia la etapa (estado) de un proyecto con historial antes → después, como el panel del proyecto. PEDÍ EL SÍ DEL DUEÑO ANTES. Etapas: " + E.ESTADOS.join(", ") + ".",
+                inputSchema: { type: "object", properties: {
+                    cid: { type: "string" }, pid: { type: "string" }, estado: { type: "string", enum: E.ESTADOS },
+                    motivo: { type: "string", maxLength: 300 }, idempotencia: IDEM, registrado_por: REGISTRADO_POR,
+                }, required: ["cid", "pid", "estado", "idempotencia", "registrado_por"] },
+                annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
+            },
+            async correr(almacen, uid, e) {
+                const { registrado_por, ...args } = e;
+                return proy(almacen, uid, "cambiar_estado", args, quienDe(uid, registrado_por));
+            },
+        },
         {
             def: {
                 name: "listar_licitaciones",

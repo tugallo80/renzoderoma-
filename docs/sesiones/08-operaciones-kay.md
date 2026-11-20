@@ -40,6 +40,18 @@ Kay: `herramientas_conector` incluye `modificar_licitacion` (`readOnlyHint: fals
 
 Pruebas: `tools/licitaciones` 6/6 (incluye 2.548,50 → 3.000 con reintento), conector 35/35, reglas 191 OK.
 
+## Crear licitaciones y etapa del proyecto ✅ (2026-11-20)
+
+- `crear` (`functions/licitaciones/api.js`): arma la licitación desde un alcance simple (ítems del presupuesto por índice
+  o renglones libres, con monto) y la guarda con `guardar`, igual que la pantalla. El trabajador o proveedor se indica por
+  `worker_id` o por nombre (si coincide uno solo). `trabajadores {texto}` busca en `personal` y solo devuelve id, nombre y tipo.
+  Conector: `buscar_trabajador`, `crear_licitacion`.
+- `cambiar_estado` (`functions/proyectos/estado.js`, `/api/proyectos`): etapa con historial antes → después. La usan el
+  panel del proyecto (cerrar, fijar cierre, aceptar oferta, factura → entregado) y la lista del cliente (editar).
+  Conector: `cambiar_estado_proyecto`.
+- Kay: `ESCRITURA_KAY` suma `crear_licitacion` y `cambiar_estado_proyecto`.
+- Pruebas: licitaciones 8/8, proyectos 5/5, conector 36/36.
+
 ## Etapas siguientes
 
 | Etapa | Área | Operaciones mínimas |

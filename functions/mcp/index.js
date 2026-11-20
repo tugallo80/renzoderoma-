@@ -31,6 +31,7 @@ const RUTAS_MCP = [
     /^render_cola(\/|$)/,      // sesión 6: pedidos de render para renderTurno
     /^pdf_cola(\/|$)/,         // páginas de los PDF de los requerimientos (functions/pdf)
     /^personal\/[^/]+\/(nombre|solicitudes)(\/|$)/,   // copia de las licitaciones del trabajador (functions/licitaciones)
+    /^personal$/,              // buscar_trabajador / crear_licitacion (solo salen id, nombre y tipo)
     /^operaciones_idem(\/|$)/,  // idempotencia de las operaciones (functions/operaciones)
 ];
 /** Storage: escribe y lee las del agente (adjuntos de las cotizaciones); las de los Requerimientos solo las LEE. */

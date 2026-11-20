@@ -111,4 +111,14 @@ idempotentes. **Antes de cada cambio, decile al dueño qué vas a hacer y esper�
   `cambiar_monto` (aprobada: precio final; si no, el propuesto), `cambiar_contratista`, `aprobar`, `contra_oferta`,
   `terminar`, `registrar_pago` (pago, adelanto o descuento por compra; `pagado_con` caja chica, QR…), `anular_pago`,
   `agregar_extra`, `anular` (con motivo; la copia queda en el historial). No toca `gasto_total`.
+- **`buscar_trabajador`** `{texto}` → `worker_id`, nombre, tipo y especialidad de trabajadores y proveedores de la base
+  (ej. una imprenta). Para `crear_licitacion` o `cambiar_contratista`.
+- **`crear_licitacion`** `{cid, pid, worker_id | trabajador, alcance: [{item?, descripcion?, cant?, und?, monto}], tipo?, estado?,
+  idempotencia, registrado_por}` → encarga trabajo a alguien de la base, como la pantalla de Licitaciones. `item` es el índice
+  del ítem del presupuesto (`ver_presupuesto`); sin ítem, el renglón es libre. El total es la suma de los montos. `estado`:
+  `enviado` (propuesta, por defecto) o `aprobado` (adjudicación directa). `tipo`: `mano_de_obra`, `grafico`, `llave_en_mano`,
+  `supervision`. Con el sí del dueño.
+- **`cambiar_estado_proyecto`** `{cid, pid, estado, motivo?, idempotencia, registrado_por}` → cambia la etapa (requerimiento,
+  cotizacion, propuesta_enviada, negociando, contrato_firmado, planificacion, produccion, entregado, cerrado, cancelado) con
+  historial antes → después. Con el sí del dueño.
 
