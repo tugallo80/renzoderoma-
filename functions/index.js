@@ -1065,10 +1065,16 @@ exports.whatsappWebhook = onRequest(WA_OPTS, async (req, res) => {
         }
         if (!textoUsuario.trim()) return res.status(200).send("OK");
         const db   = admin.database();
-        const rol  = await identificarRol(from);
-        const nombre = rol === "ADMIN" ? "Renzo" : from;
-        let contexto = await contextoProyectos(db, rol, from);
+        // Antes se llamaba identificarRol(from) sin la base: nunca reconocía a nadie y, como el rol era un objeto, el contexto
+        // llevaba TODOS los proyectos para cualquier número (Sesión 9, auditoría). Ahora: rol real, y a un número no
+        // registrado no le llega ningún dato del sistema.
+        const quien = await identificarRol(db, from);
+        const rol  = quien.rol;
+        const nombre = quien.nombre || from;
+        const ROLES_CON_DATOS = ["ADMIN", "SUPERVISOR", "TRABAJADOR", "CLIENTE"];
+        let contexto = ROLES_CON_DATOS.includes(rol) ? await contextoProyectos(db, rol, quien.id || from) : "";
         if (rol === "ADMIN") contexto += await contextoPrecios(db);
+        console.log("[whatsappWebhook] mensaje de", rol);
         const historial = await leerHistorial(db, from);
         const systemPrompt = buildPrompt(rol, nombre, contexto, historial, textoUsuario);
         const parts = [];
