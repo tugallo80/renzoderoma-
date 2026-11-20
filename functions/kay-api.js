@@ -381,6 +381,18 @@ async function compras(accion, params) {
     return r.status === 200 ? { error: false, ...r.cuerpo } : { error: true, texto: (r.cuerpo && r.cuerpo.error) || `Error ${r.status}` };
 }
 
+// ── Cobros y facturas de venta: el mismo módulo que /api/cobros (functions/cobros/api.js) ──
+async function cobros(accion, params) {
+    const K = require("./cobros/api");
+    const { almacenCobros } = require("./cobros");
+    const { registrado_por, ...resto } = params || {};
+    const rp = registrado_por && typeof registrado_por === "object" ? registrado_por : {};
+    const quien = { rol: rp.rol || "dueño", nombre: rp.nombre || null, telefono: rp.telefono || null, via: "whatsapp" };
+    const r = await K.atender(almacenCobros(), { ...resto, accion }, quien, "whatsapp");
+    console.log(`[kayApi] cobros ${accion}: ${r.status}`);
+    return r.status === 200 ? { error: false, ...r.cuerpo } : { error: true, texto: (r.cuerpo && r.cuerpo.error) || `Error ${r.status}` };
+}
+
 const ACCIONES = {
     listar_proyectos_activos: {
         soloLectura: true,
@@ -444,6 +456,41 @@ const ACCIONES = {
         soloLectura: true,
         descripcion: "Ingresos, egresos (compras, contratistas, cancheos), resultado e IVA de compras de un mes { mes: \"AAAA-MM\" }.",
         ejecutar: (p) => compras("balance_mensual", p),
+    },
+    cobros_pendientes: {
+        soloLectura: true,
+        descripcion: "Lo que le falta pagar a un cliente { cid, monto? } → { proyectos: [{pid, proyecto, venta, cobrado, saldo}], facturas_pendientes, saldo_total, "
+            + "reparto_sugerido? (con monto: lo más viejo primero), sin_asignar? }. Usalo ANTES de registrar_cobro para proponerle el reparto al dueño.",
+        ejecutar: (p) => cobros("pendientes", p),
+    },
+    listar_cobros: {
+        soloLectura: true,
+        descripcion: "Cobros y facturas de venta { cid?, pid?, desde?, hasta? (AAAA-MM-DD) } → { cobros, facturas, total_cobrado }.",
+        ejecutar: (p) => cobros("listar", p),
+    },
+    registrar_cobro: {
+        soloLectura: false,
+        descripcion: "Registra plata que pagó un cliente, repartida entre sus proyectos (y sus facturas) "
+            + "{ idempotencia, cid, monto, fecha?, concepto?, medio?: transferencia|qr|efectivo|cheque|deposito|otro, "
+            + "aplicaciones: [{pid, monto, factura_id?}] (tienen que sumar el monto), foto?: {datos_base64} (comprobante), registrado_por } "
+            + "→ { id, aplicaciones }. Con el sí del dueño al reparto.",
+        ejecutar: (p) => cobros("registrar_cobro", p),
+    },
+    anular_cobro: {
+        soloLectura: false,
+        descripcion: "Anula un cobro (no se borra; lo quita de cada proyecto y de sus facturas) { idempotencia, id, motivo, registrado_por }.",
+        ejecutar: (p) => cobros("anular_cobro", p),
+    },
+    registrar_factura_venta: {
+        soloLectura: false,
+        descripcion: "Registra una factura de venta emitida, unida a su proyecto (Impuestos la cuenta) "
+            + "{ idempotencia, cid, pid, monto, nro_factura, fecha?, nit?, cuf?, cliente_rs?, foto?: {datos_base64}, registrado_por } → { id }.",
+        ejecutar: (p) => cobros("registrar_factura", p),
+    },
+    anular_factura_venta: {
+        soloLectura: false,
+        descripcion: "Anula una factura de venta sin cobros aplicados { idempotencia, id, motivo, registrado_por }.",
+        ejecutar: (p) => cobros("anular_factura", p),
     },
     balance_proyecto: {
         soloLectura: true,

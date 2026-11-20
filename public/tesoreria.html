@@ -31,7 +31,7 @@
     <script src="/js/firecache.js?v=7"></script>
     <script src="/js/auth-guard.js?v=3"></script>
     <script src="/js/compras-api.js?v=1"></script>
-    <script src="/js/operaciones-api.js?v=1"></script>
+    <script src="/js/operaciones-api.js?v=2"></script>
     <script src="/js/viewmode.js?v=1"></script>
 
     <style>
@@ -353,22 +353,17 @@
                     <i class="ph-bold ph-magic-wand"></i> Leer con IA
                 </button>
 
-                <label class="inp-lbl">Proyecto Asociado</label>
-                <div id="cobro-proy-container" style="position:relative; margin-bottom:14px;">
-                    <input type="text" id="cobro-proy-input" class="inp-std" placeholder="Buscar proyecto..." autocomplete="off"
-                           style="margin:0; padding-right:36px;"
-                           oninput="filtrarProyectosCobro(this.value)"
-                           onfocus="abrirDropProyectosCobro()"
-                           onkeydown="navDropProyectosCobro(event)">
-                    <i class="ph-bold ph-magnifying-glass" style="position:absolute;right:12px;top:50%;transform:translateY(-50%);color:var(--gray);pointer-events:none;font-size:16px;"></i>
-                    <div id="cobro-proy-drop" style="display:none;position:absolute;top:calc(100% + 4px);left:0;right:0;background:var(--card);border:1px solid var(--border);border-radius:12px;max-height:200px;overflow-y:auto;z-index:200;box-shadow:0 8px 24px rgba(0,0,0,0.2);"></div>
-                </div>
+                <div id="cobro-proy-container" style="display:none;"><input type="hidden" id="cobro-proy-input"><div id="cobro-proy-drop"></div></div>
                 <input type="hidden" id="cobro-proy-sel" value="">
 
                 <div class="flex-row">
-                    <div style="flex:1;"><label class="inp-lbl">Monto Cobrado (Bs)</label><input type="number" step="any" id="cobro-monto" class="inp-std" placeholder="0.00"></div>
+                    <div style="flex:1;"><label class="inp-lbl">Monto Cobrado (Bs)</label><input type="number" step="any" id="cobro-monto" class="inp-std" placeholder="0.00" oninput="RubikCobrosUI.sugerir()"></div>
                     <div style="flex:1;"><label class="inp-lbl">Fecha de Cobro</label><input type="date" id="cobro-fecha" class="inp-std"></div>
                 </div>
+                <label class="inp-lbl">Cliente que pagó</label>
+                <select id="cobro-cliente" class="inp-std" onchange="RubikCobrosUI.cargarPendientes()"><option value="">Elegí el cliente…</option></select>
+                <!-- Un pago puede cubrir varios proyectos del mismo cliente: se reparte acá (functions/cobros) -->
+                <div id="cobro-reparto" style="margin-bottom:14px;"></div>
                 <label class="inp-lbl">Concepto / Descripción</label>
                 <input type="text" id="cobro-concepto" class="inp-std" placeholder="Ej: 50% anticipo, pago final...">
                 <button class="btn-action btn-success" onclick="registrarCobro()"><i class="ph-bold ph-floppy-disk"></i> Guardar Cobro</button>
@@ -376,6 +371,7 @@
             <div class="section-title"><i class="ph-bold ph-chart-pie-slice"></i> Cuentas por Cobrar</div>
             <div id="list-cxc"></div>
             <div class="section-title"><i class="ph-bold ph-list-dashes"></i> Historial de Cobros</div>
+            <div id="list-cobros-nuevos"></div>
             <div id="list-cobros"></div>
         </div>
 
@@ -736,35 +732,29 @@
     window.registrarIngreso = async function() {
         const monto = parseFloat(document.getElementById('ing-monto').value || 0);
         const fecha = document.getElementById('ing-fecha').value;
-        const nit = document.getElementById('ing-nit').value.trim();
         const nro = document.getElementById('ing-nro').value.trim();
         if (!monto || monto <= 0) return alert('Ingresa un monto válido.');
         if (!fecha) return alert('Selecciona una fecha.');
         if (!nro) return alert('El número de factura es requerido.');
+        const etiqueta = document.getElementById('ing-proy-sel').value || document.getElementById('ing-proy-input').value || '';
+        const proy = (window._proyPorEtiqueta || {})[etiqueta];
+        if (!proy) return alert('Elegí el proyecto de la lista (la factura queda unida a ese proyecto).');
         const estadoCobro = document.getElementById('ing-estado-cobro').value || 'pendiente';
-        const payload = {
-            monto,
-            fecha,
-            proyecto: document.getElementById('ing-proy-sel').value || document.getElementById('ing-proy-input').value || '',
-            is_facturado: true,
-            nit: nit || '',
-            nro_factura: nro,
-            cuf: document.getElementById('ing-cuf').value.trim() || '',
-            cliente_rs: document.getElementById('ing-cliente-rs').value.trim() || '',
-            estado_cobro: estadoCobro,
-            fecha_cobro: estadoCobro === 'cobrado' ? (document.getElementById('ing-fecha-cobro').value || '') : '',
-            timestamp: Date.now()
-        };
         try {
-            await db.ref('ingresos').push(payload);
-            // Reset form
+            const f = await RubikOps.cobros('registrar_factura', { cid: proy.cid, pid: proy.pid, monto, fecha, nro_factura: nro,
+                nit: document.getElementById('ing-nit').value.trim(), cuf: document.getElementById('ing-cuf').value.trim(),
+                cliente_rs: document.getElementById('ing-cliente-rs').value.trim() });
+            if (estadoCobro === 'cobrado') {
+                await RubikOps.cobros('registrar_cobro', { cid: proy.cid, pid: proy.pid, factura_id: f.id, monto,
+                    fecha: document.getElementById('ing-fecha-cobro').value || fecha, concepto: 'Cobro factura ' + nro });
+            }
             ['ing-monto','ing-nit','ing-nro','ing-cuf','ing-cliente-rs'].forEach(id => { document.getElementById(id).value = ''; });
             document.getElementById('ing-fecha').valueAsDate = new Date();
             document.getElementById('ing-proy-input').value = '';
             document.getElementById('ing-proy-sel').value = '';
             setEstadoCobro('pendiente');
-            alert('Factura de venta registrada.');
-        } catch(e) { alert('Error: ' + e.message); }
+            alert('Factura de venta registrada' + (estadoCobro === 'cobrado' ? ' y cobrada.' : '.'));
+        } catch(e) { alert('No se guardó: ' + e.message); }
     };
 
     // ── Registrar Cobro / Boucher ──
@@ -795,42 +785,7 @@
         if (btnIA) btnIA.style.display = 'none';
     };
 
-    window.registrarCobro = async function() {
-        const monto = parseFloat(document.getElementById('cobro-monto').value || 0);
-        const fecha = document.getElementById('cobro-fecha').value;
-        if (!monto || monto <= 0) return alert('Ingresa un monto válido.');
-        if (!fecha) return alert('Selecciona una fecha.');
-
-        let boucherUrl = null;
-        if (window._cobroBoucherFile) {
-            try {
-                const ref = storage.ref(`cobros/${Date.now()}_${window._cobroBoucherFile.name}`);
-                await ref.put(window._cobroBoucherFile);
-                boucherUrl = await ref.getDownloadURL();
-            } catch(e) { console.warn('No se pudo subir boucher:', e); }
-        }
-
-        const payload = {
-            monto,
-            fecha,
-            proyecto: document.getElementById('cobro-proy-sel').value || document.getElementById('cobro-proy-input').value || '',
-            concepto: document.getElementById('cobro-concepto').value.trim() || '',
-            is_facturado: false,
-            tipo: 'cobro',
-            boucher: boucherUrl,
-            timestamp: Date.now()
-        };
-        try {
-            await db.ref('ingresos').push(payload);
-            document.getElementById('cobro-monto').value = '';
-            document.getElementById('cobro-fecha').valueAsDate = new Date();
-            document.getElementById('cobro-proy-input').value = '';
-            document.getElementById('cobro-proy-sel').value = '';
-            document.getElementById('cobro-concepto').value = '';
-            limpiarCobroBoucher();
-            alert('Cobro registrado correctamente.');
-        } catch(e) { alert('Error: ' + e.message); }
-    };
+    window.registrarCobro = () => RubikCobrosUI.guardar();
 
     // Las facturas y compras anuladas (no se borran) no cuentan en ningún total
     function _sinAnuladas(o) { const r = {}; Object.entries(o || {}).forEach(([k, v]) => { if (v && !v.anulada && v.estado !== 'anulada') r[k] = v; }); return r; }
@@ -857,7 +812,7 @@
                 safe('personal')
             ]);
             proyectosData         = _proyectosSinArchivados(proySnap.val() || {});
-            ingresosData          = ingSnap.val()   || {};
+            ingresosData          = _sinAnuladas(ingSnap.val());   // facturas de venta anuladas: no cuentan en Impuestos
             comprasFacturadasData = _sinAnuladas(compSnap.val());
             cancheosData          = cancSnap.val()  || {};
             personalData          = personalSnap.val() || {}; // fix: assign to outer let, not shadow it
@@ -880,7 +835,7 @@
         } catch(e) { console.error('Error cargando tesoreria:', e); }
         finally { document.getElementById('global-loader').style.display = 'none'; }
     }
-    db.ref('ingresos').on('value', snap => { ingresosData = snap.val() || {}; calcularBalancesGlobales(); renderIngresos(); });
+    db.ref('ingresos').on('value', snap => { ingresosData = _sinAnuladas(snap.val()); calcularBalancesGlobales(); renderIngresos(); });
     db.ref('compras_facturadas').on('value', snap => { comprasFacturadasData = _sinAnuladas(snap.val()); renderImpuestos(); });
     // Compras registradas con /api/compras (docs/sesiones/07-compras.md): cuentan como egreso en el balance
     var comprasData = {};   // var: calcularBalancesGlobales puede correr antes de esta línea
@@ -911,9 +866,11 @@
         ref.on('child_removed', snap => { delete proyectosData[snap.key]; _reRenderTesoreria(); });
     }
 
+    window._recalcularBalances = () => calcularBalancesGlobales();
     function calcularBalancesGlobales() {
         let totalIngresos = 0; let totalEgresos = 0;
-        Object.values(ingresosData).forEach(i => { totalIngresos += parseFloat(i.monto || 0); });
+        Object.values(ingresosData).forEach(i => { if (i && i.origen !== 'modulo' && !i.anulada) totalIngresos += parseFloat(i.monto || 0); });
+        Object.values(window._cobrosData || {}).forEach(c => { if (c && !c.anulado) totalIngresos += parseFloat(c.monto || 0); });
         Object.values(proyectosData).forEach(cliente => {
             Object.values(cliente).forEach(p => {
                 if(p.licitaciones) { Object.values(p.licitaciones).forEach(lic => { if(lic.pagos) { Object.values(lic.pagos).forEach(pay => { totalEgresos += parseFloat(pay.monto || 0); }); } }); }
@@ -929,17 +886,22 @@
     }
 
     let _proyNombres = [];
+    window._rehacerNombresProyectos = () => renderBuzonYContratos();
 
     function renderBuzonYContratos() {
         const listBuzon = document.getElementById('list-global-lic'); const listActive = document.getElementById('list-active-contracts');
         listBuzon.innerHTML = ''; listActive.innerHTML = '';
 
         _proyNombres = [];
+        window._proyPorEtiqueta = {};
+        const cliNom = window._clientesNombres || {};
         Object.keys(proyectosData).forEach(clientId => {
             Object.keys(proyectosData[clientId] || {}).forEach(projectId => {
                 const proyecto = proyectosData[clientId][projectId];
-                const projectName = proyecto.nombre || 'Proyecto';
-                if (!_proyNombres.includes(projectName)) _proyNombres.push(projectName);
+                if (!proyecto || typeof proyecto.nombre !== 'string') return;
+                const etiqueta = proyecto.nombre + (cliNom[clientId] ? ' · ' + cliNom[clientId] : '');
+                window._proyPorEtiqueta[etiqueta] = { cid: clientId, pid: projectId, nombre: proyecto.nombre };
+                if (!_proyNombres.includes(etiqueta)) _proyNombres.push(etiqueta);
             });
         });
         _proyNombres.sort();
@@ -2146,7 +2108,7 @@
                     if(p.presupuesto && p.presupuesto.items) Object.values(p.presupuesto.items).forEach(it => { if(it && it.type !== 'chapter') montoTotal += (parseFloat(it.cant||1)*parseFloat(it.pu||0)); });
                     if(montoTotal <= 0) return;
                     let pagado = 0;
-                    Object.values(ingresosData).forEach(ing => { if(ing && (ing.proyecto||'').includes(p.nombre||'')) pagado += parseFloat(ing.monto||0); });
+                    Object.values(p.pagos || {}).forEach(pg => { if (pg) pagado += parseFloat(pg.monto || 0); });
                     const saldo = montoTotal - pagado;
                     if(saldo <= 0) return;
                     hasCxC = true;
@@ -2229,13 +2191,28 @@
         }
     }
 
-    window.eliminarIngreso = function(id) {
+    window.eliminarIngreso = async function(id) {
+        const i = ingresosData[id];
+        if (i && i.origen === 'modulo') {
+            const motivo = prompt('Anular la factura ' + (i.nro_factura || '') + ' (no se borra; deja de contar en Impuestos). Motivo:');
+            if (!motivo) return;
+            try { await RubikOps.cobros('anular_factura', { id, motivo }); } catch (e) { alert(e.message); }
+            return;
+        }
         if(confirm('¿Eliminar este registro?')) db.ref('ingresos/'+id).remove();
     };
 
-    window.marcarFacturaCobrada = function(id) {
+    window.marcarFacturaCobrada = async function(id) {
         const fecha = prompt('Fecha de cobro (YYYY-MM-DD):', new Date().toISOString().substring(0,10));
         if (!fecha) return;
+        const i = ingresosData[id];
+        if (i && i.origen === 'modulo' && i.cid && i.pid) {
+            // registra el cobro del saldo de la factura (queda en el proyecto y en Cobros)
+            const saldo = Math.round((parseFloat(i.monto || 0) - parseFloat(i.cobrado || 0)) * 100) / 100;
+            try { await RubikOps.cobros('registrar_cobro', { cid: i.cid, pid: i.pid, factura_id: id, monto: saldo, fecha, concepto: 'Cobro factura ' + (i.nro_factura || '') }); }
+            catch (e) { alert(e.message); }
+            return;
+        }
         db.ref('ingresos/'+id).update({ estado_cobro: 'cobrado', fecha_cobro: fecha });
     };
 
@@ -2988,6 +2965,7 @@
             if (jsonMatch) {
                 const d = JSON.parse(jsonMatch[0]);
                 if (d.monto)    document.getElementById('cobro-monto').value    = d.monto;
+                if (d.monto && window.RubikCobrosUI) RubikCobrosUI.sugerir();
                 if (d.fecha)    document.getElementById('cobro-fecha').value    = d.fecha;
                 if (d.concepto) document.getElementById('cobro-concepto').value = d.concepto + (d.banco_origen ? ' · ' + d.banco_origen : '');
                 document.getElementById('cobro-boucher-nombre').innerText = '✓ Leído con IA · ' + (window._cobroBoucherFile?.name || '');
@@ -4111,18 +4089,10 @@
         if (!concepto) { alert('Ingresá el concepto del pago.'); return; }
         if (!monto || monto <= 0) { alert('Ingresá un monto válido.'); return; }
         if (!fecha) { alert('Ingresá la fecha.'); return; }
-
-        let comprobanteURL = null;
-        if (window._ecCompFile) {
-            try {
-                const ref = firebase.storage().ref(`cobros_cliente/${cid}/${pid}/${Date.now()}_${window._ecCompFile.name}`);
-                await ref.put(window._ecCompFile);
-                comprobanteURL = await ref.getDownloadURL();
-            } catch(e) { console.warn('No se pudo subir comprobante:', e.message); }
-        }
-
-        const payload = { concepto, monto, fecha, comprobante: comprobanteURL, ts: Date.now() };
-        await db.ref(`proyectos/${cid}/${pid}/pagos`).push(payload);
+        try {
+            const foto = window._ecCompFile ? await RubikOps.archivoABase64(window._ecCompFile) : null;
+            await RubikOps.cobros('registrar_cobro', { cid, pid, monto, fecha, concepto, foto });
+        } catch (e) { alert('No se guardó: ' + e.message); return; }
         document.getElementById('mod-pago-cliente').style.display = 'none';
         cargarEstadoCuenta();
     };
@@ -4225,5 +4195,143 @@
     <button class="m-act-btn" data-tab="impuestos" onclick="switchMainTab('impuestos',null)"><i class="ph-bold ph-bank"></i><span>Impuest.</span></button>
     <button class="m-act-btn" data-tab="clientes" onclick="switchMainTab('clientes',null)"><i class="ph-bold ph-receipt"></i><span>Clientes</span></button>
 </div>
+<script>
+// ═══════════════════════════════════════════════════════
+//  COBROS (functions/cobros): un pago del cliente repartido entre sus proyectos y facturas
+// ═══════════════════════════════════════════════════════
+window.RubikCobrosUI = (function () {
+    const r2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
+    const fm = (n) => (Number(n) || 0).toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const esc = (t) => String(t == null ? '' : t).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    const $ = (id) => document.getElementById(id);
+    let pend = null;      // respuesta de "pendientes" del cliente elegido
+    let filas = [];       // [{pid, proyecto, saldo|null, monto, factura_id}]
+
+    // clientes (selector del cobro y etiquetas "Proyecto · Cliente" de la factura)
+    db.ref('clientes').once('value').then((snap) => {
+        const cs = snap.val() || {}; const nombres = {};
+        Object.entries(cs).forEach(([k, c]) => { if (c && typeof c === 'object') nombres[k] = c.empresa || c.nombre || k; });
+        window._clientesNombres = nombres;
+        if (window._rehacerNombresProyectos) window._rehacerNombresProyectos();
+        const sel = $('cobro-cliente');
+        if (sel) sel.innerHTML = '<option value="">Elegí el cliente…</option>' + Object.entries(nombres).sort((a, b) => a[1].localeCompare(b[1]))
+            .map(([k, n]) => `<option value="${esc(k)}">${esc(n)}</option>`).join('');
+    }).catch(() => {});
+
+    // historial de cobros nuevos
+    db.ref('cobros').on('value', (snap) => {
+        window._cobrosData = snap.val() || {};
+        if (window._recalcularBalances) window._recalcularBalances();
+        pintarHistorial();
+    }, () => {});
+    function pintarHistorial() {
+        const el = $('list-cobros-nuevos'); if (!el) return;
+        const lista = Object.entries(window._cobrosData || {}).filter(([, c]) => c && typeof c === 'object').sort((a, b) => String(b[1].fecha || '').localeCompare(String(a[1].fecha || '')));
+        el.innerHTML = lista.map(([k, c]) => {
+            const apl = (c.aplicaciones || []).filter(Boolean).map((a) => `${esc(a.proyecto)}: ${fm(a.monto)}`).join(' · ');
+            return `<div class="generic-card" style="padding:12px; border-left:3px solid ${c.anulado ? 'var(--gray)' : 'var(--green)'};${c.anulado ? 'opacity:.55;' : ''}">
+                <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">
+                    <div style="flex:1;min-width:0;">
+                        <div style="font-weight:900;font-size:13px;">${esc(c.cliente || 'Cliente')}${c.anulado ? ' · ANULADO' : ''}</div>
+                        <div style="font-size:10px;color:var(--gray);margin-top:2px;">${esc(c.fecha)}${c.concepto ? ' · ' + esc(c.concepto) : ''}${c.registrado_por && c.registrado_por.via === 'whatsapp' ? ' · por WhatsApp' : ''}</div>
+                        <div style="font-size:11px;margin-top:4px;">${apl}</div>
+                        ${c.comprobante ? `<a href="${esc(c.comprobante)}" target="_blank" style="font-size:10px;color:var(--blue);font-weight:800;">📎 Comprobante</a>` : ''}
+                    </div>
+                    <div style="display:flex;align-items:center;gap:8px;">
+                        <div style="font-size:16px;font-weight:900;color:var(--green);">${fm(c.monto)} Bs</div>
+                        ${c.anulado ? '' : `<button onclick="RubikCobrosUI.anular('${esc(k)}')" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:14px;" title="Anular"><i class="ph-bold ph-trash"></i></button>`}
+                    </div>
+                </div></div>`;
+        }).join('');
+    }
+
+    async function cargarPendientes() {
+        const cid = $('cobro-cliente').value, box = $('cobro-reparto');
+        pend = null; filas = [];
+        if (!cid) { box.innerHTML = ''; return; }
+        box.innerHTML = '<div style="font-size:12px;color:var(--gray);padding:8px;">Buscando lo que falta cobrar…</div>';
+        try { pend = await RubikOps.cobros('pendientes', { cid }); }
+        catch (e) { box.innerHTML = `<div style="font-size:12px;color:var(--red);padding:8px;">${esc(e.message)}</div>`; return; }
+        filas = pend.proyectos.map((p) => ({ pid: p.pid, proyecto: p.proyecto, saldo: p.saldo, monto: 0, factura_id: '' }));
+        sugerir();
+    }
+    // lo más viejo primero, sin pasarse del saldo
+    function sugerir() {
+        if (!pend) return;
+        let resto = r2(parseFloat($('cobro-monto').value) || 0);
+        filas.forEach((f) => {
+            const m = f.saldo == null ? 0 : r2(Math.min(resto, f.saldo));
+            f.monto = m > 0 ? m : 0; resto = r2(resto - f.monto);
+            const fac = pend.facturas_pendientes.find((x) => x.pid === f.pid && x.saldo + 0.01 >= f.monto);
+            f.factura_id = f.monto > 0 && fac ? fac.id : '';
+        });
+        pintar();
+    }
+    function pintar() {
+        const box = $('cobro-reparto'); if (!pend) return;
+        const facOpts = (pid, sel) => '<option value="">Sin factura</option>' + pend.facturas_pendientes.filter((x) => !x.pid || x.pid === pid)
+            .map((x) => `<option value="${esc(x.id)}" ${x.id === sel ? 'selected' : ''}>Fact. ${esc(x.nro_factura || 'S/N')} · saldo ${fm(x.saldo)}</option>`).join('');
+        box.innerHTML = `<div style="font-size:11px;font-weight:800;color:var(--gray);text-transform:uppercase;margin:6px 0;">Reparto entre sus proyectos</div>`
+            + (filas.length ? filas.map((f, i) => `<div style="background:var(--bg);border-radius:10px;padding:10px;margin-bottom:6px;">
+                <div style="display:flex;justify-content:space-between;gap:8px;font-size:12px;font-weight:800;"><span>${esc(f.proyecto)}</span>
+                    <span style="color:var(--orange);white-space:nowrap;">${f.saldo == null ? '' : 'falta ' + fm(f.saldo)}</span></div>
+                <div style="display:flex;gap:6px;margin-top:6px;">
+                    <input type="number" step="any" class="inp-std" style="margin:0;flex:1;" value="${f.monto || ''}" placeholder="0.00" oninput="RubikCobrosUI.monto(${i}, this.value)">
+                    <select class="inp-std" style="margin:0;flex:1;" onchange="RubikCobrosUI.factura(${i}, this.value)">${facOpts(f.pid, f.factura_id)}</select>
+                </div></div>`).join('') : '<div style="font-size:12px;color:var(--gray);padding:6px;">Este cliente no tiene saldos pendientes.</div>')
+            + (pend.otros && pend.otros.length ? `<select class="inp-std" style="margin:4px 0 0;" onchange="RubikCobrosUI.agregar(this.value); this.value='';">
+                <option value="">+ Agregar otro proyecto del cliente…</option>${pend.otros.filter((o) => !filas.some((f) => f.pid === o.pid))
+                .map((o) => `<option value="${esc(o.pid)}">${esc(o.proyecto)} (${esc(o.estado)})</option>`).join('')}</select>` : '')
+            + '<div id="cobro-reparto-total" style="font-size:12px;font-weight:800;margin-top:6px;"></div>';
+        totalReparto();
+    }
+    // solo el renglón del total (no se repinta lo demás: el campo que se está escribiendo no pierde el foco)
+    function totalReparto() {
+        const el = $('cobro-reparto-total'); if (!el) return;
+        const total = r2(parseFloat($('cobro-monto').value) || 0);
+        const suma = r2(filas.reduce((s, f) => s + (Number(f.monto) || 0), 0));
+        const dif = r2(total - suma);
+        el.style.color = Math.abs(dif) <= 0.01 ? 'var(--green)' : 'var(--red)';
+        el.textContent = `Repartido ${fm(suma)} de ${fm(total)} Bs` + (Math.abs(dif) > 0.01 ? (dif > 0 ? ' · faltan ' + fm(dif) : ' · sobran ' + fm(-dif)) : ' ✓');
+    }
+    function agregar(pid) {
+        const o = (pend && pend.otros || []).find((x) => x.pid === pid);
+        if (o) { filas.push({ pid: o.pid, proyecto: o.proyecto, saldo: null, monto: 0, factura_id: '' }); pintar(); }
+    }
+
+    async function guardar() {
+        const cid = $('cobro-cliente').value;
+        const monto = r2(parseFloat($('cobro-monto').value) || 0);
+        const fecha = $('cobro-fecha').value;
+        if (!cid) return alert('Elegí el cliente que pagó.');
+        if (!monto || monto <= 0) return alert('Ingresa un monto válido.');
+        if (!fecha) return alert('Selecciona una fecha.');
+        const aplicaciones = filas.filter((f) => Number(f.monto) > 0).map((f) => ({ pid: f.pid, monto: r2(f.monto), factura_id: f.factura_id || null }));
+        if (!aplicaciones.length) return alert('Decí a qué proyecto(s) va el pago.');
+        const suma = r2(aplicaciones.reduce((s, a) => s + a.monto, 0));
+        if (Math.abs(suma - monto) > 0.01) return alert(`El reparto suma ${fm(suma)} Bs y el cobro es de ${fm(monto)} Bs: tienen que coincidir.`);
+        const foto = window._cobroBoucherB64 ? RubikOps.dataUrlABase64(window._cobroBoucherB64) : null;
+        try {
+            await RubikOps.cobros('registrar_cobro', { cid, monto, fecha, concepto: $('cobro-concepto').value.trim(), aplicaciones, foto });
+        } catch (e) { return alert('No se guardó: ' + e.message); }
+        $('cobro-monto').value = ''; $('cobro-concepto').value = ''; $('cobro-fecha').valueAsDate = new Date();
+        if (window.limpiarCobroBoucher) limpiarCobroBoucher();
+        await cargarPendientes();
+        alert('Cobro registrado' + (aplicaciones.length > 1 ? ' y repartido en ' + aplicaciones.length + ' proyectos.' : '.'));
+    }
+    async function anular(id) {
+        const c = (window._cobrosData || {})[id]; if (!c) return;
+        const motivo = prompt(`Anular el cobro de ${fm(c.monto)} Bs (${c.cliente || ''}, ${c.fecha}). No se borra: se quita de cada proyecto y de sus facturas. Motivo:`);
+        if (!motivo) return;
+        try { await RubikOps.cobros('anular_cobro', { id, motivo }); if ($('cobro-cliente').value === c.cid) cargarPendientes(); }
+        catch (e) { alert(e.message); }
+    }
+    return {
+        cargarPendientes, sugerir, guardar, anular, agregar,
+        monto: (i, v) => { filas[i].monto = r2(parseFloat(v) || 0); totalReparto(); },
+        factura: (i, v) => { filas[i].factura_id = v; },
+    };
+})();
+</script>
 </body>
 </html>

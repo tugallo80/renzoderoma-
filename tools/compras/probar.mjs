@@ -20,7 +20,9 @@ function base(extra) {
             proveedores: { '-Pviejo': { nombre: 'Ferretería Demo', nit: '1234567' } },
             materiales: { 'MDF 18MM': { n: 'MDF 18MM', u: 'plancha', p: 300 } },
         },
-        ingresos: { i1: { monto: 5000, fecha: '2026-11-05', proyecto: 'Stand Demo' } },
+        ingresos: { i1: { monto: 5000, fecha: '2026-11-05', proyecto: 'Stand Demo' },
+            f1: { is_facturado: true, origen: 'modulo', monto: 3000, fecha: '2026-11-06' }, f2: { is_facturado: true, origen: 'modulo', monto: 9, fecha: '2026-11-06', anulada: true } },
+        cobros: { k1: { monto: 3000, fecha: '2026-11-07' }, k2: { monto: 777, fecha: '2026-11-08', anulado: true } },
     }, extra || {}), C.RUTAS, C.ARCHIVOS);
 }
 const reg = (alm, b, q) => C.atender(alm, { accion: 'registrar', ...b }, q || DUENO);
@@ -125,10 +127,11 @@ prueba('balance mensual (ingresos, compras, contratistas, IVA), sin contar anula
     ok(await C.atender(alm, { accion: 'anular', id: x.id, motivo: 'prueba' }, DUENO));
     ok(await reg(alm, { idempotencia: 'b-0004', total: 70, fecha: '2026-10-30', proveedor: { nombre: 'Kiosco' } }));
     const m = ok(await C.atender(alm, { accion: 'balance_mensual', mes: '2026-11' }, DUENO));
-    assert.equal(m.ingresos.total, 5000);
+    assert.equal(m.ingresos.total, 8000, 'registro viejo 5000 + cobro 3000; la factura del módulo no suma dos veces');
+    assert.equal(m.ingresos.facturado, 3000);
     assert.equal(m.egresos.compras, 1200);
     assert.equal(m.egresos.pagos_contratistas, 1000);
-    assert.equal(m.resultado, 2800);
+    assert.equal(m.resultado, 5800);
     assert.equal(m.impuestos.monto_facturado, 1000);
     assert.equal(m.impuestos.credito_fiscal_iva_13, 130);
     err(await C.atender(alm, { accion: 'balance_mensual', mes: 'noviembre' }, DUENO), /Mes/);

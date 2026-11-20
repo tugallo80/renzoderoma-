@@ -1,0 +1,7 @@
+{
+  "name": "probar-cobros",
+  "private": true,
+  "type": "module",
+  "description": "Pruebas del módulo de cobros y facturas de venta (functions/cobros) con la base en memoria.",
+  "scripts": { "test": "node probar.mjs" }
+}

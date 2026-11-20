@@ -98,6 +98,7 @@ exports.comprasApi = require("./compras").crearApi({ requireAuth, applyCors });
 exports.licitacionesApi = require("./licitaciones").crearApi({ requireAuth, applyCors });
 // Finanzas del proyecto: una sola fórmula de gasto, cobrado y utilidad (Sesión 9, Lote 2)
 exports.proyectosApi = require("./proyectos").crearApi({ requireAuth, applyCors });
+exports.cobrosApi = require("./cobros").crearApi({ requireAuth, applyCors });
 
 // ── Conector MCP "Rubik" para claude.ai (docs/sesiones/05-rubik-agente-app.md) ─
 // OAuth con Firebase Auth + lista blanca hub; las cotizaciones las hace Claude con la suscripción del dueño.

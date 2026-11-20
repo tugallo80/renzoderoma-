@@ -24,6 +24,7 @@
     </script>
     <script src="/js/firecache.js?v=7"></script>
     <script src="/js/auth-guard.js?v=3"></script>
+    <script src="/js/operaciones-api.js?v=2"></script>
 
     <style>
         :root { --bg: #f4f4f7; --card: #fff; --text: #1a1a1a; --blue: #007aff; --green: #34c759; --red: #ff3b30; --orange: #ff9500; --gray: #8e8e93; --border: #d1d1d6; }
@@ -530,13 +531,19 @@
 
         if(!monto || !fecha) return alert("Ingresa el monto y la fecha del pago.");
 
-        const pagoData = { monto, fecha, nota, timestamp: Date.now() };
-        db.ref(`proyectos/${cid}/${pid}/pagos`).push(pagoData).then(() => {
+        // Por el módulo de cobros (functions/cobros): queda en Tesorería → Cobros y en este proyecto
+        RubikOps.cobros('registrar_cobro', { cid, pid, monto, fecha, concepto: nota }).then(() => {
             alert("Pago registrado correctamente.");
             document.getElementById('pago-monto').value = '';
             document.getElementById('pago-nota').value = '';
-        });
+        }).catch(e => alert('No se guardó: ' + e.message));
     }
+
+    window.anularCobroProyecto = async function(cobroId) {
+        const motivo = prompt('Anular este cobro (no se borra; si se repartió entre varios proyectos, se quita de todos). Motivo:');
+        if (!motivo) return;
+        try { await RubikOps.cobros('anular_cobro', { id: cobroId, motivo }); } catch (e) { alert(e.message); }
+    };
 
     function escucharPagosAdmin() {
         db.ref(`proyectos/${cid}/${pid}/pagos`).on('value', snap => {
@@ -550,7 +557,7 @@
                     totalPagado += parseFloat(p.monto || 0);
                     cont.innerHTML += `<div style="display:flex; justify-content:space-between; border-bottom:1px solid var(--border); padding:8px 0; color:var(--text);">
                         <span><b style="color:var(--gray); margin-right:5px;">${p.fecha}</b> ${p.nota}${p.comprobante_url ? ` <a href="${p.comprobante_url}" target="_blank" style="color:var(--blue);font-size:10px;">📎ver</a>` : ''}</span>
-                        <b style="color:var(--green);">+${parseFloat(p.monto || 0).toLocaleString('es-BO', {minimumFractionDigits: 2})} Bs</b>
+                        <span style="white-space:nowrap;"><b style="color:var(--green);">+${parseFloat(p.monto || 0).toLocaleString('es-BO', {minimumFractionDigits: 2})} Bs</b>${p.cobro_id ? ` <button onclick="anularCobroProyecto('${String(p.cobro_id).replace(/[^\w-]/g, '')}')" title="Anular cobro" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:13px;padding:0 0 0 4px;">&times;</button>` : ''}</span>
                     </div>`;
                 });
                 cont.innerHTML += `<div style="text-align:right; font-weight:900; margin-top:10px; color:var(--green); font-size:14px;">Total Pagado: ${totalPagado.toLocaleString('es-BO', {minimumFractionDigits: 2})} Bs</div>`;
@@ -562,6 +569,7 @@
 
     function escucharFacturasEmitidas() {
         db.ref(`proyectos/${cid}/${pid}/facturas_emitidas`).on('value', snap => {
+            window._facturasProyecto = snap.val() || {};
             const cont = document.getElementById('lista-facturas-emitidas');
             if(!cont) return;
             cont.innerHTML = '';
@@ -585,7 +593,14 @@
         });
     }
 
-    window.eliminarFactura = function(key) {
+    window.eliminarFactura = async function(key) {
+        const f = (window._facturasProyecto || {})[key] || {};
+        if (f.factura_id) {   // factura del módulo de cobros: se anula (Impuestos deja de contarla), no se borra
+            const motivo = prompt('Anular la factura ' + (f.nro_factura || '') + '. Motivo:');
+            if (!motivo) return;
+            try { await RubikOps.cobros('anular_factura', { id: f.factura_id, motivo }); } catch (e) { alert(e.message); }
+            return;
+        }
         if(confirm('¿Eliminar esta factura?')) db.ref(`proyectos/${cid}/${pid}/facturas_emitidas/${key}`).remove();
     };
 
@@ -1416,41 +1431,23 @@
         const btn = document.getElementById('btn-scan-confirmar');
         btn.disabled = true; btn.textContent = 'Guardando...';
         try {
+            const foto = _scanImgB64 ? { datos_base64: _scanImgB64, mime: _scanMime } : null;
             if(_scanMode === 'factura') {
-                const factData = {
-                    nro_factura: _scanResultado.nro_factura || null,
-                    nit_cliente: _scanResultado.nit_cliente || null,
-                    razon_social: _scanResultado.razon_social || null,
-                    cuf: _scanResultado.cuf || null,
-                    fecha: _scanResultado.fecha || new Date().toISOString().slice(0,10),
-                    monto: parseFloat(_scanResultado.monto) || 0,
-                    url: document.getElementById('inp-factura').value.trim() || null,
-                    timestamp: Date.now()
-                };
-                await db.ref(`proyectos/${cid}/${pid}/facturas_emitidas`).push(factData);
-                // Compat: también guardar URL si hay
-                if(factData.url) db.ref(`proyectos/${cid}/${pid}/factura_url`).set(factData.url);
+                // Factura de venta: un solo registro (Tesorería → Facturas de venta e Impuestos), unida a este proyecto
+                let nro = _scanResultado.nro_factura || prompt('Número de la factura:');
+                if (!nro) { btn.disabled = false; btn.innerHTML = '<i class="ph-bold ph-check-circle"></i> Confirmar y guardar'; return; }
+                await RubikOps.cobros('registrar_factura', {
+                    cid, pid, nro_factura: String(nro), nit: _scanResultado.nit_cliente || '', cliente_rs: _scanResultado.razon_social || '',
+                    cuf: _scanResultado.cuf || '', fecha: _scanResultado.fecha || new Date().toISOString().slice(0,10),
+                    monto: parseFloat(_scanResultado.monto) || 0, foto,
+                });
                 document.getElementById('inp-factura').value = '';
             } else {
-                // Para pago: guardar imagen como comprobante en storage si hay
-                let comprob_url = null;
-                if(_scanImgB64) {
-                    try {
-                        const storage = firebase.storage();
-                        const ref = storage.ref(`proyectos/${cid}/${pid}/comprobantes/pago_${Date.now()}.jpg`);
-                        await ref.putString(_scanImgB64, 'base64', { contentType: _scanMime });
-                        comprob_url = await ref.getDownloadURL();
-                    } catch(e) {}
-                }
-                const pagoData = {
-                    monto: parseFloat(document.getElementById('pago-monto').value) || parseFloat(_scanResultado.monto) || 0,
-                    fecha: document.getElementById('pago-fecha').value || _scanResultado.fecha || new Date().toISOString().slice(0,10),
-                    nota: document.getElementById('pago-nota').value.trim() || _scanResultado.concepto || '',
-                    timestamp: Date.now()
-                };
-                if(comprob_url) pagoData.comprobante_url = comprob_url;
-                if(!pagoData.monto || !pagoData.fecha) { alert('Revisá el monto y fecha.'); btn.disabled=false; btn.innerHTML='<i class="ph-bold ph-check-circle"></i> Confirmar y guardar'; return; }
-                await db.ref(`proyectos/${cid}/${pid}/pagos`).push(pagoData);
+                const monto = parseFloat(document.getElementById('pago-monto').value) || parseFloat(_scanResultado.monto) || 0;
+                const fecha = document.getElementById('pago-fecha').value || _scanResultado.fecha || new Date().toISOString().slice(0,10);
+                if(!monto || !fecha) { alert('Revisá el monto y fecha.'); btn.disabled=false; btn.innerHTML='<i class="ph-bold ph-check-circle"></i> Confirmar y guardar'; return; }
+                await RubikOps.cobros('registrar_cobro', { cid, pid, monto, fecha,
+                    concepto: document.getElementById('pago-nota').value.trim() || _scanResultado.concepto || '', foto });
                 document.getElementById('pago-monto').value = '';
                 document.getElementById('pago-nota').value = '';
             }

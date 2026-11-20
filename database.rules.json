@@ -90,6 +90,11 @@
     },
 
     // Idempotencia de las operaciones por área (functions/operaciones): solo Functions
+    "cobros": {
+      ".read":  "auth != null && root.child('acceso').child('hub').child(auth.uid).val() === true",
+      ".write": false,
+      ".indexOn": ["cid", "fecha"]
+    },
     "operaciones_idem": {
       ".read":  false,
       ".write": false

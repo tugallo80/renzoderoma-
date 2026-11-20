@@ -8,8 +8,8 @@
  *          + mano de obra de licitaciones aprobadas/adjudicadas/terminadas.
  *          La mano de obra va de dos formas (decisión del dueño): CONTRATADA (contrato + extras) y PAGADA.
  *          → utilidad_esperada (con lo contratado) y utilidad_con_pagado (con lo ya pagado).
- * Cobrado: se muestran las dos fuentes de hoy por separado (pagos del proyecto e ingresos de Tesorería): hasta definir
- *          el registro de cobros que reparte un pago entre varios proyectos, no se suman para no contar dos veces.
+ * Cobrado: los pagos del proyecto (cada cobro de /cobros deja ahí su parte: functions/cobros). Las facturas de venta de
+ *          Tesorería se muestran aparte: facturado no es cobrado. saldo_por_cobrar = venta − cobrado.
  * gasto_total (contador viejo) se muestra solo como referencia: mezclaba compras y caja chica (contada dos veces).
  */
 const ID = /^[A-Za-z0-9_-]{1,64}$/;
@@ -19,6 +19,20 @@ const num = (x) => { const n = typeof x === "string" ? parseFloat(x.replace(",",
 const valores = (o) => (o && typeof o === "object" ? Object.values(o) : []).filter((x) => x && typeof x === "object");
 const sumar = (lista, f) => r2(lista.reduce((s, x) => s + num(f(x)), 0));
 const norm = (t) => String(t || "").trim().toLowerCase();
+
+/** Venta del proyecto (igual que el panel): monto de cierre o presupuesto con descuento e impuestos, + extras aprobados. */
+function venta(p) {
+    const pres = p && p.presupuesto, extras = p && p.extras, cierre = p && p.monto_cierre;
+    const items = valores(pres && pres.items).filter((it) => it.type !== "chapter" && it.activo !== false);   // el ojo apagado no suma (como presupuesto.html)
+    const subtotal = sumar(items, (it) => num(it.cant) * num(it.pu));
+    const descuento = r2(pres && pres.descuento);
+    const baseImp = r2(subtotal - descuento);
+    const impuestos = pres && pres.impuestos ? r2(baseImp * 0.16) : 0;
+    const presupuesto = r2(baseImp + impuestos);
+    const extrasCliente = sumar(valores(extras).filter((e) => e.estado === "aprobado"), (e) => e.precio);
+    const final = r2((num(cierre) > 0 ? num(cierre) : presupuesto) + extrasCliente);
+    return { presupuesto, subtotal, descuento, impuestos, monto_cierre: num(cierre) > 0 ? r2(cierre) : null, extras_cliente: extrasCliente, final };
+}
 
 /** Nodos que lee (para crearAlmacen). */
 const RUTAS = [/^proyectos\/[^/]+\/[^/]+(\/|$)/, /^caja_chica$/, /^supervisores$/, /^ingresos$/];
@@ -35,14 +49,8 @@ async function calcular(almacen, cid, pid) {
     if (nombre == null) throw Object.assign(new Error("No existe el proyecto."), { status: 404 });
 
     // ---- venta (igual que el panel del proyecto)
-    const items = valores(pres && pres.items).filter((it) => it.type !== "chapter" && it.activo !== false);   // el ojo apagado no suma (como presupuesto.html)
-    const subtotal = sumar(items, (it) => num(it.cant) * num(it.pu));
-    const descuento = r2(pres && pres.descuento);
-    const baseImp = r2(subtotal - descuento);
-    const impuestos = pres && pres.impuestos ? r2(baseImp * 0.16) : 0;
-    const presupuesto = r2(baseImp + impuestos);
-    const extrasCliente = sumar(valores(extras).filter((e) => e.estado === "aprobado"), (e) => e.precio);
-    const ventaFinal = r2((num(cierre) > 0 ? num(cierre) : presupuesto) + extrasCliente);
+    const v = venta({ presupuesto: pres, extras, monto_cierre: cierre });
+    const ventaFinal = v.final;
 
     // ---- gasto
     const compras = sumar(valores(hist).filter((c) => !c.anulada && c.estado !== "anulada"), (c) => c.total);
@@ -82,15 +90,17 @@ async function calcular(almacen, cid, pid) {
     const gastoEsperado = r2(otrosGastos + moContratado + moExtras);
     const gastoPagado = r2(otrosGastos + moPagado);
 
-    // ---- cobrado (dos fuentes, sin sumar)
+    // ---- cobrado: los pagos del proyecto (incluye la parte de cada cobro registrado en /cobros, que se copia acá).
+    // Las facturas de Tesorería se muestran aparte (facturado no es cobrado).
     const pagosProyecto = sumar(valores(pagos), (p) => p.monto);
-    const ing = valores(ingresos).filter((i) => (i.pid && i.pid === pid) || (!i.pid && norm(i.proyecto) === nombreN));
+    const ing = valores(ingresos).filter((i) => i.is_facturado !== false && !i.anulada && i.tipo !== "cobro")
+        .filter((i) => (i.pid && i.pid === pid) || (!i.pid && norm(i.proyecto) === nombreN));
     const facturado = sumar(ing, (i) => i.monto);
     const cobradoIngresos = sumar(ing.filter((i) => i.estado_cobro === "cobrado"), (i) => i.monto);
 
     return {
         proyecto: { cid, pid, nombre },
-        venta: { presupuesto, subtotal, descuento, impuestos, monto_cierre: num(cierre) > 0 ? r2(cierre) : null, extras_cliente: extrasCliente, final: ventaFinal },
+        venta: v,
         gasto: {
             compras, compras_adicionales: adicionales, caja_chica: cajaGastada, caja_chica_pendiente: r2(cajaPendiente),
             supervisores_gastos: supGastos, supervisores_extras: supExtras,
@@ -100,9 +110,10 @@ async function calcular(almacen, cid, pid) {
         utilidad_esperada: r2(ventaFinal - gastoEsperado),
         utilidad_con_pagado: r2(ventaFinal - gastoPagado),
         cobrado: { pagos_proyecto: pagosProyecto, facturado_tesoreria: facturado, cobrado_tesoreria: cobradoIngresos },
+        saldo_por_cobrar: r2(ventaFinal - pagosProyecto),
         contratistas,
         referencia: { gasto_total_viejo: r2(gt), nota: "gasto_total era un contador que mezclaba compras y caja chica (a veces contada dos veces); ya no se usa para la utilidad." },
     };
 }
 
-module.exports = { calcular, RUTAS, APROBADAS };
+module.exports = { calcular, venta, RUTAS, APROBADAS };
