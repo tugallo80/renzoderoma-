@@ -362,8 +362,12 @@ window.RQ = (function () {
         await guardar();
         var r = todos[actual.id] || actual;
         var cli = r.cliente ? (r.cliente.nombre || r.cliente.cid) + (r.cliente.nuevo ? ' (cliente nuevo)' : '') : 'sin cliente asignado';
-        var texto = 'Tengo un requerimiento nuevo en la app: "' + (r.titulo || 'Requerimiento') + '" · ' + cli + ' (id ' + actual.id + ').\n' +
-            'Leelo con leer_requerimiento, mirá las fotos y proponé cómo resolverlo y cotizarlo.';
+        // El pedido nombra el conector y la herramienta: si Claude solo ve texto, busca "adjuntos del chat" y no los de la app.
+        var adj = (r.adjuntos && typeof r.adjuntos === 'object') ? Object.keys(r.adjuntos).length : 0;
+        var asig = r.pid ? '\nYa está asignado al proyecto "' + (r.proyecto_nombre || r.pid) + '"' + (r.conv ? ' (conversación ' + r.conv + ')' : '') + ': seguí esa cotización.' : '';
+        var texto = 'Usá el conector Rubik: leer_requerimiento con id ' + actual.id + '.\n' +
+            'Es el requerimiento "' + (r.titulo || 'Requerimiento') + '" · ' + cli + (adj ? ' · ' + adj + ' adjunto' + (adj === 1 ? '' : 's') + ' (fotos, PDF o 3D: están en la app, no en este chat)' : '') + '.' + asig + '\n' +
+            'Mirá las fotos y las páginas de los PDF y proponé cómo resolverlo y cotizarlo.';
         var copiado = false;
         try { await navigator.clipboard.writeText(texto); copiado = true; } catch (e) { copiado = false; }
         if (!copiado) { window.prompt('Copiá este texto y pegalo en el chat de Claude:', texto); }
