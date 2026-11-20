@@ -39,7 +39,7 @@ const RUTAS = [
     /^compras(\/|$)/, /^compras_idem(\/|$)/, /^compras_facturadas(\/|$)/,
     /^base_datos\/proveedores(\/|$)/, /^base_datos\/proveedores_alias(\/|$)/, /^base_datos\/materiales(\/|$)/,
     /^proyectos\/[^/]+\/[^/]+\/(nombre|estado|monto_cierre|gasto_total|gastos_adicionales_compras|historial_compras|licitaciones)(\/|$)/,
-    /^proyectos\/[^/]+$/, /^clientes$/, /^ingresos$/, /^cancheos$/,
+    /^proyectos\/[^/]+$/, /^clientes$/, /^ingresos$/, /^cobros$/, /^cancheos$/,
 ];
 const ARCHIVOS = [/^compras\/\d{4}-\d{2}\/[A-Za-z0-9_-]+\.(jpg|png|webp|pdf)$/];
 
@@ -296,8 +296,9 @@ const vivas = (o) => Object.entries(o || {}).filter(([, v]) => v && typeof v ===
 async function balanceMensual(almacen, b) {
     const mes = String(b.mes || "").trim() || hoyBolivia(almacen.ahora()).slice(0, 7);
     if (!MES.test(mes)) falla("Mes inválido (AAAA-MM).");
-    const [compras, facturas, ingresos, cancheos, clientes] = await Promise.all([
+    const [compras, facturas, ingresos, cancheos, clientes, cobros] = await Promise.all([
         almacen.leer("compras"), almacen.leer("compras_facturadas"), almacen.leer("ingresos"), almacen.leer("cancheos"), almacen.leer("clientes"),
+        almacen.leer("cobros").catch(() => null),
     ]);
     const cDelMes = vivas(compras).filter(([, c]) => c.mes === mes);
     const egCompras = r2(cDelMes.reduce((s, [, c]) => s + (Number(c.total) || 0), 0));
@@ -310,13 +311,18 @@ async function balanceMensual(almacen, b) {
     }
     let pagosCancheos = 0;
     Object.values(cancheos || {}).forEach((c) => Object.values((c && c.pagos) || {}).forEach((pay) => { if (pay && enMes(pay.fecha, mes)) pagosCancheos += Number(pay.monto) || 0; }));
-    const ing = Object.values(ingresos || {}).filter((i) => i && enMes(i.fecha, mes));
-    const totalIngresos = r2(ing.reduce((s, i) => s + (Number(i.monto) || 0), 0));
+    // Ingresos = plata cobrada: los cobros (functions/cobros) + los registros viejos de /ingresos (como antes). Las facturas
+    // del módulo de cobros no suman acá (su plata entra por el cobro): van en "facturado" y en el débito fiscal.
+    const ingMes = vivas(ingresos).filter(([, i]) => enMes(i.fecha, mes)).map(([, i]) => i);
+    const ing = ingMes.filter((i) => i.origen !== "modulo");
+    const cobMes = Object.values(cobros || {}).filter((c) => c && !c.anulado && enMes(c.fecha, mes));
+    const totalIngresos = r2(ing.reduce((s, i) => s + (Number(i.monto) || 0), 0) + cobMes.reduce((s, c) => s + (Number(c.monto) || 0), 0));
+    const facturadoVenta = r2(ingMes.filter((i) => i.is_facturado).reduce((s, i) => s + (Number(i.monto) || 0), 0));
     const credito = vivas(facturas).filter(([, f]) => enMes(f.fecha, mes));
     const montoFacturado = r2(credito.reduce((s, [, f]) => s + (Number(f.monto) || 0), 0));
     const egresos = r2(egCompras + pagosContratistas + pagosCancheos);
     return {
-        mes, ingresos: { total: totalIngresos, facturas: ing.length },
+        mes, ingresos: { total: totalIngresos, registros: ing.length, cobros: cobMes.length, facturado: facturadoVenta, debito_fiscal_iva_13: r2(facturadoVenta * 0.13) },
         egresos: { total: egresos, compras: egCompras, pagos_contratistas: r2(pagosContratistas), pagos_cancheos: r2(pagosCancheos), cantidad_compras: cDelMes.length },
         resultado: r2(totalIngresos - egresos),
         impuestos: { compras_con_factura: credito.length, monto_facturado: montoFacturado, credito_fiscal_iva_13: r2(montoFacturado * 0.13) },

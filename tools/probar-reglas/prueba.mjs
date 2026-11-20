@@ -21,7 +21,7 @@ const nadie = env.unauthenticatedContext().database();
 
 const rutas = ['proyectos', 'proyectos/c1/p1/pagos', 'proyectos/c1/p1/agencia', 'proyectos/c1/p1/compras',
   'proyectos/c1/p1/licitaciones', 'clientes/c1/pin_hash', 'personal', 'supervisores/w1', 'caja_chica',
-  'ingresos', 'cobros', 'compras_facturadas', 'base_datos/materiales', 'config_ia', 'notificaciones/hub',
+  'ingresos', 'compras_facturadas', 'base_datos/materiales', 'config_ia', 'notificaciones/hub',
   'whatsapp_historial', 'gantt/c1', 'requerimientos_asistidos/c1', 'feed_actividad'];
 
 let ok = 0, mal = 0;
@@ -55,6 +55,10 @@ await chk('hub NO escribe operaciones_idem', set(ref(hub, 'operaciones_idem/x'),
 await chk('hub lee compras', get(ref(hub, 'compras')), true);
 await chk('hub NO escribe compras', set(ref(hub, 'compras/x'), { total: 1 }), false);
 await chk('anónimo NO lee compras', get(ref(anon, 'compras')), false);
+// Cobros (functions/cobros): el hub lee, escribe solo la Function
+await chk('hub lee cobros', get(ref(hub, 'cobros')), true);
+await chk('hub NO escribe cobros', set(ref(hub, 'cobros/x'), { monto: 1 }), false);
+await chk('anónimo NO lee cobros', get(ref(anon, 'cobros')), false);
 await chk('hub NO lee compras_idem', get(ref(hub, 'compras_idem')), false);
 await chk('hub NO escribe compras_idem', set(ref(hub, 'compras_idem/x'), { id: 'y' }), false);
 await chk('hub sigue escribiendo compras_facturadas (hasta la etapa 2)', set(ref(hub, 'compras_facturadas/x'), { monto: 1 }), true);
