@@ -473,14 +473,20 @@
     }
 
 
+    // Etapa del proyecto: por el servidor (functions/proyectos/estado.js), con historial antes → después
+    function cambiarEstadoProyecto(estado, motivo) {
+        return RubikOps.proyectos('cambiar_estado', { cid, pid, estado, motivo: motivo || null });
+    }
+
     function aceptarOfertaCliente() {
         db.ref(`proyectos/${cid}/${pid}/negociacion`).once('value', snap => {
             const nego = snap.val();
             if(nego && nego.propuesta) { 
+ 
                 db.ref(`proyectos/${cid}/${pid}/monto_cierre`).set(nego.propuesta); 
-                db.ref(`proyectos/${cid}/${pid}/estado`).set('produccion'); 
                 db.ref(`proyectos/${cid}/${pid}/negociacion`).remove(); 
-                alert("¡Trato cerrado con el cliente!"); location.reload(); 
+                cambiarEstadoProyecto('produccion', 'Oferta del cliente aceptada').catch(e => alert('No se cambió la etapa: ' + e.message))
+                    .finally(() => { alert("¡Trato cerrado con el cliente!"); location.reload(); });
             }
         });
     }
@@ -493,16 +499,16 @@
         if(!monto || monto <= 0) return alert("Ingresa un monto válido.");
         if(confirm("¿Fijar este monto como el cierre definitivo del proyecto?")) { 
             db.ref(`proyectos/${cid}/${pid}/monto_cierre`).set(monto); 
-            db.ref(`proyectos/${cid}/${pid}/estado`).set('produccion'); 
             db.ref(`proyectos/${cid}/${pid}/negociacion`).remove(); 
-            alert("Monto de cierre fijado correctamente."); location.reload(); 
+            cambiarEstadoProyecto('produccion', 'Monto de cierre fijado').catch(e => alert('No se cambió la etapa: ' + e.message))
+                .finally(() => { alert("Monto de cierre fijado correctamente."); location.reload(); });
         }
     }
     function guardarFactura() {
         const url = document.getElementById('inp-factura').value.trim();
         if(!url) return alert("Pega el enlace de la factura.");
         db.ref(`proyectos/${cid}/${pid}/factura_url`).set(url); 
-        db.ref(`proyectos/${cid}/${pid}/estado`).set('entregado'); 
+        cambiarEstadoProyecto('entregado', 'Factura enviada al portal').catch(e => alert('No se cambió la etapa: ' + e.message));
         alert("Factura enviada al portal del cliente.");
     }
 
@@ -518,10 +524,10 @@
 
     function cerrarProyecto() {
         if(!confirm("¿Cerrar este proyecto como Pagado / Liquidado?\n\nEsto declara que el proyecto está completamente cobrado.\nEl saldo quedará en 0 en Tesorería independientemente de los pagos registrados.\n\nAsegurate de haber registrado todos los pagos antes de cerrar.")) return;
-        db.ref(`proyectos/${cid}/${pid}/estado`).set('cerrado').then(() => {
+        cambiarEstadoProyecto('cerrado', 'Cerrado como pagado / liquidado').then(() => {
             document.getElementById('btn-cerrar-proyecto').style.display = 'none';
             alert("Proyecto cerrado correctamente.");
-        });
+        }).catch(e => alert('No se pudo cerrar: ' + e.message));
     }
 
     function registrarPagoCliente() {

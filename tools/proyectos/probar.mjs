@@ -105,4 +105,20 @@ await prueba('archivar: proyecto inexistente, lista vacía o ids inválidos se r
     assert.equal((await P.atender(alm, { accion: 'archivar', proyectos: [{ cid: 'cliA', pid: 'proyA' }] }, yo)).status, 400, 'sin clave de idempotencia');
 });
 
-console.log(`\n${ok}/4 pruebas OK`);
+await prueba('cambiar_estado: valida la etapa, deja historial antes → después y el reintento no repite', async () => {
+    const alm = crearAlmacenMemoria(datos(), RUTAS_TODO);
+    alm.datos.proyectos.cliA.proyA.estado = 'cotizacion';
+    const r = await P.atender(alm, { accion: 'cambiar_estado', cid: 'cliA', pid: 'proyA', estado: 'produccion', motivo: 'firmó', idempotencia: 'est-0001' },
+        { nombre: 'Renzo', rol: 'dueño', via: 'whatsapp' });
+    assert.equal(r.status, 200, JSON.stringify(r.cuerpo));
+    assert.deepEqual([r.cuerpo.antes, r.cuerpo.estado], ['cotizacion', 'produccion']);
+    assert.equal(await alm.leer('proyectos/cliA/proyA/estado'), 'produccion');
+    const h = Object.values(await alm.leer('proyectos/cliA/proyA/historial_operaciones'));
+    assert.deepEqual([h[0].op, h[0].antes.estado, h[0].despues.estado, h[0].por.via], ['cambiar_estado', 'cotizacion', 'produccion', 'whatsapp']);
+    const rep = await P.atender(alm, { accion: 'cambiar_estado', cid: 'cliA', pid: 'proyA', estado: 'produccion', idempotencia: 'est-0001' }, yo);
+    assert.equal(rep.cuerpo.repetida, true);
+    assert.equal((await P.atender(alm, { accion: 'cambiar_estado', cid: 'cliA', pid: 'proyA', estado: 'volando', idempotencia: 'est-0002' }, yo)).status, 400);
+    assert.equal((await P.atender(alm, { accion: 'cambiar_estado', cid: 'cliA', pid: 'noExiste', estado: 'cerrado', idempotencia: 'est-0003' }, yo)).status, 404);
+});
+
+console.log(`\n${ok}/5 pruebas OK`);

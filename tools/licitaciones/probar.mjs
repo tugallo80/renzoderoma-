@@ -129,6 +129,34 @@ prueba('validaciones y listar (por proyecto y buscando al trabajador en todos)',
     err(await L.atender(alm, { accion: 'listar' }, DUENO), /texto/);
 });
 
+prueba('crear por Kay: proveedor por nombre, ítem del presupuesto + renglón libre, adjudicación directa', async () => {
+    const alm = base();
+    alm.datos.personal.wDate = { nombre: 'Datecolor Industria Gráfica', especialidad: 'imprenta', tipo: 'proveedor' };
+    const t = ok(await L.atender(alm, { accion: 'trabajadores', texto: 'datecolor' }, DUENO));
+    assert.deepEqual(t.trabajadores.map((w) => w.worker_id), ['wDate']);
+    const r = ok(await op(alm, 'crear', { trabajador: 'Datecolor', tipo: 'grafico', estado: 'aprobado',
+        alcance: [{ item: 1, monto: 450 }, { descripcion: 'Placa grabada', cant: 2, monto: 300 }] }, KAY));
+    assert.equal(r.op, 'crear');
+    const l = lic(alm, r.lid);
+    assert.equal(l.worker_id, 'wDate'); assert.equal(l.is_grafico, true); assert.equal(l.estado, 'aprobado');
+    assert.equal(l.precio_propuesto, 750); assert.equal(l.precio_final, 750);
+    assert.equal(l.tareas.m_1.task_name, 'Letrero'); assert.equal(l.tareas.m_1.originIdx, 1);
+    assert.equal(l.tareas.libre_1.pu, 150);
+    assert.ok(alm.datos.personal.wDate.solicitudes[r.lid], 'copia para el proveedor');
+    assert.equal(alm.datos.proyectos.cliA.proyA.presupuesto.items[1].print_resp, 'Datecolor Industria Gráfica', 'responsable de impresión');
+    const h = hist(alm).find((x) => x.ref === r.lid);
+    assert.equal(h.op, 'crear'); assert.equal(h.por.via, 'whatsapp');
+});
+
+prueba('crear: nombre ambiguo, ítem inexistente o sin alcance se rechazan sin escribir', async () => {
+    const alm = base();
+    err(await op(alm, 'crear', { trabajador: 'Demo', alcance: [{ descripcion: 'x', monto: 1 }] }), /coinciden/);
+    err(await op(alm, 'crear', { worker_id: 'wPollo', alcance: [{ item: 9, monto: 1 }] }), /no existe/);
+    err(await op(alm, 'crear', { worker_id: 'wPollo', alcance: [] }), /alcance/);
+    err(await op(alm, 'crear', { worker_id: 'wPollo', estado: 'terminado', alcance: [{ descripcion: 'x', monto: 1 }] }), /Estado/);
+    assert.equal(Object.keys(alm.datos.proyectos.cliA.proyA.licitaciones).length, 2);
+});
+
 let bien = 0;
 for (const [nombre, fn] of pruebas) {
     try { await fn(); bien++; console.log('ok  ', nombre); }

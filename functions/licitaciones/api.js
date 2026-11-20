@@ -9,6 +9,9 @@
  * Operaciones (todas con {cid, pid, idempotencia}; las que cambian algo, también {lid}):
  *   listar               {texto?}                       → licitaciones con contrato, pagado, extras y saldo
  *   guardar              {lid?, licitacion}             → crear/editar desde la pantalla (alcance completo)
+ *   crear                {worker_id | trabajador, alcance: [{item?, descripcion?, cant?, und?, monto}], tipo?, estado?, periodo?}
+ *                        → arma la licitación con ítems del presupuesto o tareas libres y la guarda como la pantalla (Kay, Claude)
+ *   trabajadores         {texto?}                       → personas y proveedores de la base (worker_id, nombre, tipo)
  *   cambiar_monto        {lid, monto, motivo?}          aprobada → precio_final; si no, precio_propuesto
  *   cambiar_contratista  {lid, worker_id}
  *   aprobar              {lid, precio_final?}           → estado aprobado (+ responsable en los ítems del presupuesto)
@@ -36,6 +39,8 @@ const RUTAS = [
     /^proyectos\/[^/]+$/,          // listar en todos los proyectos (buscar a un trabajador)
     /^clientes$/,
     /^personal\/[^/]+\/(nombre|solicitudes)(\/|$)/,
+    /^personal$/,                                                    // buscar trabajador/proveedor por nombre (solo id, nombre y tipo salen)
+    /^proyectos\/[^/]+\/[^/]+\/presupuesto\/items(\/\d+)?$/,          // alcance desde los ítems del presupuesto (crear)
     /^operaciones_idem(\/|$)/,
 ];
 const ARCHIVOS = [/^comprobantes\/[^/]+\/[^/]+\/[^/]+\/[A-Za-z0-9_-]+\.(jpg|png|webp|pdf)$/];
@@ -283,7 +288,67 @@ const OPS = {
         return { ok: true, lid: b.lid, op: "anular", copia_en_historial: hk.split("/").pop(), anulada: resumen(b.lid, l) };
     },
 };
-const LECTURA = ["listar"];
+const LECTURA = ["listar", "trabajadores"];
+const TIPOS_LIC = ["mano_de_obra", "grafico", "llave_en_mano", "supervision"];
+const sinAcentos = (t) => String(t || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+
+OPS.trabajadores = async function (almacen, b) {
+    const q = sinAcentos(b.texto);
+    const ps = (await almacen.leer("personal")) || {};
+    const lista = Object.entries(ps).filter(([k, w]) => w && typeof w === "object" && typeof w.nombre === "string" && C.ID.test(k))
+        .map(([k, w]) => ({ worker_id: k, nombre: w.nombre, tipo: w.tipo || w.rol || null, especialidad: w.especialidad || w.rubro || null, empresa: w.empresa || null }))
+        .filter((w) => !q || sinAcentos([w.nombre, w.empresa, w.especialidad].filter(Boolean).join(" ")).includes(q));
+    return { total: lista.length, trabajadores: lista.slice(0, 30) };
+};
+
+/** Crear una licitación desde Kay/Claude: alcance simple → mismas tareas que arma licitaciones.html → guardar. */
+OPS.crear = async function (almacen, b, quien) {
+    await proyecto(almacen, b);
+    let wid = b.worker_id ? id(b.worker_id, "Trabajador") : null;
+    if (!wid) {
+        if (!texto(b.trabajador, 80)) falla("Falta el trabajador o proveedor (worker_id o trabajador).");
+        const r = await OPS.trabajadores(almacen, { texto: b.trabajador });
+        if (r.total === 0) falla(`No hay nadie en la base que coincida con "${texto(b.trabajador, 80)}".`, 404);
+        if (r.total > 1) falla(`Hay ${r.total} en la base que coinciden con "${texto(b.trabajador, 80)}": ${r.trabajadores.slice(0, 6).map((w) => `${w.nombre} (${w.worker_id})`).join(", ")}. Pasá worker_id.`, 409);
+        wid = r.trabajadores[0].worker_id;
+    }
+    const tipo = b.tipo ? (TIPOS_LIC.includes(b.tipo) ? b.tipo : falla("Tipo inválido (mano_de_obra, grafico, llave_en_mano, supervision).")) : "mano_de_obra";
+    const estado = b.estado ? (["enviado", "aprobado"].includes(b.estado) ? b.estado : falla("Estado inicial: enviado (propuesta) o aprobado (adjudicación directa).")) : "enviado";
+    const alcance = Array.isArray(b.alcance) ? b.alcance : falla("Falta el alcance: [{item?, descripcion?, cant?, und?, monto}].");
+    if (!alcance.length || alcance.length > 60) falla("El alcance tiene que tener entre 1 y 60 renglones.");
+    const items = (await almacen.leer(`proyectos/${b.cid}/${b.pid}/presupuesto/items`)) || {};
+    const tareas = {};
+    let total = 0;
+    alcance.forEach((a, n) => {
+        if (!a || typeof a !== "object") falla(`Renglón ${n + 1} inválido.`);
+        const monto = numero(a.monto, `Monto del renglón ${n + 1}`);
+        total += monto;
+        if (a.item != null && a.item !== "") {
+            const idx = Number(a.item);
+            const it = Number.isInteger(idx) ? items[idx] : null;
+            if (!it || it.type === "chapter") falla(`El ítem ${a.item} no existe en el presupuesto (usá ver_presupuesto para ver los índices).`, 404);
+            const cant = a.cant != null ? numero(a.cant, `Cantidad del renglón ${n + 1}`) : Number(it.cant) || 1;
+            tareas[`m_${idx}`] = { parent_desc: "ÍTEM PRINCIPAL", task_name: texto(a.descripcion, 200) || it.desc, desc: texto(a.descripcion, 200) || it.desc, cant, und: texto(a.und, 20) || it.und || "und",
+                pu: r2(monto / (cant || 1)), subtotal: monto, feat: it.feat || "", mats: "", measures: it.measures || [], img: it.img || null, cortes: it.cortes || [], op_images: it.op_images || [],
+                originIdx: idx, originType: "main", fecha_entrega: it.prod_entrega || it.print_entrega || it.gantt_end || "Sin fecha" };
+        } else {
+            const desc = texto(a.descripcion, 200) || falla(`Renglón ${n + 1}: falta la descripción (o el ítem del presupuesto).`);
+            const cant = a.cant != null ? numero(a.cant, `Cantidad del renglón ${n + 1}`) : 1;
+            tareas[`libre_${n}`] = { parent_desc: "ALCANCE", task_name: desc, desc, cant, und: texto(a.und, 20) || "glb", pu: r2(monto / (cant || 1)), subtotal: monto,
+                feat: "", mats: "", measures: [], img: null, cortes: [], op_images: [], originIdx: null, originType: "libre", fecha_entrega: "Sin fecha" };
+        }
+    });
+    const licitacion = {
+        worker_id: wid, tareas, estado, precio_propuesto: r2(total),
+        is_grafico: tipo === "grafico", is_supervision: tipo === "supervision", is_internal_assignment: false,
+        is_llave_en_mano: tipo === "llave_en_mano", lic_mode: tipo === "llave_en_mano" ? "llave_en_mano" : "mo",
+        periodo: /^\d{4}-\d{2}$/.test(String(b.periodo || "")) ? b.periodo : C.hoyBolivia(almacen.ahora()).slice(0, 7),
+        nota: texto(b.nota, 500) || null,
+    };
+    if (estado === "aprobado") { licitacion.precio_final = r2(total); licitacion.fecha_aprobacion = almacen.ahora(); }
+    const r = await OPS.guardar(almacen, { cid: b.cid, pid: b.pid, licitacion }, quien);
+    return Object.assign(r, { op: "crear" });
+};
 
 async function atender(almacen, cuerpo, quienCrudo) {
     const b = cuerpo && typeof cuerpo === "object" && !Array.isArray(cuerpo) ? cuerpo : {};
