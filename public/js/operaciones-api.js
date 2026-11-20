@@ -4,6 +4,7 @@
  * y el servidor aplica la misma lógica que usan Kay y Claude (historial, copia del trabajador, idempotencia).
  *
  *   RubikOps.licitaciones(accion, datos)   → resultado (lanza Error con el motivo si el servidor rechaza)
+ *   RubikOps.proyectos(accion, datos)      → archivar / desarchivar varios proyectos
  *   RubikOps.archivoABase64(file)          → {datos_base64, mime}  (comprobantes)
  */
 (function (global) {
@@ -46,6 +47,7 @@
     function dataUrlABase64(u) { const m = /^data:([^;,]+)?;base64,(.*)$/.exec(String(u || '')); return m ? { datos_base64: m[2], mime: m[1] || null } : null; }
     global.RubikOps = {
         licitaciones: (accion, datos) => llamar('licitaciones', Object.assign({ accion }, datos)),
+        proyectos: (accion, datos) => llamar('proyectos', Object.assign({ accion }, datos)),   // archivar / desarchivar / finanzas
         archivoABase64, dataUrlABase64, nuevaClave: clave,
     };
 })(window);

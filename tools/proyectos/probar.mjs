@@ -67,4 +67,42 @@ await prueba('monto de cierre reemplaza al presupuesto; proyecto inexistente o i
     assert.equal((await P.atender(alm, { accion: 'finanzas', cid: 'cliA', pid: 'proyA' })).status, 200);
 });
 
-console.log(`\n${ok}/2 pruebas OK`);
+const A = require('../../functions/proyectos/archivo.js');
+const RUTAS_TODO = F.RUTAS.concat(A.RUTAS);
+const yo = { uid: 'u1', nombre: 'Dueño', via: 'app' };
+
+await prueba('archivar varios de una vez (también uno sin nombre), reintento y desarchivar', async () => {
+    const d = datos();
+    d.proyectos.cliA.viejo = { nombre: 'Stand 2025', estado: 'cerrado' };
+    d.proyectos.cliB = { huerfano: { pagos: { x: { monto: 10 } } } };
+    const alm = crearAlmacenMemoria(d, RUTAS_TODO);
+    const lista = [{ cid: 'cliA', pid: 'viejo' }, { cid: 'cliB', pid: 'huerfano' }, { cid: 'cliA', pid: 'viejo' }];
+    const r = await P.atender(alm, { accion: 'archivar', proyectos: lista, motivo: 'Proyectos 2025', idempotencia: 'clave-arch-1' }, yo);
+    assert.equal(r.status, 200, JSON.stringify(r.cuerpo));
+    assert.deepEqual(r.cuerpo, { archivados: 2, ya_estaban: 0 });
+    assert.equal(await alm.leer('proyectos/cliA/viejo/archivado'), true);
+    assert.equal(await alm.leer('proyectos/cliA/viejo/estado'), 'cerrado', 'la etapa no cambia');
+    assert.equal((await alm.leer('proyectos/cliA/viejo/archivado_info')).motivo, 'Proyectos 2025');
+    const h = Object.values(await alm.leer('proyectos/cliA/viejo/historial_operaciones'));
+    assert.equal(h.length, 1); assert.equal(h[0].op, 'archivar'); assert.equal(h[0].por.via, 'app');
+    const rep = await P.atender(alm, { accion: 'archivar', proyectos: lista, idempotencia: 'clave-arch-1' }, yo);
+    assert.equal(rep.cuerpo.repetida, true, 'el reintento no repite');
+    const otra = await P.atender(alm, { accion: 'archivar', proyectos: [{ cid: 'cliA', pid: 'viejo' }], idempotencia: 'clave-arch-2' }, yo);
+    assert.deepEqual(otra.cuerpo, { archivados: 0, ya_estaban: 1 });
+    const des = await P.atender(alm, { accion: 'desarchivar', proyectos: [{ cid: 'cliA', pid: 'viejo' }], idempotencia: 'clave-des-1' }, yo);
+    assert.deepEqual(des.cuerpo, { desarchivados: 1, no_estaban: 0 });
+    assert.equal(await alm.leer('proyectos/cliA/viejo/archivado'), null);
+    assert.equal(await alm.leer('proyectos/cliA/viejo/archivado_info'), null);
+});
+
+await prueba('archivar: proyecto inexistente, lista vacía o ids inválidos se rechazan sin escribir', async () => {
+    const alm = crearAlmacenMemoria(datos(), RUTAS_TODO);
+    assert.equal((await P.atender(alm, { accion: 'archivar', proyectos: [{ cid: 'cliA', pid: 'proyA' }, { cid: 'cliA', pid: 'noExiste' }], idempotencia: 'clave-x-1' }, yo)).status, 404);
+    assert.equal(await alm.leer('proyectos/cliA/proyA/archivado'), null, 'todo o nada');
+    assert.equal(await alm.leer('proyectos/cliA/noExiste/nombre'), null, 'no crea nodos');
+    assert.equal((await P.atender(alm, { accion: 'archivar', proyectos: [], idempotencia: 'clave-x-2' }, yo)).status, 400);
+    assert.equal((await P.atender(alm, { accion: 'archivar', proyectos: [{ cid: '../x', pid: 'p' }], idempotencia: 'clave-x-3' }, yo)).status, 400);
+    assert.equal((await P.atender(alm, { accion: 'archivar', proyectos: [{ cid: 'cliA', pid: 'proyA' }] }, yo)).status, 400, 'sin clave de idempotencia');
+});
+
+console.log(`\n${ok}/4 pruebas OK`);

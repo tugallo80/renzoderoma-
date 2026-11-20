@@ -110,7 +110,7 @@
                         });
                     }
 
-                    if(hasAccess && p.estado !== 'archivado') {
+                    if(hasAccess && p.estado !== 'archivado' && p.archivado !== true) {
                         found = true;
                         cont.innerHTML += `
                             <a href="supervisor-obra.html?cid=${cid}&pid=${pid}&wid=${wid}" class="project-card">

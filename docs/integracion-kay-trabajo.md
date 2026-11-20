@@ -86,7 +86,7 @@ detalle queda en los logs de `kayApi`, no se le devuelve a Kay).
 
 | Acción | Solo lectura | Params | Resultado |
 |---|---|---|---|
-| `listar_proyectos_activos` | sí | — | `{ total, proyectos: [{ cliente, nombre, estado, fecha, tipo }], terminados: { entregado, cancelado }, clientesLeidos }` |
+| `listar_proyectos_activos` | sí | — | `{ total, proyectos: [{ cliente, nombre, estado, fecha, tipo }], terminados: { entregado, cerrado, cancelado }, archivados, clientesLeidos }` |
 | `buscar_proyecto` | sí | `{ texto }` | `{ total, proyectos: [{ cid, pid, cliente, nombre, estado, fecha }] }` (nombre del proyecto o del cliente, todos los estados, 10 más nuevos) |
 | `detalle_proyecto` | sí | `{ cid, pid }` | `{ cliente, nombre, estado, fecha, inicio, presupuesto: { items, total_bs, capitulos }, monto_cierre_bs, gasto_total_bs, cobrado_bs, ultimos_pagos, cronograma: { tareas, avance_promedio, atrasadas, proximas } }` |
 | `herramientas_conector` | sí | — | `{ herramientas: [{ name, description, inputSchema, annotations: { readOnlyHint } }] }`: las de lectura del conector MCP "Rubik" (las mismas de Claude), sin `prueba_imagen` ni `ver_render`, **más las de escritura permitidas a Kay** (`ESCRITURA_KAY` en `kay-api.js`: hoy `modificar_licitacion`), marcadas `readOnlyHint: false`. Kay pide el sí del dueño antes de usar una de escritura |
@@ -103,7 +103,8 @@ detalle queda en los logs de `kayApi`, no se le devuelve a Kay).
 | `buscar_contacto` | sí | `{ nombre }` | `{ encontrados: [{ nombre, telefono, origen: personal\|proveedor\|cliente, detalle }] }` (hasta 5, el mejor primero; sin sueldos ni datos internos) |
 
 `listar_proyectos_activos`: recorre `/proyectos/$cid/$pid` de todos los clientes y devuelve los que **no** están
-`entregado` ni `cancelado`. El ciclo de vida completo de un proyecto es `requerimiento` → `cotizacion` →
+`entregado`, `cerrado` ni `cancelado`, ni **archivados** (`archivado: true`, pantalla `archivar-proyectos.html`: proyectos
+viejos que el dueño guardó para arrancar limpio; no se borran y `archivados` dice cuántos hay). El ciclo de vida completo de un proyecto es `requerimiento` → `cotizacion` →
 `propuesta_enviada` → `negociando` → `contrato_firmado` → `planificacion` → `produccion` → `entregado` (o
 `cancelado`), repartido entre `cliente-view.html`, `interno/dashboard.html`, `index.html` y
 `proyectos-cliente.html`; sin estado cuenta como `planificacion`. (La primera versión solo contaba
