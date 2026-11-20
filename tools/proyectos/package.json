@@ -1,0 +1,1 @@
+{ "name": "probar-proyectos", "private": true, "type": "module", "description": "Pruebas de la fórmula única de finanzas del proyecto (functions/proyectos).", "scripts": { "test": "node probar.mjs" } }

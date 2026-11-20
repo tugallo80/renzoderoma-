@@ -18,7 +18,7 @@
  *                     items_referencia?: true (precios leídos de un recibo: no tienen que sumar exacto al total)}
  *                    → {id, repetida, proveedor_id, resumen}
  *   anular           {id, motivo} → {ok, id}
- *   balance_mensual  {mes: "AAAA-MM"}   ·   balance_proyecto {cid, pid}
+ *   balance_mensual  {mes: "AAAA-MM"}   (el balance de un proyecto: functions/proyectos/finanzas.js)
  * `quien` (lo pone el servidor, nunca el pedido de la app): {uid?, rol, nombre, telefono?, via: "app"|"whatsapp"}.
  */
 const crypto = require("crypto");
@@ -324,33 +324,6 @@ async function balanceMensual(almacen, b) {
     };
 }
 
-async function balanceProyecto(almacen, b) {
-    if (!ID.test(String(b.cid || "")) || !ID.test(String(b.pid || ""))) falla("Proyecto inválido.");
-    const base = `proyectos/${b.cid}/${b.pid}`;
-    const nombre = await almacen.leer(`${base}/nombre`);
-    if (nombre == null) falla("No existe el proyecto.", 404);
-    const [monto, gt, adic, hist, lics, ingresos] = await Promise.all([
-        almacen.leer(`${base}/monto_cierre`), almacen.leer(`${base}/gasto_total`), almacen.leer(`${base}/gastos_adicionales_compras`),
-        almacen.leer(`${base}/historial_compras`), almacen.leer(`${base}/licitaciones`), almacen.leer("ingresos"),
-    ]);
-    const compras = vivas(hist);
-    const totalCompras = r2(compras.reduce((s, [, c]) => s + (Number(c.total) || 0), 0));
-    let contratado = 0, pagado = 0;
-    Object.values(lics || {}).forEach((l) => {
-        if (!l) return;
-        if (["aprobado", "adjudicado", "terminado"].includes(l.estado)) contratado += Number(l.precio_final || l.precio_propuesto) || 0;
-        Object.values(l.pagos || {}).forEach((p) => { pagado += Number(p && p.monto) || 0; });
-    });
-    const cobrado = r2(Object.values(ingresos || {}).filter((i) => i && i.proyecto === nombre).reduce((s, i) => s + (Number(i.monto) || 0), 0));
-    return {
-        proyecto: { cid: b.cid, pid: b.pid, nombre }, monto_cierre: r2(monto), cobrado,
-        gastos: { compras: totalCompras, cantidad_compras: compras.length, gasto_total_registrado: r2(gt), gastos_adicionales_compras: r2(adic),
-            contratistas_contratado: r2(contratado), contratistas_pagado: r2(pagado) },
-        ultimas_compras: compras.sort((a, z) => String(z[1].fecha).localeCompare(String(a[1].fecha))).slice(0, 10)
-            .map(([id, c]) => ({ id: c.compra_id || id, fecha: c.fecha, proveedor: c.proveedor, total: r2(c.total) })),
-    };
-}
-
 // ------------------------------------------------------------------ entrada
 async function atender(almacen, cuerpo, quien) {
     const b = cuerpo && typeof cuerpo === "object" && !Array.isArray(cuerpo) ? cuerpo : {};
@@ -359,7 +332,7 @@ async function atender(almacen, cuerpo, quien) {
             case "registrar": return { status: 200, cuerpo: await registrar(almacen, b, quien) };
             case "anular": return { status: 200, cuerpo: await anular(almacen, b, quien) };
             case "balance_mensual": return { status: 200, cuerpo: await balanceMensual(almacen, b) };
-            case "balance_proyecto": return { status: 200, cuerpo: await balanceProyecto(almacen, b) };
+            // balance_proyecto pasó a functions/proyectos/finanzas.js (fórmula única, Sesión 9 Lote 2)
             default: throw new ErrorPedido("Acción desconocida.");
         }
     } catch (e) {
