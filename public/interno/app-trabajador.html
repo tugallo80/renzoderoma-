@@ -421,7 +421,7 @@
     if(localStorage.getItem('rubik_dark')==='true') document.body.classList.add('dark-mode');
     
     window.salirApp = function() { if(confirm("¿Cerrar Sesión?")) { localStorage.removeItem('rubik_internal_user'); window.location.reload(); } };
-    window.irAInventario = function() { window.location.href = 'inventario.html'; };
+    window.irAInventario = function() { alert('El inventario se carga desde Base de Datos (en la oficina).'); };
     
     window.cambiarTab = function(tab) {
         document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));

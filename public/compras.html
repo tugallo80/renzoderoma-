@@ -160,10 +160,9 @@
         <div style="display:flex; gap:10px; margin-bottom:15px; flex-wrap: wrap;">
             <button class="btn-main" style="flex:1; min-width:120px; font-size:12px; padding:12px;" onclick="guardarYNotificarSupervisor()"><i class="ph-bold ph-paper-plane-tilt"></i> Notificar</button>
             <button class="btn-main" style="flex:1; min-width:120px; font-size:12px; padding:12px; background:var(--orange);" onclick="exportarMaterialesPDF()"><i class="ph-bold ph-file-pdf"></i> Imprimir</button>
-            <button class="btn-main" id="btn-act-precios" style="flex:1; min-width:120px; font-size:12px; padding:12px; background:var(--purple);" onclick="actualizarPreciosBD()"><i class="ph-bold ph-database"></i> Actualizar Precios BD</button>
             <button class="btn-main" style="flex:1; min-width:120px; font-size:12px; padding:12px; background:#636366;" onclick="repararVinculosBD()" title="Cruza proveedores con materiales y repara vínculos faltantes"><i class="ph-bold ph-wrench"></i> Reparar BD</button>
         </div>
-        <div class="alert-box"><b><i class="ph-bold ph-info"></i> Gestión de Materiales:</b> Selecciona los materiales que faltan comprar. Usa <b>Actualizar Precios BD</b> para que la IA busque el mejor proveedor registrado por cada material y pre-llene los precios reales automáticamente.</div>
+        <div class="alert-box"><b><i class="ph-bold ph-info"></i> Gestión de Materiales:</b> Selecciona los materiales que faltan comprar.</div>
         <div id="bd-update-result" style="display:none; background:rgba(52,199,89,0.08); border:1px solid var(--green); border-radius:12px; padding:14px; margin-bottom:14px; font-size:12px; line-height:1.7;"></div>
 
         <div class="section-title"><i class="ph-bold ph-receipt"></i> Historial de Compras Directas (Respaldos)</div>
@@ -1305,160 +1304,7 @@ JSON REQUERIDO:
         } finally { document.getElementById('global-loader').style.display = 'none'; }
     };
 </script>
-    <script src="/js/viewmode.js?v=1">
-    // ════════════════════════════════════════════════════════════════════════
-    // ACTUALIZADOR DE PRECIOS CON BASE DE DATOS + IA
-    // Lee base_datos/materiales + base_datos/proveedores y cruza con los
-    // materiales del prod_apu de cada ítem. La IA elige el mejor proveedor,
-    // pre-llena p_real en los inputs y marca los sin precio para buscar.
-    // ════════════════════════════════════════════════════════════════════════
-    window.actualizarPreciosBD = async function() {
-        const btn = document.getElementById('btn-act-precios');
-        if (btn) { btn.disabled = true; btn.innerHTML = '<i class="ph-bold ph-spinner"></i> Consultando BD + IA...'; }
-        const resultEl = document.getElementById('bd-update-result');
-        if (resultEl) { resultEl.style.display = 'none'; }
-
-        try {
-            // 1. Cargar base de datos de materiales y proveedores
-            const [matSnap, provSnap] = await Promise.all([
-                firebase.database().ref('base_datos/materiales').once('value'),
-                firebase.database().ref('base_datos/proveedores').once('value')
-            ]);
-            const bdMats = matSnap.val() || {};
-            const bdProvs = provSnap.val() || {};
-
-            // 2. Recopilar todos los materiales del proyecto (desde prod_apu o apu)
-            const items = window.budgetItems || budgetItems || {};
-            const materialesProyecto = [];
-            Object.keys(items).forEach(idx => {
-                const it = items[idx];
-                if (!it || it.type === 'chapter') return;
-                const { mats, source } = _getMaterialesItem(it);
-                mats.forEach((m, mIdx) => {
-                    if (!m.d) return;
-                    materialesProyecto.push({
-                        idx, mIdx, source,
-                        desc: m.d,
-                        q: parseFloat(m.q || m.cant || 0),
-                        u: m.u || m.und || 'und',
-                        p_ref: parseFloat(m.p || m.pu || 0)
-                    });
-                });
-            });
-
-            if (materialesProyecto.length === 0) {
-                alert('No hay materiales cargados. Ve a Producción y completa el APU real primero.');
-                return;
-            }
-
-            // 3. Construir catálogo de BD para el prompt
-            const provPorNombreC = {};
-            Object.values(bdProvs).forEach(prov => {
-                if (prov.nombre) provPorNombreC[prov.nombre.toLowerCase()] = prov;
-            });
-            const catalogoBD = [];
-            Object.entries(bdMats).forEach(([k, m]) => {
-                const nombre = m.n || m.desc || k;
-                if (!nombre) return;
-                const provNombre = m.proveedor || '';
-                const provData = provNombre ? provPorNombreC[provNombre.toLowerCase()] : null;
-                const tel = provData ? (provData.telefono || provData.whatsapp || provData.contacto || '') : '';
-                catalogoBD.push({ nombre, precio: m.p || m.pu || 0, und: m.u || m.und || 'und', proveedor: provNombre, contacto: tel });
-            });
-            Object.entries(bdProvs).forEach(([provKey, prov]) => {
-                if (prov.materiales) {
-                    Object.entries(prov.materiales).forEach(([matKey, mat]) => {
-                        catalogoBD.push({ nombre: matKey, precio: mat.precio||0, und: mat.und||'und', proveedor: prov.nombre||provKey, contacto: prov.telefono||prov.contacto||'' });
-                    });
-                }
-            });
-
-            // 4. Prompt a IA
-            const prompt = `Eres un asistente de compras industriales de Rubik Bolivia (señalética, carpintería metálica, impresión gran formato - Santa Cruz, Bolivia).
-
-MATERIALES REQUERIDOS POR EL PROYECTO:
-${materialesProyecto.map((m,i) => `${i+1}. "${m.desc}" - ${m.q} ${m.u} (precio ref: ${m.p_ref} Bs/u)`).join('\n')}
-
-CATÁLOGO DE PRECIOS EN BASE DE DATOS:
-${catalogoBD.slice(0,80).map(c => `- "${c.nombre}": ${c.precio} Bs/${c.und}${c.proveedor ? ' | Proveedor: '+c.proveedor : ''}${c.contacto ? ' ('+c.contacto+')' : ''}`).join('\n')}
-
-TAREA: Para cada material requerido, busca el mejor match en el catálogo usando similitud de nombre (puede variar en mayúsculas, abreviaturas, sinónimos como "tubo"/"tubín", "plancha"/"chapa", "perfil L"/"ángulo", etc.).
-
-Devuelve SOLO este JSON (sin markdown):
-[
-  {
-    "idx_proyecto": 0,
-    "desc_req": "nombre del material requerido",
-    "encontrado": true_o_false,
-    "mejor_precio": precio_numerico_o_null,
-    "mejor_proveedor": "nombre proveedor o null",
-    "contacto_proveedor": "contacto o null",
-    "und": "unidad",
-    "nota": "breve razón del match o 'Sin registro en BD — buscar proveedor'"
-  }
-]
-REGLAS: Si no encuentras match razonable, pon "encontrado": false y "mejor_precio": null. Nunca inventes precios. Usa el precio de BD más reciente si hay varios matches.`;
-
-            const tok = await firebase.auth().currentUser.getIdToken();
-            const res = await fetch('/api/gemini', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + tok },
-                body: JSON.stringify({ prompt, model: 'gemini-2.5-flash' })
-            });
-            const data = await res.json();
-            const raw = (data.text || '').trim().replace(/```json|```/g, '').trim();
-
-            let resultados;
-            try { resultados = JSON.parse(raw); }
-            catch(e) { throw new Error('La IA devolvió un formato inesperado. Intenta de nuevo.'); }
-
-            // 5. Aplicar precios a los inputs y guardar
-            let encontrados = 0, sinPrecio = 0;
-            let resLines = ['<b>Resultado del cruce con Base de Datos:</b><br>'];
-
-            resultados.forEach(r => {
-                const mat = materialesProyecto[r.idx_proyecto];
-                if (!mat) return;
-
-                const inputEl = document.getElementById(`mat-real-${mat.idx}-${mat.mIdx}`);
-
-                if (r.encontrado && r.mejor_precio > 0) {
-                    encontrados++;
-                    if (inputEl) { inputEl.value = r.mejor_precio; inputEl.style.borderColor = 'var(--green)'; }
-                    // Guardar proveedor_sugerido en Firebase
-                    const it = items[mat.idx];
-                    if (it) {
-                        const { mats } = _getMaterialesItem(it);
-                        if (mats[mat.mIdx]) {
-                            mats[mat.mIdx].p_real = r.mejor_precio;
-                            mats[mat.mIdx].proveedor_sugerido = r.mejor_proveedor || '';
-                            mats[mat.mIdx].contacto_proveedor = r.contacto_proveedor || '';
-                        }
-                        // Persistir
-                        if (it.prod_apu && it.prod_apu.mat) {
-                            firebase.database().ref(`proyectos/${cid}/${pid}/presupuesto/items/${mat.idx}/prod_apu/mat`).set(it.prod_apu.mat);
-                        }
-                    }
-                    resLines.push(`✅ <b>${r.desc_req}</b> → ${r.mejor_precio} Bs/${r.und} · <span style="color:var(--blue)">${r.mejor_proveedor || 'BD'}</span>${r.contacto_proveedor ? ' ('+r.contacto_proveedor+')' : ''}`);
-                } else {
-                    sinPrecio++;
-                    if (inputEl) { inputEl.style.borderColor = 'var(--orange)'; inputEl.placeholder = 'Buscar proveedor'; }
-                    resLines.push(`🔍 <b>${r.desc_req}</b> → Sin registro en BD. <i style="color:var(--orange)">Buscar proveedor manualmente.</i>`);
-                }
-            });
-
-            resLines.push(`<br><b>${encontrados} precios actualizados</b> · ${sinPrecio} materiales pendientes de cotizar.`);
-            if (resultEl) { resultEl.innerHTML = resLines.join('<br>'); resultEl.style.display = 'block'; }
-
-        } catch(e) {
-            console.error(e);
-            alert('Error: ' + e.message);
-        } finally {
-            if (btn) { btn.disabled = false; btn.innerHTML = '<i class="ph-bold ph-database"></i> Actualizar Precios BD'; }
-        }
-    };
-
-</script>
+    <script src="/js/viewmode.js?v=1"></script>
 
 <!-- ══ Modal Planificación de Compras ══════════════════════════════════════ -->
 <div id="plan-compras-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:9999;overflow-y:auto;padding:20px;">
