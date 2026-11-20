@@ -712,6 +712,7 @@
 
     db.ref('proyectos/' + cid + '/' + pid + '/presupuesto').once('value').then(snap => {
         const d = snap.val();
+        _baseItems = _comoLista(d && d.items);   // copia de lo que había en el servidor (antes de normalizar), para fusionar al guardar
         if(d) {
             _guardarPresCache(d);
             _aplicarDatos(d);
@@ -1115,17 +1116,75 @@
         db.ref('proyectos/' + cid + '/' + pid + '/presupuesto_total').set(finalTotal);
     }
 
+    // ── Guardado sin pisar a otros (Sesión 9, auditoría) ──────────────────────────────
+    // Antes se hacía set() de todo el presupuesto con lo cargado al abrir: se perdía lo que mientras tanto escribían
+    // Producción, Compras, Diseños, el anotador o Claude (aprobar_render, aplicar_al_presupuesto). Ahora, al guardar se
+    // compara con el servidor: lo que cambió allá en campos que acá no se tocaron se suma; los ítems agregados al final
+    // allá se suman; si los cambios se cruzan (orden, ítems agregados o borrados en los dos lados), se pregunta.
+    let _baseItems = null;
+    function _comoLista(x) {
+        if (!x) return [];
+        if (Array.isArray(x)) return JSON.parse(JSON.stringify(x));
+        return Object.keys(x).filter(k => /^\d+$/.test(k)).sort((a, b) => a - b).map(k => JSON.parse(JSON.stringify(x[k])));
+    }
+    function _canon(v) {
+        if (v === null || v === undefined) return undefined;
+        if (Array.isArray(v)) { const a = v.map(_canon); return a.every(x => x === undefined) ? undefined : a.map(x => x === undefined ? null : x); }
+        if (typeof v === 'object') {
+            const o = {}; Object.keys(v).sort().forEach(k => { const c = _canon(v[k]); if (c !== undefined) o[k] = c; });
+            return Object.keys(o).length ? o : undefined;
+        }
+        return v;
+    }
+    const _cs = (v) => JSON.stringify(_canon(v) === undefined ? null : _canon(v));
+    const _mismoItem = (a, b) => !!a && !!b && ((a.id || b.id) ? a.id === b.id : ((a.desc || a.d || '') === (b.desc || b.d || '') && (a.type || '') === (b.type || '')));
+    function _fusionar(base, srv, loc) {
+        if (srv.length < base.length || loc.length !== base.length) return null;
+        for (let i = 0; i < base.length; i++) if (!_mismoItem(base[i], srv[i]) || !_mismoItem(base[i], loc[i])) return null;
+        const res = loc.map((l, i) => {
+            const r = Object.assign({}, l), b = base[i] || {}, sv = srv[i] || {};
+            new Set(Object.keys(b).concat(Object.keys(sv))).forEach(k => {
+                if (_cs(l[k]) === _cs(b[k]) && _cs(sv[k]) !== _cs(b[k])) { if (sv[k] === undefined || sv[k] === null) delete r[k]; else r[k] = JSON.parse(JSON.stringify(sv[k])); }
+            });
+            return r;
+        });
+        return res.concat(srv.slice(base.length).map(x => JSON.parse(JSON.stringify(x))));
+    }
+    let _guardando = Promise.resolve();
     function saveDB(force = false) {
         clearTimeout(saveTimeout);
-        let execSave = () => {
+        let execSave = async () => {
+            const ref = db.ref('proyectos/' + cid + '/' + pid + '/presupuesto');
+            if (_baseItems !== null) {
+                const srv = _comoLista((await ref.child('items').once('value')).val());
+                if (_cs(srv) !== _cs(_baseItems)) {
+                    const f = _fusionar(_baseItems, srv, data);
+                    if (f) {
+                        data = f;
+                        render();
+                        console.info('[presupuesto] se sumaron cambios hechos desde otro lado antes de guardar');
+                    } else if (confirm('Mientras editabas, este presupuesto cambió desde otro lado (Claude, Producción u otra pantalla) y los cambios se cruzan con los tuyos.\n\nAceptar: traer lo que está guardado (se pierde tu último cambio).\nCancelar: guardar lo tuyo encima.')) {
+                        const d = (await ref.once('value')).val() || {};
+                        _baseItems = _comoLista(d.items);
+                        _aplicarDatos(d);
+                        return;
+                    }
+                }
+            }
             let payload = { items: data, fecha: document.getElementById('h-date').value, impuestos: document.getElementById('sw-imp').checked, descuento: parseFloat(document.getElementById('t-desc-val').value) || 0, descuento_pct: parseFloat(document.getElementById('t-desc-pct').value) || 0, cond: { pago: document.getElementById('c-pago').value, validez: document.getElementById('c-validez').value, montaje: document.getElementById('sw-mont').checked, desmontaje: document.getElementById('sw-desm').checked } };
-            db.ref('proyectos/' + cid + '/' + pid + '/presupuesto').set(JSON.parse(JSON.stringify(payload)));
+            payload = JSON.parse(JSON.stringify(payload));
+            // update: no borra otras claves de presupuesto que escriben otros (respaldos, versiones…)
+            await ref.update(payload);
+            _baseItems = _comoLista(payload.items);
         };
-        if(force) execSave(); else saveTimeout = setTimeout(execSave, 1000);
+        const correr = () => { _guardando = _guardando.then(execSave).catch(e => { console.error('[presupuesto] no se pudo guardar', e); alert('No se pudo guardar el presupuesto: ' + (e.message || e)); }); return _guardando; };
+        if(force) return correr();
+        saveTimeout = setTimeout(correr, 1000);
+        return _guardando;
     }
 
-    function irAComputo(idx, apuType=null, apuIdx=null) {
-        saveDB(true); 
+    async function irAComputo(idx, apuType=null, apuIdx=null) {
+        await saveDB(true);
         let url = `computo.html?idx=${idx}&cid=${cid}&pid=${pid}`;
         if(apuType) url += `&type=${apuType}&apuidx=${apuIdx}`;
         window.location.href = url;
