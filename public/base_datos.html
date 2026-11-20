@@ -559,13 +559,23 @@ Puedo ayudarte con:<br>
         const tel = document.getElementById('p-tel').value.trim();
         if(!nom) return alert("El nombre es obligatorio");
         
-        const newKey = nom.replace(/\s/g, '_');
         const payload = { nombre: nom, tipo: tipo, especialidad: document.getElementById('p-esp').value.trim(), telefono: tel };
-        if(tipo === 'interno' || tipo === 'supervisor') payload.sueldo = parseFloat(document.getElementById('p-sueldo').value) || 0;
+        payload.sueldo = (tipo === 'interno' || tipo === 'supervisor') ? (parseFloat(document.getElementById('p-sueldo').value) || 0) : null;
 
-        if(editKey && editKey !== newKey) db.ref('personal/' + editKey).remove();
-        db.ref('personal/' + newKey).set(payload);
-        document.getElementById('mod-pers').style.display = 'none';
+        // Editar: solo se actualizan estos campos y la clave NO cambia (Sesión 9, auditoría). Antes se hacía set (y remove si
+        // cambiaba el nombre): se borraban las licitaciones (solicitudes) y pagos del trabajador, y su id en las
+        // licitaciones de los proyectos dejaba de existir.
+        if (editKey) {
+            db.ref('personal/' + editKey).update(payload)
+                .then(() => { document.getElementById('mod-pers').style.display = 'none'; })
+                .catch(e => alert('No se pudo guardar: ' + e.message));
+            return;
+        }
+        const newKey = nom.replace(/[\s.#$\[\]\/]/g, '_');
+        db.ref('personal/' + newKey).once('value').then(snap => {
+            if (snap.exists() && !confirm('Ya hay una persona registrada como "' + ((snap.val() || {}).nombre || newKey) + '". ¿Actualizar sus datos con estos?')) return;
+            return db.ref('personal/' + newKey).update(payload).then(() => { document.getElementById('mod-pers').style.display = 'none'; });
+        }).catch(e => alert('No se pudo guardar: ' + e.message));
     }
 
     function guardarProveedor() {
