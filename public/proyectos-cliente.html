@@ -76,6 +76,9 @@
         .month-bar::-webkit-scrollbar { display: none; }
         .month-chip { display: inline-block; padding: 7px 16px; border-radius: 20px; font-size: 12px; font-weight: 800; margin-right: 8px; cursor: pointer; border: 1.5px solid var(--border); background: var(--card); color: var(--gray); transition: 0.15s; }
         .month-chip.active { background: var(--blue); color: #fff; border-color: var(--blue); }
+        .stage-chip { display: inline-block; padding: 6px 12px; border-radius: 16px; font-size: 11px; font-weight: 800; margin-right: 6px; cursor: pointer; border: 1.5px solid var(--border); background: var(--card); color: var(--gray); transition: 0.15s; }
+        .stage-chip.active { background: var(--text); color: var(--bg); border-color: var(--text); }
+        .stage-chip b { font-weight: 900; opacity: .7; margin-left: 3px; }
 
         /* Foto options */
         .foto-opt-btn { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 14px 10px; border-radius: 14px; border: 1px solid var(--border); background: var(--bg); cursor: pointer; font-size: 11px; font-weight: 800; color: var(--text); transition: 0.15s; }
@@ -108,6 +111,7 @@
     </div>
 
     <div id="month-filter-bar" class="month-bar"></div>
+    <div id="stage-filter-bar" class="month-bar"></div>
 
     <div id="project-grid" class="project-grid"></div>
 
@@ -148,10 +152,16 @@
             <input type="text" id="inp-name" class="inp-std" placeholder="Ej: Stand Expo...">
             <label class="inp-lbl">Estado</label>
             <select id="inp-status" class="inp-std">
+                <option value="requerimiento">📝 Requerimiento</option>
+                <option value="cotizacion">🧮 Cotización</option>
+                <option value="propuesta_enviada">📤 Propuesta enviada</option>
+                <option value="negociando">🤝 Negociando</option>
+                <option value="contrato_firmado">✍️ Contrato firmado</option>
                 <option value="planificacion">⚪ Planificación</option>
                 <option value="produccion">🔵 En Producción</option>
                 <option value="entregado">🟢 Entregado</option>
                 <option value="cerrado">✅ Cerrado / Pagado</option>
+                <option value="cancelado">⛔ Cancelado</option>
             </select>
             <label class="inp-lbl">Fecha del Proyecto</label>
             <input type="month" id="inp-fecha" class="inp-std">
@@ -303,6 +313,15 @@
     let _cachedProjectsData = null;
     const _CURRENT_MONTH = (function(){ const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0'); })();
     let activeMonthFilter = _CURRENT_MONTH;
+    // Etapas del proyecto (mismo ciclo que el inicio, el dashboard y Kay). Sin estado cuenta como planificación.
+    const ETAPAS = [
+        ['requerimiento', '📝', 'Requerimiento'], ['cotizacion', '🧮', 'Cotización'], ['propuesta_enviada', '📤', 'Propuesta enviada'],
+        ['negociando', '🤝', 'Negociando'], ['contrato_firmado', '✍️', 'Contrato firmado'], ['planificacion', '⚪', 'Planificación'],
+        ['produccion', '🔵', 'Producción'], ['entregado', '🟢', 'Entregado'], ['cerrado', '✅', 'Cerrado / pagado'], ['cancelado', '⛔', 'Cancelado'],
+    ];
+    const _TERMINADAS = ['entregado', 'cerrado', 'cancelado'];
+    const _etapaDe = (p) => (p && typeof p.estado === 'string' && p.estado) ? p.estado : 'planificacion';
+    let activeStageFilter = 'todas';   // 'todas' | 'en_curso' | una etapa
     let _editorImg = null; let _editorRotation = 0; let _iaGeneratedDataUrl = null;
 
     // Mostrar "Cargando..." inmediatamente — visible mientras auth resuelve
@@ -348,6 +367,8 @@
                 slim[pid] = {
                     nombre,
                     estado: typeof p.estado === 'string' ? p.estado : null,
+                    // la fecha va en la copia del dispositivo: sin ella, el filtro por mes no andaba hasta borrar la caché
+                    fecha_creacion: typeof p.fecha_creacion === 'string' ? p.fecha_creacion : null,
                     img: typeof p.img === 'string' ? p.img : null,
                     orden: typeof p.orden === 'number' ? p.orden : null,
                     visible_cliente: p.visible_cliente === false ? false : null,
@@ -413,7 +434,8 @@
         if (!dataObj || typeof dataObj !== 'object') return '';
         return Object.entries(dataObj)
             .filter(([, p]) => p && typeof p === 'object' && typeof p.nombre === 'string')
-            .map(([pid, p]) => `${pid}:${p.nombre}:${p.estado||''}:${p.img||''}:${p.tipo||''}`)
+            // orden y fecha también: si no, los datos reales no reemplazaban a la copia vieja del dispositivo
+            .map(([pid, p]) => `${pid}:${p.nombre}:${p.estado||''}:${p.img||''}:${p.tipo||''}:${p.orden ?? ''}:${p.fecha_creacion||''}`)
             .sort().join('|');
     }
 
@@ -456,6 +478,14 @@
                     globalProjectsArr = filtered;
                 }
             }
+            renderStageFilter(globalProjectsArr);
+            if (activeStageFilter !== 'todas') {
+                globalProjectsArr = globalProjectsArr.filter(p => activeStageFilter === 'en_curso' ? !_TERMINADAS.includes(_etapaDe(p)) : _etapaDe(p) === activeStageFilter);
+                if (globalProjectsArr.length === 0) {
+                    grid.innerHTML = `<div style="grid-column:1/-1;text-align:center;color:var(--gray);padding:40px;">No hay proyectos en esta etapa${activeMonthFilter !== 'todos' ? ' este mes' : ''}.</div>`;
+                    return;
+                }
+            }
 
             const wrap = document.createElement('div');
             wrap.className = 'proj-items';
@@ -463,10 +493,10 @@
 
             globalProjectsArr.forEach(p => {
                 const pid = p.pid;
-                let statusIcon = '⚪'; let iconColor = 'var(--gray)';
-                if(p.estado === 'produccion') { statusIcon = '🔵'; iconColor = 'var(--blue)'; }
-                if(p.estado === 'entregado') { statusIcon = '🟢'; iconColor = 'var(--green)'; }
-                if(p.estado === 'cerrado')   { statusIcon = '✅'; iconColor = 'var(--green)'; }
+                const _et = ETAPAS.find(e => e[0] === _etapaDe(p));
+                let statusIcon = _et ? _et[1] : '⚪'; let iconColor = 'var(--gray)';
+                if(p.estado === 'produccion') { iconColor = 'var(--blue)'; }
+                if(p.estado === 'entregado' || p.estado === 'cerrado') { iconColor = 'var(--green)'; }
                 const imgUrl = typeof p.img === 'string' && p.img ? p.img : null;
                 const imgSrc = imgUrl ? `<img src="${imgUrl}" loading="lazy">` : `<i class="ph-bold ph-folder" style="color:var(--gray);"></i>`;
                 const displayNombre = typeof p.nombre === 'string' && p.nombre ? p.nombre : 'Sin nombre';
@@ -830,6 +860,26 @@
             if (active) active.scrollIntoView({ inline: 'center', behavior: 'smooth', block: 'nearest' });
         }, 50);
     }
+    /** Fila de etapas: cuántos proyectos hay en cada una (con el mes elegido). Solo se muestran las que tienen proyectos. */
+    function renderStageFilter(lista) {
+        const bar = document.getElementById('stage-filter-bar');
+        if (!bar) return;
+        const cuenta = {};
+        (lista || []).forEach(p => { const e = _etapaDe(p); cuenta[e] = (cuenta[e] || 0) + 1; });
+        const enCurso = (lista || []).filter(p => !_TERMINADAS.includes(_etapaDe(p))).length;
+        const chip = (val, txt, n) => `<span class="stage-chip ${activeStageFilter === val ? 'active' : ''}" onclick="setStageFilter('${val}')">${txt}<b>${n}</b></span>`;
+        const etapas = ETAPAS.filter(e => cuenta[e[0]] || activeStageFilter === e[0]);
+        const otras = Object.keys(cuenta).filter(k => !ETAPAS.some(e => e[0] === k));   // estados que no están en el ciclo
+        bar.innerHTML = chip('todas', 'Todas', (lista || []).length) + chip('en_curso', '⏳ En curso', enCurso)
+            + etapas.map(e => chip(e[0], `${e[1]} ${e[2]}`, cuenta[e[0]] || 0)).join('')
+            + otras.map(k => String(k).replace(/[^\w-]/g, '')).filter(Boolean).map(k => chip(k, k, cuenta[k] || 0)).join('');
+    }
+    function setStageFilter(etapa) {
+        activeStageFilter = etapa;
+        _lastRenderSig = '';
+        if (window._renderDataProyectos && _cachedProjectsData) window._renderDataProyectos(_cachedProjectsData);
+    }
+
     function setMonthFilter(month) {
         activeMonthFilter = month;
         renderMonthFilter(_cachedProjectsData);
