@@ -145,6 +145,13 @@
         }
       },
       {
+        "source": "/api/rendiciones",
+        "function": {
+          "functionId": "rendicionesApi",
+          "region": "us-central1"
+        }
+      },
+      {
         "source": "/api/licitaciones",
         "function": {
           "functionId": "licitacionesApi",

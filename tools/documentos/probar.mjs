@@ -27,7 +27,7 @@ let bien = 0, total = 0;
 async function prueba(n, fn) { total++; try { await fn(); bien++; console.log('ok  ', n); } catch (e) { console.log('FALLA', n, '\n', e); process.exitCode = 1; } }
 
 await prueba('las copias del servidor son idénticas a las de la pantalla', () => {
-    for (const f of ['pdf-licitacion.js', 'pdf-cotizacion.js', 'pdf-produccion.js', 'pdf-liquidacion.js'])
+    for (const f of ['pdf-licitacion.js', 'pdf-cotizacion.js', 'pdf-produccion.js', 'pdf-liquidacion.js', 'pdf-rendicion.js'])
         assert.equal(readFileSync('../../functions/pdf/compartido/' + f, 'utf8'), readFileSync('../../public/js/' + f, 'utf8'),
             f + ' desactualizado: correr "npm run sincronizar" en tools/documentos');
 });
@@ -143,6 +143,19 @@ await prueba('liquidación de contrato: acordado, anticipos, saldo y comprobante
     assert.equal(r.nombre, 'Liquidacion_Imprenta_Demo.pdf');
     assert.ok(r.paginas >= 3, 'resumen + anexo técnico + comprobantes');
     await paginasPng(r.base64, 'liquidacion');
+});
+
+await prueba('rendición de cuentas: entregado, gastos con estado, saldo y recibos', async () => {
+    const d = datos();
+    d.personal = { wPollo: { nombre: 'Pollo Demo', telefono: '70000001' } };
+    d.caja_chica = { wPollo: {
+        depositos: { a: { monto: 500, fecha: '2026-11-02', nota: 'Para materiales', proyecto: 'Trofeo Demo' } },
+        gastos: { b: { monto: 120, fecha: '2026-11-03', concepto: 'Pintura', proveedor: 'Ferretería', proyecto: 'Trofeo Demo', estado: 'aprobado', comprobante: foto },
+            c: { monto: 45, fecha: '2026-11-04', concepto: 'Taxi', estado: 'pendiente' }, e: { monto: 80, fecha: '2026-11-05', concepto: 'Almuerzo', estado: 'rechazado' } } } };
+    const r = await D.generar(crearAlmacenMemoria(d, D.RUTAS, D.ARCHIVOS), { tipo: 'rendicion', worker_id: 'wPollo' });
+    const txt = await textoPdf(r.base64);
+    assert.match(txt, /RENDICIÓN DE CUENTAS/); assert.match(txt, /335,00/, 'saldo en mano 500 − 120 − 45');
+    await paginasPng(r.base64, 'rendicion');
 });
 
 console.log(`\n${bien}/${total} pruebas OK`);

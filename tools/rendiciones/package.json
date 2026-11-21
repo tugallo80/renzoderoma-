@@ -1,0 +1,7 @@
+{
+  "name": "probar-rendiciones",
+  "private": true,
+  "type": "module",
+  "description": "Pruebas de la rendición de cuentas / caja chica (functions/rendiciones) con la base en memoria.",
+  "scripts": { "test": "node probar.mjs" }
+}

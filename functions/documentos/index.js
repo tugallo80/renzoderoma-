@@ -6,6 +6,7 @@
  *   cotizacion {cid, pid, modo?: normal|impuestos_por_item} → pdf-cotizacion.js (presupuesto.html)
  *   orden      {cid, pid, modo?: produccion|impresion|impresion_con_imagen|completa} → pdf-produccion.js (produccion.html)
  *   liquidacion {cid, pid, id} → pdf-liquidacion.js (compras.html del proyecto): contrato, anticipos/pagos, saldo y comprobantes
+ *   rendicion  {worker_id | telefono, desde?, hasta?} → pdf-rendicion.js (Tesorería → Rendiciones): caja chica, gastos, saldo y recibos
  * Los tres módulos son copias idénticas de public/js/ (functions/pdf/compartido/).
  *
  * Devuelve {nombre, mime, base64, bytes, paginas, ruta}: el PDF también queda guardado en Storage
@@ -21,8 +22,9 @@ const MAX_PDF = 10 * 1024 * 1024;
 const MAX_IMG = 12 * 1024 * 1024;
 const IMG_OK = /^https:\/\/(firebasestorage\.googleapis\.com|storage\.googleapis\.com)\//;
 
-const RUTAS = [/^proyectos\/[^/]+\/[^/]+\/(nombre|licitaciones\/[^/]+|presupuesto|presupuesto\/items|monto_cierre|artes_data)$/, /^clientes\/[^/]+\/nombre$/];
-const ARCHIVOS = [/^documentos\/[^/]+\/[^/]+\/[A-Za-z0-9_.-]+\.pdf$/];
+const RUTAS = [/^proyectos\/[^/]+\/[^/]+\/(nombre|licitaciones\/[^/]+|presupuesto|presupuesto\/items|monto_cierre|artes_data)$/, /^clientes\/[^/]+\/nombre$/,
+    /^caja_chica\/[^/]+$/, /^personal$/, /^personal\/[^/]+\/(nombre|telefono)$/];   // rendición
+const ARCHIVOS = [/^documentos\/[^/]+\/[^/]+\/[A-Za-z0-9_.-]+\.pdf$/, /^documentos\/rendiciones\/[A-Za-z0-9_-]+\/[A-Za-z0-9_.-]+\.pdf$/];
 
 let _jsPDF = null;
 function jsPDF() {
@@ -139,22 +141,33 @@ async function pdfLiquidacion(almacen, b) {
     return { nombre: P.nombreArchivo(lic), doc };
 }
 
+async function pdfRendicion(almacen, b) {
+    const R = require("../rendiciones/api");
+    const r = await R.atender(almacen, { accion: "estado", worker_id: b.worker_id, telefono: b.telefono, desde: b.desde, hasta: b.hasta });
+    if (r.status !== 200) C.falla(r.cuerpo.error, r.status);
+    const P = require("../pdf/compartido/pdf-rendicion.js");
+    const { cargarImagen, dimensiones } = crearCargador({ soloJpeg: true });
+    const doc = await P.generar({ jsPDF: jsPDF(), estado: r.cuerpo, fecha: fechaBo(almacen.ahora()), logo: await cargarImagen("logo-liquidacion"), cargarImagen, dimensiones });
+    return { nombre: P.nombreArchivo(r.cuerpo), doc, ruta: `documentos/rendiciones/${r.cuerpo.worker_id}/${P.nombreArchivo(r.cuerpo)}` };
+}
+
 const TIPOS = {
     licitacion: pdfLicitacion,
     cotizacion: pdfCotizacion,
     orden: pdfOrden,
     liquidacion: pdfLiquidacion,
+    rendicion: pdfRendicion,
 };
 
 /** {tipo, cid, pid, id, modo?} → {nombre, mime, base64, bytes, paginas, ruta}. */
 async function generar(almacen, b) {
     const tipo = String((b && b.tipo) || "");
     const fn = Object.prototype.hasOwnProperty.call(TIPOS, tipo) ? TIPOS[tipo] : null;
-    if (!fn) C.falla("Tipo de documento inválido (licitacion, liquidacion, cotizacion u orden).");
-    const { nombre, doc } = await fn(almacen, b);
+    if (!fn) C.falla("Tipo de documento inválido (licitacion, liquidacion, rendicion, cotizacion u orden).");
+    const { nombre, doc, ruta: rutaPropia } = await fn(almacen, b);
     const buf = Buffer.from(doc.output("arraybuffer"));
     if (buf.length > MAX_PDF) C.falla(`El PDF pesa ${(buf.length / 1048576).toFixed(1)} MB (máximo 10 MB). Probá el modo general.`, 413);
-    const ruta = `documentos/${b.cid}/${b.pid}/${nombre}`;
+    const ruta = rutaPropia || `documentos/${b.cid}/${b.pid}/${nombre}`;
     await almacen.subirArchivo(ruta, buf, "application/pdf").catch((e) => console.warn("[documentos] no se guardó en Storage:", e.message));
     return { nombre, mime: "application/pdf", base64: buf.toString("base64"), bytes: buf.length, paginas: doc.getNumberOfPages(), ruta };
 }

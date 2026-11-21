@@ -6,6 +6,7 @@
  *   RubikOps.licitaciones(accion, datos)   → resultado (lanza Error con el motivo si el servidor rechaza)
  *   RubikOps.proyectos(accion, datos)      → archivar / desarchivar varios proyectos
  *   RubikOps.cobros(accion, datos)         → pendientes, registrar_cobro, registrar_factura, anular_* (functions/cobros)
+ *   RubikOps.rendiciones(accion, datos)    → estado, resumen, entregar, registrar_gasto, aprobar, rechazar, anular (functions/rendiciones)
  *   RubikOps.archivoABase64(file)          → {datos_base64, mime}  (comprobantes)
  */
 (function (global) {
@@ -50,6 +51,7 @@
         licitaciones: (accion, datos) => llamar('licitaciones', Object.assign({ accion }, datos)),
         proyectos: (accion, datos) => llamar('proyectos', Object.assign({ accion }, datos)),   // archivar / desarchivar / finanzas
         cobros: (accion, datos) => llamar('cobros', Object.assign({ accion }, datos)),         // cobros y facturas de venta
+        rendiciones: (accion, datos) => llamar('rendiciones', Object.assign({ accion }, datos)), // caja chica: entregas, gastos, aprobar
         archivoABase64, dataUrlABase64, nuevaClave: clave,
     };
 })(window);
