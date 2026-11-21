@@ -496,6 +496,7 @@ const ACCIONES = {
         soloLectura: true,
         descripcion: "PDF de un documento, igual al de la pantalla, para mandarlo por WhatsApp → { nombre, mime: \"application/pdf\", base64, bytes, paginas } (máx. 10 MB). "
             + "{ tipo: licitacion, cid, pid, id, modo?: general|detalle } (propuesta al trabajador) · "
+            + "{ tipo: liquidacion, cid, pid, id } (estado del contrato para el trabajador: acordado, anticipos y pagos, saldo, comprobantes) · "
             + "{ tipo: cotizacion, cid, pid, modo?: normal|impuestos_por_item } (presupuesto para el cliente) · "
             + "{ tipo: orden, cid, pid, modo?: produccion|impresion|impresion_con_imagen|completa } (órdenes de Producción).",
         ejecutar: async (p) => {
