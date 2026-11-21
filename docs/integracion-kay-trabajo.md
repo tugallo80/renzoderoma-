@@ -33,6 +33,8 @@ código que `presupuesto.html` y `produccion.html` (`public/js/pdf-cotizacion.js
 `rendicion_entregar`, `rendicion_gasto`, `rendicion_aprobar`, `rendicion_rechazar`, `rendicion_anular` (escritura). La persona va
 por `worker_id` o por `telefono` (quien le escribe a Kay). Lo que manda un trabajador (rol ≠ dueño) queda pendiente hasta que el
 dueño lo aprueba. PDF: `pdf_documento { tipo: rendicion, worker_id | telefono }`. Detalle en `docs/sesiones/11-rendiciones.md`.
+2026-11-21: **link para rendir sin app** — `rendicion_link` crea un link personal a `rendir.html` (mini app sin login: renglones con
+detalle, cantidad, unidad y precio, y foto del recibo). Vence a los 30 días y se puede revocar.
 2026-11-21: **gastos de funcionamiento del taller**: `registrar_compra` acepta `categoria` (alquiler, mantenimiento, herramientas,
 servicios, otros; sin cid/pid) y hay `gastos_funcionamiento { mes? }` (lectura). `balance_mensual` separa compras de proyectos,
 funcionamiento y sin clasificar. Detalle en `docs/sesiones/07-compras.md`.
@@ -138,6 +140,7 @@ detalle queda en los logs de `kayApi`, no se le devuelve a Kay).
 | `rendicion_estado` | sí | `{ worker_id \| telefono, desde?, hasta?, cid?, pid? (solo ese proyecto) }` | `{ nombre, totales: {entregado, gastado_aprobado, pendiente_de_aprobar, rechazado, saldo_en_mano}, movimientos: [{id, tipo: deposito\|gasto, fecha, monto, concepto, proyecto, estado, comprobante}], pendientes }`. `saldo_en_mano` < 0 = se le debe |
 | `rendiciones_proyecto` | sí | `{ cid, pid }` | `{ proyecto, personas: { wid: {nombre, totales, movimientos, pendientes} } }`: la plata para gastos de ese proyecto, por persona |
 | `rendiciones_resumen` | sí | — | `{ personas: [{worker_id, nombre, saldo_en_mano, pendientes, …}], total_en_mano, gastos_por_aprobar }` |
+| `rendicion_link` | **no** | `{ idempotencia, worker_id \| telefono, cid?, pid?, dias?, registrado_por }` | `{ url, vence, nombre, proyecto }`: link personal a la mini app `rendir.html` (sin login) para que la persona cargue sus gastos con detalle y recibo; queda por aprobar. Kay se lo manda con el sí del dueño |
 | `rendicion_entregar` | **no** | `{ idempotencia, worker_id \| telefono, monto, fecha?, concepto?, cid?, pid?, medio?, foto?, registrado_por }` | `{ id, saldo_en_mano }` (plata que el dueño le dio) |
 | `rendicion_gasto` | **no** | `{ idempotencia, worker_id \| telefono, monto, concepto, fecha?, cid?, pid?, proveedor?, foto?, registrado_por: {rol, nombre, telefono} }` | `{ id, estado: pendiente\|aprobado, saldo_en_mano }`: rol ≠ dueño → pendiente |
 | `rendicion_aprobar` / `rendicion_rechazar` | **no** | `{ idempotencia, worker_id \| telefono, id, motivo? (obligatorio al rechazar), registrado_por }` | `{ estado, saldo_en_mano }` |

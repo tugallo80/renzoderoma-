@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="robots" content="noindex, nofollow">
+    <meta name="referrer" content="no-referrer">
+    <title>Rendir gastos - Rubik</title>
+    <!-- Mini app SIN login para que un contratista rinda sus gastos (functions/rendiciones/link.js). El token va en el #. -->
+    <style>
+        :root { --bg: #f4f4f7; --card: #fff; --text: #1a1a1a; --blue: #007aff; --green: #34c759; --red: #ff3b30; --orange: #ff9500; --gray: #8e8e93; --border: #d1d1d6; }
+        @media (prefers-color-scheme: dark) { :root { --bg: #000; --card: #1c1c1e; --text: #fff; --border: #38383a; } }
+        * { box-sizing: border-box; }
+        body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: var(--bg); color: var(--text); padding: 16px 16px 120px; }
+        .card { background: var(--card); border: 1px solid var(--border); border-radius: 16px; padding: 14px; margin-bottom: 12px; }
+        h1 { font-size: 20px; margin: 0 0 2px; } .sub { color: var(--gray); font-size: 13px; }
+        .tot { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; text-align: center; margin-top: 10px; }
+        .tot div { background: var(--bg); border-radius: 10px; padding: 8px 4px; } .tot small { display: block; font-size: 9px; font-weight: 800; color: var(--gray); text-transform: uppercase; } .tot b { font-size: 14px; }
+        label { display: block; font-size: 11px; font-weight: 800; color: var(--gray); text-transform: uppercase; margin: 10px 0 4px; }
+        input, select { width: 100%; padding: 11px; border-radius: 10px; border: 1px solid var(--border); background: var(--bg); color: var(--text); font-size: 16px; }
+        .renglon { border: 1px solid var(--border); border-radius: 12px; padding: 10px; margin-bottom: 8px; position: relative; }
+        .fila { display: grid; grid-template-columns: 1fr 1fr 1.2fr; gap: 6px; margin-top: 6px; }
+        .sub-r { text-align: right; font-weight: 800; margin-top: 6px; font-size: 14px; }
+        .quitar { position: absolute; top: 6px; right: 6px; border: none; background: none; color: var(--red); font-size: 20px; line-height: 1; padding: 4px 8px; }
+        .btn { width: 100%; border: none; border-radius: 12px; padding: 14px; font-size: 16px; font-weight: 800; cursor: pointer; }
+        .btn-sec { background: var(--card); color: var(--blue); border: 1px dashed var(--blue); }
+        .btn-ok { background: var(--green); color: #fff; } .btn:disabled { opacity: .5; }
+        .barra { position: fixed; left: 0; right: 0; bottom: 0; background: var(--card); border-top: 1px solid var(--border); padding: 10px 16px calc(10px + env(safe-area-inset-bottom)); }
+        .barra .t { display: flex; justify-content: space-between; font-size: 15px; font-weight: 800; margin-bottom: 8px; }
+        .mov { display: flex; justify-content: space-between; gap: 8px; padding: 8px 0; border-bottom: 1px solid var(--border); font-size: 13px; } .mov:last-child { border: none; }
+        .aviso { padding: 12px; border-radius: 12px; font-size: 14px; margin-bottom: 12px; }
+        .err { background: rgba(255,59,48,.12); color: var(--red); } .ok { background: rgba(52,199,89,.14); color: #1f8a3b; }
+        .foto-prev { max-width: 100%; max-height: 160px; border-radius: 10px; margin-top: 8px; display: none; }
+    </style>
+</head>
+<body>
+    <div id="app"><div class="card">Cargando…</div></div>
+
+<script>
+(function () {
+    'use strict';
+    const token = decodeURIComponent((location.hash || '').slice(1));
+    const $ = (id) => document.getElementById(id);
+    const fm = (n) => (Number(n) || 0).toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const esc = (t) => String(t == null ? '' : t).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    const num = (v) => { const n = parseFloat(String(v || '').replace(',', '.')); return isFinite(n) ? n : 0; };
+    const EST = { entregado: 'Recibido', aprobado: 'Aprobado', pendiente: 'Por aprobar', rechazado: 'Rechazado', anulado: 'Anulado' };
+    const BORRADOR = 'rubik_rendir_' + token.slice(0, 12);
+    let info = null, renglones = [], foto = null, clave = null;
+
+    async function api(cuerpo) {
+        const body = JSON.stringify(Object.assign({ token }, cuerpo));
+        for (let i = 0; ; i++) {
+            let r = null, red = null;
+            try { r = await fetch('/api/rendir', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body }); } catch (e) { red = e; }
+            if ((red || [502, 503, 504].includes(r.status)) && i < 3) { await new Promise((ok) => setTimeout(ok, 1500 * (i + 1))); continue; }
+            if (red) throw new Error('Sin conexión. Revisá tu internet y probá de nuevo.');
+            const j = await r.json().catch(() => ({}));
+            if (!r.ok) throw new Error(j.error || ('Error ' + r.status));
+            return j;
+        }
+    }
+    function guardarBorrador() { try { localStorage.setItem(BORRADOR, JSON.stringify({ renglones, proveedor: $('proveedor') && $('proveedor').value, fecha: $('fecha') && $('fecha').value })); } catch (e) { /* sin almacenamiento */ } }
+    function leerBorrador() { try { return JSON.parse(localStorage.getItem(BORRADOR) || 'null'); } catch (e) { return null; } }
+
+    function pintar(mensaje) {
+        const t = info.totales;
+        const hoy = new Date(Date.now() - 4 * 3600e3).toISOString().slice(0, 10);
+        const b = leerBorrador();
+        if (!renglones.length) renglones = (b && b.renglones && b.renglones.length) ? b.renglones : [{ detalle: '', cantidad: '1', unidad: 'und', precio: '' }];
+        $('app').innerHTML = `
+        ${mensaje || ''}
+        <div class="card">
+            <h1>Hola, ${esc(info.nombre)}</h1>
+            <div class="sub">Rendición de gastos${info.proyecto ? ' · <b>' + esc(info.proyecto) + '</b>' : ''} · Rubik Bolivia</div>
+            <div class="tot">
+                <div><small>Recibido</small><b>${fm(t.entregado)}</b></div>
+                <div><small>Rendido</small><b>${fm(t.gastado_aprobado + t.pendiente_de_aprobar)}</b></div>
+                <div><small>${t.saldo_en_mano < 0 ? 'A tu favor' : 'Por rendir'}</small><b style="color:${t.saldo_en_mano < 0 ? 'var(--green)' : 'var(--orange)'};">${fm(Math.abs(t.saldo_en_mano))}</b></div>
+            </div>
+        </div>
+        <div class="card">
+            <b>Nuevo gasto</b>
+            <div class="sub">Cargá cada cosa que compraste. El total se calcula solo.</div>
+            <div id="renglones" style="margin-top:10px;"></div>
+            <button class="btn btn-sec" id="agregar">+ Agregar otra cosa</button>
+            <label>Dónde compraste</label><input id="proveedor" placeholder="Ej: Ferretería El Sol" value="${esc((b && b.proveedor) || '')}">
+            <label>Fecha</label><input id="fecha" type="date" value="${esc((b && b.fecha) || hoy)}">
+            <label>Foto del recibo o factura (si tenés)</label>
+            <input id="foto" type="file" accept="image/*,application/pdf">
+            <img id="foto-prev" class="foto-prev" alt="">
+        </div>
+        <div class="card">
+            <b>Lo que ya mandaste</b>
+            ${info.movimientos.length ? info.movimientos.map((m) => `<div class="mov"><span>${esc(m.fecha)} · ${m.tipo === 'deposito' ? 'Recibido' : esc(m.concepto)}<br><small style="color:var(--gray);">${esc(EST[m.estado] || m.estado)}${m.motivo ? ' · ' + esc(m.motivo) : ''}</small></span><b style="color:${m.tipo === 'deposito' ? 'var(--green)' : 'var(--text)'};">${m.tipo === 'deposito' ? '+' : ''}${fm(m.monto)}</b></div>`).join('') : '<div class="sub" style="margin-top:6px;">Todavía nada.</div>'}
+            <div class="sub" style="margin-top:8px;">Este link vence el ${esc(info.vence)}.</div>
+        </div>
+        <div class="barra"><div class="t"><span>Total del gasto</span><span id="total">0,00 Bs</span></div><button class="btn btn-ok" id="enviar">Enviar a Rubik</button></div>`;
+        pintarRenglones();
+        $('agregar').onclick = () => { renglones.push({ detalle: '', cantidad: '1', unidad: 'und', precio: '' }); pintarRenglones(); guardarBorrador(); };
+        $('proveedor').oninput = guardarBorrador; $('fecha').onchange = guardarBorrador;
+        $('foto').onchange = leerFoto;
+        $('enviar').onclick = enviar;
+    }
+    function pintarRenglones() {
+        $('renglones').innerHTML = renglones.map((r, i) => `<div class="renglon">
+            ${renglones.length > 1 ? `<button class="quitar" data-i="${i}" aria-label="Quitar">×</button>` : ''}
+            <input data-i="${i}" data-k="detalle" placeholder="Qué compraste (ej. tornillos 2&quot;)" value="${esc(r.detalle)}">
+            <div class="fila" style="font-size:10px;font-weight:800;color:var(--gray);text-transform:uppercase;margin-top:8px;"><span>Cantidad</span><span>Unidad</span><span>Precio c/u (Bs)</span></div>
+            <div class="fila" style="margin-top:2px;">
+                <input data-i="${i}" data-k="cantidad" inputmode="decimal" placeholder="Cant." value="${esc(r.cantidad)}">
+                <input data-i="${i}" data-k="unidad" placeholder="Unidad" value="${esc(r.unidad)}">
+                <input data-i="${i}" data-k="precio" inputmode="decimal" placeholder="Precio c/u" value="${esc(r.precio)}">
+            </div>
+            <div class="sub-r" id="sub-${i}">${fm(num(r.cantidad) * num(r.precio))} Bs</div></div>`).join('');
+        $('renglones').querySelectorAll('input').forEach((el) => {
+            el.oninput = () => { const i = +el.dataset.i; renglones[i][el.dataset.k] = el.value; $('sub-' + i).textContent = fm(num(renglones[i].cantidad) * num(renglones[i].precio)) + ' Bs'; total(); guardarBorrador(); };
+        });
+        $('renglones').querySelectorAll('.quitar').forEach((el) => { el.onclick = () => { renglones.splice(+el.dataset.i, 1); pintarRenglones(); guardarBorrador(); }; });
+        total();
+    }
+    function total() { const t = renglones.reduce((s, r) => s + num(r.cantidad) * num(r.precio), 0); $('total').textContent = fm(t) + ' Bs'; return t; }
+
+    // Foto: se achica en el teléfono (los recibos pesan mucho y los datos móviles son caros)
+    function leerFoto() {
+        const f = $('foto').files[0]; foto = null; $('foto-prev').style.display = 'none';
+        if (!f) return;
+        const fr = new FileReader();
+        fr.onload = () => {
+            if (f.type === 'application/pdf') { foto = { datos_base64: String(fr.result).split(',')[1], mime: 'application/pdf' }; return; }
+            const img = new Image();
+            img.onload = () => {
+                const max = 1600, k = Math.min(1, max / Math.max(img.width, img.height));
+                const c = document.createElement('canvas'); c.width = Math.round(img.width * k); c.height = Math.round(img.height * k);
+                c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+                const url = c.toDataURL('image/jpeg', 0.75);
+                foto = { datos_base64: url.split(',')[1], mime: 'image/jpeg' };
+                $('foto-prev').src = url; $('foto-prev').style.display = 'block';
+            };
+            img.src = fr.result;
+        };
+        fr.readAsDataURL(f);
+    }
+
+    async function enviar() {
+        const items = renglones.filter((r) => r.detalle.trim() || num(r.precio) > 0);
+        for (let i = 0; i < items.length; i++) {
+            const r = items[i];
+            if (!r.detalle.trim()) return alert(`Falta qué compraste en el renglón ${i + 1}.`);
+            if (!(num(r.cantidad) > 0) || !(num(r.precio) > 0)) return alert(`Revisá la cantidad y el precio de "${r.detalle.trim()}".`);
+        }
+        if (!items.length) return alert('Cargá al menos una cosa que compraste.');
+        const t = total();
+        if (!confirm(`¿Enviar este gasto de ${fm(t)} Bs a Rubik?${foto ? '' : '\n\n(Sin foto del recibo)'}`)) return;
+        clave = clave || ('link-' + (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2)));
+        const btn = $('enviar'); btn.disabled = true; btn.textContent = 'Enviando…';
+        try {
+            await api({ accion: 'gasto', idempotencia: clave, fecha: $('fecha').value, proveedor: $('proveedor').value.trim() || undefined, foto,
+                items: items.map((r) => ({ detalle: r.detalle.trim(), cantidad: num(r.cantidad), unidad: r.unidad.trim() || 'und', precio: num(r.precio) })) });
+        } catch (e) { btn.disabled = false; btn.textContent = 'Enviar a Rubik'; return alert('No se envió: ' + e.message); }
+        clave = null; renglones = []; foto = null;
+        try { localStorage.removeItem(BORRADOR); } catch (e) { /* nada */ }
+        info = await api({ accion: 'info' });
+        pintar(`<div class="aviso ok">✅ Enviado: ${fm(t)} Bs. Queda <b>por aprobar</b> hasta que Rubik lo revise.</div>`);
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    (async function () {
+        if (!token) { $('app').innerHTML = '<div class="aviso err">Este link está incompleto. Pedile el link a Rubik de nuevo.</div>'; return; }
+        try { info = await api({ accion: 'info' }); pintar(); }
+        catch (e) { $('app').innerHTML = `<div class="aviso err">${esc(e.message)}</div>`; }
+    })();
+})();
+</script>
+</body>
+</html>

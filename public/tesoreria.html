@@ -31,7 +31,7 @@
     <script src="/js/firecache.js?v=7"></script>
     <script src="/js/auth-guard.js?v=3"></script>
     <script src="/js/compras-api.js?v=2"></script>
-    <script src="/js/operaciones-api.js?v=3"></script>
+    <script src="/js/operaciones-api.js?v=4"></script>
     <script src="/js/pdf-rendicion.js?v=1"></script>
     <script src="/js/viewmode.js?v=1"></script>
 
@@ -4505,6 +4505,7 @@ window.RubikRendiciones = (function () {
                 <button class="btn-action" style="flex:1;background:var(--blue);" onclick="RubikRendiciones.form('gasto')"><i class="ph-bold ph-receipt"></i> Cargar gasto</button>
                 <button class="btn-action" style="flex:1;background:var(--card);color:var(--blue);border:1px solid var(--blue);" onclick="RubikRendiciones.pdf()"><i class="ph-bold ph-file-pdf"></i> PDF</button>
             </div>
+            <button class="btn-action" style="margin-top:8px;background:var(--card);color:var(--green);border:1px dashed var(--green);" onclick="RubikOps.linkRendicion(RubikRendiciones.actual()).catch(e => alert(e.message))"><i class="ph-bold ph-link"></i> Mandarle link para rendir (sin app)</button>
             <div id="rd-form"></div>
         </div>
         <div class="section-title"><i class="ph-bold ph-list-dashes"></i> Movimientos</div>
@@ -4577,7 +4578,7 @@ window.RubikRendiciones = (function () {
     }
     const _sw = window.switchMainTab;
     window.switchMainTab = function (tabId, btn) { _sw(tabId, btn); if (tabId === 'rendiciones') cargar(); };
-    return { cargar, elegir, verPersona, form, guardar, decidir, anular, pdf };
+    return { cargar, elegir, verPersona, form, guardar, decidir, anular, pdf, actual: () => actual };
 })();
 </script>
 </body>

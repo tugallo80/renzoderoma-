@@ -30,7 +30,7 @@
     <script src="/js/firecache.js?v=7"></script>
     <script src="/js/auth-guard.js?v=3"></script>
     <script src="/js/compras-api.js?v=1"></script>
-    <script src="/js/operaciones-api.js?v=3"></script>
+    <script src="/js/operaciones-api.js?v=4"></script>
 
     <style>
         :root { --bg: #f4f4f7; --card: #fff; --text: #1a1a1a; --blue: #007aff; --green: #34c759; --red: #ff3b30; --orange: #ff9500; --purple: #af52de; --gray: #8e8e93; --border: #d1d1d6; }
@@ -1452,6 +1452,7 @@ window.RubikRendProy = (function () {
                     <button class="btn-act b-pay" onclick="RubikRendProy.form('${esc(wid)}','entregar')"><i class="ph-bold ph-arrow-up-right"></i> Entregar</button>
                     <button class="btn-act b-pdf" onclick="RubikRendProy.form('${esc(wid)}','gasto')"><i class="ph-bold ph-receipt"></i> Cargar gasto</button>
                     <button class="btn-act b-pdf" onclick="RubikRendProy.pdf('${esc(wid)}')"><i class="ph-bold ph-file-pdf"></i> PDF</button></div>
+                <button class="btn-act b-pay" style="width:100%;margin-bottom:8px;" onclick="RubikOps.linkRendicion('${esc(wid)}', '${esc(cidP)}', '${esc(pidP)}').catch(e => alert(e.message))"><i class="ph-bold ph-link"></i> Mandarle link para rendir (sin app)</button>
                 <div id="rdp-form-${esc(wid)}"></div>
                 <div class="pay-history" style="margin-top:5px;padding-top:0;border:none;">${movs || '<div style="color:var(--gray);font-size:11px;font-style:italic;">Sin plata para gastos en este proyecto.</div>'}</div>` : ''}
         </div>`;

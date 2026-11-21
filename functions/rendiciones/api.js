@@ -17,6 +17,9 @@
  *   registrar_gasto {persona, monto, concepto, fecha?, cid?, pid?, proveedor?, foto?}   (via whatsapp del trabajador → pendiente)
  *   aprobar / rechazar {persona, id, motivo?}                      (gastos pendientes)
  *   anular         {persona, tipo: deposito|gasto, id, motivo}
+ *   crear_link     {persona, cid?, pid?, dias?}  → link personal a rendir.html (mini app sin login) · revocar_link {id} · links {persona}
+ * Gastos con detalle: items [{detalle, cantidad, unidad, precio}] → el monto es la suma (subtotal = cantidad × precio).
+ * El link (functions/rendiciones/link.js) guarda solo el hash del token en /rendicion_links (cerrado a la app).
  * Escrituras idempotentes, con quién y cuándo; nada se borra.
  */
 const crypto = require("crypto");
@@ -28,6 +31,7 @@ const NO_CUENTAN = ["rechazado", "anulado"];
 
 const RUTAS = [
     /^caja_chica(\/|$)/,
+    /^rendicion_links(\/|$)/,
     /^personal$/,
     /^personal\/[^/]+\/(nombre|telefono)$/,
     /^proyectos\/[^/]+\/[^/]+\/nombre$/,
@@ -153,10 +157,26 @@ async function entregar(almacen, b, quien) {
     });
 }
 
+/** Renglones del gasto (mini app del link o la pantalla): {desc, cant, und, pu, monto} como ya los muestra la app del trabajador. */
+function limpiarItems(items) {
+    if (items == null) return null;
+    if (!Array.isArray(items) || !items.length) falla("El detalle está vacío.");
+    if (items.length > 60) falla("Máximo 60 renglones.");
+    return items.map((it, n) => {
+        const desc = texto(it && (it.detalle || it.desc), 120) || falla(`Renglón ${n + 1}: falta el detalle.`);
+        const cant = numero(it.cantidad != null ? it.cantidad : it.cant, `Cantidad del renglón ${n + 1}`);
+        const pu = numero(it.precio != null ? it.precio : it.pu, `Precio del renglón ${n + 1}`);
+        return { desc, cant, und: texto(it.unidad || it.und, 20) || "und", pu, monto: r2(cant * pu) };
+    });
+}
+
 async function registrarGasto(almacen, b, quien) {
     const p = await persona(almacen, b);
-    const monto = numero(b.monto, "Monto");
-    const concepto = texto(b.concepto, 200);
+    const items = limpiarItems(b.items);
+    const monto = items ? r2(items.reduce((s, it) => s + it.monto, 0)) : numero(b.monto, "Monto");
+    if (monto <= 0) falla("El total tiene que ser mayor a cero.");
+    if (monto > 200000) falla("El total es demasiado alto para una rendición: revisalo.");
+    const concepto = texto(b.concepto, 200) || (items ? items.map((it) => it.desc).join(", ").slice(0, 200) : "");
     if (!concepto) falla("Falta en qué se gastó (concepto).");
     const f = fecha(b.fecha, "Fecha", almacen.ahora());
     // lo que carga el trabajador queda para que el dueño lo apruebe; lo que carga el dueño (app o su WhatsApp) va aprobado
@@ -165,7 +185,7 @@ async function registrarGasto(almacen, b, quien) {
         const proy = await proyectoOpcional(almacen, b);
         const k = almacen.nuevaClave();
         const comprobante = b.foto ? await subirFoto(almacen, p.wid, f, k, b.foto) : null;
-        const g = { monto, monto_total: monto, fecha: f, concepto, proveedor: texto(b.proveedor, 120) || null,
+        const g = { monto, monto_total: monto, fecha: f, concepto, proveedor: texto(b.proveedor, 120) || null, items: items || null,
             proyecto: proy ? proy.nombre : null, cid: proy ? proy.cid : null, pid: proy ? proy.pid : null, comprobante,
             estado: esDueno ? "aprobado" : "pendiente", registrado_por: quien, timestamp: almacen.ahora(),
             ...(esDueno ? { aprobado_por: { por: quien, fecha: almacen.ahora() } } : {}) };
@@ -213,8 +233,52 @@ async function anular(almacen, b, quien) {
     });
 }
 
-const LECTURA = { estado, resumen, proyecto };
-const ESCRITURA = { entregar, registrar_gasto: registrarGasto, aprobar: (a, b, q) => decidir(a, b, q, true), rechazar: (a, b, q) => decidir(a, b, q, false), anular };
+// ------------------------------------------------------------------ link personal (mini app sin login)
+const hashToken = (t) => crypto.createHash("sha256").update(String(t)).digest("hex").slice(0, 40);
+const DIAS_LINK = 30;
+
+async function crearLink(almacen, b, quien) {
+    const p = await persona(almacen, b);
+    const dias = Math.min(Math.max(parseInt(b.dias, 10) || DIAS_LINK, 1), 90);
+    return C.unaVez(almacen, b.idempotencia, async () => {
+        const proy = await proyectoOpcional(almacen, b);
+        const token = crypto.randomBytes(24).toString("base64url");
+        const h = hashToken(token);
+        const vence = almacen.ahora() + dias * 86400000;
+        await almacen.escribir(`rendicion_links/${h}`, { wid: p.wid, nombre: p.nombre, cid: proy ? proy.cid : null, pid: proy ? proy.pid : null,
+            proyecto: proy ? proy.nombre : null, creado: almacen.ahora(), vence, activo: true, creado_por: quien });
+        return { ok: true, id: h, url: `https://rubikbolivia.com/rendir.html#${token}`, vence: new Date(vence).toISOString().slice(0, 10), nombre: p.nombre, proyecto: proy ? proy.nombre : null };
+    });
+}
+async function revocarLink(almacen, b, quien) {
+    const h = String(b.id || "");
+    if (!/^[a-f0-9]{40}$/.test(h)) falla("Link inválido.");
+    const l = await almacen.leer(`rendicion_links/${h}`);
+    if (!l) falla("No existe ese link.", 404);
+    await almacen.actualizarVarios({ [`rendicion_links/${h}/activo`]: false, [`rendicion_links/${h}/revocado`]: { por: quien, fecha: almacen.ahora() } });
+    return { ok: true, id: h };
+}
+async function links(almacen, b) {
+    const p = await persona(almacen, b);
+    const ahora = almacen.ahora();
+    const ls = valores(await almacen.leer("rendicion_links")).filter(([, l]) => l.wid === p.wid)
+        .map(([h, l]) => ({ id: h, proyecto: l.proyecto || null, creado: new Date(l.creado).toISOString().slice(0, 10), vence: new Date(l.vence).toISOString().slice(0, 10),
+            vigente: !!l.activo && l.vence > ahora, usado: l.usado || 0 }))
+        .sort((a, z) => String(z.creado).localeCompare(String(a.creado)));
+    return { worker_id: p.wid, nombre: p.nombre, links: ls };
+}
+/** Para el link: valida el token y devuelve {wid, nombre, cid, pid, proyecto, h}. */
+async function porToken(almacen, token) {
+    if (!/^[A-Za-z0-9_-]{20,64}$/.test(String(token || ""))) falla("Link inválido.", 401);
+    const h = hashToken(token);
+    const l = await almacen.leer(`rendicion_links/${h}`);
+    if (!l || !l.activo) falla("Este link ya no está activo. Pedile uno nuevo a Rubik.", 401);
+    if (l.vence <= almacen.ahora()) falla("Este link venció. Pedile uno nuevo a Rubik.", 401);
+    return Object.assign({ h }, l);
+}
+
+const LECTURA = { estado, resumen, proyecto, links };
+const ESCRITURA = { crear_link: crearLink, revocar_link: revocarLink, entregar, registrar_gasto: registrarGasto, aprobar: (a, b, q) => decidir(a, b, q, true), rechazar: (a, b, q) => decidir(a, b, q, false), anular };
 
 function atender(almacen, b, quienCrudo, viaPorDefecto) {
     return C.responder("rendiciones", async () => {
@@ -225,4 +289,4 @@ function atender(almacen, b, quienCrudo, viaPorDefecto) {
     });
 }
 
-module.exports = { atender, calcular, RUTAS, ARCHIVOS, MEDIOS };
+module.exports = { atender, calcular, porToken, estado, registrarGasto, hashToken, RUTAS, ARCHIVOS, MEDIOS };

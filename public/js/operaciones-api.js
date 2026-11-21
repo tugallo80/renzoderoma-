@@ -46,12 +46,26 @@
             fr.readAsDataURL(file);
         });
     }
+    /** Crea el link personal para rendir (rendir.html) y ofrece mandarlo por WhatsApp o copiarlo. */
+    async function linkRendicion(wid, cid, pid) {
+        const r = await llamar('rendiciones', { accion: 'crear_link', worker_id: wid, cid: cid || undefined, pid: pid || undefined });
+        let tel = '';
+        try { tel = String((await firebase.database().ref('personal/' + wid + '/telefono').once('value')).val() || '').replace(/\D/g, ''); } catch (e) { tel = ''; }
+        if (tel && tel.length === 8) tel = '591' + tel;
+        const msg = `Hola ${r.nombre}, este es tu link para rendir los gastos${r.proyecto ? ' de ' + r.proyecto : ''} (cargá cada compra con su precio y la foto del recibo): ${r.url}\nVence el ${r.vence}.`;
+        try { await navigator.clipboard.writeText(r.url); } catch (e) { /* sin portapapeles */ }
+        if (confirm(`Link creado y copiado (vence el ${r.vence}).\n\n¿Abrir WhatsApp para mandárselo a ${r.nombre}${tel ? '' : ' (no tiene teléfono cargado: elegís el chat)'}?`)) {
+            window.open('https://wa.me/' + (tel || '') + '?text=' + encodeURIComponent(msg), '_blank');
+        } else { window.prompt('Copiá el link:', r.url); }
+        return r;
+    }
     function dataUrlABase64(u) { const m = /^data:([^;,]+)?;base64,(.*)$/.exec(String(u || '')); return m ? { datos_base64: m[2], mime: m[1] || null } : null; }
     global.RubikOps = {
         licitaciones: (accion, datos) => llamar('licitaciones', Object.assign({ accion }, datos)),
         proyectos: (accion, datos) => llamar('proyectos', Object.assign({ accion }, datos)),   // archivar / desarchivar / finanzas
         cobros: (accion, datos) => llamar('cobros', Object.assign({ accion }, datos)),         // cobros y facturas de venta
         rendiciones: (accion, datos) => llamar('rendiciones', Object.assign({ accion }, datos)), // caja chica: entregas, gastos, aprobar
+        linkRendicion,
         archivoABase64, dataUrlABase64, nuevaClave: clave,
     };
 })(window);

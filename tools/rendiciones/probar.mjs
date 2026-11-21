@@ -5,6 +5,7 @@ const require = createRequire(import.meta.url);
 const R = require('../../functions/rendiciones/api.js');
 const F = require('../../functions/proyectos/finanzas.js');
 const D = require('../../functions/documentos/index.js');
+const LINK = require('../../functions/rendiciones/link.js');
 const { crearAlmacenMemoria } = require('../agente/almacen-memoria.cjs');
 
 const DUENO = { uid: 'renzo', rol: 'dueño', nombre: 'Renzo', via: 'app' };
@@ -86,6 +87,37 @@ await prueba('por proyecto: Compras del proyecto ve solo la plata de ese proyect
     const pdf = await D.generar(al, { tipo: 'rendicion', worker_id: 'wPollo', cid: 'cliA', pid: 'proyB' });
     assert.equal(pdf.nombre, 'Rendicion_Pollo_Demo_Otro_Stand.pdf');
     assert.equal((await R.atender(al, { accion: 'proyecto', cid: 'cliA' }, DUENO)).status, 400);
+});
+
+await prueba('link para rendir sin app: info, gasto con renglones (pendiente, en su proyecto), reintento, revocar, vencido', async () => {
+    const al = nuevo();
+    ok(await op(al, { accion: 'entregar', worker_id: 'wPollo', monto: 500, cid: 'cliA', pid: 'proyA' }));
+    const l = ok(await op(al, { accion: 'crear_link', worker_id: 'wPollo', cid: 'cliA', pid: 'proyA' }));
+    assert.match(l.url, /^https:\/\/rubikbolivia\.com\/rendir\.html#[A-Za-z0-9_-]{20,}$/);
+    const token = l.url.split('#')[1];
+    const enLaBase = JSON.stringify(al.datos.rendicion_links);
+    assert.ok(!enLaBase.includes(token), 'solo se guarda el hash del token');
+    const info = ok(await LINK.atender(al, { token, accion: 'info' }));
+    assert.equal(info.nombre, 'Pollo Demo'); assert.equal(info.proyecto, 'Stand Demo'); assert.equal(info.totales.entregado, 500);
+    const g = { token, accion: 'gasto', idempotencia: 'link-abc123', proveedor: 'Ferretería X', fecha: '2026-11-20',
+        items: [{ detalle: 'Tornillos 2"', cantidad: 100, unidad: 'und', precio: 0.5 }, { detalle: 'Pintura', cantidad: 2, unidad: 'gal', precio: 85 }],
+        foto: { datos_base64: JPG } };
+    const r = ok(await LINK.atender(al, g));
+    assert.equal(r.estado, 'pendiente'); assert.equal(r.saldo_en_mano, 500 - 30 - 220);
+    const gasto = al.datos.caja_chica.wPollo.gastos[r.id];
+    assert.equal(gasto.monto, 220); assert.equal(gasto.pid, 'proyA'); assert.equal(gasto.items[0].monto, 50); assert.equal(gasto.registrado_por.via, 'link');
+    assert.ok(gasto.comprobante);
+    assert.equal(ok(await LINK.atender(al, g)).repetida, true, 'reintentar no duplica');
+    assert.equal(al.datos.rendicion_links[l.id].usado, 1);
+    assert.equal((await LINK.atender(al, { ...g, idempotencia: 'link-otro1', items: [{ detalle: 'x', cantidad: 1, precio: 0 }] })).status, 400, 'precio cero no');
+    assert.equal((await LINK.atender(al, { token: 'no-existe-este-token-123', accion: 'info' })).status, 401);
+    ok(await op(al, { accion: 'revocar_link', id: l.id }));
+    assert.equal((await LINK.atender(al, { token, accion: 'info' })).status, 401, 'revocado');
+    const l2 = ok(await op(al, { accion: 'crear_link', worker_id: 'wPollo', dias: 1 }));
+    al.datos.rendicion_links[l2.id].vence = 1;
+    assert.equal((await LINK.atender(al, { token: l2.url.split('#')[1], accion: 'info' })).status, 401, 'vencido');
+    const ls = ok(await R.atender(al, { accion: 'links', worker_id: 'wPollo' }, DUENO));
+    assert.equal(ls.links.length, 2); assert.ok(ls.links.every((x) => !x.vigente));
 });
 
 await prueba('PDF de rendición (pdf_documento tipo rendicion)', async () => {

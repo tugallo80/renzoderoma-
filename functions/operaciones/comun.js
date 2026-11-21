@@ -10,7 +10,7 @@ const crypto = require("crypto");
 
 const ID = /^[A-Za-z0-9_-]{1,64}$/;
 const FECHA = /^\d{4}-\d{2}-\d{2}$/;
-const VIAS = ["app", "whatsapp", "claude", "agente", "migracion"];
+const VIAS = ["app", "whatsapp", "claude", "agente", "migracion", "link"];   // link: mini app sin login (rendir.html)
 const EN_CURSO_MS = 2 * 60000;
 
 class ErrorPedido extends Error { constructor(msg, status) { super(msg); this.status = status || 400; } }

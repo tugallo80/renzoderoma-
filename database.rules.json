@@ -95,6 +95,10 @@
       ".write": false,
       ".indexOn": ["cid", "fecha"]
     },
+    "rendicion_links": {
+      ".read":  false,
+      ".write": false
+    },
     "operaciones_idem": {
       ".read":  false,
       ".write": false
