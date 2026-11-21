@@ -44,6 +44,25 @@ Las personas que tienen plata para gastos del proyecto pero no tienen contrato e
 - Servidor: `proyecto {cid, pid}` (por persona) y `estado {…, cid, pid}` (una persona, solo ese proyecto). Los registros
   viejos sin `pid` se asignan por nombre del proyecto, como en `finanzas.js`. El PDF con proyecto dice "solo este proyecto".
 
+### Link para rendir sin app (mientras no haya grupos de WhatsApp con Kay)
+
+- El dueño toca **"Mandarle link para rendir"** en Compras del proyecto (link de ese proyecto) o en Tesorería → Rendiciones
+  (link general). Se crea un link personal, se copia y se abre WhatsApp con el mensaje (al número de Personal, si lo tiene).
+  Kay también lo puede crear con `rendicion_link`.
+- `public/rendir.html` es una mini app sin login, para el celular:
+  - muestra el saldo de la persona (recibido, rendido, por rendir);
+  - se carga cada compra en renglones (detalle, cantidad, unidad, precio c/u), con subtotal y total automáticos;
+  - se agrega dónde se compró, la fecha y la foto del recibo, que se achica en el teléfono;
+  - lleva el historial de lo que ya mandó, con su estado;
+  - guarda un borrador por si se cierra.
+- Lo que envía queda **por aprobar**, en su proyecto si el link es de un proyecto, con `via: link`.
+- **Seguridad:**
+  - El token va en el `#` del link, así no llega a los registros del hosting.
+  - En la base solo se guarda su hash (`/rendicion_links`, cerrado a la app).
+  - El link vence a los 30 días (configurable hasta 90) y se puede revocar (`revocar_link`).
+  - Solo deja ver y cargar los gastos de esa persona.
+- `functions/rendiciones/link.js` → `/api/rendir` (`rendirLink`, público, valida el token).
+
 ## PDF
 
 `public/js/pdf-rendicion.js` (`PdfRendicion`, copia en `functions/pdf/compartido/`) tiene el resumen, los movimientos con
@@ -55,4 +74,4 @@ su estado y el anexo de recibos. El servidor lo genera con `pdf_documento { tipo
 `rendicion_rechazar`, `rendicion_anular` (escritura, con `registrado_por`; el rol decide pendiente o aprobado).
 Del lado de Kay (desarrollo-personal) faltan las herramientas y reconocer al trabajador por su número.
 
-Pruebas: `tools/rendiciones` 5/5, `tools/documentos` 8/8.
+Pruebas: `tools/rendiciones` 6/6, `tools/documentos` 8/8.

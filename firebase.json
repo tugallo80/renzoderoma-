@@ -152,6 +152,13 @@
         }
       },
       {
+        "source": "/api/rendir",
+        "function": {
+          "functionId": "rendirLink",
+          "region": "us-central1"
+        }
+      },
+      {
         "source": "/api/licitaciones",
         "function": {
           "functionId": "licitacionesApi",

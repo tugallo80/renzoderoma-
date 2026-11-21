@@ -550,6 +550,12 @@ const ACCIONES = {
         descripcion: "Todas las personas con plata entregada o gastos: saldo en mano y gastos por aprobar → { personas: [...], total_en_mano, gastos_por_aprobar }.",
         ejecutar: (p) => rendiciones("resumen", p),
     },
+    rendicion_link: {
+        soloLectura: false,
+        descripcion: "Crea el link personal para que alguien rinda sus gastos desde el celular sin app (mini app: detalle, cantidad, unidad, precio y foto del recibo; queda por aprobar) "
+            + "{ idempotencia, worker_id | telefono, cid?, pid? (link de un proyecto), dias? (30), registrado_por } → { url, vence, nombre, proyecto }. Kay se lo manda a la persona con el sí del dueño.",
+        ejecutar: (p) => rendiciones("crear_link", p),
+    },
     rendicion_entregar: {
         soloLectura: false,
         descripcion: "Registra plata que el dueño le dio a alguien para gastos { idempotencia, worker_id | telefono, monto, fecha?, concepto?, cid?, pid?, medio?: transferencia|qr|efectivo|otro, foto?, registrado_por } → { id, saldo_en_mano }. Con el sí del dueño.",
