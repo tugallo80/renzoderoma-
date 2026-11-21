@@ -45,7 +45,9 @@
             var k = (t.originIdx != null) ? String(t.originIdx) : '_' + String(t.task_name || '').slice(0, 8);
             if (!groups[k]) {
                 var it = (t.originIdx != null) ? (allPItems[t.originIdx] || null) : null;
-                groups[k] = { idx: t.originIdx, label: t.parent_desc || t.task_name || 'Ítem', subtotal: 0, item: it, imgs: [], tareas: [], fechaEntrega: '' };
+                // el ítem entero (originType main) trae parent_desc = 'ÍTEM PRINCIPAL': el título es el nombre del ítem
+                var titulo = (t.parent_desc && t.parent_desc !== 'ÍTEM PRINCIPAL') ? t.parent_desc : (it && it.desc) || t.task_name || t.parent_desc;
+                groups[k] = { idx: t.originIdx, label: titulo || 'Ítem', subtotal: 0, item: it, imgs: [], tareas: [], fechaEntrega: '' };
                 groupOrder.push(k);
             }
             groups[k].subtotal += parseFloat(t.subtotal || 0);
@@ -105,7 +107,7 @@
                 theme: 'striped',
                 headStyles: { fillColor: [0, 122, 255], textColor: 255, fontStyle: 'bold', fontSize: 10, cellPadding: 4 },
                 footStyles: { fillColor: [20, 20, 20], textColor: 255, fontStyle: 'bold', fontSize: 11, cellPadding: 5 },
-                columnStyles: { 0: { cellWidth: 10, halign: 'center' }, 1: { cellWidth: 148 }, 2: { cellWidth: 24, halign: 'right', fontStyle: 'bold' } },
+                columnStyles: { 0: { cellWidth: 10, halign: 'center' }, 1: { cellWidth: 138 }, 2: { cellWidth: 34, halign: 'right', fontStyle: 'bold' } },   // 34 mm: el total en una línea
                 styles: { fontSize: 9, cellPadding: 4, overflow: 'linebreak' },
                 margin: { left: mL, right: mR },
             });
