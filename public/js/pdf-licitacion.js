@@ -117,6 +117,62 @@
         var licMode = lic.lic_mode || o.licMode || 'mo';
         var isLlm = (licMode === 'llave_en_mano');
         var nombreDe = function (m) { return cleanTxt(isLlm ? (m.task_name || m.desc || '') : m.d); };
+        // Detalle de mano de obra / ítem completo (no llave en mano): lo CONTRATADO con su precio acordado y los materiales
+        // solo como referencia de cantidades, SIN precios (son costos internos del presupuesto de Rubik, no del contratista).
+        var hojaCont = function () {
+            doc.addPage();
+            doc.setFillColor(0, 122, 255); doc.rect(0, 0, W, 30, 'F');
+            doc.setTextColor(255, 255, 255); doc.setFont('helvetica', 'bold'); doc.setFontSize(16);
+            doc.text('PROPUESTA DETALLADA (cont.)', W / 2, 13, { align: 'center' });
+            doc.setFontSize(9); doc.setFont('helvetica', 'normal');
+            doc.text(cleanTxt(pName), W / 2, 21, { align: 'center' });
+            doc.setTextColor(0, 0, 0);
+            return 36;
+        };
+        var detalleContratado = function (g, it, matSrc, itemCant, y) {
+            var tipos = g.tareas.map(function (t) { return t.originType; });
+            var incluyeMat = tipos.some(function (x) { return x === 'main' || x === 'venta'; });
+            var matEnContrato = tipos.indexOf('venta_mat') >= 0;   // los materiales tildados ya van en lo contratado
+            var matRef = matEnContrato ? [] : matSrc;
+            if (y + 14 + (g.tareas.length + matRef.length) * 5 + 20 > 270) y = hojaCont();
+            var lblD = cleanTxt(g.label).substring(0, 85);
+            doc.setFillColor(20, 20, 20); doc.rect(mL - 2, y, usableW + 4, 10, 'F');
+            doc.setTextColor(255, 255, 255); doc.setFont('helvetica', 'bold'); doc.setFontSize(9);
+            doc.text(lblD, mL, y + 7);
+            doc.text(fM(g.subtotal) + ' Bs', W - mR, y + 7, { align: 'right' });
+            doc.setTextColor(0, 0, 0); y += 14;
+
+            doc.setFont('helvetica', 'bold'); doc.setFontSize(7.5); doc.setTextColor(200, 100, 0);
+            doc.text('TRABAJO CONTRATADO', mL, y); y += 3; doc.setTextColor(0, 0, 0);
+            doc.autoTable({
+                startY: y, head: [['Trabajo', 'Cant.', 'U.', 'P.U.', 'Subtotal']],
+                body: g.tareas.map(function (t) { return [cleanTxt(t.task_name || t.desc || '').substring(0, 70), parseFloat(t.cant || 0).toFixed(2), t.und || 'u', fM(t.pu) + ' Bs', fM(t.subtotal) + ' Bs']; }),
+                theme: 'plain', headStyles: { fillColor: [255, 245, 225], fontSize: 7, cellPadding: 2, fontStyle: 'bold' },
+                columnStyles: { 0: { cellWidth: 85 }, 1: { cellWidth: 18, halign: 'right' }, 2: { cellWidth: 12 }, 3: { cellWidth: 22, halign: 'right' }, 4: { cellWidth: 25, halign: 'right' } },
+                styles: { fontSize: 7.5, cellPadding: 2, overflow: 'linebreak' }, margin: { left: mL, right: mR }, tableWidth: usableW,
+            });
+            y = doc.lastAutoTable.finalY + 3;
+
+            if (matRef.length > 0) {
+                doc.setFont('helvetica', 'bold'); doc.setFontSize(7.5); doc.setTextColor(0, 100, 200);
+                doc.text(incluyeMat ? 'MATERIALES INCLUIDOS EN EL TRABAJO (referencia de cantidades)' : 'MATERIALES QUE ENTREGA RUBIK (referencia de cantidades)', mL, y);
+                y += 3; doc.setTextColor(0, 0, 0);
+                doc.autoTable({
+                    startY: y, head: [['Material', 'Cant.', 'U.']],
+                    body: matRef.map(function (m) { return [cleanTxt(m.d).substring(0, 80), (parseFloat(m.q || 0) * itemCant).toFixed(2), m.u || '']; }),
+                    theme: 'plain', headStyles: { fillColor: [230, 240, 255], fontSize: 7, cellPadding: 2, fontStyle: 'bold' },
+                    columnStyles: { 0: { cellWidth: 130 }, 1: { cellWidth: 20, halign: 'right' }, 2: { cellWidth: 12 } },
+                    styles: { fontSize: 7.5, cellPadding: 2, overflow: 'linebreak' }, margin: { left: mL, right: mR }, tableWidth: usableW,
+                });
+                y = doc.lastAutoTable.finalY + 3;
+            }
+            doc.setFillColor(245, 245, 247); doc.rect(mL - 2, y, usableW + 4, 8, 'F');
+            doc.setFont('helvetica', 'bold'); doc.setFontSize(7.5); doc.setTextColor(20, 20, 20);
+            doc.text('TOTAL ÍTEM: ' + fM(g.subtotal) + ' Bs', W - mR, y + 5.5, { align: 'right' });
+            doc.setTextColor(0, 0, 0);
+            return y + 14;
+        };
+
         if (modo === 'detalle') {
             var y = 44;
             var grandTotalMo = 0, grandTotalMat = 0;
@@ -143,7 +199,9 @@
                             ? (checkedMatIdxs.size > 0 ? _apuMatArrFull.filter(function (m, i) { return checkedMatIdxs.has(i) && m.d && !m.es_arte; }) : _apuMatArrFull.filter(function (m) { return m.d && !m.es_arte; }))
                             : []));
 
-                // Nueva página si no cabe
+                if (!isLlm) { y = detalleContratado(g, it, matSrc, prodMo.length > 0 ? 1 : parseFloat((it && it.cant) || 1), y); continue; }
+
+                // Nueva página si no cabe (llave en mano: materiales y mano de obra con los precios acordados con el contratista)
                 var minH = 14 + (matSrc.length + moSrc.length) * 5 + 20;
                 if (y + minH > 270) {
                     doc.addPage();
@@ -230,7 +288,16 @@
                 y += 4;
             }
 
-            // Pie con desglose MO / Mat / Total
+            // Pie: llave en mano con desglose MO / Mat; el resto, solo el total contratado
+            if (!isLlm) {
+                if (y + 15 > 272) { doc.addPage(); y = 20; }
+                doc.setFillColor(20, 20, 20); doc.rect(mL - 2, y, usableW + 4, 13, 'F');
+                doc.setFont('helvetica', 'bold'); doc.setTextColor(255, 255, 255); doc.setFontSize(12);
+                doc.text('TOTAL CONTRATADO', mL + 2, y + 9.5);
+                doc.text(fM(totalFinal) + ' Bs', W - mR, y + 9.5, { align: 'right' });
+                doc.setTextColor(0, 0, 0);
+            }
+            if (isLlm) {
             if (y + 34 > 272) { doc.addPage(); y = 20; }
             doc.setFillColor(255, 245, 225); doc.rect(mL - 2, y, usableW + 4, 9, 'F');
             doc.setDrawColor(210, 210, 215); doc.setLineWidth(0.2);
@@ -250,6 +317,7 @@
             doc.text('TOTAL GENERAL', mL + 2, y + 9.5);
             doc.text(fM(totalFinal) + ' Bs', W - mR, y + 9.5, { align: 'right' });
             doc.setTextColor(0, 0, 0);
+            }
         }
 
         // ════════════ ANEXOS — ítem por ítem: descripción + materiales + imágenes ════════════
