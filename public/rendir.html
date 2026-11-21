@@ -91,11 +91,21 @@
                 <div class="fila" style="grid-template-columns:1fr 1fr;"><input id="fac-nit" inputmode="numeric" placeholder="NIT del proveedor"><input id="fac-nro" inputmode="numeric" placeholder="Nro. de factura"></div>
             </div>
             <label>Foto del recibo o factura (si tenés)</label>
-            <input id="foto" type="file" accept="image/*,application/pdf">
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;">
+                <button type="button" class="btn btn-sec" style="padding:10px 4px;font-size:14px;" onclick="document.getElementById('foto-cam').click()">📷 Cámara</button>
+                <button type="button" class="btn btn-sec" style="padding:10px 4px;font-size:14px;" onclick="document.getElementById('foto-gal').click()">🖼️ Galería</button>
+                <button type="button" class="btn btn-sec" style="padding:10px 4px;font-size:14px;" onclick="document.getElementById('foto').click()">📄 Archivo</button>
+            </div>
+            <!-- Android solo ofrece la galería si la entrada es solo de imágenes y sin "capture" -->
+            <input id="foto-cam" type="file" accept="image/*" capture="environment" style="display:none;">
+            <input id="foto-gal" type="file" accept="image/*" style="display:none;">
+            <input id="foto" type="file" accept="image/*,application/pdf" style="display:none;">
+            <div id="foto-nombre" class="sub" style="margin-top:6px;"></div>
             <img id="foto-prev" class="foto-prev" alt="">
         </div>
         <div class="card">
-            <b>Lo que ya mandaste</b>
+            <b>Movimientos</b>
+            <div class="sub">Lo que Rubik te dio para gastos (Recibido) y lo que ya rendiste.</div>
             ${info.movimientos.length ? info.movimientos.map((m) => `<div class="mov"><span>${esc(m.fecha)} · ${m.tipo === 'deposito' ? 'Recibido' : esc(m.concepto)}<br><small style="color:var(--gray);">${esc(EST[m.estado] || m.estado)}${m.motivo ? ' · ' + esc(m.motivo) : ''}</small></span><b style="color:${m.tipo === 'deposito' ? 'var(--green)' : 'var(--text)'};">${m.tipo === 'deposito' ? '+' : ''}${fm(m.monto)}</b></div>`).join('') : '<div class="sub" style="margin-top:6px;">Todavía nada.</div>'}
             <div class="sub" style="margin-top:8px;">Este link vence el ${esc(info.vence)}.</div>
         </div>
@@ -103,7 +113,7 @@
         pintarRenglones();
         $('agregar').onclick = () => { renglones.push({ detalle: '', cantidad: '1', unidad: 'und', precio: '' }); pintarRenglones(); guardarBorrador(); };
         $('proveedor').oninput = guardarBorrador; $('fecha').onchange = guardarBorrador;
-        $('foto').onchange = leerFoto;
+        ['foto', 'foto-cam', 'foto-gal'].forEach((id) => { $(id).onchange = () => leerFoto($(id)); });
         $('con-factura').onchange = () => { $('factura').style.display = $('con-factura').checked ? 'block' : 'none'; };
         $('enviar').onclick = enviar;
     }
@@ -127,9 +137,10 @@
     function total() { const t = renglones.reduce((s, r) => s + num(r.cantidad) * num(r.precio), 0); $('total').textContent = fm(t) + ' Bs'; return t; }
 
     // Foto: se achica en el teléfono (los recibos pesan mucho y los datos móviles son caros)
-    function leerFoto() {
-        const f = $('foto').files[0]; foto = null; $('foto-prev').style.display = 'none';
+    function leerFoto(entrada) {
+        const f = entrada.files[0]; foto = null; $('foto-prev').style.display = 'none'; $('foto-nombre').textContent = '';
         if (!f) return;
+        $('foto-nombre').textContent = '✓ ' + (f.type === 'application/pdf' ? f.name : 'Foto lista');
         const fr = new FileReader();
         fr.onload = () => {
             if (f.type === 'application/pdf') { foto = { datos_base64: String(fr.result).split(',')[1], mime: 'application/pdf' }; return; }
