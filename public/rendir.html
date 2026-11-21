@@ -86,6 +86,10 @@
             <button class="btn btn-sec" id="agregar">+ Agregar otra cosa</button>
             <label>Dónde compraste</label><input id="proveedor" placeholder="Ej: Ferretería El Sol" value="${esc((b && b.proveedor) || '')}">
             <label>Fecha</label><input id="fecha" type="date" value="${esc((b && b.fecha) || hoy)}">
+            <label style="display:flex;align-items:center;gap:8px;text-transform:none;font-size:14px;color:var(--text);"><input id="con-factura" type="checkbox" style="width:auto;"> Tengo factura</label>
+            <div id="factura" style="display:none;">
+                <div class="fila" style="grid-template-columns:1fr 1fr;"><input id="fac-nit" inputmode="numeric" placeholder="NIT del proveedor"><input id="fac-nro" inputmode="numeric" placeholder="Nro. de factura"></div>
+            </div>
             <label>Foto del recibo o factura (si tenés)</label>
             <input id="foto" type="file" accept="image/*,application/pdf">
             <img id="foto-prev" class="foto-prev" alt="">
@@ -100,6 +104,7 @@
         $('agregar').onclick = () => { renglones.push({ detalle: '', cantidad: '1', unidad: 'und', precio: '' }); pintarRenglones(); guardarBorrador(); };
         $('proveedor').oninput = guardarBorrador; $('fecha').onchange = guardarBorrador;
         $('foto').onchange = leerFoto;
+        $('con-factura').onchange = () => { $('factura').style.display = $('con-factura').checked ? 'block' : 'none'; };
         $('enviar').onclick = enviar;
     }
     function pintarRenglones() {
@@ -150,12 +155,17 @@
             if (!(num(r.cantidad) > 0) || !(num(r.precio) > 0)) return alert(`Revisá la cantidad y el precio de "${r.detalle.trim()}".`);
         }
         if (!items.length) return alert('Cargá al menos una cosa que compraste.');
+        let factura;
+        if ($('con-factura').checked) {
+            factura = { nit: $('fac-nit').value.replace(/\D/g, ''), nro: $('fac-nro').value.replace(/\s/g, '') };
+            if (!factura.nit || !factura.nro) return alert('Para la factura poné el NIT del proveedor y el número de factura.');
+        }
         const t = total();
         if (!confirm(`¿Enviar este gasto de ${fm(t)} Bs a Rubik?${foto ? '' : '\n\n(Sin foto del recibo)'}`)) return;
         clave = clave || ('link-' + (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2)));
         const btn = $('enviar'); btn.disabled = true; btn.textContent = 'Enviando…';
         try {
-            await api({ accion: 'gasto', idempotencia: clave, fecha: $('fecha').value, proveedor: $('proveedor').value.trim() || undefined, foto,
+            await api({ accion: 'gasto', idempotencia: clave, fecha: $('fecha').value, proveedor: $('proveedor').value.trim() || undefined, foto, factura,
                 items: items.map((r) => ({ detalle: r.detalle.trim(), cantidad: num(r.cantidad), unidad: r.unidad.trim() || 'und', precio: num(r.precio) })) });
         } catch (e) { btn.disabled = false; btn.textContent = 'Enviar a Rubik'; return alert('No se envió: ' + e.message); }
         clave = null; renglones = []; foto = null;

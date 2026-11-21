@@ -26,7 +26,7 @@ async function atender(almacen, b) {
         if (b.accion === "gasto") {
             const quien = { rol: "trabajador", nombre: l.nombre, via: "link" };
             const r = await R.registrarGasto(almacen, Object.assign({}, filtro, { idempotencia: b.idempotencia, items: b.items, fecha: b.fecha, proveedor: b.proveedor,
-                concepto: b.concepto, foto: b.foto }), C.limpiarQuien(quien, "link"));
+                concepto: b.concepto, foto: b.foto, factura: b.factura }), C.limpiarQuien(quien, "link"));
             if (!r.repetida) await almacen.escribir(`rendicion_links/${l.h}/usado`, (Number(l.usado) || 0) + 1).catch(() => {});
             return { ok: true, id: r.id, estado: r.estado, saldo_en_mano: r.saldo_en_mano, repetida: !!r.repetida };
         }

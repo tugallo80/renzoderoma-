@@ -406,6 +406,22 @@ async function rendiciones(accion, params) {
     return r.status === 200 ? { error: false, ...r.cuerpo } : { error: true, texto: (r.cuerpo && r.cuerpo.error) || `Error ${r.status}` };
 }
 
+// ── Avisos de Rubik para el dueño por WhatsApp (functions/avisos) ──
+async function avisos(accion, params) {
+    const A = require("./avisos");
+    const admin = require("firebase-admin");
+    const { crearAlmacen } = require("./agente/almacen");
+    try {
+        const r = await A[accion](crearAlmacen(admin, A.RUTAS, []), params || {});
+        console.log(`[kayApi] avisos ${accion} ok`);
+        return Object.assign({ error: false }, r);
+    } catch (e) {
+        if (e.status) return { error: true, texto: e.message };
+        console.error("[kayApi] avisos", e);
+        return { error: true, texto: "No se pudieron leer los avisos." };
+    }
+}
+
 const ACCIONES = {
     listar_proyectos_activos: {
         soloLectura: true,
@@ -549,6 +565,24 @@ const ACCIONES = {
         soloLectura: true,
         descripcion: "Todas las personas con plata entregada o gastos: saldo en mano y gastos por aprobar → { personas: [...], total_en_mano, gastos_por_aprobar }.",
         ejecutar: (p) => rendiciones("resumen", p),
+    },
+    avisos_pendientes: {
+        soloLectura: true,
+        descripcion: "Avisos de Rubik para el dueño que todavía no se le mandaron por WhatsApp { limite? } → { avisos: [{id, tipo, texto, datos, creado}], quedan }. "
+            + "Tipos: rendicion_por_aprobar (datos: worker_id, nombre, gasto_id, monto, concepto, proyecto, cid, pid, con_recibo, con_factura). "
+            + "Mandale el texto al dueño, y con su respuesta usá rendicion_aprobar / rendicion_rechazar (worker_id + id = gasto_id). Después, avisos_confirmar.",
+        ejecutar: async (p) => avisos("pendientes", p),
+    },
+    avisos_confirmar: {
+        soloLectura: false,
+        descripcion: "Marca avisos como ya enviados al dueño { ids: [id] } (no vuelven a salir en avisos_pendientes).",
+        ejecutar: async (p) => avisos("confirmar", p),
+    },
+    avisos_configurar: {
+        soloLectura: false,
+        descripcion: "Registra la URL (https de Cloud Run / Cloud Functions de Kay) a la que Rubik le EMPUJA los avisos al instante { url } (vacía = dejar de empujar). "
+            + "Rubik hace POST {origen: 'rubik', avisos: [...]} con Authorization: Bearer <token de identidad de Google de las Functions de rubik-bolivia, audience = esa URL>.",
+        ejecutar: async (p) => avisos("configurar", p),
     },
     rendicion_link: {
         soloLectura: false,

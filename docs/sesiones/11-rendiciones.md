@@ -63,6 +63,19 @@ Las personas que tienen plata para gastos del proyecto pero no tienen contrato e
   - Solo deja ver y cargar los gastos de esa persona.
 - `functions/rendiciones/link.js` → `/api/rendir` (`rendirLink`, público, valida el token).
 
+### Avisos por WhatsApp (decisión del dueño: WhatsApp para TODAS las notificaciones de Rubik)
+
+- `functions/avisos`: buzón `/avisos_kay/{id}` `{tipo, texto, datos, creado, entregado}`, cerrado a la app. Cada módulo deja su aviso
+  en la misma escritura que el cambio y después llama a `empujar()`.
+  - Si Kay registró su URL (`avisos_configurar`), Rubik le hace un POST al instante con un token de identidad de Google de sus
+    Functions (audience = esa URL).
+  - Si no hay URL o falla, Kay los pide con `avisos_pendientes` y los marca con `avisos_confirmar`: no se pierde ninguno.
+- Primer tipo, `rendicion_por_aprobar`: se crea cuando un trabajador rinde (link o WhatsApp). Kay se lo manda al dueño y, con su
+  respuesta, aprueba o rechaza (`worker_id` + `gasto_id` vienen en `datos`). Lo que carga el dueño no avisa.
+- **Factura en la rendición:** en la mini app, "Tengo factura" pide NIT y número. Al aprobar, se registra el crédito fiscal en
+  `/compras_facturadas/{gasto}` (`origen: rendicion`), que es lo que lee Impuestos. No va a `/compras`, porque el gasto ya cuenta en
+  el proyecto por la caja chica. Si se anula, la factura queda anulada.
+
 ## PDF
 
 `public/js/pdf-rendicion.js` (`PdfRendicion`, copia en `functions/pdf/compartido/`) tiene el resumen, los movimientos con

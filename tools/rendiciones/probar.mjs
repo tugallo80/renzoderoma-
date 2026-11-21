@@ -6,6 +6,7 @@ const R = require('../../functions/rendiciones/api.js');
 const F = require('../../functions/proyectos/finanzas.js');
 const D = require('../../functions/documentos/index.js');
 const LINK = require('../../functions/rendiciones/link.js');
+const A = require('../../functions/avisos/index.js');
 const { crearAlmacenMemoria } = require('../agente/almacen-memoria.cjs');
 
 const DUENO = { uid: 'renzo', rol: 'dueño', nombre: 'Renzo', via: 'app' };
@@ -18,7 +19,7 @@ const datos = () => ({
     // un registro viejo de la app del trabajador (sin estado = cuenta como aprobado)
     caja_chica: { wPollo: { gastos: { viejo: { proyecto: 'Stand Demo', concepto: 'Clavos', monto: 30, fecha: '2026-11-01' } } } },
 });
-const nuevo = () => crearAlmacenMemoria(datos(), R.RUTAS.concat(D.RUTAS), R.ARCHIVOS.concat(D.ARCHIVOS));
+const nuevo = () => crearAlmacenMemoria(datos(), R.RUTAS.concat(D.RUTAS, A.RUTAS), R.ARCHIVOS.concat(D.ARCHIVOS));
 let n = 0;
 const op = (al, b, q = DUENO) => R.atender(al, Object.assign({ idempotencia: 'rend-' + (++n) }, b), q);
 const ok = (r) => { assert.equal(r.status, 200, JSON.stringify(r.cuerpo)); return r.cuerpo; };
@@ -118,6 +119,50 @@ await prueba('link para rendir sin app: info, gasto con renglones (pendiente, en
     assert.equal((await LINK.atender(al, { token: l2.url.split('#')[1], accion: 'info' })).status, 401, 'vencido');
     const ls = ok(await R.atender(al, { accion: 'links', worker_id: 'wPollo' }, DUENO));
     assert.equal(ls.links.length, 2); assert.ok(ls.links.every((x) => !x.vigente));
+});
+
+await prueba('aviso para el dueño (WhatsApp vía Kay) cuando el trabajador rinde; factura → crédito fiscal al aprobar; anular la descuenta', async () => {
+    const al = nuevo();
+    const l = ok(await op(al, { accion: 'crear_link', worker_id: 'wPollo', cid: 'cliA', pid: 'proyA' }));
+    const r = ok(await LINK.atender(al, { token: l.url.split('#')[1], accion: 'gasto', idempotencia: 'link-fac001',
+        items: [{ detalle: 'Pintura', cantidad: 2, unidad: 'gal', precio: 85 }], proveedor: 'Ferretería X', factura: { nit: '1234567', nro: '889' } }));
+    assert.equal(r.estado, 'pendiente');
+    const p = await A.pendientes(al, {});
+    assert.equal(p.avisos.length, 1);
+    const av = p.avisos[0];
+    assert.equal(av.tipo, 'rendicion_por_aprobar');
+    assert.match(av.texto, /Pollo Demo rindió 170,00 Bs en Stand Demo: Pintura \(1 renglón\), sin recibo, factura 889\. Está por aprobar\./);
+    assert.deepEqual([av.datos.worker_id, av.datos.gasto_id, av.datos.pid, av.datos.via], ['wPollo', r.id, 'proyA', 'link']);
+    // lo que carga el dueño (aprobado) no avisa
+    ok(await op(al, { accion: 'registrar_gasto', worker_id: 'wPollo', monto: 10, concepto: 'Agua' }));
+    assert.equal((await A.pendientes(al, {})).avisos.length, 1);
+    // Kay lo manda, el dueño dice que sí: aprobar → crédito fiscal
+    assert.equal((await A.confirmar(al, { ids: [av.id] })).confirmados, 1);
+    assert.equal((await A.pendientes(al, {})).avisos.length, 0);
+    ok(await op(al, { accion: 'aprobar', worker_id: av.datos.worker_id, id: av.datos.gasto_id }, { rol: 'dueño', nombre: 'Renzo', via: 'whatsapp' }));
+    const cf = al.datos.compras_facturadas[r.id];
+    assert.deepEqual([cf.nit, cf.nro_factura, cf.monto, cf.origen], ['1234567', '889', 170, 'rendicion']);
+    const fin = await F.calcular(crearAlmacenMemoria(al.datos, F.RUTAS), 'cliA', 'proyA');
+    assert.equal(fin.gasto.compras, 0, 'no se cuenta dos veces como compra'); assert.equal(fin.gasto.caja_chica, 200, '30 viejo + 170');
+    ok(await op(al, { accion: 'anular', worker_id: 'wPollo', tipo: 'gasto', id: r.id, motivo: 'factura mal' }));
+    assert.equal(al.datos.compras_facturadas[r.id].anulada, true);
+    assert.equal((await op(al, { accion: 'registrar_gasto', worker_id: 'wPollo', monto: 5, concepto: 'x', factura: { nit: '123' } })).status, 400, 'factura sin número');
+});
+
+await prueba('empujar a Kay: solo con URL registrada (https de Cloud Run/Functions) y con token de identidad', async () => {
+    const al = nuevo();
+    ok(await op(al, { accion: 'registrar_gasto', worker_id: 'wPollo', monto: 20, concepto: 'Taxi' }, POLLO));
+    assert.equal((await A.empujar(al)).motivo, 'sin URL de Kay');
+    await assert.rejects(A.configurar(al, { url: 'http://evil.example.com/x' }));
+    await A.configurar(al, { url: 'https://kayavisos-abc123-uc.a.run.app' });
+    const llamadas = [];
+    const r = await A.empujar(al, { tokenIdentidad: async (aud) => 'tok-' + aud.length, fetch: async (u, o) => { llamadas.push({ u, o }); return { ok: true, status: 200 }; } });
+    assert.equal(r.empujado, true);
+    assert.equal(llamadas[0].u, 'https://kayavisos-abc123-uc.a.run.app');
+    assert.match(llamadas[0].o.headers.Authorization, /^Bearer tok-/);
+    assert.equal(JSON.parse(llamadas[0].o.body).avisos[0].tipo, 'rendicion_por_aprobar');
+    const falla = await A.empujar(al, { tokenIdentidad: async () => { throw new Error('sin metadatos'); } });
+    assert.equal(falla.empujado, false, 'si falla no rompe nada: Kay los pide después');
 });
 
 await prueba('PDF de rendición (pdf_documento tipo rendicion)', async () => {
