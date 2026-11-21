@@ -113,6 +113,9 @@ idempotentes. **Antes de cada cambio, decile al dueño qué vas a hacer y esper�
   `agregar_extra`, `anular` (con motivo; la copia queda en el historial). No toca `gasto_total`.
 - **`buscar_trabajador`** `{texto}` → `worker_id`, nombre, tipo y especialidad de trabajadores y proveedores de la base
   (ej. una imprenta). Para `crear_licitacion` o `cambiar_contratista`.
+- **`registrar_trabajador`** `{nombre, tipo: graficos|externo|empresa|interno|supervisor, especialidad?, telefono?, actualizar?,
+  idempotencia, registrado_por}` → alta en Personal (sin sueldo), para poder licitarle. Con el sí del dueño. `buscar_trabajador`
+  avisa si alguien está solo en Proveedores (ahí no sirve para licitar).
 - **`crear_licitacion`** `{cid, pid, worker_id | trabajador, alcance: [{item?, descripcion?, cant?, und?, monto}], tipo?, estado?,
   idempotencia, registrado_por}` → encarga trabajo a alguien de la base, como la pantalla de Licitaciones. `item` es el índice
   del ítem del presupuesto (`ver_presupuesto`); sin ítem, el renglón es libre. El total es la suma de los montos. `estado`:

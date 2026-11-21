@@ -11,7 +11,9 @@
  *   guardar              {lid?, licitacion}             → crear/editar desde la pantalla (alcance completo)
  *   crear                {worker_id | trabajador, alcance: [{item?, descripcion?, cant?, und?, monto}], tipo?, estado?, periodo?}
  *                        → arma la licitación con ítems del presupuesto o tareas libres y la guarda como la pantalla (Kay, Claude)
- *   trabajadores         {texto?}                       → personas y proveedores de la base (worker_id, nombre, tipo)
+ *   trabajadores         {texto?}                       → personas y proveedores de la base (worker_id, nombre, tipo); avisa si
+ *                                                         el nombre está solo en Proveedores (base_datos), que no sirve para licitar
+ *   registrar_trabajador {nombre, tipo, especialidad?, telefono?, actualizar?} → alta en Personal (como base_datos.html), sin sueldo
  *   cambiar_monto        {lid, monto, motivo?}          aprobada → precio_final; si no, precio_propuesto
  *   cambiar_contratista  {lid, worker_id}
  *   aprobar              {lid, precio_final?}           → estado aprobado (+ responsable en los ítems del presupuesto)
@@ -40,6 +42,8 @@ const RUTAS = [
     /^clientes$/,
     /^personal\/[^/]+\/(nombre|solicitudes)(\/|$)/,
     /^personal$/,                                                    // buscar trabajador/proveedor por nombre (solo id, nombre y tipo salen)
+    /^personal\/[^/]+(\/(tipo|especialidad|telefono|sueldo|creado_por|creado|actualizado_por))?$/,                                             // registrar_trabajador (alta, como base_datos.html)
+    /^base_datos\/proveedores$/,                                     // avisar si alguien está como proveedor y no en Personal
     /^proyectos\/[^/]+\/[^/]+\/presupuesto\/items(\/\d+)?$/,          // alcance desde los ítems del presupuesto (crear)
     /^operaciones_idem(\/|$)/,
 ];
@@ -298,7 +302,38 @@ OPS.trabajadores = async function (almacen, b) {
     const lista = Object.entries(ps).filter(([k, w]) => w && typeof w === "object" && typeof w.nombre === "string" && C.ID.test(k))
         .map(([k, w]) => ({ worker_id: k, nombre: w.nombre, tipo: w.tipo || w.rol || null, especialidad: w.especialidad || w.rubro || null, empresa: w.empresa || null }))
         .filter((w) => !q || sinAcentos([w.nombre, w.empresa, w.especialidad].filter(Boolean).join(" ")).includes(q));
-    return { total: lista.length, trabajadores: lista.slice(0, 30) };
+    const r = { total: lista.length, trabajadores: lista.slice(0, 30) };
+    if (q && !lista.length) {
+        // ¿Está en Proveedores (base_datos/proveedores)? Ahí no sirve para licitar: tiene que estar en Personal.
+        const pv = (await almacen.leer("base_datos/proveedores").catch(() => null)) || {};
+        const enProv = Object.values(pv).filter((x) => x && typeof x === "object" && sinAcentos([x.nombre, x.categoria, x.contacto].filter(Boolean).join(" ")).includes(q))
+            .map((x) => ({ nombre: x.nombre || null, categoria: x.categoria || null, telefono: x.telefono || null })).slice(0, 5);
+        if (enProv.length) {
+            r.en_proveedores = enProv;
+            r.nota = "Está cargado en Proveedores (precios de materiales), no en Personal: para licitarle hay que darlo de alta en Personal (registrar_trabajador, con el sí del dueño).";
+        }
+    }
+    return r;
+};
+
+const TIPOS_PERSONAL = ["interno", "supervisor", "externo", "empresa", "graficos"];
+/** Alta en Personal como base_datos.html (la clave sale del nombre). Sin sueldo: eso se carga en la app. */
+OPS.registrar_trabajador = async function (almacen, b, quien) {
+    const nombre = texto(b.nombre, 80);
+    if (!nombre) falla("Falta el nombre.");
+    const tipo = TIPOS_PERSONAL.includes(b.tipo) ? b.tipo : falla(`Tipo inválido: ${TIPOS_PERSONAL.join(", ")} (graficos = imprenta, externo = contratista de mano de obra, empresa = taller).`);
+    const wid = nombre.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[\s.#$\[\]\/]/g, "_");   // sin tildes: el código solo admite letras, números, _ y -
+    if (!C.ID.test(wid)) falla("El nombre tiene caracteres que no se pueden usar como código (dejá solo letras, números y espacios).");
+    const ruta = `personal/${wid}`;
+    const existe = await almacen.leer(`${ruta}/nombre`);
+    if (existe != null && b.actualizar !== true) falla(`Ya existe "${existe}" en Personal (worker_id ${wid}). Para cambiar sus datos, pasá actualizar: true.`, 409);
+    const datos = { nombre, tipo, especialidad: texto(b.especialidad, 80) || "", telefono: String(b.telefono || "").replace(/[^\d+]/g, "").slice(0, 20) };
+    const m = {};
+    Object.keys(datos).forEach((k) => { m[`${ruta}/${k}`] = datos[k]; });
+    if (existe == null) { m[`${ruta}/sueldo`] = null; m[`${ruta}/creado_por`] = quien; m[`${ruta}/creado`] = almacen.ahora(); }
+    else m[`${ruta}/actualizado_por`] = { por: quien, fecha: almacen.ahora() };
+    await almacen.actualizarVarios(m);
+    return { ok: true, worker_id: wid, op: existe == null ? "alta" : "actualizado", trabajador: Object.assign({ worker_id: wid }, datos) };
 };
 
 /** Crear una licitación desde Kay/Claude: alcance simple → mismas tareas que arma licitaciones.html → guardar. */
