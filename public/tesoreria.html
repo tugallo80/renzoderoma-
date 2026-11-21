@@ -30,7 +30,7 @@
     </script>
     <script src="/js/firecache.js?v=7"></script>
     <script src="/js/auth-guard.js?v=3"></script>
-    <script src="/js/compras-api.js?v=1"></script>
+    <script src="/js/compras-api.js?v=2"></script>
     <script src="/js/operaciones-api.js?v=2"></script>
     <script src="/js/viewmode.js?v=1"></script>
 
@@ -112,9 +112,10 @@
             display: flex; flex-direction: column; align-items: center; gap: 2px;
             background: none; border: none; color: var(--gray);
             font-size: 9px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.2px;
-            cursor: pointer; padding: 4px 6px; border-radius: 10px; transition: 0.15s;
-            min-width: 44px;
+            cursor: pointer; padding: 4px 1px; border-radius: 10px; transition: 0.15s;
+            flex: 1 1 0; min-width: 0;   /* 7 botones (con Taller) entran en 360 px */
         }
+        #mobile-action-bar .m-act-btn span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         #mobile-action-bar .m-act-btn i { font-size: 22px; }
         #mobile-action-bar .m-act-btn.active { color: var(--blue); }
         #mobile-action-bar .m-act-btn:active { background: var(--bg); transform: scale(0.9); }
@@ -168,6 +169,7 @@
             <button class="tab-btn" onclick="switchMainTab('ingresos', this)"><i class="ph-bold ph-trend-up"></i> Ingresos</button>
             <button class="tab-btn" onclick="switchMainTab('impuestos', this)"><i class="ph-bold ph-bank"></i> Impuestos</button>
             <button class="tab-btn" onclick="switchMainTab('clientes', this)"><i class="ph-bold ph-receipt"></i> Clientes</button>
+            <button class="tab-btn" onclick="switchMainTab('funcionamiento', this)"><i class="ph-bold ph-house-line"></i> Funcionamiento</button>
         </div>
     </div>
 
@@ -578,6 +580,44 @@
     </div>
 
     <!-- ═══════════════ PANEL CLIENTES (Estado de Cuenta) ═══════════════ -->
+    <!-- Gastos de funcionamiento del taller (sin proyecto): functions/compras con categoría -->
+    <div id="panel-funcionamiento" class="panel-section">
+        <div class="generic-card">
+            <h3 style="margin-top:0; color:var(--blue); font-size:15px;"><i class="ph-bold ph-house-line"></i> Gasto de funcionamiento</h3>
+            <div style="font-size:11px; color:var(--gray); margin-bottom:12px; background:rgba(0,122,255,0.08); border-radius:8px; padding:10px;">
+                Lo que cuesta tener el taller abierto (alquiler, mantenimiento, herramientas, servicios). No va a ningún proyecto: se ve aparte en el balance del mes. También se carga por WhatsApp con Kay.
+            </div>
+            <label class="inp-lbl">Categoría</label>
+            <select id="fn-cat" class="inp-std">
+                <option value="alquiler">Alquiler</option><option value="mantenimiento">Mantenimiento</option>
+                <option value="herramientas">Herramientas</option><option value="servicios">Servicios (luz, agua, gas, internet)</option><option value="otros">Otros</option>
+            </select>
+            <div class="flex-row">
+                <div style="flex:1;"><label class="inp-lbl">Monto (Bs)</label><input type="number" step="any" id="fn-monto" class="inp-std" placeholder="0.00"></div>
+                <div style="flex:1;"><label class="inp-lbl">Fecha</label><input type="date" id="fn-fecha" class="inp-std"></div>
+            </div>
+            <label class="inp-lbl">A quién se pagó</label>
+            <input type="text" id="fn-prov" class="inp-std" placeholder="Ej: propietario del local, DELAPAZ, Entel">
+            <label class="inp-lbl">Detalle</label>
+            <input type="text" id="fn-nota" class="inp-std" placeholder="Ej: alquiler noviembre">
+            <div class="flex-row">
+                <div style="flex:1;"><label class="inp-lbl">Pagado con</label>
+                    <select id="fn-medio" class="inp-std"><option value="transferencia">Transferencia</option><option value="qr">QR</option><option value="efectivo">Efectivo</option><option value="tarjeta">Tarjeta</option><option value="otro">Otro</option></select></div>
+                <div style="flex:1;"><label class="inp-lbl">Recibo / comprobante</label><input type="file" id="fn-foto" class="inp-std" accept="image/*,application/pdf"></div>
+            </div>
+            <button class="btn-action btn-success" onclick="RubikFuncionamiento.guardar()"><i class="ph-bold ph-floppy-disk"></i> Guardar gasto</button>
+        </div>
+        <div class="generic-card">
+            <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:10px;">
+                <div style="font-size:11px; font-weight:800; color:var(--gray); text-transform:uppercase;">Mes</div>
+                <input type="month" id="fn-mes" class="inp-std" style="margin:0; max-width:170px;" onchange="RubikFuncionamiento.cargar()">
+            </div>
+            <div id="fn-resumen"></div>
+        </div>
+        <div class="section-title"><i class="ph-bold ph-list-dashes"></i> Gastos del mes</div>
+        <div id="fn-lista"><div class="empty-msg">Cargando…</div></div>
+    </div>
+
     <div id="panel-clientes" class="panel-section">
         <div class="generic-card" style="margin-bottom:12px; display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
             <div style="flex:1; min-width:180px;">
@@ -4194,6 +4234,7 @@
     <button class="m-act-btn" data-tab="ingresos" onclick="switchMainTab('ingresos',null)"><i class="ph-bold ph-trend-up"></i><span>Ingresos</span></button>
     <button class="m-act-btn" data-tab="impuestos" onclick="switchMainTab('impuestos',null)"><i class="ph-bold ph-bank"></i><span>Impuest.</span></button>
     <button class="m-act-btn" data-tab="clientes" onclick="switchMainTab('clientes',null)"><i class="ph-bold ph-receipt"></i><span>Clientes</span></button>
+    <button class="m-act-btn" data-tab="funcionamiento" onclick="switchMainTab('funcionamiento',null)"><i class="ph-bold ph-house-line"></i><span>Taller</span></button>
 </div>
 <script>
 // ═══════════════════════════════════════════════════════
@@ -4331,6 +4372,70 @@ window.RubikCobrosUI = (function () {
         monto: (i, v) => { filas[i].monto = r2(parseFloat(v) || 0); totalReparto(); },
         factura: (i, v) => { filas[i].factura_id = v; },
     };
+})();
+</script>
+<script>
+// ═══════════════════════════════════════════════════════
+//  FUNCIONAMIENTO DEL TALLER (functions/compras con categoría)
+// ═══════════════════════════════════════════════════════
+window.RubikFuncionamiento = (function () {
+    const $ = (id) => document.getElementById(id);
+    const fm = (n) => (Number(n) || 0).toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const esc = (t) => String(t == null ? '' : t).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    const NOMBRES = { alquiler: 'Alquiler', mantenimiento: 'Mantenimiento', herramientas: 'Herramientas', servicios: 'Servicios', otros: 'Otros' };
+    const mesHoy = () => new Date(Date.now() - 4 * 3600e3).toISOString().slice(0, 7);
+    let ultimo = null;
+
+    async function cargar() {
+        if (!$('fn-mes').value) $('fn-mes').value = mesHoy();
+        $('fn-lista').innerHTML = '<div class="empty-msg">Cargando…</div>';
+        try { ultimo = await RubikCompras.funcionamiento($('fn-mes').value, 6); }
+        catch (e) { $('fn-lista').innerHTML = `<div class="empty-msg">No se pudo cargar: ${esc(e.message)}</div>`; return; }
+        const r = ultimo;
+        const filas = Object.keys(r.por_categoria).sort((a, b) => r.por_categoria[b] - r.por_categoria[a])
+            .map((k) => `<div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0;"><span>${esc(NOMBRES[k] || k)}</span><b>${fm(r.por_categoria[k])} Bs</b></div>`).join('');
+        const max = Math.max(1, ...r.historial.map((h) => h.total));
+        const barras = r.historial.map((h) => `<div style="flex:1;text-align:center;font-size:9px;color:var(--gray);">
+            <div style="height:60px;display:flex;align-items:flex-end;justify-content:center;"><div title="${fm(h.total)} Bs" style="width:70%;background:${h.mes === r.mes ? 'var(--blue)' : 'var(--border)'};border-radius:4px 4px 0 0;height:${Math.round(h.total / max * 100)}%;min-height:${h.total ? 2 : 0}px;"></div></div>
+            ${esc(h.mes.slice(5))}/${esc(h.mes.slice(2, 4))}</div>`).join('');
+        $('fn-resumen').innerHTML = `<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px;"><span style="font-weight:800;">Total del mes</span><span style="font-size:20px;font-weight:900;color:var(--red);">${fm(r.total)} Bs</span></div>`
+            + (filas || '<div style="font-size:12px;color:var(--gray);">Sin gastos este mes.</div>')
+            + `<div style="display:flex;gap:4px;margin-top:12px;">${barras}</div>`;
+        $('fn-lista').innerHTML = r.gastos.length ? r.gastos.map((g) => `<div class="generic-card" style="padding:12px;border-left:3px solid var(--blue);">
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">
+                <div style="flex:1;min-width:0;"><div style="font-weight:900;font-size:13px;">${esc(NOMBRES[g.categoria] || g.categoria)}${g.nota ? ' · ' + esc(g.nota) : ''}</div>
+                    <div style="font-size:10px;color:var(--gray);margin-top:2px;">${esc(g.fecha)}${g.proveedor ? ' · ' + esc(g.proveedor) : ''}${g.factura ? ' · Fact. ' + esc(g.factura) : ''}${g.pagado_con ? ' · ' + esc(g.pagado_con) : ''}</div>
+                    ${g.comprobante ? `<a href="${esc(g.comprobante)}" target="_blank" style="font-size:10px;color:var(--blue);font-weight:800;">📎 Comprobante</a>` : ''}</div>
+                <div style="display:flex;align-items:center;gap:8px;"><b style="font-size:15px;">${fm(g.total)} Bs</b>
+                    <button onclick="RubikFuncionamiento.anular('${esc(g.id)}')" title="Anular" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:14px;"><i class="ph-bold ph-trash"></i></button></div>
+            </div></div>`).join('') : '<div class="empty-msg">No hay gastos de funcionamiento este mes.</div>';
+    }
+
+    async function guardar() {
+        const total = parseFloat($('fn-monto').value) || 0;
+        if (total <= 0) return alert('Ingresá el monto.');
+        const archivo = $('fn-foto').files[0];
+        let foto = null;
+        if (archivo) foto = await new Promise((ok) => { const fr = new FileReader(); fr.onload = () => ok(RubikCompras.dataUrlABase64(fr.result)); fr.onerror = () => ok(null); fr.readAsDataURL(archivo); });
+        try {
+            await RubikCompras.registrar({ idempotencia: RubikCompras.nuevaClave(), categoria: $('fn-cat').value, total, fecha: $('fn-fecha').value || undefined,
+                proveedor: $('fn-prov').value.trim() ? { nombre: $('fn-prov').value.trim() } : undefined, nota: $('fn-nota').value.trim() || undefined,
+                pagado_con: { medio: $('fn-medio').value }, foto });
+        } catch (e) { return alert('No se guardó: ' + e.message); }
+        ['fn-monto', 'fn-prov', 'fn-nota'].forEach((id) => { $(id).value = ''; }); $('fn-foto').value = '';
+        const f = $('fn-fecha').value; if (f) $('fn-mes').value = f.slice(0, 7);
+        await cargar();
+    }
+    async function anular(id) {
+        const g = ultimo && ultimo.gastos.find((x) => x.id === id); if (!g) return;
+        const motivo = prompt(`Anular ${NOMBRES[g.categoria] || g.categoria} de ${fm(g.total)} Bs (${g.fecha}). No se borra. Motivo:`);
+        if (!motivo) return;
+        try { await RubikCompras.anular(id, motivo); await cargar(); } catch (e) { alert(e.message); }
+    }
+    const _sw = window.switchMainTab;
+    window.switchMainTab = function (tabId, btn) { _sw(tabId, btn); if (tabId === 'funcionamiento') cargar(); };
+    try { $('fn-fecha').valueAsDate = new Date(); } catch (e) { /* nada */ }
+    return { cargar, guardar, anular };
 })();
 </script>
 </body>

@@ -154,6 +154,31 @@ prueba('clave de proveedor: NIT o nombre normalizado; alias de la migración', a
     assert.deepEqual(r, { clave: 'NIT_1234567', existe: true });
 });
 
+
+prueba('gastos de funcionamiento: alquiler por Kay con recibo, no van a un proyecto, resumen por categoría y balance separado', async () => {
+    const alm = base();
+    const a = ok(await reg(alm, { idempotencia: 'func-0001', categoria: 'alquiler', total: 3500, fecha: '2026-11-05', proveedor: { nombre: 'Propietario Demo' },
+        nota: 'Alquiler taller noviembre', pagado_con: { medio: 'transferencia' }, foto: { datos_base64: JPG } }, KAY));
+    ok(await reg(alm, { idempotencia: 'func-0002', categoria: 'servicios', total: 180, fecha: '2026-11-10', nota: 'Luz' }));
+    ok(await reg(alm, { idempotencia: 'func-0003', categoria: 'alquiler', total: 3500, fecha: '2026-10-05', nota: 'Alquiler octubre' }));
+    ok(await reg(alm, { idempotencia: 'func-0004', cid: 'cliA', pid: 'proyA', total: 200, fecha: '2026-11-12', proveedor: { nombre: 'Kiosco' } }));
+    ok(await reg(alm, { idempotencia: 'func-0005', total: 50, fecha: '2026-11-12', proveedor: { nombre: 'Kiosco' } }));
+    const c = alm.datos.compras[a.id];
+    assert.equal(c.categoria, 'alquiler'); assert.equal(c.proyecto, null); assert.ok(c.comprobante.url); assert.equal(c.registrado_por.via, 'whatsapp');
+    assert.equal(alm.datos.proyectos.cliA.proyA.gasto_total, 300, 'el alquiler no suma al proyecto');
+    err(await reg(alm, { idempotencia: 'func-0006', categoria: 'alquiler', cid: 'cliA', pid: 'proyA', total: 1 }), /no van a un proyecto/);
+    err(await reg(alm, { idempotencia: 'func-0007', categoria: 'sueldos', total: 1 }), /Categoría/);
+    const f = ok(await C.atender(alm, { accion: 'funcionamiento', mes: '2026-11', meses: 2 }, DUENO));
+    assert.equal(f.total, 3680); assert.deepEqual(f.por_categoria, { alquiler: 3500, servicios: 180 });
+    assert.equal(f.gastos.length, 2); assert.equal(f.gastos[0].nota, 'Luz', 'el más reciente primero');
+    assert.deepEqual(f.historial.map((h) => [h.mes, h.total]), [['2026-10', 3500], ['2026-11', 3680]]);
+    const m = ok(await C.atender(alm, { accion: 'balance_mensual', mes: '2026-11' }, DUENO));
+    assert.equal(m.egresos.compras, 3930);
+    assert.equal(m.egresos.compras_de_proyectos, 200);
+    assert.deepEqual(m.egresos.funcionamiento, { total: 3680, por_categoria: { alquiler: 3500, servicios: 180 } });
+    assert.equal(m.egresos.compras_sin_clasificar, 50);
+});
+
 let n = 0;
 for (const [nombre, fn] of pruebas) {
     try { await fn(); n++; console.log('ok  ', nombre); }

@@ -7,6 +7,7 @@
  *   RubikCompras.registrar({idempotencia, ...})     → {id, repetida, proveedor_id, resumen}
  *   RubikCompras.anular(id, motivo)                 → {ok, id}
  *   RubikCompras.dataUrlABase64(dataUrl)            → {datos_base64, mime}
+ *   RubikCompras.funcionamiento(mes, meses)          → gastos de funcionamiento del taller (categoría, sin proyecto)
  */
 (function (global) {
     'use strict';
@@ -53,6 +54,7 @@
         registrar: (datos) => llamar(Object.assign({ accion: 'registrar' }, datos)),
         anular: (id, motivo) => llamar({ accion: 'anular', id, motivo }),
         balanceMensual: (mes) => llamar({ accion: 'balance_mensual', mes }),
+        funcionamiento: (mes, meses) => llamar({ accion: 'funcionamiento', mes, meses }),   // gastos del taller (sin proyecto)
         balanceProyecto: (cid, pid) => llamar({ accion: 'balance_proyecto', cid, pid }),
     };
 })(window);

@@ -444,6 +444,7 @@ const ACCIONES = {
         descripcion: "Registra una compra (gasto del proyecto, egreso, crédito fiscal si es factura, proveedor y precios) "
             + "{ idempotencia, total?, fecha?, cid?, pid?, proveedor?: {nombre, nit?, contacto?}, factura?: {nit, razon_social?, nro, cuf?, fecha?, monto?}, "
             + "items?: [{material, cantidad, unidad?, precio}], nota?, foto?: {datos_base64, mime?}, pagado_con?: {medio, persona?}, "
+            + "categoria?: alquiler|mantenimiento|herramientas|servicios|otros (gasto de FUNCIONAMIENTO del taller: sin cid/pid; ej. el alquiler, la luz, una herramienta), "
             + "registrado_por: {rol, nombre, telefono} } → { id, repetida, proveedor_id, resumen }",
         ejecutar: (p) => compras("registrar", p),
     },
@@ -451,6 +452,12 @@ const ACCIONES = {
         soloLectura: false,
         descripcion: "Anula una compra (no se borra; resta del gasto del proyecto y marca la factura) { id, motivo, registrado_por }.",
         ejecutar: (p) => compras("anular", p),
+    },
+    gastos_funcionamiento: {
+        soloLectura: true,
+        descripcion: "Gastos de funcionamiento del taller (alquiler, mantenimiento, herramientas, servicios) de un mes { mes?: \"AAAA-MM\", meses?: 6 } "
+            + "→ { total, por_categoria, gastos: [{fecha, categoria, total, proveedor, nota, comprobante}], historial: [{mes, total, por_categoria}] }.",
+        ejecutar: (p) => compras("funcionamiento", p),
     },
     balance_mensual: {
         soloLectura: true,
