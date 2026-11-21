@@ -492,6 +492,23 @@ const ACCIONES = {
         descripcion: "Anula una factura de venta sin cobros aplicados { idempotencia, id, motivo, registrado_por }.",
         ejecutar: (p) => cobros("anular_factura", p),
     },
+    pdf_documento: {
+        soloLectura: true,
+        descripcion: "PDF de un documento, igual al de la pantalla, para mandarlo por WhatsApp { tipo: licitacion (cotizacion y orden: pronto), cid, pid, id, "
+            + "modo?: general|detalle } → { nombre, mime: \"application/pdf\", base64, bytes, paginas } (máx. 10 MB).",
+        ejecutar: async (p) => {
+            const D = require("./documentos");
+            const admin = require("firebase-admin");
+            const { crearAlmacen } = require("./agente/almacen");
+            const al = crearAlmacen(admin, D.RUTAS, D.ARCHIVOS);
+            try { return Object.assign({ error: false }, await D.generar(al, p || {})); }
+            catch (e) {
+                if (e.status) return { error: true, texto: e.message };
+                console.error("[kayApi] pdf_documento", e);
+                return { error: true, texto: "No se pudo generar el PDF." };
+            }
+        },
+    },
     balance_proyecto: {
         soloLectura: true,
         descripcion: "Finanzas de un proyecto { cid, pid } con la fórmula única del panel (functions/proyectos/finanzas.js): venta, gasto (compras, caja chica, supervisores, mano de obra contratada y pagada), utilidad esperada y con lo pagado, cobrado y saldo por contratista.",
@@ -555,8 +572,8 @@ async function buscarContacto(params) {
 exports.kayApi = onRequest({
     region: "us-central1",
     invoker: [KAY_SA],
-    timeoutSeconds: 60,
-    memory: "512MiB",
+    timeoutSeconds: 120,   // pdf_documento baja y achica las fotos del ítem
+    memory: "1GiB",
     cors: false,
 }, async (req, res) => {
     if (req.method !== "POST") return res.status(405).json({ ok: false, error: "Método no permitido" });
