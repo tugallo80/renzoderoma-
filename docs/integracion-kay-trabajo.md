@@ -23,6 +23,10 @@ entre varios proyectos del cliente. Mismo módulo que Tesorería (`functions/cob
 `crear_licitacion` y `cambiar_estado_proyecto` (escritura, en `ESCRITURA_KAY`). Crear usa la misma operación que la pantalla
 (`guardar` de `functions/licitaciones/api.js`); la etapa, `functions/proyectos/estado.js` (también la usan el panel del proyecto
 y la lista del cliente).
+2026-11-20: **PDF en el servidor** — `pdf_documento { tipo: licitacion, cid, pid, id, modo?: general|detalle }` (lectura) →
+`{ nombre, mime: "application/pdf", base64, bytes, paginas }`, el mismo PDF que descarga la pantalla de Licitaciones
+(`public/js/pdf-licitacion.js`, copia en `functions/pdf/compartido/`). Kay lo sube a WhatsApp como documento. Cotización
+y órdenes: próxima etapa (hoy devuelven error 501 "todavía no").
 2026-11-19: `buscar_contacto` (lectura): Kay por WhatsApp busca por nombre el teléfono de alguien del personal,
 un proveedor o un cliente cuando el dueño le pide "mandale a José Luis…" y no está en su agenda.
 
@@ -112,6 +116,7 @@ detalle queda en los logs de `kayApi`, no se le devuelve a Kay).
 | `anular_cobro` | **no** | `{ idempotencia, id, motivo, registrado_por }` | `{ ok }`: lo quita de cada proyecto y de sus facturas |
 | `registrar_factura_venta` | **no** | `{ idempotencia, cid, pid, monto, nro_factura, fecha?, nit?, cuf?, cliente_rs?, foto?, registrado_por }` | `{ id }` (no repite número de factura) |
 | `anular_factura_venta` | **no** | `{ idempotencia, id, motivo, registrado_por }` | `{ ok }` (solo sin cobros aplicados) |
+| `pdf_documento` | sí | `{ tipo: "licitacion", cid, pid, id, modo?: "general"\|"detalle" }` | `{ nombre, mime: "application/pdf", base64, bytes, paginas }` (máx. 10 MB). El mismo PDF de la pantalla de Licitaciones, generado en el servidor (`functions/documentos`); queda una copia en Storage (`documentos/{cid}/{pid}/`, sin enlace público). Fotos solo de nuestro Storage, achicadas a ≤1600 px. `cotizacion` y `orden`: todavía no |
 | `balance_proyecto` | sí | `{ cid, pid }` | La **fórmula única** del panel del proyecto (`functions/proyectos/finanzas.js`, Sesión 9 Lote 2): `{ proyecto, venta: {presupuesto, monto_cierre, extras_cliente, final}, gasto: {compras, compras_adicionales, caja_chica, caja_chica_pendiente, supervisores_gastos, supervisores_extras, mano_obra_contratada, mano_obra_extras, mano_obra_pagada, esperado, con_pagado}, utilidad_esperada, utilidad_con_pagado, cobrado: {pagos_proyecto, facturado_tesoreria, cobrado_tesoreria}, saldo_por_cobrar, contratistas: [{trabajador, contrato, extras, pagado, saldo}] }` |
 | `buscar_contacto` | sí | `{ nombre }` | `{ encontrados: [{ nombre, telefono, origen: personal\|proveedor\|cliente, detalle }] }` (hasta 5, el mejor primero; sin sueldos ni datos internos) |
 

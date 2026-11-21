@@ -1,0 +1,10 @@
+{
+  "name": "probar-documentos",
+  "private": true,
+  "type": "module",
+  "description": "Pruebas de los PDF generados en el servidor (functions/documentos) con la base en memoria.",
+  "scripts": {
+    "test": "node probar.mjs",
+    "sincronizar": "cp ../../public/js/pdf-licitacion.js ../../functions/pdf/compartido/"
+  }
+}

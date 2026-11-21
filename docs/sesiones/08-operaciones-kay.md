@@ -52,6 +52,18 @@ Pruebas: `tools/licitaciones` 6/6 (incluye 2.548,50 → 3.000 con reintento), co
 - Kay: `ESCRITURA_KAY` suma `crear_licitacion` y `cambiar_estado_proyecto`.
 - Pruebas: licitaciones 8/8, proyectos 5/5, conector 36/36.
 
+## PDF de la licitación en el servidor ✅ (2026-11-20)
+
+- `public/js/pdf-licitacion.js` (`PdfLicitacion.generar`): el dibujo del PDF de propuesta (general y detallada) que antes
+  vivía adentro de `licitaciones.html`. Lo usan la pantalla y el servidor (copia idéntica en `functions/pdf/compartido/`;
+  `npm run sincronizar` en `tools/documentos`; la prueba avisa si difieren).
+- `functions/documentos`: arma el PDF con jsPDF 4 + autotable 5 en Node (la pantalla sigue con 2.5.1 del CDN; misma API,
+  mismo resultado: comparado página por página). Fotos: solo de nuestro Storage, pasadas a JPEG de ≤1600 px con sharp.
+  Lo que no tiene el servidor: las artes gráficas que la pantalla carga en memoria (`_licArtsData`).
+- Kay: `pdf_documento` en `kayApi` (1 GiB, 120 s) → base64 del PDF; queda una copia en `documentos/{cid}/{pid}/`.
+- Siguen: cotización/presupuesto (`presupuesto.html`) y órdenes, con el mismo patrón.
+- Pruebas: `tools/documentos` 4/4 (deja las páginas en `salida/` para mirarlas).
+
 ## Etapas siguientes
 
 | Etapa | Área | Operaciones mínimas |
