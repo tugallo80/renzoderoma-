@@ -37,6 +37,9 @@ para poder licitarle; `buscar_trabajador` avisa si el nombre está solo en Prove
 2026-11-21: `pdf_documento` suma **liquidación de contrato** (`tipo: liquidacion, cid, pid, id`): el estado del contrato para mandarle
 al trabajador o proveedor (monto acordado, anticipos y pagos, saldo pendiente, desglose y comprobantes), el mismo PDF que
 "Liquidación" en Compras del proyecto (`public/js/pdf-liquidacion.js`).
+2026-11-21: **`crear_cliente`** (escritura, en `ESCRITURA_KAY`): Kay da de alta un cliente nuevo de Rubik desde WhatsApp
+(nombre de la empresa, rubro, wsp, email) con el sí del dueño; si ya existe uno con ese nombre devuelve el existente.
+Queda `creado_por: "kay"` (cuando llega con `registrado_por.via: "whatsapp"`).
 2026-11-19: `buscar_contacto` (lectura): Kay por WhatsApp busca por nombre el teléfono de alguien del personal,
 un proveedor o un cliente cuando el dueño le pide "mandale a José Luis…" y no está en su agenda.
 
@@ -110,7 +113,7 @@ detalle queda en los logs de `kayApi`, no se le devuelve a Kay).
 | `listar_proyectos_activos` | sí | — | `{ total, proyectos: [{ cliente, nombre, estado, fecha, tipo }], terminados: { entregado, cerrado, cancelado }, archivados, clientesLeidos }` |
 | `buscar_proyecto` | sí | `{ texto }` | `{ total, proyectos: [{ cid, pid, cliente, nombre, estado, fecha }] }` (nombre del proyecto o del cliente, todos los estados, 10 más nuevos) |
 | `detalle_proyecto` | sí | `{ cid, pid }` | `{ cliente, nombre, estado, fecha, inicio, presupuesto: { items, total_bs, capitulos }, monto_cierre_bs, gasto_total_bs, cobrado_bs, ultimos_pagos, cronograma: { tareas, avance_promedio, atrasadas, proximas } }` |
-| `herramientas_conector` | sí | — | `{ herramientas: [{ name, description, inputSchema, annotations: { readOnlyHint } }] }`: las de lectura del conector MCP "Rubik" (las mismas de Claude), sin `prueba_imagen` ni `ver_render`, **más las de escritura permitidas a Kay** (`ESCRITURA_KAY` en `kay-api.js`: hoy `modificar_licitacion`, `crear_licitacion`, `cambiar_estado_proyecto` y `registrar_trabajador`), marcadas `readOnlyHint: false`. Kay pide el sí del dueño antes de usar una de escritura |
+| `herramientas_conector` | sí | — | `{ herramientas: [{ name, description, inputSchema, annotations: { readOnlyHint } }] }`: las de lectura del conector MCP "Rubik" (las mismas de Claude), sin `prueba_imagen` ni `ver_render`, **más las de escritura permitidas a Kay** (`ESCRITURA_KAY` en `kay-api.js`: hoy `modificar_licitacion`, `crear_licitacion`, `cambiar_estado_proyecto`, `registrar_trabajador` y `crear_cliente`), marcadas `readOnlyHint: false`. Kay pide el sí del dueño antes de usar una de escritura |
 | `usar_conector` | sí* | `{ nombre, args }` | `{ error, texto, imagenes_omitidas? }`: corre esa herramienta con el usuario hub del dueño y el almacén del conector (`RUTAS_MCP`). *Con una herramienta de escritura, `args.registrado_por: {rol, nombre, telefono}` es obligatorio (va al historial; la vía la pone el servidor: `whatsapp`) y conviene `args.idempotencia` = id del mensaje de WhatsApp |
 | `requerimiento` | **no** | `{ accion: crear\|editar\|adjuntar, … }` (los mismos campos que `/api/requerimiento`; adjuntar solo `pdf` o `imagen`) | `{ error, id? }`: corre `requerimientos/api.js → atender` con el usuario hub del dueño. Kay confirma con el dueño antes |
 | `cotizar_requerimiento` | **no** | `{ id, cid?, pid?, cliente_nombre?, proyecto_nombre?, nota? }` | `{ error, cid, pid, conv, turno, proyecto, adjuntos }`: crea cliente/proyecto si faltan, abre una cotización nueva, registra la confirmación del dueño, `asignar_requerimiento` y encola el turno del Agente IA (Claude, API de Anthropic) |

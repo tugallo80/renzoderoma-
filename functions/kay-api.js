@@ -93,7 +93,7 @@ async function conector() {
     return contextoConector;
 }
 // Escritura (docs/sesiones/08-operaciones-kay.md): solo estas, con registrado_por; Kay pide el sí del dueño antes de cada una.
-const ESCRITURA_KAY = new Set(["modificar_licitacion", "crear_licitacion", "cambiar_estado_proyecto", "registrar_trabajador"]);
+const ESCRITURA_KAY = new Set(["modificar_licitacion", "crear_licitacion", "cambiar_estado_proyecto", "registrar_trabajador", "crear_cliente"]);
 const esEscritura = (d) => d && ESCRITURA_KAY.has(d.name) && d.annotations && d.annotations.readOnlyHint === false;
 const permitida = (d) => d && !HERRAMIENTAS_EXCLUIDAS.has(d.name) && d.annotations && (d.annotations.readOnlyHint === true || esEscritura(d));
 
