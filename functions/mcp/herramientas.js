@@ -187,7 +187,7 @@ const HERRAMIENTAS = [
             const igual = Object.keys(todos).find((k) => todos[k] && norm(todos[k].nombre) === norm(nombre));
             if (igual && !e.forzar) return { creado: false, ya_existe: { cid: igual, nombre: todos[igual].nombre }, aviso: "Ya hay un cliente con ese nombre: usá ese cid. Si el dueño confirma que es otro, repetí con forzar: true." };
             const ahora = new Date(almacen.ahora()).toISOString();
-            const cid = await al.agregar("clientes", { nombre, rubro: String(e.rubro || "").trim(), wsp: String(e.wsp || "").trim(), email: String(e.email || "").trim(), logo: "", cover: "", fecha_creacion: ahora, fecha_mod: ahora, creado_por: "claude" });
+            const cid = await al.agregar("clientes", { nombre, rubro: String(e.rubro || "").trim(), wsp: String(e.wsp || "").trim(), email: String(e.email || "").trim(), logo: "", cover: "", fecha_creacion: ahora, fecha_mod: ahora, creado_por: e.registrado_por && e.registrado_por.via === "whatsapp" ? "kay" : "claude" });
             return { creado: true, cid, nombre };
         },
     },
