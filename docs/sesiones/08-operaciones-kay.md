@@ -61,8 +61,15 @@ Pruebas: `tools/licitaciones` 6/6 (incluye 2.548,50 → 3.000 con reintento), co
   mismo resultado: comparado página por página). Fotos: solo de nuestro Storage, pasadas a JPEG de ≤1600 px con sharp.
   Lo que no tiene el servidor: las artes gráficas que la pantalla carga en memoria (`_licArtsData`).
 - Kay: `pdf_documento` en `kayApi` (1 GiB, 120 s) → base64 del PDF; queda una copia en `documentos/{cid}/{pid}/`.
-- Siguen: cotización/presupuesto (`presupuesto.html`) y órdenes, con el mismo patrón.
-- Pruebas: `tools/documentos` 4/4 (deja las páginas en `salida/` para mirarlas).
+- Cotización y órdenes ✅ (2026-11-21), mismo patrón:
+  - `public/js/pdf-cotizacion.js` (`PdfCotizacion`): "Presupuesto maestro" y "con impuestos por ítem" de `presupuesto.html`,
+    con `membrete` (logo + pie) que también usa el PDF del correo. La pantalla le pasa lo que tiene en pantalla; el servidor, lo
+    guardado en `presupuesto` (`fecha`, `impuestos`, `descuento`, `descuento_pct`, `cond`) y `monto_cierre`.
+  - `public/js/pdf-produccion.js` (`PdfProduccion`): órdenes de `produccion.html` (técnica/estructuras, impresión, impresión
+    solo con captura, completa). `armarArtes(items, artes_data)` repite los pasos de la pantalla: las artes guardadas mandan
+    y el resto sale de las medidas del APU.
+  - Comparadas con jsPDF 2.5.1 (pantalla) y 4.2.1 (servidor): iguales.
+- Pruebas: `tools/documentos` 6/6 (deja las páginas en `salida/` para mirarlas).
 
 ## Etapas siguientes
 

@@ -3,7 +3,9 @@
  *
  *   licitacion {cid, pid, id, modo?: general|detalle} → functions/pdf/compartido/pdf-licitacion.js (copia idéntica de
  *              public/js/pdf-licitacion.js, el que usa licitaciones.html)
- *   cotizacion, orden → todavía no (siguiente etapa: presupuesto.html y órdenes).
+ *   cotizacion {cid, pid, modo?: normal|impuestos_por_item} → pdf-cotizacion.js (presupuesto.html)
+ *   orden      {cid, pid, modo?: produccion|impresion|impresion_con_imagen|completa} → pdf-produccion.js (produccion.html)
+ * Los tres módulos son copias idénticas de public/js/ (functions/pdf/compartido/).
  *
  * Devuelve {nombre, mime, base64, bytes, paginas, ruta}: el PDF también queda guardado en Storage
  * (documentos/{cid}/{pid}/{nombre}, solo para la app; sin enlace público).
@@ -18,7 +20,7 @@ const MAX_PDF = 10 * 1024 * 1024;
 const MAX_IMG = 12 * 1024 * 1024;
 const IMG_OK = /^https:\/\/(firebasestorage\.googleapis\.com|storage\.googleapis\.com)\//;
 
-const RUTAS = [/^proyectos\/[^/]+\/[^/]+\/(nombre|licitaciones\/[^/]+|presupuesto\/items)$/];
+const RUTAS = [/^proyectos\/[^/]+\/[^/]+\/(nombre|licitaciones\/[^/]+|presupuesto|presupuesto\/items|monto_cierre|artes_data)$/, /^clientes\/[^/]+\/nombre$/];
 const ARCHIVOS = [/^documentos\/[^/]+\/[^/]+\/[A-Za-z0-9_.-]+\.pdf$/];
 
 let _jsPDF = null;
@@ -32,16 +34,17 @@ function jsPDF() {
 }
 const fechaBo = (ms) => { const [a, m, d] = C.hoyBolivia(ms).split("-"); return `${Number(d)}/${Number(m)}/${a}`; };
 
-/** Imágenes para el PDF: data URL JPEG (o PNG si trae transparencia) + medidas, con caché por pedido. */
-function crearCargador() {
+/** Imágenes para el PDF: data URL JPEG (o PNG si trae transparencia, salvo soloJpeg) + medidas, con caché por pedido.
+ *  soloJpeg: como getBase64ImageFromUrl de presupuesto/producción (canvas → JPEG); el fondo transparente queda blanco. */
+function crearCargador({ soloJpeg = false } = {}) {
     const sharp = require("sharp");
     const medidas = new Map();
     const cache = new Map();
     async function convertir(buf) {
         const img = sharp(buf, { failOn: "none" }).rotate().resize({ width: 1600, height: 1600, fit: "inside", withoutEnlargement: true });
         const meta = await sharp(buf, { failOn: "none" }).metadata();
-        const png = !!meta.hasAlpha;
-        const { data, info } = await (png ? img.png() : img.jpeg({ quality: 80 })).toBuffer({ resolveWithObject: true });
+        const png = !!meta.hasAlpha && !soloJpeg;
+        const { data, info } = await (png ? img.png() : img.flatten({ background: "#ffffff" }).jpeg({ quality: 80 })).toBuffer({ resolveWithObject: true });
         const url = `data:image/${png ? "png" : "jpeg"};base64,${data.toString("base64")}`;
         medidas.set(url, { w: info.width, h: info.height });
         return url;
@@ -52,6 +55,7 @@ function crearCargador() {
         const p = (async () => {
             try {
                 if (url === "logo") return convertir(fs.readFileSync(path.join(__dirname, "logo.png")));
+                if (url === "logo-presupuesto") return convertir(fs.readFileSync(path.join(__dirname, "logo-presupuesto.jpg")));
                 if (url.startsWith("data:image/")) return convertir(Buffer.from(url.split(",")[1] || "", "base64"));
                 if (!IMG_OK.test(url)) return null;   // solo nuestro Storage
                 const r = await fetch(url, { redirect: "error", signal: AbortSignal.timeout(15000) });
@@ -84,16 +88,52 @@ async function pdfLicitacion(almacen, b) {
     return { nombre: P.nombreArchivo(String(pName), lid, modo), doc };
 }
 
+/** Fecha de hoy en Bolivia como Date local (para los nombres MMDD_…) */
+const hoyComoDate = (ms) => { const [a, m, d] = C.hoyBolivia(ms).split("-").map(Number); return new Date(a, m - 1, d); };
+
+async function datosProyecto(almacen, b) {
+    const cid = C.id(b.cid, "Cliente"), pid = C.id(b.pid, "Proyecto");
+    const [nombre, cliente] = await Promise.all([almacen.leer(`proyectos/${cid}/${pid}/nombre`), almacen.leer(`clientes/${cid}/nombre`)]);
+    if (nombre == null) C.falla("No existe el proyecto.", 404);
+    return { cid, pid, proyecto: String(nombre), cliente: cliente ? String(cliente) : "CLIENTE" };
+}
+
+async function pdfCotizacion(almacen, b) {
+    const p = await datosProyecto(almacen, b);
+    const modo = b.modo === "impuestos_por_item" ? "impuestos_por_item" : "normal";
+    const [pres, cierre] = await Promise.all([almacen.leer(`proyectos/${p.cid}/${p.pid}/presupuesto`), almacen.leer(`proyectos/${p.cid}/${p.pid}/monto_cierre`)]);
+    if (!pres || !pres.items) C.falla("El proyecto no tiene presupuesto.", 404);
+    const P = require("../pdf/compartido/pdf-cotizacion.js");
+    const { cargarImagen } = crearCargador({ soloJpeg: true });
+    const doc = await P.generar({ jsPDF: jsPDF(), modo, pres, montoCierre: parseFloat(cierre) || 0, proyecto: p.proyecto, cliente: p.cliente,
+        fechaHoy: fechaBo(almacen.ahora()), logo: await cargarImagen("logo-presupuesto"), cargarImagen });
+    return { nombre: P.nombreArchivo({ proyecto: p.proyecto, cliente: p.cliente, modo, fecha: hoyComoDate(almacen.ahora()) }), doc };
+}
+
+const TIPOS_ORDEN = ["produccion", "impresion", "impresion_con_imagen", "completa"];
+async function pdfOrden(almacen, b) {
+    const p = await datosProyecto(almacen, b);
+    const modo = TIPOS_ORDEN.includes(b.modo) ? b.modo : "produccion";
+    const [items, artes] = await Promise.all([almacen.leer(`proyectos/${p.cid}/${p.pid}/presupuesto/items`), almacen.leer(`proyectos/${p.cid}/${p.pid}/artes_data`)]);
+    if (!items) C.falla("El proyecto no tiene presupuesto.", 404);
+    const P = require("../pdf/compartido/pdf-produccion.js");
+    const { cargarImagen } = crearCargador({ soloJpeg: true });
+    const r = await P.generar(modo, { jsPDF: jsPDF(), items, artsData: P.armarArtes(items, artes || {}), proyecto: p.proyecto, cliente: p.cliente,
+        fecha: fechaBo(almacen.ahora()), fechaCorta: fechaBo(almacen.ahora()), cargarImagen });
+    return { nombre: P.nombreArchivo({ proyecto: p.proyecto, cliente: p.cliente, sufijo: r.sufijo, fecha: hoyComoDate(almacen.ahora()) }), doc: r.doc };
+}
+
 const TIPOS = {
     licitacion: pdfLicitacion,
+    cotizacion: pdfCotizacion,
+    orden: pdfOrden,
 };
 
 /** {tipo, cid, pid, id, modo?} → {nombre, mime, base64, bytes, paginas, ruta}. */
 async function generar(almacen, b) {
     const tipo = String((b && b.tipo) || "");
-    if (["cotizacion", "orden"].includes(tipo)) C.falla(`El PDF de ${tipo} todavía no se genera en el servidor (por ahora: licitacion).`, 501);
-    const fn = TIPOS[tipo];
-    if (!fn) C.falla("Tipo de documento inválido (licitacion).");
+    const fn = Object.prototype.hasOwnProperty.call(TIPOS, tipo) ? TIPOS[tipo] : null;
+    if (!fn) C.falla("Tipo de documento inválido (licitacion, cotizacion u orden).");
     const { nombre, doc } = await fn(almacen, b);
     const buf = Buffer.from(doc.output("arraybuffer"));
     if (buf.length > MAX_PDF) C.falla(`El PDF pesa ${(buf.length / 1048576).toFixed(1)} MB (máximo 10 MB). Probá el modo general.`, 413);
@@ -102,4 +142,4 @@ async function generar(almacen, b) {
     return { nombre, mime: "application/pdf", base64: buf.toString("base64"), bytes: buf.length, paginas: doc.getNumberOfPages(), ruta };
 }
 
-module.exports = { generar, RUTAS, ARCHIVOS, TIPOS };
+module.exports = { generar, RUTAS, ARCHIVOS, TIPOS, TIPOS_ORDEN };

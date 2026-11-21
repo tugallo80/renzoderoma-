@@ -494,8 +494,10 @@ const ACCIONES = {
     },
     pdf_documento: {
         soloLectura: true,
-        descripcion: "PDF de un documento, igual al de la pantalla, para mandarlo por WhatsApp { tipo: licitacion (cotizacion y orden: pronto), cid, pid, id, "
-            + "modo?: general|detalle } → { nombre, mime: \"application/pdf\", base64, bytes, paginas } (máx. 10 MB).",
+        descripcion: "PDF de un documento, igual al de la pantalla, para mandarlo por WhatsApp → { nombre, mime: \"application/pdf\", base64, bytes, paginas } (máx. 10 MB). "
+            + "{ tipo: licitacion, cid, pid, id, modo?: general|detalle } (propuesta al trabajador) · "
+            + "{ tipo: cotizacion, cid, pid, modo?: normal|impuestos_por_item } (presupuesto para el cliente) · "
+            + "{ tipo: orden, cid, pid, modo?: produccion|impresion|impresion_con_imagen|completa } (órdenes de Producción).",
         ejecutar: async (p) => {
             const D = require("./documentos");
             const admin = require("firebase-admin");

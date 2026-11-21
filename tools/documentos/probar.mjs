@@ -26,9 +26,10 @@ const datos = () => ({ proyectos: { cliA: { proyA: {
 let bien = 0, total = 0;
 async function prueba(n, fn) { total++; try { await fn(); bien++; console.log('ok  ', n); } catch (e) { console.log('FALLA', n, '\n', e); process.exitCode = 1; } }
 
-await prueba('la copia del servidor es idéntica a la de la pantalla', () => {
-    assert.equal(readFileSync('../../functions/pdf/compartido/pdf-licitacion.js', 'utf8'), readFileSync('../../public/js/pdf-licitacion.js', 'utf8'),
-        'pdf-licitacion.js desactualizado: correr "npm run sincronizar" en tools/documentos');
+await prueba('las copias del servidor son idénticas a las de la pantalla', () => {
+    for (const f of ['pdf-licitacion.js', 'pdf-cotizacion.js', 'pdf-produccion.js'])
+        assert.equal(readFileSync('../../functions/pdf/compartido/' + f, 'utf8'), readFileSync('../../public/js/' + f, 'utf8'),
+            f + ' desactualizado: correr "npm run sincronizar" en tools/documentos');
 });
 
 const paginasPng = async (base64, prefijo) => {
@@ -64,12 +65,52 @@ await prueba('licitación modo detalle: materiales y mano de obra del ítem', as
     await paginasPng(r.base64, 'detalle');
 });
 
-await prueba('errores: cotización todavía no, licitación o proyecto inexistente, tipo inválido', async () => {
+await prueba('errores: licitación o proyecto inexistente, tipo inválido', async () => {
     const al = crearAlmacenMemoria(datos(), D.RUTAS, D.ARCHIVOS);
-    await assert.rejects(D.generar(al, { tipo: 'cotizacion', cid: 'cliA', pid: 'proyA' }), (e) => e.status === 501);
     await assert.rejects(D.generar(al, { tipo: 'licitacion', cid: 'cliA', pid: 'proyA', id: 'NO' }), (e) => e.status === 404);
     await assert.rejects(D.generar(al, { tipo: 'licitacion', cid: 'cliA', pid: 'nada', id: 'L1' }), (e) => e.status === 404);
     await assert.rejects(D.generar(al, { tipo: 'otro' }), (e) => e.status === 400);
+});
+
+const conPresupuesto = () => {
+    const d = datos();
+    d.clientes = { cliA: { nombre: 'Strativa Demo' } };
+    const p = d.proyectos.cliA.proyA;
+    p.presupuesto.items.unshift({ type: 'chapter', name: 'Trofeos' });
+    p.presupuesto.items.forEach((it) => { if (it.type !== 'chapter') { it.pu = it.desc.startsWith('Trofeo') ? 1450 : 180; it.prod_resp = 'Imprenta Demo';
+        it.proceso_ia = [{ m: 'Roladora', d: 'Rolar la plancha en cono' }]; } });
+    p.presupuesto.items.push({ desc: 'Vinil adhesivo azul metalizado', und: 'm2', cant: 2, pu: 60, measures: [{ d: 'Franjas', b: 61, h: 10, c: 8 }] });
+    Object.assign(p.presupuesto, { fecha: '2026-11-21', impuestos: true, descuento: 50, descuento_pct: 0, cond: { pago: '50% / 50%', validez: '15 días', montaje: true } });
+    p.monto_cierre = 0;
+    p.artes_data = { 3: [{ id: 'manual_1', nombre: 'Franjas cono', base: 61, altura: 10, cantidad: 8, material: 'Adhesivo Vinílico', precio: 60, imgRef: foto }] };
+    return d;
+};
+
+await prueba('cotización: normal (vertical) e impuestos por ítem (horizontal), con anexo fotográfico y nombre de archivo', async () => {
+    const al = crearAlmacenMemoria(conPresupuesto(), D.RUTAS, D.ARCHIVOS);
+    const n = await D.generar(al, { tipo: 'cotizacion', cid: 'cliA', pid: 'proyA' });
+    assert.match(n.nombre, /^\d{4}_TROFEO_DEMO_STRATIVA_DEMO\.pdf$/);
+    assert.ok(n.paginas >= 2, 'tabla + anexo fotográfico');
+    await paginasPng(n.base64, 'cotizacion');
+    const i = await D.generar(al, { tipo: 'cotizacion', cid: 'cliA', pid: 'proyA', modo: 'impuestos_por_item' });
+    assert.match(i.nombre, /_CON_IMP\.pdf$/);
+    await paginasPng(i.base64, 'cotizacion-imp');
+    await assert.rejects(D.generar(crearAlmacenMemoria({ proyectos: { cliA: { proyA: { nombre: 'Vacío' } } } }, D.RUTAS, D.ARCHIVOS),
+        { tipo: 'cotizacion', cid: 'cliA', pid: 'proyA' }), (e) => e.status === 404);
+});
+
+await prueba('órdenes: producción, impresión (artes guardadas + las de las medidas), solo con imagen y completa', async () => {
+    const al = crearAlmacenMemoria(conPresupuesto(), D.RUTAS, D.ARCHIVOS);
+    const P = require('../../functions/pdf/compartido/pdf-produccion.js');
+    const artes = P.armarArtes(al.datos.proyectos.cliA.proyA.presupuesto.items, al.datos.proyectos.cliA.proyA.artes_data);
+    assert.equal(artes[3][0].id, 'manual_1', 'la guardada manda (no se rearma desde las medidas)');
+    const sufijos = {};
+    for (const modo of D.TIPOS_ORDEN) {
+        const r = await D.generar(al, { tipo: 'orden', cid: 'cliA', pid: 'proyA', modo });
+        sufijos[modo] = r.nombre.replace(/^\d{4}_Trofeo_Demo_Strativa_Demo_/, '');
+        await paginasPng(r.base64, 'orden-' + modo);
+    }
+    assert.deepEqual(sufijos, { produccion: 'ESTRUCTURAS.pdf', impresion: 'ORDEN_IMPRESION.pdf', impresion_con_imagen: 'ORDEN_IMPRESION.pdf', completa: 'ORDEN_COMPLETA.pdf' });
 });
 
 console.log(`\n${bien}/${total} pruebas OK`);
