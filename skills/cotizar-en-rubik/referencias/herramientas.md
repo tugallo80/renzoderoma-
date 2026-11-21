@@ -107,7 +107,10 @@ Las mismas operaciones de servidor que usan las pantallas: dejan historial (ante
 idempotentes. **Antes de cada cambio, decile al dueño qué vas a hacer y esperá su sí.**
 - **`listar_licitaciones`** `{cid, pid}` o `{texto}` (nombre del trabajador, en todos los proyectos) → trabajador, estado,
   contrato, extras, pagado y saldo de cada licitación.
-- **`modificar_licitacion`** `{cid, pid, lid, operacion, idempotencia, registrado_por: {rol, nombre}, …}` →
+- **`ver_licitacion`** `{cid, pid, lid}` → ítems (tareas con su clave, cantidad, precio y subtotal) y extras de una licitación.
+- **`modificar_licitacion`** `{cid, pid, lid, operacion, idempotencia, registrado_por: {rol, nombre}, …}` → ítems: `agregar_items`
+  `{alcance}`, `cambiar_item` `{tarea, monto}`, `quitar_item` `{tarea, motivo}` (el contrato se ajusta por diferencia; sumar trabajo
+  como ítem, no como extra); `anular_extra` `{extra, motivo}`;
   `cambiar_monto` (aprobada: precio final; si no, el propuesto), `cambiar_contratista`, `aprobar`, `contra_oferta`,
   `terminar`, `registrar_pago` (pago, adelanto o descuento por compra; `pagado_con` caja chica, QR…), `anular_pago`,
   `agregar_extra`, `anular` (con motivo; la copia queda en el historial). No toca `gasto_total`.

@@ -6,6 +6,8 @@
  *   cotizacion {cid, pid, modo?: normal|impuestos_por_item} → pdf-cotizacion.js (presupuesto.html)
  *   orden      {cid, pid, modo?: produccion|impresion|impresion_con_imagen|completa} → pdf-produccion.js (produccion.html)
  *   liquidacion {cid, pid, id} → pdf-liquidacion.js (compras.html del proyecto): contrato, anticipos/pagos, saldo y comprobantes
+ *   contratista {worker_id | nombre, proyectos?: [{cid, pid}]} → pdf-contratista.js (Tesorería → Contratistas): todos sus contratos,
+ *              con extras, pagos, comprobantes y la rendición de cada proyecto → total a pagar
  *   rendicion  {worker_id | telefono, desde?, hasta?, cid?, pid?} → pdf-rendicion.js (Tesorería → Rendiciones): caja chica, gastos, saldo y recibos
  * Los tres módulos son copias idénticas de public/js/ (functions/pdf/compartido/).
  *
@@ -23,8 +25,9 @@ const MAX_IMG = 12 * 1024 * 1024;
 const IMG_OK = /^https:\/\/(firebasestorage\.googleapis\.com|storage\.googleapis\.com)\//;
 
 const RUTAS = [/^proyectos\/[^/]+\/[^/]+\/(nombre|licitaciones\/[^/]+|presupuesto|presupuesto\/items|monto_cierre|artes_data)$/, /^clientes\/[^/]+\/nombre$/,
-    /^caja_chica\/[^/]+$/, /^personal$/, /^personal\/[^/]+\/(nombre|telefono)$/];   // rendición
-const ARCHIVOS = [/^documentos\/[^/]+\/[^/]+\/[A-Za-z0-9_.-]+\.pdf$/, /^documentos\/rendiciones\/[A-Za-z0-9_-]+\/[A-Za-z0-9_.-]+\.pdf$/];
+    /^caja_chica\/[^/]+$/, /^personal$/, /^personal\/[^/]+\/(nombre|telefono)$/,   // rendición
+    /^proyectos$/];   // consolidado del contratista (todos sus contratos)
+const ARCHIVOS = [/^documentos\/[^/]+\/[^/]+\/[A-Za-z0-9_.-]+\.pdf$/, /^documentos\/(rendiciones|contratistas)\/[A-Za-z0-9_-]+\/[A-Za-z0-9_.-]+\.pdf$/];
 
 let _jsPDF = null;
 function jsPDF() {
@@ -158,19 +161,55 @@ async function pdfRendicion(almacen, b) {
     return { nombre: P.nombreArchivo(r.cuerpo), doc, ruta: `documentos/rendiciones/${r.cuerpo.worker_id}/${P.nombreArchivo(r.cuerpo)}` };
 }
 
+async function pdfContratista(almacen, b) {
+    const wid = b.worker_id ? C.id(b.worker_id, "Trabajador") : null;
+    const nombreQ = String(b.nombre || "").trim().toLowerCase();
+    let workerName = wid ? await almacen.leer(`personal/${wid}/nombre`) : null;
+    if (!wid && !nombreQ) C.falla("Decí de quién (worker_id o nombre).");
+    const filtroProy = Array.isArray(b.proyectos) && b.proyectos.length ? new Set(b.proyectos.map((p) => `${p.cid}/${p.pid}`)) : null;
+    const todos = (await almacen.leer("proyectos")) || {};
+    const items = [];
+    Object.entries(todos).forEach(([cid, ps]) => Object.entries(ps || {}).forEach(([pid, proy]) => {
+        if (!proy || typeof proy !== "object" || proy.archivado === true || !proy.licitaciones) return;
+        if (filtroProy && !filtroProy.has(`${cid}/${pid}`)) return;
+        Object.entries(proy.licitaciones).forEach(([licId, lic]) => {
+            if (!lic || lic.is_supervision || lic.is_internal_assignment) return;
+            const nom = lic.worker_name || lic.nombre_trabajador || lic.trabajador_nombre || lic.worker_id || "";
+            const es = wid ? lic.worker_id === wid || (workerName && nom === workerName) : String(nom).trim().toLowerCase() === nombreQ;
+            if (!es) return;
+            if (!workerName) workerName = nom;
+            items.push({ cid, pid, pid_nombre: proy.nombre || pid, licId, lic, budgetItems: (proy.presupuesto && proy.presupuesto.items) || {} });
+        });
+    }));
+    if (!items.length) C.falla("No encontré contratos de esa persona.", 404);
+    const R = require("../rendiciones/api");
+    for (const it of items) {
+        if (!it.lic.worker_id) continue;
+        const r = await R.atender(almacen, { accion: "estado", worker_id: it.lic.worker_id, cid: it.cid, pid: it.pid }).catch(() => null);
+        if (r && r.status === 200) it.rendicion = r.cuerpo;
+    }
+    const P = require("../pdf/compartido/pdf-contratista.js");
+    const { cargarImagen, dimensiones } = crearCargador({ soloJpeg: true });
+    const fecha = fechaBo(almacen.ahora());
+    const doc = await P.generar({ jsPDF: jsPDF(), workerName: String(workerName), fecha, logo: await cargarImagen("logo-liquidacion"), items, cargarImagen, dimensiones });
+    const nombre = P.nombreArchivo(String(workerName), fecha);
+    return { nombre, doc, ruta: `documentos/contratistas/${String(wid || nombre).replace(/[^A-Za-z0-9_-]/g, "_").slice(0, 60)}/${nombre}` };
+}
+
 const TIPOS = {
     licitacion: pdfLicitacion,
     cotizacion: pdfCotizacion,
     orden: pdfOrden,
     liquidacion: pdfLiquidacion,
     rendicion: pdfRendicion,
+    contratista: pdfContratista,
 };
 
 /** {tipo, cid, pid, id, modo?} → {nombre, mime, base64, bytes, paginas, ruta}. */
 async function generar(almacen, b) {
     const tipo = String((b && b.tipo) || "");
     const fn = Object.prototype.hasOwnProperty.call(TIPOS, tipo) ? TIPOS[tipo] : null;
-    if (!fn) C.falla("Tipo de documento inválido (licitacion, liquidacion, rendicion, cotizacion u orden).");
+    if (!fn) C.falla("Tipo de documento inválido (licitacion, liquidacion, contratista, rendicion, cotizacion u orden).");
     const { nombre, doc, ruta: rutaPropia } = await fn(almacen, b);
     const buf = Buffer.from(doc.output("arraybuffer"));
     if (buf.length > MAX_PDF) C.falla(`El PDF pesa ${(buf.length / 1048576).toFixed(1)} MB (máximo 10 MB). Probá el modo general.`, 413);

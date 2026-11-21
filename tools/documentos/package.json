@@ -5,6 +5,6 @@
   "description": "Pruebas de los PDF generados en el servidor (functions/documentos) con la base en memoria.",
   "scripts": {
     "test": "node probar.mjs",
-    "sincronizar": "cp ../../public/js/pdf-licitacion.js ../../public/js/pdf-cotizacion.js ../../public/js/pdf-produccion.js ../../public/js/pdf-liquidacion.js ../../public/js/pdf-rendicion.js ../../functions/pdf/compartido/"
+    "sincronizar": "cp ../../public/js/pdf-licitacion.js ../../public/js/pdf-cotizacion.js ../../public/js/pdf-produccion.js ../../public/js/pdf-liquidacion.js ../../public/js/pdf-rendicion.js ../../public/js/pdf-contratista.js ../../functions/pdf/compartido/"
   }
 }

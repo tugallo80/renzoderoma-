@@ -533,6 +533,7 @@ const ACCIONES = {
         descripcion: "PDF de un documento, igual al de la pantalla, para mandarlo por WhatsApp → { nombre, mime: \"application/pdf\", base64, bytes, paginas } (máx. 10 MB). "
             + "{ tipo: licitacion, cid, pid, id, modo?: general|detalle } (propuesta al trabajador) · "
             + "{ tipo: liquidacion, cid, pid, id } (estado del contrato para el trabajador: acordado, anticipos y pagos, saldo, comprobantes) · "
+            + "{ tipo: contratista, worker_id | nombre, proyectos?: [{cid, pid}] } (BALANCE COMPLETO del contratista, todos sus trabajos: contratos con extras, pagos, comprobantes y rendiciones → total a pagar; el de Tesorería → Contratistas) · "
             + "{ tipo: rendicion, worker_id | telefono, desde?, hasta?, cid?, pid? } (rendición de cuentas de la caja chica: entregado, gastos con recibos, saldo; con cid/pid solo ese proyecto) · "
             + "{ tipo: cotizacion, cid, pid, modo?: normal|impuestos_por_item } (presupuesto para el cliente) · "
             + "{ tipo: orden, cid, pid, modo?: produccion|impresion|impresion_con_imagen|completa } (órdenes de Producción).",

@@ -14,6 +14,9 @@
  *   trabajadores         {texto?}                       → personas y proveedores de la base (worker_id, nombre, tipo); avisa si
  *                                                         el nombre está solo en Proveedores (base_datos), que no sirve para licitar
  *   registrar_trabajador {nombre, tipo, especialidad?, telefono?, actualizar?} → alta en Personal (como base_datos.html), sin sueldo
+ *   ver                  {lid}                          → tareas (ítems) con su clave y extras
+ *   agregar_items        {lid, alcance}  · cambiar_item {lid, tarea, monto, cant?, descripcion?} · quitar_item {lid, tarea, motivo}
+ *                        → el contrato se ajusta por DIFERENCIA (respeta un precio negociado) · anular_extra {lid, extra, motivo}
  *   cambiar_monto        {lid, monto, motivo?}          aprobada → precio_final; si no, precio_propuesto
  *   cambiar_contratista  {lid, worker_id}
  *   aprobar              {lid, precio_final?}           → estado aprobado (+ responsable en los ítems del presupuesto)
@@ -292,7 +295,7 @@ const OPS = {
         return { ok: true, lid: b.lid, op: "anular", copia_en_historial: hk.split("/").pop(), anulada: resumen(b.lid, l) };
     },
 };
-const LECTURA = ["listar", "trabajadores"];
+const LECTURA = ["listar", "trabajadores", "ver"];
 const TIPOS_LIC = ["mano_de_obra", "grafico", "llave_en_mano", "supervision"];
 const sinAcentos = (t) => String(t || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
 
@@ -337,6 +340,116 @@ OPS.registrar_trabajador = async function (almacen, b, quien) {
 };
 
 /** Crear una licitación desde Kay/Claude: alcance simple → mismas tareas que arma licitaciones.html → guardar. */
+/** Un renglón del alcance → [clave, tarea] con la forma que arma licitaciones.html (ítem del presupuesto o renglón libre). */
+function tareaDe(a, n, items, claveLibre) {
+    if (!a || typeof a !== "object") falla(`Renglón ${n + 1} inválido.`);
+    const monto = numero(a.monto, `Monto del renglón ${n + 1}`);
+    if (a.item != null && a.item !== "") {
+        const idx = Number(a.item);
+        const it = Number.isInteger(idx) ? items[idx] : null;
+        if (!it || it.type === "chapter") falla(`El ítem ${a.item} no existe en el presupuesto (usá ver_presupuesto para ver los índices).`, 404);
+        const cant = a.cant != null ? numero(a.cant, `Cantidad del renglón ${n + 1}`) : Number(it.cant) || 1;
+        return [`m_${idx}`, { parent_desc: "ÍTEM PRINCIPAL", task_name: texto(a.descripcion, 200) || it.desc, desc: texto(a.descripcion, 200) || it.desc, cant, und: texto(a.und, 20) || it.und || "und",
+            pu: r2(monto / (cant || 1)), subtotal: monto, feat: it.feat || "", mats: "", measures: it.measures || [], img: it.img || null, cortes: it.cortes || [], op_images: it.op_images || [],
+            originIdx: idx, originType: "main", fecha_entrega: it.prod_entrega || it.print_entrega || it.gantt_end || "Sin fecha" }];
+    }
+    const desc = texto(a.descripcion, 200) || falla(`Renglón ${n + 1}: falta la descripción (o el ítem del presupuesto).`);
+    const cant = a.cant != null ? numero(a.cant, `Cantidad del renglón ${n + 1}`) : 1;
+    return [claveLibre, { parent_desc: "ALCANCE", task_name: desc, desc, cant, und: texto(a.und, 20) || "glb", pu: r2(monto / (cant || 1)), subtotal: monto,
+        feat: "", mats: "", measures: [], img: null, cortes: [], op_images: [], originIdx: null, originType: "libre", fecha_entrega: "Sin fecha" }];
+}
+
+/** Detalle de una licitación: sus tareas (ítems) y extras, con las claves para cambiarlos. */
+OPS.ver = async function (almacen, b) {
+    const nombre = await proyecto(almacen, b);
+    const l = await cargar(almacen, b);
+    return { proyecto: nombre, licitacion: resumen(b.lid, l),
+        tareas: Object.entries(l.tareas || {}).filter(([, t]) => t && typeof t === "object").map(([k, t]) => ({ tarea: k, nombre: t.task_name || t.desc || "", cant: r2(t.cant), und: t.und || "",
+            pu: r2(t.pu), subtotal: r2(t.subtotal), item: t.originIdx != null ? Number(t.originIdx) : null })),
+        extras: Object.entries(l.extras || {}).filter(([, x]) => x && typeof x === "object").map(([k, x]) => ({ extra: k, descripcion: x.descripcion || "", monto: r2(x.monto), fecha: x.fecha || null })) };
+};
+
+/** Cambia las tareas de una licitación y ajusta el contrato POR DIFERENCIA (si había un precio negociado distinto de la suma, se respeta). */
+async function cambiarTareas(almacen, b, quien, l, op, cambios, motivo) {
+    const campo = APROBADAS.includes(l.estado) ? "precio_final" : "precio_propuesto";
+    const antes = contrato(l);
+    const delta = r2(cambios.reduce((s, c) => s + (c.nueva ? c.nueva.subtotal : 0) - (c.vieja ? r2(c.vieja.subtotal) : 0), 0));
+    const despues = r2(antes + delta);
+    if (despues < 0) falla("El contrato quedaría en negativo.");
+    const m = {};
+    const rutas = [`${base(b)}/${b.lid}`, await espejo(almacen, l.worker_id, b.lid)].filter(Boolean);
+    rutas.forEach((r) => {
+        cambios.forEach((c) => { m[`${r}/tareas/${c.clave}`] = c.nueva || null; });
+        m[`${r}/${campo}`] = despues;
+        if (campo === "precio_final" && l.precio_propuesto != null) m[`${r}/precio_propuesto`] = r2(Number(l.precio_propuesto || 0) + delta);
+    });
+    const [hk, hv] = C.entradaHistorial(almacen, b.cid, b.pid, { area: "licitaciones", ref: b.lid, op,
+        antes: { contrato: antes, tareas: cambios.map((c) => c.vieja ? { tarea: c.clave, nombre: c.vieja.task_name, subtotal: r2(c.vieja.subtotal) } : { tarea: c.clave, nueva: true }) },
+        despues: { contrato: despues, tareas: cambios.map((c) => c.nueva ? { tarea: c.clave, nombre: c.nueva.task_name, subtotal: c.nueva.subtotal } : { tarea: c.clave, quitada: true }) }, motivo, quien });
+    m[hk] = hv;
+    const nueva = Object.assign({}, l, { [campo]: despues, tareas: Object.assign({}, l.tareas) });
+    cambios.forEach((c) => { if (c.nueva) nueva.tareas[c.clave] = c.nueva; else delete nueva.tareas[c.clave]; });
+    if (APROBADAS.includes(l.estado)) await marcarResponsable(almacen, b, nueva, m);
+    await almacen.actualizarVarios(m);
+    return { ok: true, lid: b.lid, op, contrato_antes: antes, contrato: despues, licitacion: resumen(b.lid, nueva) };
+}
+
+OPS.agregar_items = async function (almacen, b, quien) {
+    await proyecto(almacen, b);
+    const l = await cargar(almacen, b);
+    const alcance = Array.isArray(b.alcance) && b.alcance.length ? b.alcance : falla("Falta el alcance: [{item?, descripcion?, cant?, und?, monto}].");
+    if (alcance.length > 30) falla("Máximo 30 renglones por vez.");
+    const items = (await almacen.leer(`proyectos/${b.cid}/${b.pid}/presupuesto/items`)) || {};
+    const cambios = alcance.map((a, n) => {
+        const [k, t] = tareaDe(a, n, items, `libre_${almacen.nuevaClave()}`);
+        if (l.tareas && l.tareas[k]) falla(`El ítem ${a.item} ya está en la licitación (tarea ${k}): para cambiar su precio usá cambiar_item.`, 409);
+        return { clave: k, vieja: null, nueva: t };
+    });
+    if (new Set(cambios.map((c) => c.clave)).size !== cambios.length) falla("Hay un ítem repetido en el alcance.");
+    return cambiarTareas(almacen, b, quien, l, "agregar_items", cambios, texto(b.motivo, 300) || null);
+};
+
+OPS.cambiar_item = async function (almacen, b, quien) {
+    await proyecto(almacen, b);
+    const l = await cargar(almacen, b);
+    const clave = String(b.tarea || "");
+    const vieja = clave && l.tareas ? l.tareas[clave] : null;
+    if (!vieja) falla("No existe esa tarea en la licitación (usá la operación ver para las claves).", 404);
+    const monto = numero(b.monto, "Monto");
+    const cant = b.cant != null ? numero(b.cant, "Cantidad") : Number(vieja.cant) || 1;
+    const nueva = Object.assign({}, vieja, { subtotal: monto, cant, pu: r2(monto / (cant || 1)) });
+    if (b.descripcion) { nueva.task_name = texto(b.descripcion, 200); nueva.desc = nueva.task_name; }
+    return cambiarTareas(almacen, b, quien, l, "cambiar_item", [{ clave, vieja, nueva }], texto(b.motivo, 300) || null);
+};
+
+OPS.quitar_item = async function (almacen, b, quien) {
+    await proyecto(almacen, b);
+    const l = await cargar(almacen, b);
+    const clave = String(b.tarea || "");
+    const vieja = clave && l.tareas ? l.tareas[clave] : null;
+    if (!vieja) falla("No existe esa tarea en la licitación.", 404);
+    if (Object.keys(l.tareas || {}).length <= 1) falla("Es la única tarea: para dar de baja la licitación usá anular.");
+    const motivo = texto(b.motivo, 300) || falla("Falta el motivo.");
+    return cambiarTareas(almacen, b, quien, l, "quitar_item", [{ clave, vieja, nueva: null }], motivo);
+};
+
+OPS.anular_extra = async function (almacen, b, quien) {
+    await proyecto(almacen, b);
+    const l = await cargar(almacen, b);
+    const ek = String(b.extra || "");
+    const x = ek && l.extras ? l.extras[ek] : null;
+    if (!x) falla("No existe ese extra (usá la operación ver).", 404);
+    const motivo = texto(b.motivo, 300) || falla("Falta el motivo.");
+    const m = { [`${base(b)}/${b.lid}/extras/${ek}`]: null };
+    const esp = await espejo(almacen, l.worker_id, b.lid);
+    if (esp) m[`${esp}/extras/${ek}`] = null;
+    const [hk, hv] = C.entradaHistorial(almacen, b.cid, b.pid, { area: "licitaciones", ref: b.lid, op: "anular_extra", antes: x, despues: null, motivo, quien });
+    m[hk] = hv;
+    await almacen.actualizarVarios(m);
+    const extras = Object.assign({}, l.extras); delete extras[ek];
+    return { ok: true, lid: b.lid, op: "anular_extra", licitacion: resumen(b.lid, Object.assign({}, l, { extras })) };
+};
+
 OPS.crear = async function (almacen, b, quien) {
     await proyecto(almacen, b);
     let wid = b.worker_id ? id(b.worker_id, "Trabajador") : null;
@@ -355,23 +468,8 @@ OPS.crear = async function (almacen, b, quien) {
     const tareas = {};
     let total = 0;
     alcance.forEach((a, n) => {
-        if (!a || typeof a !== "object") falla(`Renglón ${n + 1} inválido.`);
-        const monto = numero(a.monto, `Monto del renglón ${n + 1}`);
-        total += monto;
-        if (a.item != null && a.item !== "") {
-            const idx = Number(a.item);
-            const it = Number.isInteger(idx) ? items[idx] : null;
-            if (!it || it.type === "chapter") falla(`El ítem ${a.item} no existe en el presupuesto (usá ver_presupuesto para ver los índices).`, 404);
-            const cant = a.cant != null ? numero(a.cant, `Cantidad del renglón ${n + 1}`) : Number(it.cant) || 1;
-            tareas[`m_${idx}`] = { parent_desc: "ÍTEM PRINCIPAL", task_name: texto(a.descripcion, 200) || it.desc, desc: texto(a.descripcion, 200) || it.desc, cant, und: texto(a.und, 20) || it.und || "und",
-                pu: r2(monto / (cant || 1)), subtotal: monto, feat: it.feat || "", mats: "", measures: it.measures || [], img: it.img || null, cortes: it.cortes || [], op_images: it.op_images || [],
-                originIdx: idx, originType: "main", fecha_entrega: it.prod_entrega || it.print_entrega || it.gantt_end || "Sin fecha" };
-        } else {
-            const desc = texto(a.descripcion, 200) || falla(`Renglón ${n + 1}: falta la descripción (o el ítem del presupuesto).`);
-            const cant = a.cant != null ? numero(a.cant, `Cantidad del renglón ${n + 1}`) : 1;
-            tareas[`libre_${n}`] = { parent_desc: "ALCANCE", task_name: desc, desc, cant, und: texto(a.und, 20) || "glb", pu: r2(monto / (cant || 1)), subtotal: monto,
-                feat: "", mats: "", measures: [], img: null, cortes: [], op_images: [], originIdx: null, originType: "libre", fecha_entrega: "Sin fecha" };
-        }
+        const [k, t] = tareaDe(a, n, items, `libre_${n}`);
+        tareas[k] = t; total += t.subtotal;
     });
     const licitacion = {
         worker_id: wid, tareas, estado, precio_propuesto: r2(total),

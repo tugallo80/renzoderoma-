@@ -26,6 +26,8 @@ usan, y el conector lo expone.
 | `registrar_pago` | Pago, adelanto o descuento por compra; comprobante en Storage `comprobantes/{cid}/{pid}/{lid}/`; `pagado_con` (caja chica…) | Licitaciones, Tesorería (2) y Compras (2), cada una distinta |
 | `anular_pago` | Lo quita de los dos lados con copia en el historial | Compras |
 | `agregar_extra` | Extra con copia | Licitaciones |
+| `agregar_items` / `cambiar_item` / `quitar_item` | Ítems de una licitación ya creada (mismo `alcance` que crear); el contrato se ajusta por la diferencia, con copia e historial. Trabajo nuevo va como ítem, no como extra | (solo editando todo) |
+| `anular_extra` | Quita un extra con motivo (para pasarlo a ítem) | — |
 | `anular` | La quita de la obra y del trabajador; la copia completa queda en el historial | `remove` + **restaba de `gasto_total`** |
 
 **Corrección:** anular una licitación aprobada restaba su monto de `gasto_total`, pero nunca se le había sumado (el
@@ -35,6 +37,8 @@ Pantallas que pasan a usar el módulo (`public/js/operaciones-api.js`): `licitac
 oferta, terminar, anular, pago, extra), `tesoreria.html` (anticipo y pago a contratista), `compras.html` (abono, eliminar
 pago con motivo, descuento por compra). La asignación automática al Gantt sigue en la pantalla hasta la etapa Gantt.
 Las apps de contratista y proveedor gráfico (cerradas desde la Sesión 0) no se tocaron.
+
+Lectura `ver` (`ver_licitacion` en el conector): ítems con su clave `tarea` y extras.
 
 Kay: `herramientas_conector` incluye `modificar_licitacion` (`readOnlyHint: false`) y `usar_conector` exige `registrado_por`.
 
