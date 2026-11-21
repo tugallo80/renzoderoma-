@@ -9,7 +9,7 @@
  *     cargarImagen(url),             // → Promise<dataURL | null>   (recibos)
  *     dimensiones(dataURL),          // → Promise<{w, h}>
  *   }) → Promise<jsPDF>
- *   PdfRendicion.nombreArchivo(estado) → "Rendicion_<Nombre>.pdf"
+ *   PdfRendicion.nombreArchivo(estado) → "Rendicion_<Nombre>[_<Proyecto>].pdf"  (estado con proyecto: solo ese proyecto)
  */
 (function (global) {
     'use strict';
@@ -18,7 +18,8 @@
     var fechaBo = function (f) { var p = String(f || '').slice(0, 10).split('-'); return p.length === 3 ? p[2] + '/' + p[1] + '/' + p[0] : (f || ''); };
     var ESTADOS = { entregado: 'Entregado', aprobado: 'Aprobado', pendiente: 'Por aprobar', rechazado: 'Rechazado', anulado: 'Anulado' };
 
-    function nombreArchivo(e) { return 'Rendicion_' + String((e && e.nombre) || 'Persona').replace(/[^a-zA-Z0-9_\- ]/g, '').trim().replace(/ /g, '_') + '.pdf'; }
+    var seguro = function (t) { return String(t || '').replace(/[^a-zA-Z0-9_\- ]/g, '').trim().replace(/ /g, '_'); };
+    function nombreArchivo(e) { return 'Rendicion_' + (seguro(e && e.nombre) || 'Persona') + (e && e.proyecto ? '_' + seguro(e.proyecto).slice(0, 30) : '') + '.pdf'; }
 
     async function generar(o) {
         var e = o.estado, doc = new o.jsPDF('p', 'mm', 'a4');
@@ -33,7 +34,7 @@
         doc.text('RENDICIÓN DE CUENTAS', W / 2, 12, { align: 'center' });
         doc.setFontSize(9); doc.setFont('helvetica', 'normal');
         var periodo = e.desde || e.hasta ? ('   |   PERIODO: ' + (e.desde ? fechaBo(e.desde) : '…') + ' a ' + (e.hasta ? fechaBo(e.hasta) : 'hoy')) : '';
-        doc.text('PERSONA: ' + limpio(e.nombre) + periodo + '   |   ' + (o.fecha || ''), W / 2, 21, { align: 'center' });
+        doc.text('PERSONA: ' + limpio(e.nombre) + (e.proyecto ? '   |   PROYECTO: ' + limpio(e.proyecto) : '') + periodo + '   |   ' + (o.fecha || ''), W / 2, 21, { align: 'center' });
         try { if (o.logo) doc.addImage(o.logo, 'JPEG', 4, 3, 22, 22); } catch (er) { /* sin logo */ }
         doc.setTextColor(0, 0, 0);
 
@@ -83,7 +84,8 @@
         }
         if (y > 270) { doc.addPage(); y = 20; }
         doc.setFontSize(9); doc.setFont('helvetica', 'normal'); doc.setTextColor(100, 100, 100);
-        doc.text('Los gastos rechazados o anulados no cuentan. El saldo es de toda la cuenta, no solo del periodo.', mL, y);
+        doc.text(e.proyecto ? 'Solo la plata para gastos de este proyecto. Los gastos rechazados o anulados no cuentan.'
+            : 'Los gastos rechazados o anulados no cuentan. El saldo es de toda la cuenta, no solo del periodo.', mL, y);
         doc.setTextColor(0, 0, 0);
 
         // ── 3. Recibos ──

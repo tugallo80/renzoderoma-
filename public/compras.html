@@ -9,6 +9,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
     <script src="/js/pdf-liquidacion.js?v=1"></script>
+    <script src="/js/pdf-rendicion.js?v=2"></script>
     
     <script src="https://www.gstatic.com/firebasejs/9.1.3/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.1.3/firebase-auth-compat.js"></script>
@@ -29,7 +30,7 @@
     <script src="/js/firecache.js?v=7"></script>
     <script src="/js/auth-guard.js?v=3"></script>
     <script src="/js/compras-api.js?v=1"></script>
-    <script src="/js/operaciones-api.js?v=1"></script>
+    <script src="/js/operaciones-api.js?v=3"></script>
 
     <style>
         :root { --bg: #f4f4f7; --card: #fff; --text: #1a1a1a; --blue: #007aff; --green: #34c759; --red: #ff3b30; --orange: #ff9500; --purple: #af52de; --gray: #8e8e93; --border: #d1d1d6; }
@@ -155,6 +156,8 @@
 
         <div class="section-title"><i class="ph-bold ph-handshake"></i> Estado de Contratos y Anticipos</div>
         <div id="contract-list" class="contract-list"></div>
+        <!-- Plata para gastos de este proyecto de personas que no tienen contrato acá (functions/rendiciones) -->
+        <div id="rd-otros"></div>
     </div>
 
     <div id="panel-materiales" style="display:none;">
@@ -748,6 +751,7 @@
                 </div>
                 <div style="font-size:11px; font-weight:800; color:var(--gray); text-transform:uppercase; border-top:1px solid var(--border); padding-top:10px;">Historial de Pagos</div>
                 <div class="pay-history" style="margin-top:5px; padding-top:0; border:none;">${pagosHtml || '<div style="color:var(--gray); font-size:11px; font-style:italic;">No hay pagos registrados.</div>'}</div>
+                <div class="rd-bloque" data-wid="${lic.worker_id || ''}"></div>
             </div>`;
 
             if(lic.estado === 'aprobado' || lic.estado === 'terminado' || lic.estado === 'liquidado' || lic.estado === 'pagado') { cont.innerHTML += cardHtml; } 
@@ -755,6 +759,7 @@
         });
 
         if(!hasSols) solCont.innerHTML = '<div style="text-align:center; color:var(--gray); font-size:12px; padding:20px;">No hay solicitudes pendientes.</div>';
+        if (window.RubikRendProy) RubikRendProy.pintar();
     }
 
     function renderMateriales() {
@@ -1403,5 +1408,119 @@ window.repararVinculosBD = async function() {
 </script>
 
 <script src="/paste-image.js"></script>
+<script>
+// ═══════════════════════════════════════════════════════
+//  PLATA PARA GASTOS DEL PROYECTO (rendición de cuentas, functions/rendiciones)
+//  Distinto del anticipo: el anticipo es parte del contrato; esto se rinde con recibos.
+// ═══════════════════════════════════════════════════════
+window.RubikRendProy = (function () {
+    const fm = (n) => (Number(n) || 0).toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const esc = (t) => String(t == null ? '' : t).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    const cidP = localStorage.getItem('rubik_client_id'), pidP = localStorage.getItem('rubik_current_pid');
+    const EST = { entregado: ['Entregado', 'var(--green)'], aprobado: ['Aprobado', 'var(--green)'], pendiente: ['Por aprobar', 'var(--orange)'], rechazado: ['Rechazado', 'var(--gray)'], anulado: ['Anulado', 'var(--gray)'] };
+    let datos = null, cargando = null, abierto = {};
+
+    function cargar() {
+        if (!cidP || !pidP || !window.RubikOps) return Promise.resolve(null);
+        cargando = RubikOps.rendiciones('proyecto', { cid: cidP, pid: pidP }).then((r) => { datos = r; return r; }).catch((e) => { console.warn('[rendiciones]', e); datos = { personas: {} }; return datos; });
+        return cargando;
+    }
+    function bloque(wid, nombre) {
+        const p = (datos && datos.personas[wid]) || { totales: { entregado: 0, gastado_aprobado: 0, pendiente_de_aprobar: 0, saldo_en_mano: 0 }, movimientos: [] };
+        const t = p.totales, ver = abierto[wid];
+        const movs = p.movimientos.map((m) => {
+            const [txt, color] = EST[m.estado] || [m.estado, 'var(--gray)'];
+            const pend = m.tipo === 'gasto' && m.estado === 'pendiente', fuera = m.estado === 'rechazado' || m.estado === 'anulado';
+            return `<div class="pay-row" style="${fuera ? 'opacity:.5;' : ''}align-items:flex-start;">
+                <span class="p-date" style="flex:1;">${esc(m.fecha)} - ${m.tipo === 'deposito' ? 'Entrega' : 'Gasto'}: ${esc(m.concepto)}${m.proveedor ? ' (' + esc(m.proveedor) + ')' : ''} · <b style="color:${color};">${esc(txt)}</b>
+                    ${m.comprobante ? ` <a href="${esc(m.comprobante)}" target="_blank" style="color:var(--blue);">📎</a>` : ''}
+                    ${pend ? `<br><button onclick="RubikRendProy.decidir('${esc(wid)}','${esc(m.id)}',true)" style="margin-top:4px;font-size:10px;background:rgba(52,199,89,.12);color:var(--green);border:1px solid var(--green);padding:3px 8px;border-radius:6px;font-weight:800;cursor:pointer;">Aprobar</button>
+                        <button onclick="RubikRendProy.decidir('${esc(wid)}','${esc(m.id)}',false)" style="font-size:10px;background:rgba(255,59,48,.08);color:var(--red);border:1px solid var(--red);padding:3px 8px;border-radius:6px;font-weight:800;cursor:pointer;">Rechazar</button>` : ''}</span>
+                <div style="display:flex;align-items:center;gap:6px;"><span class="p-amt" style="color:${m.tipo === 'deposito' ? 'var(--green)' : 'var(--red)'};">${m.tipo === 'deposito' ? '+' : '-'}${fm(m.monto)}</span>
+                    ${fuera ? '' : `<button onclick="RubikRendProy.anular('${esc(wid)}','${m.tipo}','${esc(m.id)}')" title="Anular" style="background:rgba(255,59,48,0.12);color:#ff3b30;border:none;border-radius:6px;padding:4px 8px;cursor:pointer;font-size:11px;"><i class="ph-bold ph-trash"></i></button>`}</div></div>`;
+        }).join('');
+        return `<div style="border-top:1px solid var(--border);margin-top:12px;padding-top:10px;">
+            <div onclick="RubikRendProy.alternar('${esc(wid)}')" style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;">
+                <div style="font-size:11px;font-weight:800;color:var(--gray);text-transform:uppercase;">Plata para gastos (rendición)${p.pendientes && p.pendientes.length ? ` <span style="color:var(--orange);">· ${p.pendientes.length} por aprobar</span>` : ''}</div>
+                <b style="font-size:12px;color:${t.saldo_en_mano < 0 ? 'var(--red)' : 'var(--text)'};">${t.saldo_en_mano < 0 ? 'Se le debe ' + fm(-t.saldo_en_mano) : 'En mano ' + fm(t.saldo_en_mano)} Bs <i class="ph-bold ph-caret-${ver ? 'up' : 'down'}"></i></b>
+            </div>
+            ${ver ? `<div class="bal-grid" style="margin-top:8px;">
+                    <div><div class="b-lbl">Entregado</div><div class="b-val">${fm(t.entregado)}</div></div>
+                    <div><div class="b-lbl">Rendido</div><div class="b-val" style="color:var(--green)">${fm(t.gastado_aprobado)}</div></div>
+                    <div><div class="b-lbl" style="color:var(--orange)">Por aprobar</div><div class="b-val" style="color:var(--orange)">${fm(t.pendiente_de_aprobar)}</div></div></div>
+                <div class="btn-group" style="margin:8px 0;">
+                    <button class="btn-act b-pay" onclick="RubikRendProy.form('${esc(wid)}','entregar')"><i class="ph-bold ph-arrow-up-right"></i> Entregar</button>
+                    <button class="btn-act b-pdf" onclick="RubikRendProy.form('${esc(wid)}','gasto')"><i class="ph-bold ph-receipt"></i> Cargar gasto</button>
+                    <button class="btn-act b-pdf" onclick="RubikRendProy.pdf('${esc(wid)}')"><i class="ph-bold ph-file-pdf"></i> PDF</button></div>
+                <div id="rdp-form-${esc(wid)}"></div>
+                <div class="pay-history" style="margin-top:5px;padding-top:0;border:none;">${movs || '<div style="color:var(--gray);font-size:11px;font-style:italic;">Sin plata para gastos en este proyecto.</div>'}</div>` : ''}
+        </div>`;
+    }
+    async function pintar() {
+        if (!datos && !cargando) await cargar(); else if (cargando) await cargando;
+        if (!datos) return;
+        const conContrato = new Set();
+        document.querySelectorAll('#contract-list .rd-bloque').forEach((el) => {
+            const wid = el.getAttribute('data-wid'); if (!wid) return;
+            conContrato.add(wid); el.innerHTML = bloque(wid);
+        });
+        const otros = Object.values(datos.personas).filter((p) => !conContrato.has(p.worker_id));
+        const cont = document.getElementById('rd-otros');
+        if (cont) cont.innerHTML = otros.length ? `<div style="font-size:12px;font-weight:800;color:var(--gray);text-transform:uppercase;margin:16px 0 8px;">Plata para gastos de otras personas en este proyecto</div>`
+            + otros.map((p) => `<div class="c-card" style="margin-bottom:10px;"><div class="c-name"><i class="ph-fill ph-user"></i> ${esc(p.nombre)}</div>${bloque(p.worker_id)}</div>`).join('') : '';
+    }
+    async function refrescar() { datos = null; cargando = null; await cargar(); await pintar(); }
+    function alternar(wid) { abierto[wid] = !abierto[wid]; pintar(); }
+    function form(wid, tipo) {
+        const hoy = new Date(Date.now() - 4 * 3600e3).toISOString().slice(0, 10);
+        const el = document.getElementById('rdp-form-' + wid); if (!el) return;
+        el.innerHTML = `<div style="background:var(--bg);border-radius:10px;padding:10px;margin-bottom:8px;">
+            <div style="display:flex;gap:6px;"><input type="number" step="any" id="rdp-monto-${esc(wid)}" placeholder="Monto Bs" style="flex:1;padding:9px;border-radius:8px;border:1px solid var(--border);background:var(--card);color:var(--text);">
+                <input type="date" id="rdp-fecha-${esc(wid)}" value="${hoy}" style="flex:1;padding:9px;border-radius:8px;border:1px solid var(--border);background:var(--card);color:var(--text);"></div>
+            <input type="text" id="rdp-concepto-${esc(wid)}" placeholder="${tipo === 'entregar' ? 'Para qué (ej. materiales)' : 'En qué se gastó'}" style="width:100%;box-sizing:border-box;margin-top:6px;padding:9px;border-radius:8px;border:1px solid var(--border);background:var(--card);color:var(--text);">
+            ${tipo === 'gasto' ? `<input type="text" id="rdp-prov-${esc(wid)}" placeholder="Dónde (proveedor)" style="width:100%;box-sizing:border-box;margin-top:6px;padding:9px;border-radius:8px;border:1px solid var(--border);background:var(--card);color:var(--text);">` : ''}
+            <input type="file" id="rdp-foto-${esc(wid)}" accept="image/*,application/pdf" style="margin-top:6px;font-size:12px;">
+            <button class="btn-act b-pay" style="margin-top:8px;width:100%;" onclick="RubikRendProy.guardar('${esc(wid)}','${tipo}')"><i class="ph-bold ph-floppy-disk"></i> Guardar ${tipo === 'entregar' ? 'entrega' : 'gasto'}</button></div>`;
+    }
+    async function guardar(wid, tipo) {
+        const v = (k) => { const el = document.getElementById(`rdp-${k}-${wid}`); return el ? el.value.trim() : ''; };
+        const monto = parseFloat(v('monto')) || 0;
+        if (monto <= 0) return alert('Ingresá el monto.');
+        if (tipo === 'gasto' && !v('concepto')) return alert('Decí en qué se gastó.');
+        const f = document.getElementById(`rdp-foto-${wid}`).files[0];
+        const foto = f ? await RubikOps.archivoABase64(f) : null;
+        const base = { worker_id: wid, cid: cidP, pid: pidP, monto, fecha: v('fecha') || undefined, concepto: v('concepto') || undefined, foto };
+        try {
+            if (tipo === 'entregar') await RubikOps.rendiciones('entregar', base);
+            else await RubikOps.rendiciones('registrar_gasto', Object.assign(base, { proveedor: v('prov') || undefined }));
+        } catch (e) { return alert('No se guardó: ' + e.message); }
+        abierto[wid] = true; await refrescar();
+    }
+    async function decidir(wid, id, aprobar) {
+        const motivo = aprobar ? null : prompt('Motivo del rechazo:');
+        if (!aprobar && !motivo) return;
+        try { await RubikOps.rendiciones(aprobar ? 'aprobar' : 'rechazar', { worker_id: wid, id, motivo }); } catch (e) { return alert(e.message); }
+        await refrescar();
+    }
+    async function anular(wid, tipo, id) {
+        const motivo = prompt(`Anular esta ${tipo === 'deposito' ? 'entrega' : 'rendición de gasto'} (no se borra). Motivo:`);
+        if (!motivo) return;
+        try { await RubikOps.rendiciones('anular', { worker_id: wid, tipo, id, motivo }); } catch (e) { return alert(e.message); }
+        await refrescar();
+    }
+    async function pdf(wid) {
+        try {
+            const estado = await RubikOps.rendiciones('estado', { worker_id: wid, cid: cidP, pid: pidP });
+            const aData = (b) => new Promise((ok) => { const fr = new FileReader(); fr.onload = () => ok(fr.result); fr.readAsDataURL(b); });
+            const logo = await fetch('/LOGO-IA-RUBIK.jpg').then((r) => r.ok ? r.blob() : null).then((b) => b ? aData(b) : null).catch(() => null);
+            const cargarImagen = (url) => fetch(url).then((r) => r.ok ? r.blob() : null).then((b) => b && /^image\//.test(b.type) ? aData(b) : null).catch(() => null);
+            const dimensiones = (b64) => new Promise((ok) => { const im = new Image(); im.onload = () => ok({ w: im.naturalWidth || 1, h: im.naturalHeight || 1 }); im.onerror = () => ok({ w: 1, h: 1 }); im.src = b64; });
+            const doc = await PdfRendicion.generar({ jsPDF: window.jspdf.jsPDF, estado, fecha: new Date().toLocaleDateString('es-BO'), logo, cargarImagen, dimensiones });
+            doc.save(PdfRendicion.nombreArchivo(estado));
+        } catch (e) { alert('No se pudo generar el PDF: ' + e.message); }
+    }
+    return { pintar, refrescar, alternar, form, guardar, decidir, anular, pdf };
+})();
+</script>
 </body>
 </html>
