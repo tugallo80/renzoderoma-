@@ -95,6 +95,10 @@
       ".write": false,
       ".indexOn": ["cid", "fecha"]
     },
+    "avisos_kay": {
+      ".read":  false,
+      ".write": false
+    },
     "rendicion_links": {
       ".read":  false,
       ".write": false

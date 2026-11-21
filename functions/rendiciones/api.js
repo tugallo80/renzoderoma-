@@ -24,6 +24,7 @@
  */
 const crypto = require("crypto");
 const C = require("../operaciones/comun");
+const Avisos = require("../avisos");
 const { falla, r2, texto, numero, fecha, id } = C;
 
 const MEDIOS = ["transferencia", "qr", "efectivo", "otro"];
@@ -31,6 +32,8 @@ const NO_CUENTAN = ["rechazado", "anulado"];
 
 const RUTAS = [
     /^caja_chica(\/|$)/,
+    /^compras_facturadas\/[^/]+(\/(anulada|anulada_info))?$/,   // crédito fiscal de una factura rendida, al aprobarla
+    ...Avisos.RUTAS,
     /^rendicion_links(\/|$)/,
     /^personal$/,
     /^personal\/[^/]+\/(nombre|telefono)$/,
@@ -170,8 +173,19 @@ function limpiarItems(items) {
     });
 }
 
+/** Factura de un gasto rendido (para el crédito fiscal al aprobarlo): {nit, nro, razon_social?}. */
+function limpiarFactura(f) {
+    if (!f || typeof f !== "object") return null;
+    const nit = String(f.nit || "").replace(/\D/g, "").slice(0, 20), nro = String(f.nro || f.nro_factura || "").replace(/\s/g, "").slice(0, 30);
+    if (!nit && !nro) return null;
+    if (!nit || !nro) falla("Para la factura hacen falta el NIT y el número.");
+    return { nit, nro, razon_social: texto(f.razon_social, 120) || null };
+}
+const fmBs = (n) => (Number(n) || 0).toLocaleString("es-BO", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
 async function registrarGasto(almacen, b, quien) {
     const p = await persona(almacen, b);
+    const factura = limpiarFactura(b.factura);
     const items = limpiarItems(b.items);
     const monto = items ? r2(items.reduce((s, it) => s + it.monto, 0)) : numero(b.monto, "Monto");
     if (monto <= 0) falla("El total tiene que ser mayor a cero.");
@@ -185,14 +199,34 @@ async function registrarGasto(almacen, b, quien) {
         const proy = await proyectoOpcional(almacen, b);
         const k = almacen.nuevaClave();
         const comprobante = b.foto ? await subirFoto(almacen, p.wid, f, k, b.foto) : null;
-        const g = { monto, monto_total: monto, fecha: f, concepto, proveedor: texto(b.proveedor, 120) || null, items: items || null,
+        const g = { monto, monto_total: monto, fecha: f, concepto, proveedor: texto(b.proveedor, 120) || null, items: items || null, factura,
             proyecto: proy ? proy.nombre : null, cid: proy ? proy.cid : null, pid: proy ? proy.pid : null, comprobante,
             estado: esDueno ? "aprobado" : "pendiente", registrado_por: quien, timestamp: almacen.ahora(),
             ...(esDueno ? { aprobado_por: { por: quien, fecha: almacen.ahora() } } : {}) };
-        await almacen.escribir(`caja_chica/${p.wid}/gastos/${k}`, g);
+        const m = { [`caja_chica/${p.wid}/gastos/${k}`]: g };
+        if (g.estado === "pendiente") {
+            // aviso para el dueño por WhatsApp (Kay): functions/avisos
+            const [ra, va] = Avisos.entrada(almacen, { tipo: "rendicion_por_aprobar",
+                texto: `🧾 ${p.nombre} rindió ${fmBs(monto)} Bs${proy ? " en " + proy.nombre : ""}: ${concepto}${items ? ` (${items.length} renglón${items.length === 1 ? "" : "es"})` : ""}`
+                    + `${comprobante ? ", con recibo" : ", sin recibo"}${factura ? `, factura ${factura.nro}` : ""}. Está por aprobar.`,
+                datos: { worker_id: p.wid, nombre: p.nombre, gasto_id: k, monto, concepto, proveedor: g.proveedor, proyecto: proy ? proy.nombre : null,
+                    cid: proy ? proy.cid : null, pid: proy ? proy.pid : null, renglones: items ? items.length : 0, con_recibo: !!comprobante, con_factura: !!factura,
+                    comprobante: comprobante || null, via: quien.via } });
+            m[ra] = va;
+        }
+        await almacen.actualizarVarios(m);
         const e = calcular(await almacen.leer(`caja_chica/${p.wid}`));
         return { ok: true, id: k, worker_id: p.wid, nombre: p.nombre, estado: g.estado, saldo_en_mano: e.totales.saldo_en_mano, con_comprobante: !!comprobante };
-    });
+    }).then(async (r) => { if (r && r.estado === "pendiente" && !r.repetida) r.aviso = await Avisos.empujar(almacen); return r; });
+}
+
+/** Crédito fiscal de la factura de un gasto aprobado (Impuestos lee /compras_facturadas). No va a /compras: el gasto ya cuenta
+ *  en el proyecto por la caja chica (sumarlo como compra lo contaría dos veces). */
+function creditoFiscal(m, g, gid, wid, nombre) {
+    if (!g.factura || g.credito_fiscal) return;
+    m[`compras_facturadas/${gid}`] = { nit: g.factura.nit, proveedor: g.proveedor || g.factura.razon_social || null, razon_social: g.factura.razon_social || null,
+        nro_factura: g.factura.nro, cuf: null, monto: Number(g.monto_total || g.monto) || 0, fecha: g.fecha, descripcion: `Rendición de ${nombre}: ${g.concepto || ""}`.slice(0, 200),
+        comprobante: g.comprobante || null, origen: "rendicion", rendicion: { worker_id: wid, gasto_id: gid }, proyecto: g.proyecto || null, timestamp: Date.now() };
 }
 
 async function decidir(almacen, b, quien, aprobar) {
@@ -208,6 +242,7 @@ async function decidir(almacen, b, quien, aprobar) {
         const m = { [`${ruta}/estado`]: aprobar ? "aprobado" : "rechazado" };
         m[`${ruta}/${aprobar ? "aprobado_por" : "rechazado_por"}`] = { por: quien, fecha: almacen.ahora() };
         if (!aprobar) m[`${ruta}/motivo_rechazo`] = motivo;
+        if (aprobar && g.factura && !g.credito_fiscal) { creditoFiscal(m, g, gid, p.wid, p.nombre); m[`${ruta}/credito_fiscal`] = true; }
         await almacen.actualizarVarios(m);
         const e = calcular(await almacen.leer(`caja_chica/${p.wid}`));
         return { ok: true, id: gid, estado: aprobar ? "aprobado" : "rechazado", saldo_en_mano: e.totales.saldo_en_mano };
@@ -225,9 +260,11 @@ async function anular(almacen, b, quien) {
         const x = await almacen.leer(ruta);
         if (!x) falla("No existe ese movimiento.", 404);
         const info = { motivo, por: quien, fecha: almacen.ahora() };
-        await almacen.actualizarVarios(tipo === "depositos"
+        const m = tipo === "depositos"
             ? { [`${ruta}/anulado`]: true, [`${ruta}/anulado_info`]: info }
-            : { [`${ruta}/estado`]: "anulado", [`${ruta}/anulado_info`]: info });
+            : { [`${ruta}/estado`]: "anulado", [`${ruta}/anulado_info`]: info };
+        if (tipo === "gastos" && x.credito_fiscal) { m[`compras_facturadas/${k}/anulada`] = true; m[`compras_facturadas/${k}/anulada_info`] = info; }
+        await almacen.actualizarVarios(m);
         const e = calcular(await almacen.leer(`caja_chica/${p.wid}`));
         return { ok: true, id: k, saldo_en_mano: e.totales.saldo_en_mano };
     });

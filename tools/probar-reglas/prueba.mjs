@@ -57,6 +57,8 @@ await chk('hub NO escribe compras', set(ref(hub, 'compras/x'), { total: 1 }), fa
 await chk('anónimo NO lee compras', get(ref(anon, 'compras')), false);
 // Cobros (functions/cobros): el hub lee, escribe solo la Function
 await chk('hub NO lee rendicion_links', get(ref(hub, 'rendicion_links')), false);
+await chk('hub NO lee avisos_kay', get(ref(hub, 'avisos_kay')), false);
+await chk('hub NO escribe avisos_kay', set(ref(hub, 'avisos_kay/x'), { tipo: 't' }), false);
 await chk('hub NO escribe rendicion_links', set(ref(hub, 'rendicion_links/x'), { wid: 'w' }), false);
 await chk('hub lee cobros', get(ref(hub, 'cobros')), true);
 await chk('hub NO escribe cobros', set(ref(hub, 'cobros/x'), { monto: 1 }), false);
