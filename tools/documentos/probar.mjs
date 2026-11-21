@@ -27,7 +27,7 @@ let bien = 0, total = 0;
 async function prueba(n, fn) { total++; try { await fn(); bien++; console.log('ok  ', n); } catch (e) { console.log('FALLA', n, '\n', e); process.exitCode = 1; } }
 
 await prueba('las copias del servidor son idénticas a las de la pantalla', () => {
-    for (const f of ['pdf-licitacion.js', 'pdf-cotizacion.js', 'pdf-produccion.js', 'pdf-liquidacion.js', 'pdf-rendicion.js'])
+    for (const f of ['pdf-licitacion.js', 'pdf-cotizacion.js', 'pdf-produccion.js', 'pdf-liquidacion.js', 'pdf-rendicion.js', 'pdf-contratista.js'])
         assert.equal(readFileSync('../../functions/pdf/compartido/' + f, 'utf8'), readFileSync('../../public/js/' + f, 'utf8'),
             f + ' desactualizado: correr "npm run sincronizar" en tools/documentos');
 });
@@ -176,6 +176,26 @@ await prueba('rendición de cuentas: entregado, gastos con estado, saldo y recib
     const txt = await textoPdf(r.base64);
     assert.match(txt, /RENDICIÓN DE CUENTAS/); assert.match(txt, /335,00/, 'saldo en mano 500 − 120 − 45');
     await paginasPng(r.base64, 'rendicion');
+});
+
+await prueba('balance completo del contratista (Tesorería): todos sus contratos con extras, pagos y rendición → total a pagar', async () => {
+    const d = datos();
+    d.personal = { wPollo: { nombre: 'POLLO', telefono: '70000001' } };
+    const L = d.proyectos.cliA.proyA.licitaciones.L1;
+    Object.assign(L, { worker_id: 'wPollo', worker_name: 'POLLO', precio_final: 3000, precio_propuesto: 3000,
+        extras: { e1: { monto: 300, descripcion: 'Masillado', fecha: '2026-11-21' } }, pagos: { p1: { monto: 1000, fecha: '2026-11-20', tipo: 'adelanto' } } });
+    d.caja_chica = { wPollo: {
+        depositos: { a: { monto: 1500, fecha: '2026-11-21', pid: 'proyA', cid: 'cliA' } },
+        gastos: { b: { monto: 1590, fecha: '2026-11-21', concepto: 'Insumos', pid: 'proyA', cid: 'cliA', estado: 'aprobado' } } } };
+    const al = crearAlmacenMemoria(d, D.RUTAS, D.ARCHIVOS);
+    const r = await D.generar(al, { tipo: 'contratista', worker_id: 'wPollo' });
+    assert.match(r.nombre, /^Contratista_POLLO_/);
+    const txt = await textoPdf(r.base64);
+    assert.match(txt, /3\.300,00/, 'acordado con el extra');
+    assert.match(txt, /2\.390,00/, '3.300 − 1.000 pagado + 90 de la rendición');
+    const porNombre = await D.generar(crearAlmacenMemoria(datos(), D.RUTAS, D.ARCHIVOS), { tipo: 'contratista', nombre: 'nadie' }).catch((e) => e);
+    assert.ok(porNombre instanceof Error || porNombre.status === 404);
+    await paginasPng(r.base64, 'contratista');
 });
 
 console.log(`\n${bien}/${total} pruebas OK`);

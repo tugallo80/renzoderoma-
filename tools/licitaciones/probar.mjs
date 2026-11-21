@@ -175,6 +175,35 @@ prueba('registrar_trabajador: alta en Personal (sin sueldo), repetido y aviso si
     assert.equal(lic(alm, c.lid).worker_id, 'Juan_Datecolor');
 });
 
+prueba('ítems de una licitación existente: ver, agregar (del presupuesto y libres), cambiar precio, quitar, anular extra; contrato por diferencia', async () => {
+    const alm = conEspejo(base());
+    // L1: aprobada, contrato 2.548,50 con la tarea t1 (Armado) del ítem 0
+    alm.datos.proyectos.cliA.proyA.licitaciones.L1.extras = { x1: { monto: 300, descripcion: 'Masillado' } };
+    const v = ok(await L.atender(alm, { accion: 'ver', ...P, lid: 'L1' }, DUENO));
+    assert.deepEqual(v.tareas.map((t) => [t.tarea, t.subtotal]), [['t1', 2548.5]]); assert.equal(v.extras[0].extra, 'x1');
+    const a = ok(await op(alm, 'agregar_items', { lid: 'L1', alcance: [{ item: 1, monto: 600 }, { descripcion: 'Desmontaje', monto: 500 }] }, KAY));
+    assert.equal(a.contrato_antes, 2548.5); assert.equal(a.contrato, 3648.5);
+    const l = lic(alm, 'L1');
+    assert.equal(l.precio_final, 3648.5); assert.equal(l.tareas.m_1.task_name, 'Letrero'); assert.equal(l.tareas.m_1.subtotal, 600);
+    assert.equal(alm.datos.personal.wPollo.solicitudes.L1.precio_final, 3648.5, 'copia del trabajador');
+    assert.ok(Object.values(alm.datos.personal.wPollo.solicitudes.L1.tareas).some((t) => t.task_name === 'Desmontaje'));
+    assert.equal(alm.datos.proyectos.cliA.proyA.presupuesto.items[1].prod_resp, 'Pollo Demo', 'responsable en el ítem nuevo');
+    err(await op(alm, 'agregar_items', { lid: 'L1', alcance: [{ item: 1, monto: 1 }] }), /ya está/);
+    ok(await op(alm, 'cambiar_item', { lid: 'L1', tarea: 'm_1', monto: 450, motivo: 'acordado' }));
+    assert.equal(lic(alm, 'L1').precio_final, 3498.5); assert.equal(lic(alm, 'L1').tareas.m_1.pu, 450);
+    const libre = Object.keys(lic(alm, 'L1').tareas).find((k) => k.startsWith('libre_'));
+    err(await op(alm, 'quitar_item', { lid: 'L1', tarea: libre }), /motivo/);
+    ok(await op(alm, 'quitar_item', { lid: 'L1', tarea: libre, motivo: 'no va' }));
+    assert.equal(lic(alm, 'L1').precio_final, 2998.5); assert.equal(lic(alm, 'L1').tareas[libre], undefined);
+    ok(await op(alm, 'anular_extra', { lid: 'L1', extra: 'x1', motivo: 'pasó a ítem' }));
+    assert.equal((lic(alm, 'L1').extras || {}).x1, undefined);
+    const ops = hist(alm).filter((h) => h.ref === 'L1').map((h) => h.op);
+    assert.deepEqual(ops, ['agregar_items', 'cambiar_item', 'quitar_item', 'anular_extra']);
+    // en una no aprobada cambia el propuesto
+    ok(await op(alm, 'agregar_items', { lid: 'L2', alcance: [{ descripcion: 'Pintura', monto: 200 }] }));
+    assert.equal(lic(alm, 'L2').precio_propuesto, 1000); assert.equal(lic(alm, 'L2').precio_final, undefined);
+});
+
 let bien = 0;
 for (const [nombre, fn] of pruebas) {
     try { await fn(); bien++; console.log('ok  ', nombre); }

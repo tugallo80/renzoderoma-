@@ -111,12 +111,29 @@ module.exports = function crear({ falla, acotar }) {
         },
         {
             def: {
+                name: "ver_licitacion",
+                title: "Ver el detalle de una licitación",
+                description: "Una licitación {cid, pid, lid} con sus ítems (tareas: clave, nombre, cantidad, unidad, precio, subtotal) y sus extras (clave, descripción, monto). Usalo antes de cambiar_item, quitar_item o anular_extra.",
+                inputSchema: { type: "object", properties: { cid: { type: "string" }, pid: { type: "string" }, lid: { type: "string" } }, required: ["cid", "pid", "lid"] },
+                annotations: { readOnlyHint: true },
+            },
+            async correr(almacen, uid, e) { return lic(almacen, uid, "ver", e, null); },
+        },
+        {
+            def: {
                 name: "modificar_licitacion",
                 title: "Modificar una licitación",
-                description: "Cambia una licitación con la misma lógica que la pantalla de Licitaciones (copia del trabajador, responsables en el presupuesto, historial antes → después). PEDÍ EL SÍ DEL DUEÑO ANTES, diciendo qué vas a cambiar y los montos. Operaciones: cambiar_monto {monto, motivo?} (si está aprobada cambia el precio final; si no, el propuesto) · cambiar_contratista {worker_id} · aprobar {precio_final?} · contra_oferta {precio} · terminar · registrar_pago {monto, fecha?, concepto?, tipo?: pago|adelanto|descuento_compra, pagado_con?: {medio: transferencia|qr|efectivo|caja_chica|otro, persona?}} · anular_pago {pago, motivo} · agregar_extra {monto, descripcion, fecha?} · anular {motivo} (la quita; la copia queda en el historial). No toca gasto_total.",
+                description: "Cambia una licitación con la misma lógica que la pantalla de Licitaciones (copia del trabajador, responsables en el presupuesto, historial antes → después). PEDÍ EL SÍ DEL DUEÑO ANTES, diciendo qué vas a cambiar y los montos. Operaciones: "
+                    + "ÍTEMS (lo que el trabajador ve en su propuesta; usá ver_licitacion para las claves): agregar_items {alcance: [{item?: índice del presupuesto, descripcion?, cant?, und?, monto}]} (sumar trabajo al contrato COMO ÍTEMS, no como extra) · cambiar_item {tarea, monto, cant?, descripcion?} (precio de un ítem por trabajador) · quitar_item {tarea, motivo}; el contrato se ajusta por diferencia · "
+                    + "cambiar_monto {monto, motivo?} (solo el total; si está aprobada cambia el precio final, si no, el propuesto) · cambiar_contratista {worker_id} · aprobar {precio_final?} · contra_oferta {precio} · terminar · registrar_pago {monto, fecha?, concepto?, tipo?: pago|adelanto|descuento_compra, pagado_con?: {medio: transferencia|qr|efectivo|caja_chica|otro, persona?}} · anular_pago {pago, motivo} · "
+                    + "agregar_extra {monto, descripcion, fecha?} (algo aparte del alcance, que no va como ítem) · anular_extra {extra, motivo} · anular {motivo} (la quita; la copia queda en el historial). No toca gasto_total.",
                 inputSchema: { type: "object", properties: {
                     cid: { type: "string" }, pid: { type: "string" }, lid: { type: "string", description: "Id de la licitación (de listar_licitaciones)." },
-                    operacion: { type: "string", enum: ["cambiar_monto", "cambiar_contratista", "aprobar", "contra_oferta", "terminar", "registrar_pago", "anular_pago", "agregar_extra", "anular"] },
+                    operacion: { type: "string", enum: ["agregar_items", "cambiar_item", "quitar_item", "cambiar_monto", "cambiar_contratista", "aprobar", "contra_oferta", "terminar", "registrar_pago", "anular_pago", "agregar_extra", "anular_extra", "anular"] },
+                    alcance: { type: "array", maxItems: 30, items: { type: "object", properties: { item: { type: "integer", minimum: 0 }, descripcion: { type: "string", maxLength: 200 },
+                        cant: { type: "number", minimum: 0.0001 }, und: { type: "string", maxLength: 20 }, monto: { type: "number", minimum: 0.01 } }, required: ["monto"] } },
+                    tarea: { type: "string", description: "Clave de la tarea (ítem) en la licitación, de ver_licitacion." }, extra: { type: "string", description: "Clave del extra, de ver_licitacion." },
+                    cant: { type: "number", minimum: 0.0001 },
                     monto: { type: "number", minimum: 0.01 }, precio: { type: "number", minimum: 0.01 }, precio_final: { type: "number", minimum: 0.01 },
                     worker_id: { type: "string" }, motivo: { type: "string", maxLength: 300 }, fecha: { type: "string", description: "AAAA-MM-DD" },
                     concepto: { type: "string", maxLength: 200 }, descripcion: { type: "string", maxLength: 300 }, pago: { type: "string" },
