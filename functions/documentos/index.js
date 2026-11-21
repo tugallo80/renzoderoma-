@@ -5,6 +5,7 @@
  *              public/js/pdf-licitacion.js, el que usa licitaciones.html)
  *   cotizacion {cid, pid, modo?: normal|impuestos_por_item} → pdf-cotizacion.js (presupuesto.html)
  *   orden      {cid, pid, modo?: produccion|impresion|impresion_con_imagen|completa} → pdf-produccion.js (produccion.html)
+ *   liquidacion {cid, pid, id} → pdf-liquidacion.js (compras.html del proyecto): contrato, anticipos/pagos, saldo y comprobantes
  * Los tres módulos son copias idénticas de public/js/ (functions/pdf/compartido/).
  *
  * Devuelve {nombre, mime, base64, bytes, paginas, ruta}: el PDF también queda guardado en Storage
@@ -56,6 +57,7 @@ function crearCargador({ soloJpeg = false } = {}) {
             try {
                 if (url === "logo") return convertir(fs.readFileSync(path.join(__dirname, "logo.png")));
                 if (url === "logo-presupuesto") return convertir(fs.readFileSync(path.join(__dirname, "logo-presupuesto.jpg")));
+                if (url === "logo-liquidacion") return convertir(fs.readFileSync(path.join(__dirname, "logo-liquidacion.jpg")));
                 if (url.startsWith("data:image/")) return convertir(Buffer.from(url.split(",")[1] || "", "base64"));
                 if (!IMG_OK.test(url)) return null;   // solo nuestro Storage
                 const r = await fetch(url, { redirect: "error", signal: AbortSignal.timeout(15000) });
@@ -123,17 +125,32 @@ async function pdfOrden(almacen, b) {
     return { nombre: P.nombreArchivo({ proyecto: p.proyecto, cliente: p.cliente, sufijo: r.sufijo, fecha: hoyComoDate(almacen.ahora()) }), doc: r.doc };
 }
 
+async function pdfLiquidacion(almacen, b) {
+    const cid = C.id(b.cid, "Cliente"), pid = C.id(b.pid, "Proyecto"), lid = C.id(b.id, "Licitación");
+    const [pName, lic, items] = await Promise.all([
+        almacen.leer(`proyectos/${cid}/${pid}/nombre`), almacen.leer(`proyectos/${cid}/${pid}/licitaciones/${lid}`), almacen.leer(`proyectos/${cid}/${pid}/presupuesto/items`),
+    ]);
+    if (pName == null) C.falla("No existe el proyecto.", 404);
+    if (!lic) C.falla("No existe la licitación.", 404);
+    const P = require("../pdf/compartido/pdf-liquidacion.js");
+    const { cargarImagen, dimensiones } = crearCargador({ soloJpeg: true });
+    const doc = await P.generar({ jsPDF: jsPDF(), lic, budgetItems: items || [], proyecto: String(pName), fecha: fechaBo(almacen.ahora()),
+        logo: await cargarImagen("logo-liquidacion"), cargarImagen, cargarComprobante: cargarImagen, dimensiones });
+    return { nombre: P.nombreArchivo(lic), doc };
+}
+
 const TIPOS = {
     licitacion: pdfLicitacion,
     cotizacion: pdfCotizacion,
     orden: pdfOrden,
+    liquidacion: pdfLiquidacion,
 };
 
 /** {tipo, cid, pid, id, modo?} → {nombre, mime, base64, bytes, paginas, ruta}. */
 async function generar(almacen, b) {
     const tipo = String((b && b.tipo) || "");
     const fn = Object.prototype.hasOwnProperty.call(TIPOS, tipo) ? TIPOS[tipo] : null;
-    if (!fn) C.falla("Tipo de documento inválido (licitacion, cotizacion u orden).");
+    if (!fn) C.falla("Tipo de documento inválido (licitacion, liquidacion, cotizacion u orden).");
     const { nombre, doc } = await fn(almacen, b);
     const buf = Buffer.from(doc.output("arraybuffer"));
     if (buf.length > MAX_PDF) C.falla(`El PDF pesa ${(buf.length / 1048576).toFixed(1)} MB (máximo 10 MB). Probá el modo general.`, 413);

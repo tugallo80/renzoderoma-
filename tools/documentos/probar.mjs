@@ -27,7 +27,7 @@ let bien = 0, total = 0;
 async function prueba(n, fn) { total++; try { await fn(); bien++; console.log('ok  ', n); } catch (e) { console.log('FALLA', n, '\n', e); process.exitCode = 1; } }
 
 await prueba('las copias del servidor son idénticas a las de la pantalla', () => {
-    for (const f of ['pdf-licitacion.js', 'pdf-cotizacion.js', 'pdf-produccion.js'])
+    for (const f of ['pdf-licitacion.js', 'pdf-cotizacion.js', 'pdf-produccion.js', 'pdf-liquidacion.js'])
         assert.equal(readFileSync('../../functions/pdf/compartido/' + f, 'utf8'), readFileSync('../../public/js/' + f, 'utf8'),
             f + ' desactualizado: correr "npm run sincronizar" en tools/documentos');
 });
@@ -111,6 +111,18 @@ await prueba('órdenes: producción, impresión (artes guardadas + las de las me
         await paginasPng(r.base64, 'orden-' + modo);
     }
     assert.deepEqual(sufijos, { produccion: 'ESTRUCTURAS.pdf', impresion: 'ORDEN_IMPRESION.pdf', impresion_con_imagen: 'ORDEN_IMPRESION.pdf', completa: 'ORDEN_COMPLETA.pdf' });
+});
+
+await prueba('liquidación de contrato: acordado, anticipos, saldo y comprobante', async () => {
+    const d = datos();
+    d.proyectos.cliA.proyA.licitaciones.L1.pagos = {
+        p1: { monto: 500, fecha: '2026-11-15', nota: 'Anticipo', tipo: 'adelanto', comprobante: foto },
+        p2: { monto: 200, fecha: '2026-11-18', nota: 'Segundo anticipo', tipo: 'adelanto' } };
+    const al = crearAlmacenMemoria(d, D.RUTAS, D.ARCHIVOS);
+    const r = await D.generar(al, { tipo: 'liquidacion', cid: 'cliA', pid: 'proyA', id: 'L1' });
+    assert.equal(r.nombre, 'Liquidacion_Imprenta_Demo.pdf');
+    assert.ok(r.paginas >= 3, 'resumen + anexo técnico + comprobantes');
+    await paginasPng(r.base64, 'liquidacion');
 });
 
 console.log(`\n${bien}/${total} pruebas OK`);
