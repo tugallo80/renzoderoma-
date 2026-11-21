@@ -15,10 +15,13 @@
  *   registrar        {idempotencia, total?, fecha?, cid?, pid?, proveedor?: {nombre, nit?, contacto?},
  *                     factura?: {nit, razon_social?, nro, cuf?, fecha?, monto?}, items?: [{material, cantidad, unidad?, precio}],
  *                     nota?, foto?: {datos_base64, mime?} (JPG/PNG/WEBP/PDF), pagado_con?: {medio, persona?}, origen?: {tipo, ref?},
- *                     items_referencia?: true (precios leídos de un recibo: no tienen que sumar exacto al total)}
+ *                     items_referencia?: true (precios leídos de un recibo: no tienen que sumar exacto al total),
+ *                     categoria?: alquiler|mantenimiento|herramientas|servicios|otros (gasto de funcionamiento del taller, sin proyecto)}
  *                    → {id, repetida, proveedor_id, resumen}
  *   anular           {id, motivo} → {ok, id}
- *   balance_mensual  {mes: "AAAA-MM"}   (el balance de un proyecto: functions/proyectos/finanzas.js)
+ *   balance_mensual  {mes: "AAAA-MM"}   (el balance de un proyecto: functions/proyectos/finanzas.js); separa compras de proyectos,
+ *                    funcionamiento (por categoría) y sin clasificar
+ *   funcionamiento   {mes?, meses?} → gastos de funcionamiento del mes, total por categoría y los meses anteriores
  * `quien` (lo pone el servidor, nunca el pedido de la app): {uid?, rol, nombre, telefono?, via: "app"|"whatsapp"}.
  */
 const crypto = require("crypto");
@@ -32,6 +35,9 @@ const MAX_ITEMS = 100;
 const TOLERANCIA_BS = 1;
 const MEDIOS = ["transferencia", "qr", "efectivo", "caja_chica", "tarjeta", "otro"];
 const ORIGENES = ["directa", "solicitud", "caja_chica", "migrada"];
+// Gastos de funcionamiento del taller (sin proyecto): van al balance mensual aparte de los costos de los proyectos.
+// Las herramientas, cuando exista el módulo de inventario, además entran ahí.
+const CATEGORIAS = ["alquiler", "mantenimiento", "herramientas", "servicios", "otros"];
 const VIAS = ["app", "whatsapp", "agente", "migracion"];
 
 /** Nodos de la base que toca este módulo (crearAlmacen los verifica en cada lectura y escritura). */
@@ -156,6 +162,9 @@ async function registrar(almacen, b, quienCrudo) {
     const provNombre = texto(prov.nombre || (factura && factura.razon_social), 120) || (factura ? "" : "PROVEEDOR LOCAL");
     const provNit = soloDigitos(prov.nit || (factura && factura.nit));
     if (!provNombre && !provNit) falla("Falta el proveedor.");
+    const categoria = b.categoria == null || b.categoria === "" ? null
+        : CATEGORIAS.includes(b.categoria) ? b.categoria : falla(`Categoría inválida: ${CATEGORIAS.join(", ")}.`);
+    if (categoria && (b.cid || b.pid)) falla("Los gastos de funcionamiento (categoría) no van a un proyecto.");
     let proyecto = null;
     if (b.cid || b.pid) {
         if (!ID.test(String(b.cid || "")) || !ID.test(String(b.pid || ""))) falla("Proyecto inválido.");
@@ -200,7 +209,7 @@ async function registrar(almacen, b, quienCrudo) {
 
     const itemsConClave = items.map((it) => ({ ...it, material_clave: resolverClave(mats || {}, it.material).clave }));
     const compra = {
-        fecha: f, mes, total, moneda: "BOB", proyecto, proveedor_id: pv.clave, proveedor_nombre: provNombre || provPrevio.nombre || provNit,
+        fecha: f, mes, total, moneda: "BOB", proyecto, categoria, proveedor_id: pv.clave, proveedor_nombre: provNombre || provPrevio.nombre || provNit,
         factura, items: itemsConClave.length ? itemsConClave : null, nota: texto(b.nota, 500) || null, comprobante,
         pagado_con: medio ? { medio, persona: texto(b.pagado_con.persona, 80) || null } : null,
         origen: { tipo: origenTipo, ref: b.origen && b.origen.ref ? texto(b.origen.ref, 120) : null },
@@ -302,6 +311,10 @@ async function balanceMensual(almacen, b) {
     ]);
     const cDelMes = vivas(compras).filter(([, c]) => c.mes === mes);
     const egCompras = r2(cDelMes.reduce((s, [, c]) => s + (Number(c.total) || 0), 0));
+    const sumaDe = (lista) => r2(lista.reduce((s, [, c]) => s + (Number(c.total) || 0), 0));
+    const func = cDelMes.filter(([, c]) => c.categoria);
+    const porCategoria = {};
+    func.forEach(([, c]) => { porCategoria[c.categoria] = r2((porCategoria[c.categoria] || 0) + (Number(c.total) || 0)); });
     let pagosContratistas = 0;
     for (const cid of Object.keys(clientes || {})) {
         const ps = (await almacen.leer(`proyectos/${cid}`).catch(() => null)) || {};
@@ -323,10 +336,39 @@ async function balanceMensual(almacen, b) {
     const egresos = r2(egCompras + pagosContratistas + pagosCancheos);
     return {
         mes, ingresos: { total: totalIngresos, registros: ing.length, cobros: cobMes.length, facturado: facturadoVenta, debito_fiscal_iva_13: r2(facturadoVenta * 0.13) },
-        egresos: { total: egresos, compras: egCompras, pagos_contratistas: r2(pagosContratistas), pagos_cancheos: r2(pagosCancheos), cantidad_compras: cDelMes.length },
+        egresos: { total: egresos, compras: egCompras, pagos_contratistas: r2(pagosContratistas), pagos_cancheos: r2(pagosCancheos), cantidad_compras: cDelMes.length,
+            // compras = de_proyectos + funcionamiento + sin_clasificar
+            compras_de_proyectos: sumaDe(cDelMes.filter(([, c]) => c.proyecto)),
+            funcionamiento: { total: sumaDe(func), por_categoria: porCategoria },
+            compras_sin_clasificar: sumaDe(cDelMes.filter(([, c]) => !c.proyecto && !c.categoria)) },
         resultado: r2(totalIngresos - egresos),
         impuestos: { compras_con_factura: credito.length, monto_facturado: montoFacturado, credito_fiscal_iva_13: r2(montoFacturado * 0.13) },
         nota: "Egresos: compras registradas + pagos a contratistas y cancheos con fecha en el mes. Los gastos adicionales de compras sin fecha no entran.",
+    };
+}
+
+/** Gastos de funcionamiento de un mes (lista y total por categoría) + los totales de los meses anteriores para comparar. */
+async function funcionamiento(almacen, b) {
+    const mes = String(b.mes || "").trim() || hoyBolivia(almacen.ahora()).slice(0, 7);
+    if (!MES.test(mes)) falla("Mes inválido (AAAA-MM).");
+    const meses = Math.min(Math.max(parseInt(b.meses, 10) || 6, 1), 24);
+    const compras = vivas(await almacen.leer("compras")).filter(([, c]) => c.categoria);
+    const delMes = compras.filter(([, c]) => c.mes === mes).sort((a, z) => String(z[1].fecha).localeCompare(String(a[1].fecha)));
+    const porCategoria = {};
+    delMes.forEach(([, c]) => { porCategoria[c.categoria] = r2((porCategoria[c.categoria] || 0) + (Number(c.total) || 0)); });
+    const [a, m] = mes.split("-").map(Number);
+    const historial = [];
+    for (let i = meses - 1; i >= 0; i--) {
+        const d = new Date(Date.UTC(a, m - 1 - i, 1)); const mk = d.toISOString().slice(0, 7);
+        const cs = compras.filter(([, c]) => c.mes === mk);
+        const pc = {}; cs.forEach(([, c]) => { pc[c.categoria] = r2((pc[c.categoria] || 0) + (Number(c.total) || 0)); });
+        historial.push({ mes: mk, total: r2(cs.reduce((s, [, c]) => s + (Number(c.total) || 0), 0)), por_categoria: pc });
+    }
+    return {
+        mes, categorias: CATEGORIAS, total: r2(delMes.reduce((s, [, c]) => s + (Number(c.total) || 0), 0)), por_categoria: porCategoria,
+        gastos: delMes.map(([id, c]) => ({ id, fecha: c.fecha, categoria: c.categoria, total: r2(c.total), proveedor: c.proveedor_nombre || null, nota: c.nota || null,
+            factura: c.factura ? c.factura.nro : null, comprobante: c.comprobante ? c.comprobante.url : null, pagado_con: c.pagado_con ? c.pagado_con.medio : null })),
+        historial,
     };
 }
 
@@ -338,6 +380,7 @@ async function atender(almacen, cuerpo, quien) {
             case "registrar": return { status: 200, cuerpo: await registrar(almacen, b, quien) };
             case "anular": return { status: 200, cuerpo: await anular(almacen, b, quien) };
             case "balance_mensual": return { status: 200, cuerpo: await balanceMensual(almacen, b) };
+            case "funcionamiento": return { status: 200, cuerpo: await funcionamiento(almacen, b) };
             // balance_proyecto pasó a functions/proyectos/finanzas.js (fórmula única, Sesión 9 Lote 2)
             default: throw new ErrorPedido("Acción desconocida.");
         }
@@ -348,4 +391,4 @@ async function atender(almacen, cuerpo, quien) {
     }
 }
 
-module.exports = { atender, RUTAS, ARCHIVOS, claveProveedor, buscarProveedor, ErrorPedido };
+module.exports = { CATEGORIAS, funcionamiento, atender, RUTAS, ARCHIVOS, claveProveedor, buscarProveedor, ErrorPedido };

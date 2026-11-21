@@ -95,3 +95,22 @@ Reglas de la operación:
 - **Caja chica por persona:** `/caja_chica/{persona}/movimientos/{id}` con `tipo: deposito|gasto|rendicion|devolucion`; el
   saldo se calcula. Un gasto de caja chica es una compra con `pagado_con: caja_chica` (cuenta una sola vez: arregla el doble
   conteo del dashboard).
+
+
+## Gastos de funcionamiento del taller (2026-11-21)
+
+Pedido del dueño: el alquiler del taller (y lo que cuesta tenerlo abierto) tiene que quedar registrado para el balance y la
+rendición de cuentas, sin ir a un proyecto. Él trabaja por licitación: **no hay sueldos**.
+
+- `registrar {…, categoria}`: `alquiler | mantenimiento | herramientas | servicios | otros`. Con categoría, la compra **no**
+  puede tener proyecto (error). Queda en `/compras` con su comprobante y, si tiene factura, en el crédito fiscal como cualquier compra.
+- `funcionamiento {mes?, meses?}`: gastos del mes (más recientes primero), total por categoría y los totales de los meses anteriores.
+- `balance_mensual`: `egresos.compras` = `compras_de_proyectos` + `funcionamiento {total, por_categoria}` + `compras_sin_clasificar`.
+- Tesorería → **Funcionamiento** (en el celular, "Taller"): cargar el gasto con recibo, resumen del mes por categoría,
+  barras de los últimos 6 meses y anular.
+- Kay: `registrar_compra` con `categoria` (sin cid/pid) y `gastos_funcionamiento {mes?}`. Mandarle el comprobante al
+  propietario por WhatsApp es del lado de Kay (como los PDF).
+- **Pendiente: módulo de inventario.** Las herramientas hoy entran como gasto; cuando exista el inventario, cada compra con
+  categoría `herramientas` pasa también ahí.
+
+Pruebas: `tools/compras` 10/10.
