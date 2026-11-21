@@ -32,6 +32,7 @@ const RUTAS_MCP = [
     /^pdf_cola(\/|$)/,         // páginas de los PDF de los requerimientos (functions/pdf)
     /^personal\/[^/]+\/(nombre|solicitudes)(\/|$)/,   // copia de las licitaciones del trabajador (functions/licitaciones)
     /^personal$/,              // buscar_trabajador / crear_licitacion (solo salen id, nombre y tipo)
+    /^personal\/[^/]+(\/(tipo|especialidad|telefono|sueldo|creado_por|creado|actualizado_por))?$/,       // registrar_trabajador (alta en Personal)
     /^operaciones_idem(\/|$)/,  // idempotencia de las operaciones (functions/operaciones)
 ];
 /** Storage: escribe y lee las del agente (adjuntos de las cotizaciones); las de los Requerimientos solo las LEE. */

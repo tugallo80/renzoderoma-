@@ -41,6 +41,23 @@ module.exports = function crear({ falla, acotar }) {
         },
         {
             def: {
+                name: "registrar_trabajador",
+                title: "Dar de alta a un trabajador o proveedor",
+                description: "Da de alta a alguien en Personal (como Base de datos → Personal), para poder licitarle trabajo. PEDÍ EL SÍ DEL DUEÑO ANTES (nombre, tipo y teléfono). tipo: graficos (imprenta / empresa de gráficos), externo (contratista de mano de obra), empresa (taller de servicios), interno (planta), supervisor. El sueldo no se carga acá. Si ya existe, devuelve su worker_id (con actualizar: true cambia tipo, especialidad o teléfono).",
+                inputSchema: { type: "object", properties: {
+                    nombre: { type: "string", maxLength: 80 }, tipo: { type: "string", enum: ["graficos", "externo", "empresa", "interno", "supervisor"] },
+                    especialidad: { type: "string", maxLength: 80 }, telefono: { type: "string", maxLength: 20, description: "WhatsApp, con código de país (591…)." },
+                    actualizar: { type: "boolean" }, idempotencia: IDEM, registrado_por: REGISTRADO_POR,
+                }, required: ["nombre", "tipo", "idempotencia", "registrado_por"] },
+                annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
+            },
+            async correr(almacen, uid, e) {
+                const { registrado_por, ...args } = e;
+                return lic(almacen, uid, "registrar_trabajador", args, quienDe(uid, registrado_por));
+            },
+        },
+        {
+            def: {
                 name: "crear_licitacion",
                 title: "Crear una licitación",
                 description: "Crea una licitación (encargo a un trabajador o proveedor de la base) con la misma lógica que la pantalla de Licitaciones: copia para el trabajador, responsable en los ítems del presupuesto si queda aprobada, historial. PEDÍ EL SÍ DEL DUEÑO ANTES (a quién, qué y por cuánto). alcance: renglones {item?: índice del ítem del presupuesto (ver_presupuesto), descripcion?, cant?, und?, monto}; el total es la suma de los montos. estado: enviado (propuesta al trabajador, por defecto) o aprobado (adjudicación directa). tipo: mano_de_obra (por defecto), grafico (imprenta), llave_en_mano, supervision. Trabajador por worker_id (buscar_trabajador) o por nombre si hay uno solo que coincide.",

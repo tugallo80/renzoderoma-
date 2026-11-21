@@ -926,6 +926,8 @@ prueba('crear_licitacion y cambiar_estado_proyecto por el conector (proveedor bu
     const c = await ok(ent, 'crear_licitacion', { cid: 'cliDemo', pid: 'proyDemo', worker_id: 'wDate', tipo: 'grafico', alcance: [{ descripcion: 'Vinil', monto: 120 }], idempotencia: 'wamid.c1', registrado_por: RP });
     assert.equal(D.proyectos.cliDemo.proyDemo.licitaciones[c.lid].precio_propuesto, 120);
     assert.ok(D.personal.wDate.solicitudes[c.lid]);
+    const alta = await ok(ent, 'registrar_trabajador', { nombre: 'Juan Grafico', tipo: 'graficos', telefono: '59170000000', idempotencia: 'wamid.t1', registrado_por: RP });
+    assert.equal(alta.worker_id, 'Juan_Grafico'); assert.equal(D.personal.Juan_Grafico.tipo, 'graficos');
     const e = await ok(ent, 'cambiar_estado_proyecto', { cid: 'cliDemo', pid: 'proyDemo', estado: 'produccion', idempotencia: 'wamid.e1', registrado_por: RP });
     assert.equal(e.estado, 'produccion'); assert.equal(D.proyectos.cliDemo.proyDemo.estado, 'produccion');
     assert.ok((await llamar(ent, 'cambiar_estado_proyecto', { cid: 'cliDemo', pid: 'proyDemo', estado: 'volando', idempotencia: 'wamid.e2', registrado_por: RP })).error);

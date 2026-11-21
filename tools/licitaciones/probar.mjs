@@ -157,6 +157,24 @@ prueba('crear: nombre ambiguo, ítem inexistente o sin alcance se rechazan sin e
     assert.equal(Object.keys(alm.datos.proyectos.cliA.proyA.licitaciones).length, 2);
 });
 
+prueba('registrar_trabajador: alta en Personal (sin sueldo), repetido y aviso si está solo en Proveedores', async () => {
+    const alm = base();
+    alm.datos.base_datos = { proveedores: { x1: { nombre: 'Datecolor Industria Gráfica', categoria: 'imprenta', telefono: '70000000' } } };
+    const b = ok(await L.atender(alm, { accion: 'trabajadores', texto: 'datecolor' }, DUENO));
+    assert.equal(b.total, 0); assert.equal(b.en_proveedores[0].nombre, 'Datecolor Industria Gráfica'); assert.match(b.nota, /Personal/);
+    const r = ok(await op(alm, 'registrar_trabajador', { nombre: 'Juan Datecolor', tipo: 'graficos', especialidad: 'Imprenta', telefono: '+591 700-00000' }, KAY));
+    assert.equal(r.worker_id, 'Juan_Datecolor');
+    const w = alm.datos.personal.Juan_Datecolor;
+    assert.equal(w.tipo, 'graficos'); assert.equal(w.telefono, '+59170000000'); assert.equal(w.sueldo, undefined); assert.equal(w.creado_por.via, 'whatsapp');
+    err(await op(alm, 'registrar_trabajador', { nombre: 'Juan Datecolor', tipo: 'graficos' }), /Ya existe/);
+    ok(await op(alm, 'registrar_trabajador', { nombre: 'Juan Datecolor', tipo: 'graficos', telefono: '71111111', actualizar: true }));
+    assert.equal(alm.datos.personal.Juan_Datecolor.telefono, '71111111');
+    err(await op(alm, 'registrar_trabajador', { nombre: 'X', tipo: 'jefe' }), /Tipo/);
+    // ya se le puede licitar
+    const c = ok(await op(alm, 'crear', { trabajador: 'datecolor', tipo: 'grafico', alcance: [{ descripcion: 'Vinil', monto: 100 }] }));
+    assert.equal(lic(alm, c.lid).worker_id, 'Juan_Datecolor');
+});
+
 let bien = 0;
 for (const [nombre, fn] of pruebas) {
     try { await fn(); bien++; console.log('ok  ', nombre); }
