@@ -31,7 +31,8 @@
     <script src="/js/firecache.js?v=7"></script>
     <script src="/js/auth-guard.js?v=3"></script>
     <script src="/js/compras-api.js?v=2"></script>
-    <script src="/js/operaciones-api.js?v=2"></script>
+    <script src="/js/operaciones-api.js?v=3"></script>
+    <script src="/js/pdf-rendicion.js?v=1"></script>
     <script src="/js/viewmode.js?v=1"></script>
 
     <style>
@@ -111,12 +112,12 @@
         #mobile-action-bar .m-act-btn {
             display: flex; flex-direction: column; align-items: center; gap: 2px;
             background: none; border: none; color: var(--gray);
-            font-size: 9px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.2px;
-            cursor: pointer; padding: 4px 1px; border-radius: 10px; transition: 0.15s;
-            flex: 1 1 0; min-width: 0;   /* 7 botones (con Taller) entran en 360 px */
+            font-size: 7.5px; font-weight: 800; text-transform: uppercase; letter-spacing: 0;
+            cursor: pointer; padding: 4px 0; border-radius: 10px; transition: 0.15s;
+            flex: 1 1 0; min-width: 0;   /* 8 botones (Taller y Rendir) entran en 360 px */
         }
         #mobile-action-bar .m-act-btn span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-        #mobile-action-bar .m-act-btn i { font-size: 22px; }
+        #mobile-action-bar .m-act-btn i { font-size: 20px; }
         #mobile-action-bar .m-act-btn.active { color: var(--blue); }
         #mobile-action-bar .m-act-btn:active { background: var(--bg); transform: scale(0.9); }
 
@@ -170,6 +171,7 @@
             <button class="tab-btn" onclick="switchMainTab('impuestos', this)"><i class="ph-bold ph-bank"></i> Impuestos</button>
             <button class="tab-btn" onclick="switchMainTab('clientes', this)"><i class="ph-bold ph-receipt"></i> Clientes</button>
             <button class="tab-btn" onclick="switchMainTab('funcionamiento', this)"><i class="ph-bold ph-house-line"></i> Funcionamiento</button>
+            <button class="tab-btn" onclick="switchMainTab('rendiciones', this)"><i class="ph-bold ph-hand-coins"></i> Rendiciones</button>
         </div>
     </div>
 
@@ -616,6 +618,20 @@
         </div>
         <div class="section-title"><i class="ph-bold ph-list-dashes"></i> Gastos del mes</div>
         <div id="fn-lista"><div class="empty-msg">Cargando…</div></div>
+    </div>
+
+    <!-- Rendición de cuentas / caja chica por persona: functions/rendiciones -->
+    <div id="panel-rendiciones" class="panel-section">
+        <div class="generic-card">
+            <h3 style="margin-top:0; color:var(--blue); font-size:15px;"><i class="ph-bold ph-hand-coins"></i> Rendición de cuentas</h3>
+            <div style="font-size:11px; color:var(--gray); margin-bottom:12px; background:rgba(0,122,255,0.08); border-radius:8px; padding:10px;">
+                La plata que le das a alguien para gastos y lo que rinde con recibos. Lo que manda el trabajador por WhatsApp a Kay queda <b>por aprobar</b>; al aprobarlo, si es de un proyecto, cuenta como gasto del proyecto.
+            </div>
+            <div id="rd-resumen"><div class="empty-msg">Cargando…</div></div>
+            <label class="inp-lbl" style="margin-top:10px;">Persona</label>
+            <select id="rd-persona" class="inp-std" onchange="RubikRendiciones.verPersona()"><option value="">Elegí a la persona…</option></select>
+        </div>
+        <div id="rd-detalle"></div>
     </div>
 
     <div id="panel-clientes" class="panel-section">
@@ -4235,6 +4251,7 @@
     <button class="m-act-btn" data-tab="impuestos" onclick="switchMainTab('impuestos',null)"><i class="ph-bold ph-bank"></i><span>Impuest.</span></button>
     <button class="m-act-btn" data-tab="clientes" onclick="switchMainTab('clientes',null)"><i class="ph-bold ph-receipt"></i><span>Clientes</span></button>
     <button class="m-act-btn" data-tab="funcionamiento" onclick="switchMainTab('funcionamiento',null)"><i class="ph-bold ph-house-line"></i><span>Taller</span></button>
+    <button class="m-act-btn" data-tab="rendiciones" onclick="switchMainTab('rendiciones',null)"><i class="ph-bold ph-hand-coins"></i><span>Rendir</span></button>
 </div>
 <script>
 // ═══════════════════════════════════════════════════════
@@ -4436,6 +4453,131 @@ window.RubikFuncionamiento = (function () {
     window.switchMainTab = function (tabId, btn) { _sw(tabId, btn); if (tabId === 'funcionamiento') cargar(); };
     try { $('fn-fecha').valueAsDate = new Date(); } catch (e) { /* nada */ }
     return { cargar, guardar, anular };
+})();
+</script>
+<script>
+// ═══════════════════════════════════════════════════════
+//  RENDICIONES / CAJA CHICA (functions/rendiciones)
+// ═══════════════════════════════════════════════════════
+window.RubikRendiciones = (function () {
+    const $ = (id) => document.getElementById(id);
+    const fm = (n) => (Number(n) || 0).toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const esc = (t) => String(t == null ? '' : t).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    const ESTADO = { entregado: ['Entregado', 'var(--green)'], aprobado: ['Aprobado', 'var(--green)'], pendiente: ['Por aprobar', 'var(--orange)'], rechazado: ['Rechazado', 'var(--gray)'], anulado: ['Anulado', 'var(--gray)'] };
+    let personas = {}, actual = null, ultimo = null;
+
+    async function cargar() {
+        try {
+            const [ps, res] = await Promise.all([db.ref('personal').once('value').then((s) => s.val() || {}), RubikOps.rendiciones('resumen', {})]);
+            personas = {};
+            Object.entries(ps).forEach(([k, w]) => { if (w && typeof w.nombre === 'string' && /^[A-Za-z0-9_-]{1,64}$/.test(k)) personas[k] = w.nombre; });
+            const sel = $('rd-persona'), act = sel.value;
+            sel.innerHTML = '<option value="">Elegí a la persona…</option>' + Object.entries(personas).sort((a, b) => a[1].localeCompare(b[1])).map(([k, n]) => `<option value="${esc(k)}">${esc(n)}</option>`).join('');
+            if (act) sel.value = act;
+            $('rd-resumen').innerHTML = res.personas.length
+                ? `<div style="font-size:12px;font-weight:800;margin-bottom:6px;">En manos del equipo: ${fm(res.total_en_mano)} Bs${res.gastos_por_aprobar ? ` · <span style="color:var(--orange);">${res.gastos_por_aprobar} gasto(s) por aprobar</span>` : ''}</div>`
+                  + res.personas.map((p) => `<div onclick="RubikRendiciones.elegir('${esc(p.worker_id)}')" style="display:flex;justify-content:space-between;padding:8px 10px;border:1px solid var(--border);border-radius:10px;margin-bottom:6px;cursor:pointer;font-size:13px;">
+                        <span><b>${esc(p.nombre)}</b>${p.pendientes ? ` <span style="color:var(--orange);font-size:11px;">· ${p.pendientes} por aprobar</span>` : ''}</span>
+                        <b style="color:${p.saldo_en_mano < 0 ? 'var(--red)' : 'var(--text)'};">${fm(p.saldo_en_mano)} Bs</b></div>`).join('')
+                : '<div style="font-size:12px;color:var(--gray);">Todavía no hay plata entregada ni gastos rendidos.</div>';
+        } catch (e) { $('rd-resumen').innerHTML = `<div class="empty-msg">No se pudo cargar: ${esc(e.message)}</div>`; }
+    }
+    function elegir(wid) { $('rd-persona').value = wid; verPersona(); }
+
+    const opcionesProyecto = () => '<option value="">Sin proyecto (general)</option>' + Object.keys(window._proyPorEtiqueta || {}).sort().map((k) => `<option value="${esc(k)}">${esc(k)}</option>`).join('');
+    async function verPersona() {
+        actual = $('rd-persona').value;
+        if (!actual) { $('rd-detalle').innerHTML = ''; return; }
+        $('rd-detalle').innerHTML = '<div class="empty-msg">Cargando…</div>';
+        try { ultimo = await RubikOps.rendiciones('estado', { worker_id: actual }); }
+        catch (e) { $('rd-detalle').innerHTML = `<div class="empty-msg">${esc(e.message)}</div>`; return; }
+        const t = ultimo.totales;
+        $('rd-detalle').innerHTML = `
+        <div class="generic-card">
+            <div class="bal-grid" style="grid-template-columns:1fr 1fr;">
+                <div><div style="font-size:10px;color:var(--gray);font-weight:800;">ENTREGADO</div><b>${fm(t.entregado)}</b></div>
+                <div><div style="font-size:10px;color:var(--gray);font-weight:800;">GASTOS APROBADOS</div><b>${fm(t.gastado_aprobado)}</b></div>
+                <div><div style="font-size:10px;color:var(--gray);font-weight:800;">POR APROBAR</div><b style="color:var(--orange);">${fm(t.pendiente_de_aprobar)}</b></div>
+                <div><div style="font-size:10px;color:var(--gray);font-weight:800;">${t.saldo_en_mano < 0 ? 'SE LE DEBE' : 'SALDO EN MANO'}</div><b style="color:${t.saldo_en_mano < 0 ? 'var(--red)' : 'var(--green)'};">${fm(Math.abs(t.saldo_en_mano))}</b></div>
+            </div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                <button class="btn-action" style="flex:1;background:var(--green);" onclick="RubikRendiciones.form('entregar')"><i class="ph-bold ph-arrow-up-right"></i> Entregar plata</button>
+                <button class="btn-action" style="flex:1;background:var(--blue);" onclick="RubikRendiciones.form('gasto')"><i class="ph-bold ph-receipt"></i> Cargar gasto</button>
+                <button class="btn-action" style="flex:1;background:var(--card);color:var(--blue);border:1px solid var(--blue);" onclick="RubikRendiciones.pdf()"><i class="ph-bold ph-file-pdf"></i> PDF</button>
+            </div>
+            <div id="rd-form"></div>
+        </div>
+        <div class="section-title"><i class="ph-bold ph-list-dashes"></i> Movimientos</div>
+        ${ultimo.movimientos.length ? ultimo.movimientos.map((m) => {
+            const [txt, color] = ESTADO[m.estado] || [m.estado, 'var(--gray)'];
+            const pend = m.tipo === 'gasto' && m.estado === 'pendiente';
+            const tachado = m.estado === 'rechazado' || m.estado === 'anulado';
+            return `<div class="generic-card" style="padding:12px;border-left:3px solid ${color};${tachado ? 'opacity:.55;' : ''}">
+                <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">
+                    <div style="flex:1;min-width:0;"><div style="font-weight:900;font-size:13px;">${m.tipo === 'deposito' ? 'Entrega' : 'Gasto'} · ${esc(m.concepto)}</div>
+                        <div style="font-size:10px;color:var(--gray);margin-top:2px;">${esc(m.fecha)} · ${esc(m.proyecto || 'General')}${m.proveedor ? ' · ' + esc(m.proveedor) : ''} · <span style="color:${color};font-weight:800;">${esc(txt)}</span>${m.motivo ? ' · ' + esc(m.motivo) : ''}</div>
+                        ${m.comprobante ? `<a href="${esc(m.comprobante)}" target="_blank" style="font-size:10px;color:var(--blue);font-weight:800;">📎 Recibo</a>` : ''}
+                        ${pend ? `<div style="display:flex;gap:6px;margin-top:6px;"><button onclick="RubikRendiciones.decidir('${esc(m.id)}',true)" style="font-size:11px;background:rgba(52,199,89,.12);color:var(--green);border:1px solid var(--green);padding:5px 10px;border-radius:8px;font-weight:800;cursor:pointer;">Aprobar</button>
+                            <button onclick="RubikRendiciones.decidir('${esc(m.id)}',false)" style="font-size:11px;background:rgba(255,59,48,.08);color:var(--red);border:1px solid var(--red);padding:5px 10px;border-radius:8px;font-weight:800;cursor:pointer;">Rechazar</button></div>` : ''}
+                    </div>
+                    <div style="display:flex;align-items:center;gap:6px;"><b style="color:${m.tipo === 'deposito' ? 'var(--green)' : 'var(--red)'};">${m.tipo === 'deposito' ? '+' : '-'}${fm(m.monto)}</b>
+                        ${tachado ? '' : `<button onclick="RubikRendiciones.anular('${m.tipo}','${esc(m.id)}')" title="Anular" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:14px;"><i class="ph-bold ph-trash"></i></button>`}</div>
+                </div></div>`;
+        }).join('') : '<div class="empty-msg">Sin movimientos.</div>'}`;
+    }
+
+    function form(tipo) {
+        const hoy = new Date(Date.now() - 4 * 3600e3).toISOString().slice(0, 10);
+        $('rd-form').innerHTML = `<div style="border-top:1px solid var(--border);margin-top:12px;padding-top:12px;">
+            <div class="flex-row"><div style="flex:1;"><label class="inp-lbl">Monto (Bs)</label><input type="number" step="any" id="rd-monto" class="inp-std"></div>
+                <div style="flex:1;"><label class="inp-lbl">Fecha</label><input type="date" id="rd-fecha" class="inp-std" value="${hoy}"></div></div>
+            <label class="inp-lbl">${tipo === 'entregar' ? 'Para qué' : 'En qué se gastó'}</label><input type="text" id="rd-concepto" class="inp-std" placeholder="${tipo === 'entregar' ? 'Ej: materiales del stand' : 'Ej: pintura, taxi, tornillos'}">
+            ${tipo === 'gasto' ? '<label class="inp-lbl">Dónde (proveedor)</label><input type="text" id="rd-prov" class="inp-std">' : '<label class="inp-lbl">Cómo</label><select id="rd-medio" class="inp-std"><option value="efectivo">Efectivo</option><option value="transferencia">Transferencia</option><option value="qr">QR</option><option value="otro">Otro</option></select>'}
+            <label class="inp-lbl">Proyecto</label><select id="rd-proy" class="inp-std">${opcionesProyecto()}</select>
+            <label class="inp-lbl">${tipo === 'entregar' ? 'Comprobante (opcional)' : 'Recibo'}</label><input type="file" id="rd-foto" class="inp-std" accept="image/*,application/pdf">
+            <button class="btn-action btn-success" onclick="RubikRendiciones.guardar('${tipo}')"><i class="ph-bold ph-floppy-disk"></i> Guardar</button></div>`;
+    }
+    async function guardar(tipo) {
+        const monto = parseFloat($('rd-monto').value) || 0;
+        if (monto <= 0) return alert('Ingresá el monto.');
+        const concepto = $('rd-concepto').value.trim();
+        if (tipo === 'gasto' && !concepto) return alert('Decí en qué se gastó.');
+        const proy = (window._proyPorEtiqueta || {})[$('rd-proy').value] || null;
+        const archivo = $('rd-foto').files[0];
+        const foto = archivo ? await RubikOps.archivoABase64(archivo) : null;
+        const datos = { worker_id: actual, monto, fecha: $('rd-fecha').value || undefined, concepto: concepto || undefined, foto,
+            ...(proy ? { cid: proy.cid, pid: proy.pid } : {}) };
+        try {
+            if (tipo === 'entregar') await RubikOps.rendiciones('entregar', Object.assign(datos, { medio: $('rd-medio').value }));
+            else await RubikOps.rendiciones('registrar_gasto', Object.assign(datos, { proveedor: $('rd-prov').value.trim() || undefined }));
+        } catch (e) { return alert('No se guardó: ' + e.message); }
+        await Promise.all([verPersona(), cargar()]);
+    }
+    async function decidir(id, aprobar) {
+        const motivo = aprobar ? null : prompt('Motivo del rechazo:');
+        if (!aprobar && !motivo) return;
+        try { await RubikOps.rendiciones(aprobar ? 'aprobar' : 'rechazar', { worker_id: actual, id, motivo }); } catch (e) { return alert(e.message); }
+        await Promise.all([verPersona(), cargar()]);
+    }
+    async function anular(tipo, id) {
+        const motivo = prompt(`Anular esta ${tipo === 'deposito' ? 'entrega' : 'rendición de gasto'} (no se borra). Motivo:`);
+        if (!motivo) return;
+        try { await RubikOps.rendiciones('anular', { worker_id: actual, tipo, id, motivo }); } catch (e) { return alert(e.message); }
+        await Promise.all([verPersona(), cargar()]);
+    }
+    async function pdf() {
+        if (!ultimo) return;
+        try {
+            const logo = await fetch('/LOGO-IA-RUBIK.jpg').then((r) => r.ok ? r.blob() : null).then((b) => b ? new Promise((ok) => { const fr = new FileReader(); fr.onload = () => ok(fr.result); fr.readAsDataURL(b); }) : null).catch(() => null);
+            const cargarImagen = (url) => fetch(url).then((r) => r.ok ? r.blob() : null).then((b) => b && /^image\//.test(b.type) ? new Promise((ok) => { const fr = new FileReader(); fr.onload = () => ok(fr.result); fr.readAsDataURL(b); }) : null).catch(() => null);
+            const dimensiones = (b64) => new Promise((ok) => { const im = new Image(); im.onload = () => ok({ w: im.naturalWidth || 1, h: im.naturalHeight || 1 }); im.onerror = () => ok({ w: 1, h: 1 }); im.src = b64; });
+            const doc = await PdfRendicion.generar({ jsPDF: window.jspdf.jsPDF, estado: ultimo, fecha: new Date().toLocaleDateString('es-BO'), logo, cargarImagen, dimensiones });
+            doc.save(PdfRendicion.nombreArchivo(ultimo));
+        } catch (e) { alert('No se pudo generar el PDF: ' + e.message); }
+    }
+    const _sw = window.switchMainTab;
+    window.switchMainTab = function (tabId, btn) { _sw(tabId, btn); if (tabId === 'rendiciones') cargar(); };
+    return { cargar, elegir, verPersona, form, guardar, decidir, anular, pdf };
 })();
 </script>
 </body>

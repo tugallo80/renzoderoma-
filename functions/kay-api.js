@@ -393,6 +393,19 @@ async function cobros(accion, params) {
     return r.status === 200 ? { error: false, ...r.cuerpo } : { error: true, texto: (r.cuerpo && r.cuerpo.error) || `Error ${r.status}` };
 }
 
+// ── Rendiciones de cuentas (caja chica): el mismo módulo que /api/rendiciones (functions/rendiciones/api.js) ──
+// registrado_por.rol: "dueño" (lo que carga Renzo queda aprobado) o el rol de quien escribe (trabajador: queda pendiente).
+async function rendiciones(accion, params) {
+    const K = require("./rendiciones/api");
+    const { almacenRendiciones } = require("./rendiciones");
+    const { registrado_por, ...resto } = params || {};
+    const rp = registrado_por && typeof registrado_por === "object" ? registrado_por : {};
+    const quien = { rol: rp.rol || "trabajador", nombre: rp.nombre || null, telefono: rp.telefono || null, via: "whatsapp" };
+    const r = await K.atender(almacenRendiciones(), { ...resto, accion }, quien, "whatsapp");
+    console.log(`[kayApi] rendiciones ${accion}: ${r.status}`);
+    return r.status === 200 ? { error: false, ...r.cuerpo } : { error: true, texto: (r.cuerpo && r.cuerpo.error) || `Error ${r.status}` };
+}
+
 const ACCIONES = {
     listar_proyectos_activos: {
         soloLectura: true,
@@ -504,6 +517,7 @@ const ACCIONES = {
         descripcion: "PDF de un documento, igual al de la pantalla, para mandarlo por WhatsApp → { nombre, mime: \"application/pdf\", base64, bytes, paginas } (máx. 10 MB). "
             + "{ tipo: licitacion, cid, pid, id, modo?: general|detalle } (propuesta al trabajador) · "
             + "{ tipo: liquidacion, cid, pid, id } (estado del contrato para el trabajador: acordado, anticipos y pagos, saldo, comprobantes) · "
+            + "{ tipo: rendicion, worker_id | telefono, desde?, hasta? } (rendición de cuentas de la caja chica: entregado, gastos con recibos, saldo) · "
             + "{ tipo: cotizacion, cid, pid, modo?: normal|impuestos_por_item } (presupuesto para el cliente) · "
             + "{ tipo: orden, cid, pid, modo?: produccion|impresion|impresion_con_imagen|completa } (órdenes de Producción).",
         ejecutar: async (p) => {
@@ -518,6 +532,44 @@ const ACCIONES = {
                 return { error: true, texto: "No se pudo generar el PDF." };
             }
         },
+    },
+    rendicion_estado: {
+        soloLectura: true,
+        descripcion: "Rendición de cuentas de una persona (plata entregada para gastos / caja chica) { worker_id | telefono, desde?, hasta? } "
+            + "→ { nombre, totales: {entregado, gastado_aprobado, pendiente_de_aprobar, saldo_en_mano}, movimientos: [{id, tipo: deposito|gasto, fecha, monto, concepto, proyecto, estado, comprobante}], pendientes }. "
+            + "saldo_en_mano negativo = gastó más de lo entregado (se le debe).",
+        ejecutar: (p) => rendiciones("estado", p),
+    },
+    rendiciones_resumen: {
+        soloLectura: true,
+        descripcion: "Todas las personas con plata entregada o gastos: saldo en mano y gastos por aprobar → { personas: [...], total_en_mano, gastos_por_aprobar }.",
+        ejecutar: (p) => rendiciones("resumen", p),
+    },
+    rendicion_entregar: {
+        soloLectura: false,
+        descripcion: "Registra plata que el dueño le dio a alguien para gastos { idempotencia, worker_id | telefono, monto, fecha?, concepto?, cid?, pid?, medio?: transferencia|qr|efectivo|otro, foto?, registrado_por } → { id, saldo_en_mano }. Con el sí del dueño.",
+        ejecutar: (p) => rendiciones("entregar", p),
+    },
+    rendicion_gasto: {
+        soloLectura: false,
+        descripcion: "Registra un gasto rendido con su recibo { idempotencia, worker_id | telefono, monto, concepto, fecha?, cid?, pid?, proveedor?, foto?: {datos_base64}, registrado_por: {rol, nombre, telefono} }. "
+            + "Si lo manda el trabajador (rol distinto de dueño) queda PENDIENTE hasta que el dueño lo apruebe; si lo carga el dueño, aprobado. Con proyecto, al aprobarse cuenta como gasto del proyecto.",
+        ejecutar: (p) => rendiciones("registrar_gasto", p),
+    },
+    rendicion_aprobar: {
+        soloLectura: false,
+        descripcion: "El dueño aprueba un gasto pendiente { idempotencia, worker_id | telefono, id, registrado_por }.",
+        ejecutar: (p) => rendiciones("aprobar", p),
+    },
+    rendicion_rechazar: {
+        soloLectura: false,
+        descripcion: "El dueño rechaza un gasto pendiente { idempotencia, worker_id | telefono, id, motivo, registrado_por }.",
+        ejecutar: (p) => rendiciones("rechazar", p),
+    },
+    rendicion_anular: {
+        soloLectura: false,
+        descripcion: "Anula una entrega o un gasto cargado por error (no se borra) { idempotencia, worker_id | telefono, tipo: deposito|gasto, id, motivo, registrado_por }.",
+        ejecutar: (p) => rendiciones("anular", p),
     },
     balance_proyecto: {
         soloLectura: true,
