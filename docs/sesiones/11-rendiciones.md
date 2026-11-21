@@ -76,6 +76,16 @@ Las personas que tienen plata para gastos del proyecto pero no tienen contrato e
   `/compras_facturadas/{gasto}` (`origen: rendicion`), que es lo que lee Impuestos. No va a `/compras`, porque el gasto ya cuenta en
   el proyecto por la caja chica. Si se anula, la factura queda anulada.
 
+### Liquidación del contrato con extras y rendición (2026-11-21, caso Pollo en STAND NEXCORP)
+
+La liquidación del contrato (`pdf-liquidacion.js`, desde la app y desde Kay) ahora:
+- **suma los extras** de la licitación (antes mostraba solo el contrato: 3.000 en vez de 3.300), con su lista;
+- incluye la **rendición de esa persona en ese proyecto**: entregado, aprobado y por aprobar. Lo aprobado que gastó de más se le
+  **suma**; lo que tiene sin rendir se le **descuenta**; lo por aprobar todavía no cuenta;
+- cierra con el **TOTAL A PAGAR** (saldo del contrato ± rendición), o con el saldo a favor de Rubik si es negativo.
+
+En la tarjeta de Compras, "Acordado" también incluye los extras.
+
 ## PDF
 
 `public/js/pdf-rendicion.js` (`PdfRendicion`, copia en `functions/pdf/compartido/`) tiene el resumen, los movimientos con

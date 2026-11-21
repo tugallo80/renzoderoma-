@@ -136,7 +136,14 @@ async function pdfLiquidacion(almacen, b) {
     if (!lic) C.falla("No existe la licitación.", 404);
     const P = require("../pdf/compartido/pdf-liquidacion.js");
     const { cargarImagen, dimensiones } = crearCargador({ soloJpeg: true });
-    const doc = await P.generar({ jsPDF: jsPDF(), lic, budgetItems: items || [], proyecto: String(pName), fecha: fechaBo(almacen.ahora()),
+    // la rendición de esta persona en este proyecto (si tiene): suma o descuenta en el total a pagar
+    let rendicion = null;
+    if (lic.worker_id) {
+        const R = require("../rendiciones/api");
+        const r = await R.atender(almacen, { accion: "estado", worker_id: lic.worker_id, cid, pid }).catch(() => null);
+        if (r && r.status === 200) rendicion = r.cuerpo;
+    }
+    const doc = await P.generar({ jsPDF: jsPDF(), lic, budgetItems: items || [], proyecto: String(pName), fecha: fechaBo(almacen.ahora()), rendicion,
         logo: await cargarImagen("logo-liquidacion"), cargarImagen, cargarComprobante: cargarImagen, dimensiones });
     return { nombre: P.nombreArchivo(lic), doc };
 }

@@ -8,7 +8,7 @@
     <script src="https://unpkg.com/@phosphor-icons/web" defer></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
-    <script src="/js/pdf-liquidacion.js?v=1"></script>
+    <script src="/js/pdf-liquidacion.js?v=2"></script>
     <script src="/js/pdf-rendicion.js?v=2"></script>
     
     <script src="https://www.gstatic.com/firebasejs/9.1.3/firebase-app-compat.js"></script>
@@ -655,8 +655,9 @@
 
         try {
             // El PDF lo arma /js/pdf-liquidacion.js: el mismo código que usa el servidor para mandarlo por WhatsApp (Kay)
+            const rendicion = lic.worker_id ? await RubikOps.rendiciones('estado', { worker_id: lic.worker_id, cid: localStorage.getItem('rubik_client_id'), pid: localStorage.getItem('rubik_current_pid') }).catch(() => null) : null;
             const doc = await PdfLiquidacion.generar({
-                jsPDF: window.jspdf.jsPDF, lic, budgetItems: window.budgetItems || [], proyecto: window.pName,
+                jsPDF: window.jspdf.jsPDF, lic, budgetItems: window.budgetItems || [], proyecto: window.pName, rendicion,
                 fecha: new Date().toLocaleDateString('es-BO'), logo: await _logoLiquidacion(),
                 cargarImagen: getBase64ImageFromUrl, cargarComprobante: _comprobanteB64, dimensiones: _dimsImagen,
             });
@@ -722,7 +723,8 @@
 
         Object.keys(window.currentLics).forEach(key => {
             const lic = window.currentLics[key];
-            const total = parseFloat(lic.precio_final || lic.precio_propuesto || 0);
+            const extrasLic = lic.extras ? Object.values(lic.extras).reduce((s, x) => s + parseFloat((x && x.monto) || 0), 0) : 0;
+            const total = parseFloat(lic.precio_final || lic.precio_propuesto || 0) + extrasLic;   // contrato + extras
             let pagado = 0;
             let pagosHtml = '';
             if(lic.pagos) {
@@ -741,7 +743,7 @@
                     <div style="font-size:10px; font-weight:800; background:var(--green); color:white; padding:4px 8px; border-radius:6px; text-transform:uppercase;">${lic.estado}</div>
                 </div>
                 <div class="bal-grid">
-                    <div><div class="b-lbl">Acordado</div><div class="b-val">${fMoney(total)}</div></div>
+                    <div><div class="b-lbl">Acordado${extrasLic ? ' (con extras)' : ''}</div><div class="b-val">${fMoney(total)}</div></div>
                     <div><div class="b-lbl">Pagado</div><div class="b-val" style="color:var(--green)">${fMoney(pagado)}</div></div>
                     <div><div class="b-lbl" style="color:var(--orange)">Saldo Deuda</div><div class="b-val" style="color:var(--orange)">${fMoney(total - pagado)}</div></div>
                 </div>

@@ -145,6 +145,26 @@ await prueba('liquidación de contrato: acordado, anticipos, saldo y comprobante
     await paginasPng(r.base64, 'liquidacion');
 });
 
+await prueba('liquidación del caso de Pollo: contrato 3.000 + extra 300, rendición 1.500 entregado / 1.590 aprobado → total a pagar 3.390', async () => {
+    const d = datos();
+    d.personal = { wPollo: { nombre: 'POLLO', telefono: '70000001' } };
+    const L = d.proyectos.cliA.proyA.licitaciones.L1;
+    Object.assign(L, { worker_id: 'wPollo', worker_name: 'POLLO', precio_final: 3000, precio_propuesto: 3000,
+        extras: { e1: { monto: 300, descripcion: 'Mantenimiento y masillado de todo', fecha: '2026-11-21' } }, pagos: null });
+    d.caja_chica = { wPollo: {
+        depositos: { a: { monto: 1500, fecha: '2026-11-21', nota: 'Anticipo caja chica', pid: 'proyA', cid: 'cliA', proyecto: 'Trofeo Demo' } },
+        gastos: { b: { monto: 1590, fecha: '2026-11-21', concepto: 'Insumos y fletes', pid: 'proyA', cid: 'cliA', proyecto: 'Trofeo Demo', estado: 'aprobado' } },
+        otro: null } };
+    d.caja_chica.wPollo.depositos.z = { monto: 999, fecha: '2026-11-21', nota: 'De otro proyecto', pid: 'otroP' };
+    const r = await D.generar(crearAlmacenMemoria(d, D.RUTAS, D.ARCHIVOS), { tipo: 'liquidacion', cid: 'cliA', pid: 'proyA', id: 'L1' });
+    const txt = await textoPdf(r.base64);
+    assert.match(txt, /EXTRAS \(1\)/); assert.match(txt, /MONTO TOTAL ACORDADO\s+3\.300,00 Bs/);
+    assert.match(txt, /SALDO DEL CONTRATO\s+3\.300,00 Bs/);
+    assert.match(txt, /A FAVOR DEL CONTRATISTA \(se le suma\)\s+90,00 Bs/, 'solo la plata de este proyecto (no los 999 de otro)');
+    assert.match(txt, /TOTAL A PAGAR: 3\.390,00 Bs/);
+    await paginasPng(r.base64, 'liquidacion-pollo');
+});
+
 await prueba('rendición de cuentas: entregado, gastos con estado, saldo y recibos', async () => {
     const d = datos();
     d.personal = { wPollo: { nombre: 'Pollo Demo', telefono: '70000001' } };

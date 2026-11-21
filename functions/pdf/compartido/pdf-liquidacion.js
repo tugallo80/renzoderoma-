@@ -7,6 +7,7 @@
  *   PdfLiquidacion.generar({
  *     jsPDF, lic, budgetItems,        // licitación y los ítems del presupuesto (para medidas e imágenes del anexo)
  *     proyecto, fecha, logo,          // logo: dataURL JPEG (o null)
+ *     rendicion,                      // opcional: "estado" de functions/rendiciones de esta persona EN ESTE PROYECTO
  *     cargarImagen(url),              // → Promise<dataURL JPEG | null>   (anexo técnico)
  *     cargarComprobante(url),         // → Promise<dataURL | null>        (fotos de los comprobantes)
  *     dimensiones(dataURL),           // → Promise<{w, h}>
@@ -28,9 +29,17 @@
         const pagosArr = lic.pagos
             ? Object.values(lic.pagos).sort((a,b) => (a.fecha||'') > (b.fecha||'') ? 1 : -1)
             : [];
-        let totalProp = parseFloat(lic.precio_final || lic.precio_propuesto || 0);
+        // Contrato + extras (los extras agregados después también se le deben: antes no se sumaban)
+        const extrasArr = lic.extras ? Object.values(lic.extras).filter(x => x && typeof x === 'object').sort((a,b) => (a.fecha||'') > (b.fecha||'') ? 1 : -1) : [];
+        const contrato = parseFloat(lic.precio_final || lic.precio_propuesto || 0);
+        const totalExtras = extrasArr.reduce((s,x) => s + parseFloat(x.monto||0), 0);
+        let totalProp = contrato + totalExtras;
         let totalPagado = pagosArr.reduce((s,p) => s + parseFloat(p.monto||0), 0);
         let saldo = totalProp - totalPagado;
+        // Rendición de la plata para gastos de este proyecto: lo aprobado que gastó de más se le suma; lo que tiene sin rendir se descuenta
+        const rend = ctx.rendicion && ctx.rendicion.movimientos && ctx.rendicion.movimientos.length ? ctx.rendicion.totales : null;
+        const netoRend = rend ? Math.round((rend.gastado_aprobado - rend.entregado) * 100) / 100 : 0;
+        const totalAPagar = Math.round((saldo + netoRend) * 100) / 100;
 
         // ══ HOJA 1: ENCABEZADO CON LOGO ══
         // Barra azul de encabezado
@@ -54,9 +63,10 @@
             startY: y + 5,
             head: [['CONCEPTO', 'MONTO']],
             body: [
-                ['MONTO TOTAL ACORDADO', fMoney(totalProp) + ' Bs'],
+                ['MONTO DEL CONTRATO', fMoney(contrato) + ' Bs'],
+                ...(extrasArr.length ? [['EXTRAS (' + extrasArr.length + ')', fMoney(totalExtras) + ' Bs'], ['MONTO TOTAL ACORDADO', fMoney(totalProp) + ' Bs']] : [['MONTO TOTAL ACORDADO', fMoney(totalProp) + ' Bs']]),
                 ['TOTAL DESEMBOLSADO (PAGADO)', fMoney(totalPagado) + ' Bs'],
-                ['SALDO PENDIENTE', fMoney(saldo) + ' Bs']
+                ['SALDO DEL CONTRATO', fMoney(saldo) + ' Bs']
             ],
             theme: 'grid', headStyles: { fillColor: [0, 122, 255] }
         });
@@ -82,11 +92,44 @@
             y += 15;
         }
 
+        if (extrasArr.length) {
+            if (y > 240) { doc.addPage(); y = 20; }
+            doc.setFontSize(12); doc.setFont(undefined, 'bold');
+            doc.text("EXTRAS DEL CONTRATO", margin, y);
+            doc.autoTable({
+                startY: y + 5, head: [['Fecha', 'Descripción', 'Monto']],
+                body: extrasArr.map(x => [x.fecha ? new Date(String(x.fecha).slice(0,10)+'T12:00:00').toLocaleDateString('es-BO') : '-', x.descripcion || x.desc || 'Extra', fMoney(parseFloat(x.monto||0)) + ' Bs']),
+                theme: 'striped', headStyles: { fillColor: [255, 149, 0] }
+            });
+            y = doc.lastAutoTable.finalY + 12;
+        }
+
+        if (rend) {
+            if (y > 230) { doc.addPage(); y = 20; }
+            doc.setFontSize(12); doc.setFont(undefined, 'bold');
+            doc.text("3. PLATA PARA GASTOS (RENDICIÓN) DE ESTE PROYECTO", margin, y);
+            doc.autoTable({
+                startY: y + 5, head: [['CONCEPTO', 'MONTO']],
+                body: [
+                    ['ENTREGADO PARA GASTOS', fMoney(rend.entregado) + ' Bs'],
+                    ['GASTOS RENDIDOS Y APROBADOS', fMoney(rend.gastado_aprobado) + ' Bs'],
+                    ...(rend.pendiente_de_aprobar ? [['GASTOS POR APROBAR (no se cuentan todavía)', fMoney(rend.pendiente_de_aprobar) + ' Bs']] : []),
+                    [netoRend >= 0 ? 'A FAVOR DEL CONTRATISTA (se le suma)' : 'SIN RENDIR (se le descuenta)', fMoney(Math.abs(netoRend)) + ' Bs'],
+                ],
+                theme: 'grid', headStyles: { fillColor: [52, 199, 89] }
+            });
+            y = doc.lastAutoTable.finalY + 12;
+        }
+
         if (y > 250) { doc.addPage(); y = 20; }
-        const saldoOk = saldo <= 0;
+        const saldoOk = totalAPagar <= 0.005 && totalAPagar >= -0.005;
         doc.setFontSize(14); doc.setFont(undefined, 'bold');
-        doc.setTextColor(...(saldoOk ? [52,199,89] : [255,149,0]));
-        doc.text(saldoOk ? '✓ CONTRATO LIQUIDADO' : `SALDO PENDIENTE: ${fMoney(saldo)} Bs`, margin, y);
+        doc.setTextColor(...(saldoOk ? [52,199,89] : totalAPagar > 0 ? [255,149,0] : [200,40,40]));
+        doc.text(saldoOk ? '✓ CONTRATO LIQUIDADO' : totalAPagar > 0 ? `TOTAL A PAGAR: ${fMoney(totalAPagar)} Bs` : `SALDO A FAVOR DE RUBIK: ${fMoney(-totalAPagar)} Bs`, margin, y);
+        if (rend && netoRend) {
+            doc.setFontSize(9); doc.setFont(undefined, 'normal'); doc.setTextColor(100,100,100);
+            doc.text(`Saldo del contrato ${fMoney(saldo)} Bs ${netoRend >= 0 ? '+' : '−'} rendición ${fMoney(Math.abs(netoRend))} Bs`, margin, y + 6);
+        }
         doc.setTextColor(0);
 
         // ══ HOJA 2: ANEXO TÉCNICO AGRUPADO POR ÍTEM ══
