@@ -32,6 +32,13 @@ await prueba('las copias del servidor son idénticas a las de la pantalla', () =
             f + ' desactualizado: correr "npm run sincronizar" en tools/documentos');
 });
 
+const textoPdf = async (base64) => {
+    const pdfjs = await import('../../functions/node_modules/pdfjs-dist/legacy/build/pdf.mjs');
+    const tarea = pdfjs.getDocument({ data: new Uint8Array(Buffer.from(base64, 'base64')), isEvalSupported: false });
+    const doc = await tarea.promise; let t = '';
+    for (let i = 1; i <= doc.numPages; i++) t += (await (await doc.getPage(i)).getTextContent()).items.map((x) => x.str).join(' ') + '\n';
+    await tarea.destroy(); return t;
+};
 const paginasPng = async (base64, prefijo) => {
     const pdfjs = await import('../../functions/node_modules/pdfjs-dist/legacy/build/pdf.mjs');
     const { createCanvas } = require('../../functions/node_modules/@napi-rs/canvas');
@@ -63,6 +70,19 @@ await prueba('licitación modo detalle: materiales y mano de obra del ítem', as
     const r = await D.generar(al, { tipo: 'licitacion', cid: 'cliA', pid: 'proyA', id: 'L1', modo: 'detalle' });
     assert.equal(r.nombre, 'propuesta_detallada_Trofeo_Demo_L1.pdf');
     await paginasPng(r.base64, 'detalle');
+    const txt = await textoPdf(r.base64);
+    assert.match(txt, /TRABAJO CONTRATADO/); assert.match(txt, /TOTAL CONTRATADO/);
+    assert.match(txt, /Plancha acero inox 0\.8 mm/, 'el material sale como referencia');
+    assert.doesNotMatch(txt, /900,00/, 'sin el precio interno del material (900 Bs)');
+    assert.doesNotMatch(txt, /35,00/, 'sin el precio interno de la mano de obra (35 Bs/hr)');
+    // llave en mano: los precios acordados con el contratista sí salen
+    const d = datos(); const L = d.proyectos.cliA.proyA.licitaciones.L1;
+    L.lic_mode = 'llave_en_mano';
+    L.tareas = { a: { parent_desc: 'Trofeo acero inox', task_name: 'Plancha inox', originType: 'llm_mat', originIdx: 0, cant: 1, und: 'pl', pu: 700, subtotal: 700 },
+        b: { parent_desc: 'Trofeo acero inox', task_name: 'Rolado y soldado', originType: 'llm_mo', originIdx: 0, cant: 1, und: 'glb', pu: 800, subtotal: 800 } };
+    const llm = await D.generar(crearAlmacenMemoria(d, D.RUTAS, D.ARCHIVOS), { tipo: 'licitacion', cid: 'cliA', pid: 'proyA', id: 'L1', modo: 'detalle' });
+    const t2 = await textoPdf(llm.base64);
+    assert.match(t2, /TOTAL MATERIALES/); assert.match(t2, /700,00/);
 });
 
 await prueba('errores: licitación o proyecto inexistente, tipo inválido', async () => {

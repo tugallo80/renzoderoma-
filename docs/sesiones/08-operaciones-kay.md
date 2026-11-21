@@ -69,6 +69,10 @@ Pruebas: `tools/licitaciones` 6/6 (incluye 2.548,50 → 3.000 con reintento), co
     solo con captura, completa). `armarArtes(items, artes_data)` repite los pasos de la pantalla: las artes guardadas mandan
     y el resto sale de las medidas del APU.
   - Comparadas con jsPDF 2.5.1 (pantalla) y 4.2.1 (servidor): iguales.
+- Propuesta detallada sin costos internos (2026-11-21, pedido del dueño): en licitaciones de mano de obra o de ítem completo,
+  el modo detalle muestra **lo contratado** (tareas con su precio acordado) y los materiales del ítem solo como referencia de
+  cantidades, **sin precios** (son costos del presupuesto de Rubik), y "TOTAL CONTRATADO". Llave en mano sigue con materiales
+  y mano de obra con precios (son los acordados con el contratista).
 - Liquidación de contrato ✅ (2026-11-21): `public/js/pdf-liquidacion.js` (`PdfLiquidacion`), el PDF "Liquidación" de
   `compras.html` (acordado, anticipos y pagos, saldo, anexo técnico y comprobantes). `pdf_documento {tipo: liquidacion, cid, pid, id}`.
 - Pruebas: `tools/documentos` 7/7 (deja las páginas en `salida/` para mirarlas).
