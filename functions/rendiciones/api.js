@@ -10,8 +10,9 @@
  *   saldo en mano = entregado − gastos aprobados − gastos pendientes   (lo que le queda; negativo = el dueño le debe)
  *
  * Operaciones (la persona: worker_id, o telefono si coincide con uno solo en Personal):
- *   estado         {worker_id|telefono, desde?, hasta?}           → movimientos, totales y saldo
+ *   estado         {worker_id|telefono, desde?, hasta?, cid?, pid?} → movimientos, totales y saldo (con cid/pid: solo ese proyecto)
  *   resumen        {}                                              → todas las personas con movimientos: saldo y pendientes
+ *   proyecto       {cid, pid}                                      → por persona, la plata para gastos de ese proyecto (Compras del proyecto)
  *   entregar       {persona, monto, fecha?, concepto?, cid?, pid?, medio?, foto?}
  *   registrar_gasto {persona, monto, concepto, fecha?, cid?, pid?, proveedor?, foto?}   (via whatsapp del trabajador → pendiente)
  *   aprobar / rechazar {persona, id, motivo?}                      (gastos pendientes)
@@ -70,11 +71,13 @@ async function subirFoto(almacen, wid, f, ident, foto) {
     return almacen.subirArchivo(`rendiciones/${wid}/${f.slice(0, 7)}/${ident}.${comp.ext}`, comp.buf, comp.mime, { token: crypto.randomUUID() });
 }
 
-function calcular(caja, desde, hasta) {
+/** filtro: (movimiento crudo) → bool, para quedarse con un proyecto (los totales también salen de ese proyecto). */
+function calcular(caja, desde, hasta, filtro) {
     const enRango = (f) => (!desde || f >= desde) && (!hasta || f <= hasta);
-    const deps = valores(caja && caja.depositos).map(([k, d]) => ({ id: k, tipo: "deposito", fecha: fechaDe(d), monto: r2(montoDe(d)), concepto: d.nota || d.concepto || "Entrega",
+    const ok = filtro || (() => true);
+    const deps = valores(caja && caja.depositos).filter(([, d]) => ok(d)).map(([k, d]) => ({ id: k, tipo: "deposito", fecha: fechaDe(d), monto: r2(montoDe(d)), concepto: d.nota || d.concepto || "Entrega",
         proyecto: d.proyecto || null, pid: d.pid || null, medio: d.medio || null, comprobante: d.comprobante || null, estado: d.anulado ? "anulado" : "entregado", por: d.registrado_por || null }));
-    const gas = valores(caja && caja.gastos).map(([k, g]) => ({ id: k, tipo: "gasto", fecha: fechaDe(g), monto: r2(montoDe(g)),
+    const gas = valores(caja && caja.gastos).filter(([, g]) => ok(g)).map(([k, g]) => ({ id: k, tipo: "gasto", fecha: fechaDe(g), monto: r2(montoDe(g)),
         concepto: g.concepto || g.descripcion || g.desc || g.proveedor || "Gasto", proveedor: g.proveedor || null, proyecto: g.proyecto || null, pid: g.pid || null,
         comprobante: g.comprobante || (Array.isArray(g.fotos) ? g.fotos[0] : null) || null, estado: g.estado || "aprobado", motivo: g.motivo_rechazo || null, por: g.registrado_por || null }));
     const movs = deps.concat(gas).filter((m) => enRango(m.fecha)).sort((a, b) => String(b.fecha).localeCompare(String(a.fecha)));
@@ -92,13 +95,20 @@ function calcular(caja, desde, hasta) {
     };
 }
 
+/** Movimientos de un proyecto: por pid, o por nombre en los registros viejos sin pid (como finanzas.js). */
+const delProyecto = (pid, nombre) => {
+    const n = String(nombre || "").trim().toLowerCase();
+    return (x) => (x.pid ? x.pid === pid : !!n && String(x.proyecto || "").trim().toLowerCase() === n);
+};
+
 // ------------------------------------------------------------------ lectura
 async function estado(almacen, b) {
     const p = await persona(almacen, b);
     const desde = b.desde ? fecha(b.desde, "Desde") : null, hasta = b.hasta ? fecha(b.hasta, "Hasta") : null;
+    const proy = await proyectoOpcional(almacen, b);
     const caja = await almacen.leer(`caja_chica/${p.wid}`);
-    const r = calcular(caja, desde, hasta);
-    return Object.assign({ worker_id: p.wid, nombre: p.nombre, desde, hasta }, r,
+    const r = calcular(caja, desde, hasta, proy ? delProyecto(proy.pid, proy.nombre) : null);
+    return Object.assign({ worker_id: p.wid, nombre: p.nombre, desde, hasta, proyecto: proy ? proy.nombre : null, cid: proy ? proy.cid : null, pid: proy ? proy.pid : null }, r,
         { nota: r.totales.saldo_en_mano < 0 ? `Gastó ${r2(-r.totales.saldo_en_mano)} Bs más de lo entregado: se le debe.` : null });
 }
 
@@ -110,6 +120,19 @@ async function resumen(almacen) {
     }).filter((x) => x.entregado || x.gastado_aprobado || x.pendiente_de_aprobar)
         .sort((a, b) => b.pendientes - a.pendientes || Math.abs(b.saldo_en_mano) - Math.abs(a.saldo_en_mano));
     return { personas: lista, total_en_mano: r2(lista.reduce((s, x) => s + Math.max(0, x.saldo_en_mano), 0)), gastos_por_aprobar: lista.reduce((s, x) => s + x.pendientes, 0) };
+}
+
+async function proyecto(almacen, b) {
+    const proy = await proyectoOpcional(almacen, { cid: b.cid, pid: b.pid || falla("Falta el proyecto.") });
+    const [cajas, ps] = await Promise.all([almacen.leer("caja_chica"), almacen.leer("personal")]);
+    const filtro = delProyecto(proy.pid, proy.nombre);
+    const personas = {};
+    Object.keys(cajas || {}).filter((k) => C.ID.test(k)).forEach((wid) => {
+        const r = calcular(cajas[wid], null, null, filtro);
+        if (!r.movimientos.length) return;
+        personas[wid] = { worker_id: wid, nombre: (ps && ps[wid] && ps[wid].nombre) || wid, totales: r.totales, movimientos: r.movimientos, pendientes: r.pendientes };
+    });
+    return { cid: proy.cid, pid: proy.pid, proyecto: proy.nombre, personas };
 }
 
 // ------------------------------------------------------------------ escritura
@@ -190,7 +213,7 @@ async function anular(almacen, b, quien) {
     });
 }
 
-const LECTURA = { estado, resumen };
+const LECTURA = { estado, resumen, proyecto };
 const ESCRITURA = { entregar, registrar_gasto: registrarGasto, aprobar: (a, b, q) => decidir(a, b, q, true), rechazar: (a, b, q) => decidir(a, b, q, false), anular };
 
 function atender(almacen, b, quienCrudo, viaPorDefecto) {

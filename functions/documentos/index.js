@@ -6,7 +6,7 @@
  *   cotizacion {cid, pid, modo?: normal|impuestos_por_item} → pdf-cotizacion.js (presupuesto.html)
  *   orden      {cid, pid, modo?: produccion|impresion|impresion_con_imagen|completa} → pdf-produccion.js (produccion.html)
  *   liquidacion {cid, pid, id} → pdf-liquidacion.js (compras.html del proyecto): contrato, anticipos/pagos, saldo y comprobantes
- *   rendicion  {worker_id | telefono, desde?, hasta?} → pdf-rendicion.js (Tesorería → Rendiciones): caja chica, gastos, saldo y recibos
+ *   rendicion  {worker_id | telefono, desde?, hasta?, cid?, pid?} → pdf-rendicion.js (Tesorería → Rendiciones): caja chica, gastos, saldo y recibos
  * Los tres módulos son copias idénticas de public/js/ (functions/pdf/compartido/).
  *
  * Devuelve {nombre, mime, base64, bytes, paginas, ruta}: el PDF también queda guardado en Storage
@@ -143,7 +143,7 @@ async function pdfLiquidacion(almacen, b) {
 
 async function pdfRendicion(almacen, b) {
     const R = require("../rendiciones/api");
-    const r = await R.atender(almacen, { accion: "estado", worker_id: b.worker_id, telefono: b.telefono, desde: b.desde, hasta: b.hasta });
+    const r = await R.atender(almacen, { accion: "estado", worker_id: b.worker_id, telefono: b.telefono, desde: b.desde, hasta: b.hasta, cid: b.cid, pid: b.pid });
     if (r.status !== 200) C.falla(r.cuerpo.error, r.status);
     const P = require("../pdf/compartido/pdf-rendicion.js");
     const { cargarImagen, dimensiones } = crearCargador({ soloJpeg: true });

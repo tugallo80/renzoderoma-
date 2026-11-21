@@ -69,6 +69,25 @@ await prueba('validaciones: teléfono desconocido, persona inexistente, sin conc
     assert.equal((await R.atender(al, { accion: 'borrar' }, DUENO)).status, 400);
 });
 
+await prueba('por proyecto: Compras del proyecto ve solo la plata de ese proyecto (también registros viejos por nombre)', async () => {
+    const al = nuevo();
+    al.datos.proyectos.cliA.proyB = { nombre: 'Otro Stand' };
+    ok(await op(al, { accion: 'entregar', worker_id: 'wPollo', monto: 500, cid: 'cliA', pid: 'proyA' }));
+    ok(await op(al, { accion: 'entregar', worker_id: 'wPollo', monto: 200, cid: 'cliA', pid: 'proyB' }));
+    ok(await op(al, { accion: 'registrar_gasto', worker_id: 'wPollo', monto: 50, concepto: 'Lija', cid: 'cliA', pid: 'proyB' }, POLLO));
+    ok(await op(al, { accion: 'entregar', worker_id: 'wJuan', monto: 100 }));   // general, sin proyecto
+    const r = ok(await R.atender(al, { accion: 'proyecto', cid: 'cliA', pid: 'proyA' }, DUENO));
+    assert.deepEqual(Object.keys(r.personas), ['wPollo'], 'Juan no tiene nada en este proyecto');
+    assert.deepEqual(r.personas.wPollo.totales, { entregado: 500, gastado_aprobado: 30, pendiente_de_aprobar: 0, rechazado: 0, saldo_en_mano: 470 }, 'el viejo "Clavos" va por nombre');
+    const e = ok(await R.atender(al, { accion: 'estado', worker_id: 'wPollo', cid: 'cliA', pid: 'proyB' }, DUENO));
+    assert.equal(e.proyecto, 'Otro Stand'); assert.deepEqual([e.totales.entregado, e.totales.pendiente_de_aprobar, e.totales.saldo_en_mano], [200, 50, 150]);
+    const g = ok(await R.atender(al, { accion: 'estado', worker_id: 'wPollo' }, DUENO));
+    assert.equal(g.totales.saldo_en_mano, 620, 'global: 700 − 30 − 50');
+    const pdf = await D.generar(al, { tipo: 'rendicion', worker_id: 'wPollo', cid: 'cliA', pid: 'proyB' });
+    assert.equal(pdf.nombre, 'Rendicion_Pollo_Demo_Otro_Stand.pdf');
+    assert.equal((await R.atender(al, { accion: 'proyecto', cid: 'cliA' }, DUENO)).status, 400);
+});
+
 await prueba('PDF de rendición (pdf_documento tipo rendicion)', async () => {
     const al = nuevo();
     ok(await op(al, { accion: 'entregar', worker_id: 'wPollo', monto: 500, fecha: '2026-11-02' }));

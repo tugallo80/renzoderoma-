@@ -517,7 +517,7 @@ const ACCIONES = {
         descripcion: "PDF de un documento, igual al de la pantalla, para mandarlo por WhatsApp → { nombre, mime: \"application/pdf\", base64, bytes, paginas } (máx. 10 MB). "
             + "{ tipo: licitacion, cid, pid, id, modo?: general|detalle } (propuesta al trabajador) · "
             + "{ tipo: liquidacion, cid, pid, id } (estado del contrato para el trabajador: acordado, anticipos y pagos, saldo, comprobantes) · "
-            + "{ tipo: rendicion, worker_id | telefono, desde?, hasta? } (rendición de cuentas de la caja chica: entregado, gastos con recibos, saldo) · "
+            + "{ tipo: rendicion, worker_id | telefono, desde?, hasta?, cid?, pid? } (rendición de cuentas de la caja chica: entregado, gastos con recibos, saldo; con cid/pid solo ese proyecto) · "
             + "{ tipo: cotizacion, cid, pid, modo?: normal|impuestos_por_item } (presupuesto para el cliente) · "
             + "{ tipo: orden, cid, pid, modo?: produccion|impresion|impresion_con_imagen|completa } (órdenes de Producción).",
         ejecutar: async (p) => {
@@ -535,10 +535,15 @@ const ACCIONES = {
     },
     rendicion_estado: {
         soloLectura: true,
-        descripcion: "Rendición de cuentas de una persona (plata entregada para gastos / caja chica) { worker_id | telefono, desde?, hasta? } "
+        descripcion: "Rendición de cuentas de una persona (plata entregada para gastos / caja chica) { worker_id | telefono, desde?, hasta?, cid?, pid? (solo ese proyecto) } "
             + "→ { nombre, totales: {entregado, gastado_aprobado, pendiente_de_aprobar, saldo_en_mano}, movimientos: [{id, tipo: deposito|gasto, fecha, monto, concepto, proyecto, estado, comprobante}], pendientes }. "
             + "saldo_en_mano negativo = gastó más de lo entregado (se le debe).",
         ejecutar: (p) => rendiciones("estado", p),
+    },
+    rendiciones_proyecto: {
+        soloLectura: true,
+        descripcion: "Plata para gastos de un proyecto, por persona { cid, pid } → { proyecto, personas: { wid: {nombre, totales: {entregado, gastado_aprobado, pendiente_de_aprobar, saldo_en_mano}, movimientos, pendientes} } }.",
+        ejecutar: (p) => rendiciones("proyecto", p),
     },
     rendiciones_resumen: {
         soloLectura: true,

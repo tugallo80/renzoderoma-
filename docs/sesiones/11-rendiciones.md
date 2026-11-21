@@ -29,6 +29,21 @@ Tesorería → **Rendiciones** (en el celular, "Rendir"):
 - Al elegir una persona: los totales; los botones entregar plata, cargar gasto (con recibo y proyecto) y PDF; los
   movimientos, donde se aprueba, se rechaza o se anula.
 
+### En el proyecto (decisión del dueño, 2026-11-21)
+
+En **Compras del proyecto**, cada tarjeta de contratista suma, debajo de su contrato y sus anticipos, el bloque
+**"Plata para gastos (rendición)"**:
+- Lo entregado, lo rendido, lo por aprobar y el saldo, **solo de este proyecto**.
+- Botones entregar, cargar gasto (ya asignados al proyecto) y PDF del proyecto.
+- Aprobar, rechazar y anular ahí mismo.
+
+Las personas que tienen plata para gastos del proyecto pero no tienen contrato en él salen abajo, en "otras personas". Tesorería
+→ Rendiciones queda como la vista **global** por persona (varios proyectos y plata general).
+- **Anticipo ≠ plata para gastos:** el anticipo es parte del contrato y se descuenta en la Liquidación; la plata para
+  gastos se rinde con recibos.
+- Servidor: `proyecto {cid, pid}` (por persona) y `estado {…, cid, pid}` (una persona, solo ese proyecto). Los registros
+  viejos sin `pid` se asignan por nombre del proyecto, como en `finanzas.js`. El PDF con proyecto dice "solo este proyecto".
+
 ## PDF
 
 `public/js/pdf-rendicion.js` (`PdfRendicion`, copia en `functions/pdf/compartido/`) tiene el resumen, los movimientos con
@@ -40,4 +55,4 @@ su estado y el anexo de recibos. El servidor lo genera con `pdf_documento { tipo
 `rendicion_rechazar`, `rendicion_anular` (escritura, con `registrado_por`; el rol decide pendiente o aprobado).
 Del lado de Kay (desarrollo-personal) faltan las herramientas y reconocer al trabajador por su número.
 
-Pruebas: `tools/rendiciones` 4/4, `tools/documentos` 8/8.
+Pruebas: `tools/rendiciones` 5/5, `tools/documentos` 8/8.
