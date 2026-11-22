@@ -60,12 +60,12 @@ module.exports = function crear({ falla, acotar }) {
             def: {
                 name: "crear_licitacion",
                 title: "Crear una licitación",
-                description: "Crea una licitación (encargo a un trabajador o proveedor de la base) con la misma lógica que la pantalla de Licitaciones: copia para el trabajador, responsable en los ítems del presupuesto si queda aprobada, historial. PEDÍ EL SÍ DEL DUEÑO ANTES (a quién, qué y por cuánto). alcance: renglones {item?: índice del ítem del presupuesto (ver_presupuesto), descripcion?, cant?, und?, monto}; el total es la suma de los montos. estado: enviado (propuesta al trabajador, por defecto) o aprobado (adjudicación directa). tipo: mano_de_obra (por defecto), grafico (imprenta), llave_en_mano, supervision. Trabajador por worker_id (buscar_trabajador) o por nombre si hay uno solo que coincide.",
+                description: "Crea una licitación (encargo a un trabajador o proveedor de la base) con la misma lógica que la pantalla de Licitaciones: copia para el trabajador, responsable en los ítems del presupuesto si queda aprobada, historial. PEDÍ EL SÍ DEL DUEÑO ANTES (a quién, qué y por cuánto). alcance: renglones {item?: índice del ítem del presupuesto (ver_presupuesto), descripcion?, detalle? (descripción larga para la ficha del PDF), cant?, und?, monto}; el total es la suma de los montos. estado: enviado (propuesta al trabajador, por defecto) o aprobado (adjudicación directa). tipo: mano_de_obra (por defecto), grafico (imprenta), llave_en_mano, supervision. Trabajador por worker_id (buscar_trabajador) o por nombre si hay uno solo que coincide.",
                 inputSchema: { type: "object", properties: {
                     cid: { type: "string" }, pid: { type: "string" },
                     worker_id: { type: "string" }, trabajador: { type: "string", maxLength: 80, description: "Nombre (si no tenés worker_id)." },
                     alcance: { type: "array", minItems: 1, maxItems: 60, items: { type: "object", properties: {
-                        item: { type: "integer", minimum: 0 }, descripcion: { type: "string", maxLength: 200 }, cant: { type: "number", minimum: 0.0001 },
+                        item: { type: "integer", minimum: 0 }, descripcion: { type: "string", maxLength: 200 }, detalle: { type: "string", maxLength: 1500, description: "Descripción larga del trabajo (medidas, materiales, cómo se hace): sale en la ficha del ítem en el PDF." }, cant: { type: "number", minimum: 0.0001 },
                         und: { type: "string", maxLength: 20 }, monto: { type: "number", minimum: 0.01 } }, required: ["monto"] } },
                     tipo: { type: "string", enum: ["mano_de_obra", "grafico", "llave_en_mano", "supervision"] },
                     estado: { type: "string", enum: ["enviado", "aprobado"] },
@@ -124,16 +124,17 @@ module.exports = function crear({ falla, acotar }) {
                 name: "modificar_licitacion",
                 title: "Modificar una licitación",
                 description: "Cambia una licitación con la misma lógica que la pantalla de Licitaciones (copia del trabajador, responsables en el presupuesto, historial antes → después). PEDÍ EL SÍ DEL DUEÑO ANTES, diciendo qué vas a cambiar y los montos. Operaciones: "
-                    + "ÍTEMS (lo que el trabajador ve en su propuesta; usá ver_licitacion para las claves): agregar_items {alcance: [{item?: índice del presupuesto, descripcion?, cant?, und?, monto}]} (sumar trabajo al contrato COMO ÍTEMS, no como extra) · cambiar_item {tarea, monto, cant?, descripcion?} (precio de un ítem por trabajador) · quitar_item {tarea, motivo}; el contrato se ajusta por diferencia · "
+                    + "ÍTEMS (lo que el trabajador ve en su propuesta; usá ver_licitacion para las claves): agregar_items {alcance: [{item?: índice del presupuesto, descripcion?, detalle?, cant?, und?, monto}]} (sumar trabajo al contrato COMO ÍTEMS, no como extra) · cambiar_item {tarea, monto, cant?, descripcion?, detalle?, item?} (precio de un ítem por trabajador; detalle = descripción larga para la ficha del PDF; item = vincular un trabajo suelto a un ítem del presupuesto para que salga con su ficha de Producción) · quitar_item {tarea, motivo}; el contrato se ajusta por diferencia · "
                     + "cambiar_monto {monto, motivo?} (solo el total; si está aprobada cambia el precio final, si no, el propuesto) · cambiar_contratista {worker_id} · aprobar {precio_final?} · contra_oferta {precio} · terminar · registrar_pago {monto, fecha?, concepto?, tipo?: pago|adelanto|descuento_compra, pagado_con?: {medio: transferencia|qr|efectivo|caja_chica|otro, persona?}} · anular_pago {pago, motivo} · "
                     + "agregar_extra {monto, descripcion, fecha?} (algo aparte del alcance, que no va como ítem) · anular_extra {extra, motivo} · anular {motivo} (la quita; la copia queda en el historial). No toca gasto_total.",
                 inputSchema: { type: "object", properties: {
                     cid: { type: "string" }, pid: { type: "string" }, lid: { type: "string", description: "Id de la licitación (de listar_licitaciones)." },
                     operacion: { type: "string", enum: ["agregar_items", "cambiar_item", "quitar_item", "cambiar_monto", "cambiar_contratista", "aprobar", "contra_oferta", "terminar", "registrar_pago", "anular_pago", "agregar_extra", "anular_extra", "anular"] },
-                    alcance: { type: "array", maxItems: 30, items: { type: "object", properties: { item: { type: "integer", minimum: 0 }, descripcion: { type: "string", maxLength: 200 },
+                    alcance: { type: "array", maxItems: 30, items: { type: "object", properties: { item: { type: "integer", minimum: 0 }, descripcion: { type: "string", maxLength: 200 }, detalle: { type: "string", maxLength: 1500, description: "Descripción larga del trabajo (medidas, materiales, cómo se hace): sale en la ficha del ítem en el PDF." },
                         cant: { type: "number", minimum: 0.0001 }, und: { type: "string", maxLength: 20 }, monto: { type: "number", minimum: 0.01 } }, required: ["monto"] } },
                     tarea: { type: "string", description: "Clave de la tarea (ítem) en la licitación, de ver_licitacion." }, extra: { type: "string", description: "Clave del extra, de ver_licitacion." },
-                    cant: { type: "number", minimum: 0.0001 },
+                    cant: { type: "number", minimum: 0.0001 }, item: { type: "integer", minimum: 0, description: "cambiar_item: índice del ítem del presupuesto al que se vincula el trabajo." },
+                    detalle: { type: "string", maxLength: 1500 },
                     monto: { type: "number", minimum: 0.01 }, precio: { type: "number", minimum: 0.01 }, precio_final: { type: "number", minimum: 0.01 },
                     worker_id: { type: "string" }, motivo: { type: "string", maxLength: 300 }, fecha: { type: "string", description: "AAAA-MM-DD" },
                     concepto: { type: "string", maxLength: 200 }, descripcion: { type: "string", maxLength: 300 }, pago: { type: "string" },

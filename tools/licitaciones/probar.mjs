@@ -202,6 +202,14 @@ prueba('ítems de una licitación existente: ver, agregar (del presupuesto y lib
     // en una no aprobada cambia el propuesto
     ok(await op(alm, 'agregar_items', { lid: 'L2', alcance: [{ descripcion: 'Pintura', monto: 200 }] }));
     assert.equal(lic(alm, 'L2').precio_propuesto, 1000); assert.equal(lic(alm, 'L2').precio_final, undefined);
+    // detalle (ficha del PDF) y vincular un trabajo suelto a un ítem del presupuesto, sin cambiar el monto
+    ok(await op(alm, 'agregar_items', { lid: 'L2', alcance: [{ descripcion: 'Tesado de lona', detalle: 'Lona front 3x2 en bastidor', cant: 6, und: 'm2', monto: 60 }] }));
+    const k2 = Object.keys(lic(alm, 'L2').tareas).find((k) => lic(alm, 'L2').tareas[k].task_name === 'Tesado de lona');
+    assert.equal(lic(alm, 'L2').tareas[k2].feat, 'Lona front 3x2 en bastidor');
+    ok(await op(alm, 'cambiar_item', { lid: 'L2', tarea: k2, monto: 60, item: 1, detalle: 'Con grapas' }));
+    assert.equal(lic(alm, 'L2').tareas[k2].originIdx, 1); assert.equal(lic(alm, 'L2').tareas[k2].feat, 'Con grapas');
+    assert.equal(lic(alm, 'L2').precio_propuesto, 1060);
+    err(await op(alm, 'cambiar_item', { lid: 'L2', tarea: k2, monto: 60, item: 99 }), /no existe/);
 });
 
 let bien = 0;

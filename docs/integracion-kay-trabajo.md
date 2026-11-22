@@ -53,6 +53,9 @@ al trabajador o proveedor (monto acordado, anticipos y pagos, saldo pendiente, d
 `crear_licitacion`), `cambiar_item { tarea, monto, cant?, descripcion? }`, `quitar_item { tarea, motivo }` y `anular_extra { extra, motivo }`;
 el contrato se ajusta por la diferencia y la copia del trabajador también. Trabajo nuevo **va como ítem, no como extra** (los extras
 no le aparecen al trabajador como ítems). Lectura nueva `ver_licitacion { cid, pid, lid }`: ítems (con su clave `tarea`) y extras.
+2026-11-22: los renglones de `alcance` aceptan `detalle` (descripción larga → ficha del ítem en el PDF) y `cambiar_item` acepta
+`detalle` e `item` (vincula un trabajo suelto a un ítem del presupuesto: sale con la ficha de Producción de ese ítem). En el PDF de
+la licitación cada trabajo suelto va en su fila con su nombre y su ficha (antes salían como "ALCANCE" y agrupados).
 2026-11-21: `pdf_documento` suma **balance completo del contratista** (`tipo: contratista, worker_id | nombre, proyectos?`): todos sus
 contratos (archivados no) con extras, pagos, comprobantes y la rendición de cada proyecto → total a pagar. Es el consolidado de
 Tesorería → Contratistas (`public/js/pdf-contratista.js`).

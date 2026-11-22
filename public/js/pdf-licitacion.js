@@ -40,13 +40,15 @@
 
         // ── Agrupar tareas por originIdx ──
         var groupOrder = [], groups = {};
-        Object.values(lic.tareas).forEach(function (t) {
+        Object.keys(lic.tareas).forEach(function (clave) {
+            var t = lic.tareas[clave];
             if (!t) return;
-            var k = (t.originIdx != null) ? String(t.originIdx) : '_' + String(t.task_name || '').slice(0, 8);
+            // los trabajos sueltos (sin ítem del presupuesto) van cada uno en su fila; antes se agrupaban por las 8 primeras letras
+            var k = (t.originIdx != null) ? String(t.originIdx) : '_' + clave;
             if (!groups[k]) {
                 var it = (t.originIdx != null) ? (allPItems[t.originIdx] || null) : null;
                 // el ítem entero (originType main) trae parent_desc = 'ÍTEM PRINCIPAL': el título es el nombre del ítem
-                var titulo = (t.parent_desc && t.parent_desc !== 'ÍTEM PRINCIPAL') ? t.parent_desc : (it && it.desc) || t.task_name || t.parent_desc;
+                var titulo = (t.parent_desc && t.parent_desc !== 'ÍTEM PRINCIPAL' && t.parent_desc !== 'ALCANCE') ? t.parent_desc : (it && it.desc) || t.task_name || t.desc || t.parent_desc;
                 groups[k] = { idx: t.originIdx, label: titulo || 'Ítem', subtotal: 0, item: it, imgs: [], tareas: [], fechaEntrega: '' };
                 groupOrder.push(k);
             }
@@ -107,7 +109,7 @@
                 theme: 'striped',
                 headStyles: { fillColor: [0, 122, 255], textColor: 255, fontStyle: 'bold', fontSize: 10, cellPadding: 4 },
                 footStyles: { fillColor: [20, 20, 20], textColor: 255, fontStyle: 'bold', fontSize: 11, cellPadding: 5 },
-                columnStyles: { 0: { cellWidth: 10, halign: 'center' }, 1: { cellWidth: 138 }, 2: { cellWidth: 34, halign: 'right', fontStyle: 'bold' } },   // 34 mm: el total en una línea
+                columnStyles: { 0: { cellWidth: 12, halign: 'center' }, 1: { cellWidth: 136 }, 2: { cellWidth: 34, halign: 'right', fontStyle: 'bold' } },   // 34 mm: el total en una línea
                 styles: { fontSize: 9, cellPadding: 4, overflow: 'linebreak' },
                 margin: { left: mL, right: mR },
             });
@@ -326,6 +328,13 @@
             var moSrcA = isLlm ? ga.tareas.filter(function (t) { return t.originType === 'llm_mo'; }) : ((ita && ita.prod_apu && ita.prod_apu.mo) ? lista(ita.prod_apu.mo) : []);
             var matSrcA = isLlm ? ga.tareas.filter(function (t) { return t.originType === 'llm_mat'; }) : ((ita && ita.prod_apu && ita.prod_apu.mat) ? lista(ita.prod_apu.mat).filter(function (m) { return !m.es_arte; }) : []);
             var featTxt = ita && ita.feat ? cleanTxt(ita.feat) : '';
+            // trabajo suelto (sin ítem del presupuesto): su ficha es el trabajo contratado + su detalle, si lo tiene
+            if (!ita) {
+                featTxt = ga.tareas.map(function (t) {
+                    var cab = '- ' + cleanTxt(t.task_name || t.desc || '') + ': ' + parseFloat(t.cant || 0).toFixed(2) + ' ' + (t.und || 'u') + ' x ' + fM(t.pu) + ' Bs';
+                    return t.feat ? cab + '\n' + cleanTxt(t.feat) : cab;
+                }).join('\n');
+            }
             var lblItem = cleanTxt(ga.label).substring(0, 85);
             var uniqueImgs = ga.imgs.slice(0, 10);
             if (!(featTxt || matSrcA.length || moSrcA.length || uniqueImgs.length)) continue;

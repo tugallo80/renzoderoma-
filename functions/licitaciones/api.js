@@ -350,13 +350,13 @@ function tareaDe(a, n, items, claveLibre) {
         if (!it || it.type === "chapter") falla(`El ítem ${a.item} no existe en el presupuesto (usá ver_presupuesto para ver los índices).`, 404);
         const cant = a.cant != null ? numero(a.cant, `Cantidad del renglón ${n + 1}`) : Number(it.cant) || 1;
         return [`m_${idx}`, { parent_desc: "ÍTEM PRINCIPAL", task_name: texto(a.descripcion, 200) || it.desc, desc: texto(a.descripcion, 200) || it.desc, cant, und: texto(a.und, 20) || it.und || "und",
-            pu: r2(monto / (cant || 1)), subtotal: monto, feat: it.feat || "", mats: "", measures: it.measures || [], img: it.img || null, cortes: it.cortes || [], op_images: it.op_images || [],
+            pu: r2(monto / (cant || 1)), subtotal: monto, feat: texto(a.detalle, 1500) || it.feat || "", mats: "", measures: it.measures || [], img: it.img || null, cortes: it.cortes || [], op_images: it.op_images || [],
             originIdx: idx, originType: "main", fecha_entrega: it.prod_entrega || it.print_entrega || it.gantt_end || "Sin fecha" }];
     }
     const desc = texto(a.descripcion, 200) || falla(`Renglón ${n + 1}: falta la descripción (o el ítem del presupuesto).`);
     const cant = a.cant != null ? numero(a.cant, `Cantidad del renglón ${n + 1}`) : 1;
     return [claveLibre, { parent_desc: "ALCANCE", task_name: desc, desc, cant, und: texto(a.und, 20) || "glb", pu: r2(monto / (cant || 1)), subtotal: monto,
-        feat: "", mats: "", measures: [], img: null, cortes: [], op_images: [], originIdx: null, originType: "libre", fecha_entrega: "Sin fecha" }];
+        feat: texto(a.detalle, 1500) || "", mats: "", measures: [], img: null, cortes: [], op_images: [], originIdx: null, originType: "libre", fecha_entrega: "Sin fecha" }];
 }
 
 /** Detalle de una licitación: sus tareas (ítems) y extras, con las claves para cambiarlos. */
@@ -365,7 +365,7 @@ OPS.ver = async function (almacen, b) {
     const l = await cargar(almacen, b);
     return { proyecto: nombre, licitacion: resumen(b.lid, l),
         tareas: Object.entries(l.tareas || {}).filter(([, t]) => t && typeof t === "object").map(([k, t]) => ({ tarea: k, nombre: t.task_name || t.desc || "", cant: r2(t.cant), und: t.und || "",
-            pu: r2(t.pu), subtotal: r2(t.subtotal), item: t.originIdx != null ? Number(t.originIdx) : null })),
+            pu: r2(t.pu), subtotal: r2(t.subtotal), item: t.originIdx != null ? Number(t.originIdx) : null, detalle: t.feat || "" })),
         extras: Object.entries(l.extras || {}).filter(([, x]) => x && typeof x === "object").map(([k, x]) => ({ extra: k, descripcion: x.descripcion || "", monto: r2(x.monto), fecha: x.fecha || null })) };
 };
 
@@ -397,7 +397,7 @@ async function cambiarTareas(almacen, b, quien, l, op, cambios, motivo) {
 OPS.agregar_items = async function (almacen, b, quien) {
     await proyecto(almacen, b);
     const l = await cargar(almacen, b);
-    const alcance = Array.isArray(b.alcance) && b.alcance.length ? b.alcance : falla("Falta el alcance: [{item?, descripcion?, cant?, und?, monto}].");
+    const alcance = Array.isArray(b.alcance) && b.alcance.length ? b.alcance : falla("Falta el alcance: [{item?, descripcion?, detalle?, cant?, und?, monto}].");
     if (alcance.length > 30) falla("Máximo 30 renglones por vez.");
     const items = (await almacen.leer(`proyectos/${b.cid}/${b.pid}/presupuesto/items`)) || {};
     const cambios = alcance.map((a, n) => {
@@ -419,6 +419,14 @@ OPS.cambiar_item = async function (almacen, b, quien) {
     const cant = b.cant != null ? numero(b.cant, "Cantidad") : Number(vieja.cant) || 1;
     const nueva = Object.assign({}, vieja, { subtotal: monto, cant, pu: r2(monto / (cant || 1)) });
     if (b.descripcion) { nueva.task_name = texto(b.descripcion, 200); nueva.desc = nueva.task_name; }
+    if (b.detalle != null) nueva.feat = texto(b.detalle, 1500) || "";   // descripción larga: la ficha del ítem en el PDF
+    if (b.item != null && b.item !== "") {   // vincular un trabajo suelto a un ítem del presupuesto: el PDF muestra la ficha de ese ítem
+        const idx = Number(b.item);
+        const items = (await almacen.leer(`proyectos/${b.cid}/${b.pid}/presupuesto/items`)) || {};
+        const it = Number.isInteger(idx) ? items[idx] : null;
+        if (!it || it.type === "chapter") falla(`El ítem ${b.item} no existe en el presupuesto (usá ver_presupuesto).`, 404);
+        Object.assign(nueva, { originIdx: idx, fecha_entrega: it.prod_entrega || it.print_entrega || it.gantt_end || nueva.fecha_entrega || "Sin fecha" });
+    }
     return cambiarTareas(almacen, b, quien, l, "cambiar_item", [{ clave, vieja, nueva }], texto(b.motivo, 300) || null);
 };
 
@@ -462,7 +470,7 @@ OPS.crear = async function (almacen, b, quien) {
     }
     const tipo = b.tipo ? (TIPOS_LIC.includes(b.tipo) ? b.tipo : falla("Tipo inválido (mano_de_obra, grafico, llave_en_mano, supervision).")) : "mano_de_obra";
     const estado = b.estado ? (["enviado", "aprobado"].includes(b.estado) ? b.estado : falla("Estado inicial: enviado (propuesta) o aprobado (adjudicación directa).")) : "enviado";
-    const alcance = Array.isArray(b.alcance) ? b.alcance : falla("Falta el alcance: [{item?, descripcion?, cant?, und?, monto}].");
+    const alcance = Array.isArray(b.alcance) ? b.alcance : falla("Falta el alcance: [{item?, descripcion?, detalle?, cant?, und?, monto}].");
     if (!alcance.length || alcance.length > 60) falla("El alcance tiene que tener entre 1 y 60 renglones.");
     const items = (await almacen.leer(`proyectos/${b.cid}/${b.pid}/presupuesto/items`)) || {};
     const tareas = {};
