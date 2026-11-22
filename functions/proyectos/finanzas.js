@@ -5,7 +5,7 @@
  * Venta:   (monto de cierre o presupuesto con descuento e impuestos) + extras aprobados del cliente.
  * Gasto:   compras (historial_compras, sin anuladas) + gastos adicionales de compras + caja chica GASTADA del proyecto
  *          (sin pedidos pendientes) + gastos rendidos por supervisores + trabajos extra aprobados de supervisores
- *          + mano de obra de licitaciones aprobadas/adjudicadas/terminadas.
+ *          + mano de obra de licitaciones aprobadas/adjudicadas/terminadas (o con pagos, aunque no estén aprobadas).
  *          La mano de obra va de dos formas (decisión del dueño): CONTRATADA (contrato + extras) y PAGADA.
  *          → utilidad_esperada (con lo contratado) y utilidad_con_pagado (con lo ya pagado).
  * Cobrado: los pagos del proyecto (cada cobro de /cobros deja ahí su parte: functions/cobros). Las facturas de venta de
@@ -78,7 +78,8 @@ async function calcular(almacen, cid, pid) {
         if (!l || typeof l !== "object") return;
         const pagado = valores(l.pagos).reduce((t, p) => t + num(p.monto), 0);
         moPagado += pagado;   // lo pagado cuenta siempre (salió la plata), aunque no esté aprobada
-        if (!APROBADAS.includes(l.estado)) return;
+        // Con pagos cuenta como contratada aunque nunca la hayan aprobado (ej. quedó "enviado" y se pagó): la plata ya salió.
+        if (!APROBADAS.includes(l.estado) && !(pagado > 0 && l.estado !== "rechazado")) return;
         const contrato = num(l.precio_final || l.precio_propuesto);
         const ext = valores(l.extras).reduce((t, e) => t + num(e.monto), 0);
         moContratado += contrato; moExtras += ext;

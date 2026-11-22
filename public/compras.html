@@ -436,11 +436,17 @@
         if(!hasReq) list.innerHTML = '<div style="font-size:12px; color:var(--gray); text-align:center; padding:20px;">No hay solicitudes de compra pendientes.</div>';
     }
 
+    // Contrato vigente: aprobado/terminado/liquidado/pagado, o con pagos aunque haya quedado "enviado" (la plata ya salió).
+    function _licActiva(lic) {
+        if (!lic || lic.estado === 'rechazado') return false;
+        if (['aprobado','terminado','liquidado','pagado','adjudicado'].includes(lic.estado)) return true;
+        return Object.values(lic.pagos || {}).some(p => parseFloat(p && p.monto) > 0);
+    }
     function renderContracts() {
         const list = document.getElementById('contract-list'); list.innerHTML = ''; let sumTotal = 0; let sumDeuda = 0;
         Object.keys(currentLics).forEach(key => {
-            let lic = currentLics[key]; if(lic.estado !== 'aprobado' && lic.estado !== 'terminado' && lic.estado !== 'liquidado' && lic.estado !== 'pagado') return; 
-            let totalProp = parseFloat(lic.precio_final || lic.precio_propuesto || 0); let totalPagado = 0; let historyHtml = '';
+            let lic = currentLics[key]; if(!_licActiva(lic)) return; 
+            let totalProp = parseFloat(lic.precio_final || lic.precio_propuesto || 0) + Object.values(lic.extras || {}).reduce((t, x) => t + parseFloat((x && x.monto) || 0), 0); let totalPagado = 0; let historyHtml = '';
             if(lic.pagos) {
                 const _pagosOrdenados = Object.entries(lic.pagos).sort((a,b) => (a[1].fecha||'') > (b[1].fecha||'') ? 1 : -1);
                 _pagosOrdenados.forEach(([pagoKey, p]) => {
@@ -756,7 +762,7 @@
                 <div class="rd-bloque" data-wid="${lic.worker_id || ''}"></div>
             </div>`;
 
-            if(lic.estado === 'aprobado' || lic.estado === 'terminado' || lic.estado === 'liquidado' || lic.estado === 'pagado') { cont.innerHTML += cardHtml; } 
+            if(_licActiva(lic)) { cont.innerHTML += cardHtml; } 
             else if (lic.estado !== 'rechazado') { hasSols = true; solCont.innerHTML += cardHtml; }
         });
 
