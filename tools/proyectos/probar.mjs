@@ -17,7 +17,9 @@ const datos = () => ({
         licitaciones: {
             L1: { worker_name: 'Pollo', estado: 'aprobado', precio_propuesto: 2548.5, precio_final: 3000, extras: { x: { monto: 100 } }, pagos: { p: { monto: 1000 } } },
             L2: { worker_name: 'Otro', estado: 'enviado', precio_propuesto: 800, pagos: { p: { monto: 50 } } },
-            L3: { worker_name: 'Viejo', estado: 'adjudicado', precio_final: 500 } },
+            L3: { worker_name: 'Viejo', estado: 'adjudicado', precio_final: 500 },
+            L4: { worker_name: 'Sin pagos', estado: 'enviado', precio_propuesto: 9000 },
+            L5: { worker_name: 'Rechazado', estado: 'rechazado', precio_propuesto: 7000, pagos: { p: { monto: 0 } } } },
         pagos: { a: { monto: 700 } },
     } } },
     caja_chica: { w1: { gastos: {
@@ -44,10 +46,10 @@ await prueba('venta, gastos por fuente, dos utilidades y cobrado por separado', 
     assert.equal(g.caja_chica_pendiente, 500);
     assert.equal(g.supervisores_gastos, 60);
     assert.equal(g.supervisores_extras, 30, 'solo extras aprobados; los depósitos no son gasto');
-    assert.equal(g.mano_obra_contratada, 3500, 'aprobada 3000 + adjudicada 500; la enviada no');
+    assert.equal(g.mano_obra_contratada, 4300, 'aprobada 3000 + adjudicada 500 + la enviada que ya tiene pagos 800 (caso Pollo / Nexcorp)');
     assert.equal(g.mano_obra_extras, 100);
     assert.equal(g.mano_obra_pagada, 1050, 'lo pagado cuenta aunque la licitación no esté aprobada');
-    assert.equal(g.esperado, 300 + 40 + 100 + 60 + 30 + 3500 + 100);
+    assert.equal(g.esperado, 300 + 40 + 100 + 60 + 30 + 4300 + 100);
     assert.equal(g.con_pagado, 300 + 40 + 100 + 60 + 30 + 1050);
     assert.equal(r.utilidad_esperada, 1244 - g.esperado);
     assert.equal(r.utilidad_con_pagado, 1244 - g.con_pagado);
