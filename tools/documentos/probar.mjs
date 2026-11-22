@@ -65,6 +65,20 @@ await prueba('licitación modo general: PDF válido, guardado en Storage, fotos 
     assert.equal(await paginasPng(r.base64, 'general'), 3);
 });
 
+await prueba('trabajos sueltos: una fila cada uno con su nombre (no "ALCANCE" ni agrupados por las primeras letras) y su ficha', async () => {
+    const d = datos();
+    const L = d.proyectos.cliA.proyA.licitaciones.L1;
+    const libre = (n, m, f) => ({ parent_desc: 'ALCANCE', task_name: n, desc: n, cant: 1, und: 'glb', pu: m, subtotal: m, feat: f || '', originIdx: null, originType: 'libre' });
+    Object.assign(L.tareas, { libre_a: libre('Tesado de backing', 78.75, 'Backing 3.15 x 2.50 m'), libre_b: libre('Tesado de lona bastidor', 490), libre_c: libre('Tesado de bastidor salida', 135.96) });
+    const r = await D.generar(crearAlmacenMemoria(d, D.RUTAS, D.ARCHIVOS), { tipo: 'licitacion', cid: 'cliA', pid: 'proyA', id: 'L1' });
+    const txt = await textoPdf(r.base64);
+    assert.doesNotMatch(txt, /ALCANCE/);
+    for (const n of ['Tesado de backing', 'Tesado de lona bastidor', 'Tesado de bastidor salida']) assert.match(txt.toUpperCase(), new RegExp(n.toUpperCase()));
+    assert.match(txt, /78,75 Bs/); assert.match(txt, /490,00 Bs/); assert.doesNotMatch(txt, /704,71/);
+    assert.match(txt, /Backing 3\.15 x 2\.50 m/, 'el detalle sale en la ficha');
+    await paginasPng(r.base64, 'libres');
+});
+
 await prueba('licitación modo detalle: materiales y mano de obra del ítem', async () => {
     const al = crearAlmacenMemoria(datos(), D.RUTAS, D.ARCHIVOS);
     const r = await D.generar(al, { tipo: 'licitacion', cid: 'cliA', pid: 'proyA', id: 'L1', modo: 'detalle' });

@@ -109,7 +109,7 @@ idempotentes. **Antes de cada cambio, decile al dueño qué vas a hacer y esper�
   contrato, extras, pagado y saldo de cada licitación.
 - **`ver_licitacion`** `{cid, pid, lid}` → ítems (tareas con su clave, cantidad, precio y subtotal) y extras de una licitación.
 - **`modificar_licitacion`** `{cid, pid, lid, operacion, idempotencia, registrado_por: {rol, nombre}, …}` → ítems: `agregar_items`
-  `{alcance}`, `cambiar_item` `{tarea, monto}`, `quitar_item` `{tarea, motivo}` (el contrato se ajusta por diferencia; sumar trabajo
+  `{alcance}` (cada renglón puede llevar `detalle`: descripción larga para la ficha del PDF), `cambiar_item` `{tarea, monto, detalle?, item?}` (`item` vincula un trabajo suelto a un ítem del presupuesto para que salga con su ficha de Producción), `quitar_item` `{tarea, motivo}` (el contrato se ajusta por diferencia; sumar trabajo
   como ítem, no como extra); `anular_extra` `{extra, motivo}`;
   `cambiar_monto` (aprobada: precio final; si no, el propuesto), `cambiar_contratista`, `aprobar`, `contra_oferta`,
   `terminar`, `registrar_pago` (pago, adelanto o descuento por compra; `pagado_con` caja chica, QR…), `anular_pago`,
