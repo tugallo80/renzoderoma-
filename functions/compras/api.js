@@ -16,7 +16,7 @@
  *                     factura?: {nit, razon_social?, nro, cuf?, fecha?, monto?}, items?: [{material, cantidad, unidad?, precio}],
  *                     nota?, foto?: {datos_base64, mime?} (JPG/PNG/WEBP/PDF), pagado_con?: {medio, persona?}, origen?: {tipo, ref?},
  *                     items_referencia?: true (precios leídos de un recibo: no tienen que sumar exacto al total),
- *                     categoria?: alquiler|mantenimiento|herramientas|servicios|otros (gasto de funcionamiento del taller, sin proyecto)}
+ *                     categoria?: alquiler|mantenimiento|herramientas|servicios|insumos|equipamiento|otros (gasto de funcionamiento del taller, sin proyecto)}
  *                    → {id, repetida, proveedor_id, resumen}
  *   anular           {id, motivo} → {ok, id}
  *   balance_mensual  {mes: "AAAA-MM"}   (el balance de un proyecto: functions/proyectos/finanzas.js); separa compras de proyectos,
@@ -37,7 +37,7 @@ const MEDIOS = ["transferencia", "qr", "efectivo", "caja_chica", "tarjeta", "otr
 const ORIGENES = ["directa", "solicitud", "caja_chica", "migrada"];
 // Gastos de funcionamiento del taller (sin proyecto): van al balance mensual aparte de los costos de los proyectos.
 // Las herramientas, cuando exista el módulo de inventario, además entran ahí.
-const CATEGORIAS = ["alquiler", "mantenimiento", "herramientas", "servicios", "otros"];
+const CATEGORIAS = ["alquiler", "mantenimiento", "herramientas", "servicios", "insumos", "equipamiento", "otros"];   // insumos = material de bodega para varios proyectos
 const VIAS = ["app", "whatsapp", "agente", "migracion"];
 
 /** Nodos de la base que toca este módulo (crearAlmacen los verifica en cada lectura y escritura). */

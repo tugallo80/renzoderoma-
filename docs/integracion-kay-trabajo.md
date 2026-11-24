@@ -44,6 +44,8 @@ detalle, cantidad, unidad y precio, y foto del recibo). Vence a los 30 días y s
 2026-11-21: **gastos de funcionamiento del taller**: `registrar_compra` acepta `categoria` (alquiler, mantenimiento, herramientas,
 servicios, otros; sin cid/pid) y hay `gastos_funcionamiento { mes? }` (lectura). `balance_mensual` separa compras de proyectos,
 funcionamiento y sin clasificar. Detalle en `docs/sesiones/07-compras.md`.
+2026-11-24: categorías nuevas de funcionamiento: `insumos` (material de bodega o que sirve a varios proyectos) y `equipamiento`
+(máquinas, muebles y mejoras del taller).
 2026-11-21: **`registrar_trabajador`** (escritura): Kay da de alta en Personal a un trabajador o proveedor (ej. una imprenta)
 para poder licitarle; `buscar_trabajador` avisa si el nombre está solo en Proveedores.
 2026-11-21: `pdf_documento` suma **liquidación de contrato** (`tipo: liquidacion, cid, pid, id`): el estado del contrato para mandarle

@@ -102,7 +102,7 @@ Reglas de la operación:
 Pedido del dueño: el alquiler del taller (y lo que cuesta tenerlo abierto) tiene que quedar registrado para el balance y la
 rendición de cuentas, sin ir a un proyecto. Él trabaja por licitación: **no hay sueldos**.
 
-- `registrar {…, categoria}`: `alquiler | mantenimiento | herramientas | servicios | otros`. Con categoría, la compra **no**
+- `registrar {…, categoria}`: `alquiler | mantenimiento | herramientas | servicios | insumos | equipamiento | otros` (insumos = material de bodega o para varios proyectos; equipamiento = máquinas, muebles y mejoras del taller; sumadas el 24/11). Con categoría, la compra **no**
   puede tener proyecto (error). Queda en `/compras` con su comprobante y, si tiene factura, en el crédito fiscal como cualquier compra.
 - `funcionamiento {mes?, meses?}`: gastos del mes (más recientes primero), total por categoría y los totales de los meses anteriores.
 - `balance_mensual`: `egresos.compras` = `compras_de_proyectos` + `funcionamiento {total, por_categoria}` + `compras_sin_clasificar`.
