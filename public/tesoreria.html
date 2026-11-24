@@ -593,7 +593,7 @@
             <label class="inp-lbl">Categoría</label>
             <select id="fn-cat" class="inp-std">
                 <option value="alquiler">Alquiler</option><option value="mantenimiento">Mantenimiento</option>
-                <option value="herramientas">Herramientas</option><option value="servicios">Servicios (luz, agua, gas, internet)</option><option value="otros">Otros</option>
+                <option value="herramientas">Herramientas</option><option value="servicios">Servicios (luz, agua, gas, internet)</option><option value="insumos">Insumos / bodega</option><option value="equipamiento">Equipamiento del taller</option><option value="otros">Otros</option>
             </select>
             <div class="flex-row">
                 <div style="flex:1;"><label class="inp-lbl">Monto (Bs)</label><input type="number" step="any" id="fn-monto" class="inp-std" placeholder="0.00"></div>
@@ -4129,7 +4129,7 @@ window.RubikFuncionamiento = (function () {
     const $ = (id) => document.getElementById(id);
     const fm = (n) => (Number(n) || 0).toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     const esc = (t) => String(t == null ? '' : t).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-    const NOMBRES = { alquiler: 'Alquiler', mantenimiento: 'Mantenimiento', herramientas: 'Herramientas', servicios: 'Servicios', otros: 'Otros' };
+    const NOMBRES = { alquiler: 'Alquiler', mantenimiento: 'Mantenimiento', herramientas: 'Herramientas', servicios: 'Servicios', insumos: 'Insumos / bodega', equipamiento: 'Equipamiento', otros: 'Otros' };
     const mesHoy = () => new Date(Date.now() - 4 * 3600e3).toISOString().slice(0, 7);
     let ultimo = null;
 

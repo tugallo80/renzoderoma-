@@ -473,7 +473,7 @@ const ACCIONES = {
         descripcion: "Registra una compra (gasto del proyecto, egreso, crédito fiscal si es factura, proveedor y precios) "
             + "{ idempotencia, total?, fecha?, cid?, pid?, proveedor?: {nombre, nit?, contacto?}, factura?: {nit, razon_social?, nro, cuf?, fecha?, monto?}, "
             + "items?: [{material, cantidad, unidad?, precio}], nota?, foto?: {datos_base64, mime?}, pagado_con?: {medio, persona?}, "
-            + "categoria?: alquiler|mantenimiento|herramientas|servicios|otros (gasto de FUNCIONAMIENTO del taller: sin cid/pid; ej. el alquiler, la luz, una herramienta), "
+            + "categoria?: alquiler|mantenimiento|herramientas|servicios|insumos|equipamiento|otros (gasto de FUNCIONAMIENTO del taller: sin cid/pid; ej. el alquiler, la luz, una herramienta; insumos = material para bodega o que sirve a varios proyectos; equipamiento = máquinas, muebles y mejoras del taller), "
             + "registrado_por: {rol, nombre, telefono} } → { id, repetida, proveedor_id, resumen }",
         ejecutar: (p) => compras("registrar", p),
     },

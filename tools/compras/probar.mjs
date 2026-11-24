@@ -160,6 +160,8 @@ prueba('gastos de funcionamiento: alquiler por Kay con recibo, no van a un proye
     const a = ok(await reg(alm, { idempotencia: 'func-0001', categoria: 'alquiler', total: 3500, fecha: '2026-11-05', proveedor: { nombre: 'Propietario Demo' },
         nota: 'Alquiler taller noviembre', pagado_con: { medio: 'transferencia' }, foto: { datos_base64: JPG } }, KAY));
     ok(await reg(alm, { idempotencia: 'func-0002', categoria: 'servicios', total: 180, fecha: '2026-11-10', nota: 'Luz' }));
+    ok(await reg(alm, { idempotencia: 'func-0002b', categoria: 'insumos', total: 0.01, fecha: '2025-01-10', nota: 'Bodega' }));
+    ok(await reg(alm, { idempotencia: 'func-0002c', categoria: 'equipamiento', total: 0.01, fecha: '2025-01-11', nota: 'Mesa' }));
     ok(await reg(alm, { idempotencia: 'func-0003', categoria: 'alquiler', total: 3500, fecha: '2026-10-05', nota: 'Alquiler octubre' }));
     ok(await reg(alm, { idempotencia: 'func-0004', cid: 'cliA', pid: 'proyA', total: 200, fecha: '2026-11-12', proveedor: { nombre: 'Kiosco' } }));
     ok(await reg(alm, { idempotencia: 'func-0005', total: 50, fecha: '2026-11-12', proveedor: { nombre: 'Kiosco' } }));
