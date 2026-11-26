@@ -181,6 +181,26 @@ prueba('gastos de funcionamiento: alquiler por Kay con recibo, no van a un proye
     assert.equal(m.egresos.compras_sin_clasificar, 50);
 });
 
+prueba('actualizar precios de la base desde la cotización de un proveedor: solo el dueño, clave existente o nuevo, historial', async () => {
+    const alm = base();
+    const ap = (b, q) => C.atender(alm, { accion: 'actualizar_precios', ...b }, q || { ...DUENO, via: 'whatsapp' });
+    const r = ok(await ap({ proveedor: { nombre: 'Ferretería Demo' }, fuente: 'cotización WhatsApp', fecha: '2026-11-26',
+        precios: [{ clave: 'mdf 18mm', precio: 330 }, { nuevo: true, material: 'Vidrio bronce 8 mm', unidad: 'm2', precio: 360 }] }));
+    assert.equal(r.actualizados, 2);
+    const D = alm.datos.base_datos;
+    assert.equal(D.materiales['MDF 18MM'].p, 330); assert.equal(D.materiales['MDF 18MM'].proveedor_ref, 'Ferretería Demo');
+    assert.deepEqual(r.cambios[0], { clave: 'MDF 18MM', material: 'MDF 18MM', antes: 300, despues: 330, nuevo: false, variacion_pct: 10 });
+    const nueva = D.materiales.VIDRIO_BRONCE_8_MM; assert.equal(nueva.p, 360); assert.equal(nueva.u, 'm2'); assert.equal(nueva.origen, 'kay');
+    assert.equal(D.proveedores['-Pviejo'].materiales['MDF 18MM'].precio, 330, 'precio por proveedor');
+    const h = Object.values(D.historial_cambios); assert.equal(h.length, 2); assert.deepEqual(h[0].cambios.p, { antes: 300, despues: 330 });
+    err(await ap({ precios: [{ clave: 'NO EXISTE', precio: 1 }] }), /No existe/);
+    err(await ap({ precios: [{ nuevo: true, material: 'MDF 18MM', precio: 1 }] }), /ya está en la base/);
+    err(await ap({ precios: [{ material: 'algo', precio: 1 }] }), /falta la clave/);
+    err(await ap({ proveedor: { nombre: 'Inventado SRL' }, precios: [{ clave: 'MDF 18MM', precio: 1 }] }), /proveedor/);
+    err(await ap({ precios: [{ clave: 'MDF 18MM', precio: 1 }] }, KAY), /Solo el dueño/);
+    assert.equal(D.materiales['MDF 18MM'].p, 330, 'los rechazados no escriben nada');
+});
+
 let n = 0;
 for (const [nombre, fn] of pruebas) {
     try { await fn(); n++; console.log('ok  ', nombre); }

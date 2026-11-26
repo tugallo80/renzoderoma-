@@ -43,7 +43,7 @@ const VIAS = ["app", "whatsapp", "agente", "migracion"];
 /** Nodos de la base que toca este módulo (crearAlmacen los verifica en cada lectura y escritura). */
 const RUTAS = [
     /^compras(\/|$)/, /^compras_idem(\/|$)/, /^compras_facturadas(\/|$)/,
-    /^base_datos\/proveedores(\/|$)/, /^base_datos\/proveedores_alias(\/|$)/, /^base_datos\/materiales(\/|$)/,
+    /^base_datos\/proveedores(\/|$)/, /^base_datos\/proveedores_alias(\/|$)/, /^base_datos\/materiales(\/|$)/, /^base_datos\/historial_cambios\/[^/]+$/,
     /^proyectos\/[^/]+\/[^/]+\/(nombre|estado|monto_cierre|gasto_total|gastos_adicionales_compras|historial_compras|licitaciones)(\/|$)/,
     /^proyectos\/[^/]+$/, /^clientes$/, /^ingresos$/, /^cobros$/, /^cancheos$/,
 ];
@@ -373,6 +373,59 @@ async function funcionamiento(almacen, b) {
 }
 
 // ------------------------------------------------------------------ entrada
+/**
+ * Actualiza precios de MATERIALES de la base desde una cotización o lista de precios de un proveedor (sin compra).
+ * Solo el dueño (Kay pide su sí antes). { proveedor?: {nombre, nit?}, fuente?, fecha?, precios: [{clave?, material?, nuevo?, unidad?, precio}] }
+ *   clave = la de buscar_base (tiene que existir: así no se crean repetidos); para un material que no está, nuevo: true + material.
+ * Cada cambio deja historial (antes → después) en base_datos/historial_cambios. Todo en una sola escritura.
+ */
+async function actualizarPrecios(almacen, b, quienCrudo) {
+    const quien = limpiarQuien(quienCrudo);
+    if (quien.rol !== "dueño") falla("Solo el dueño actualiza precios de la base.", 403);
+    const lista = Array.isArray(b.precios) ? b.precios : [];
+    if (!lista.length) falla("Faltan los precios: [{clave, precio}].");
+    if (lista.length > 60) falla("Máximo 60 precios por vez.");
+    const fuente = texto(b.fuente, 120) || "cotización del proveedor";
+    const f = b.fecha ? (/^\d{4}-\d{2}-\d{2}$/.test(String(b.fecha)) ? String(b.fecha) : falla("Fecha inválida (AAAA-MM-DD).")) : new Date(almacen.ahora()).toISOString().slice(0, 10);
+    const [mats, provs, alias] = await Promise.all([almacen.leer("base_datos/materiales"), almacen.leer("base_datos/proveedores"), almacen.leer("base_datos/proveedores_alias")]);
+    const prov = b.proveedor && typeof b.proveedor === "object" ? b.proveedor : null;
+    const provNombre = prov ? texto(prov.nombre, 120) : "", provNit = prov ? texto(prov.nit, 20).replace(/\D/g, "") : "";
+    const pv = provNombre || provNit ? buscarProveedor(provs || {}, alias || {}, provNombre, provNit) : null;
+    if (pv && !pv.existe) falla(`No encontré al proveedor «${provNombre || provNit}» en la base: registralo primero o mandá el nombre como está en Proveedores.`, 404);
+    const provNom = pv ? ((provs || {})[pv.clave] || {}).nombre || provNombre : null;
+    const ahora = almacen.ahora(), m = {}, cambios = [], vistas = new Set();
+    lista.forEach((x, n) => {
+        if (!x || typeof x !== "object") falla(`Renglón ${n + 1} inválido.`);
+        const precio = numero(x.precio, `Precio del renglón ${n + 1}`);
+        let clave, previo = null;
+        if (x.clave) {
+            const r = resolverClave(mats || {}, x.clave);
+            if (!r.existe) falla(`No existe en la base la clave «${x.clave}» (usá la que devuelve buscar_base, o nuevo: true para un material nuevo).`, 404);
+            clave = r.clave; previo = mats[clave];
+        } else if (x.nuevo === true) {
+            const nombre = texto(x.material, 120) || falla(`Renglón ${n + 1}: falta el nombre del material nuevo.`);
+            const r = resolverClave(mats || {}, nombre);
+            if (r.existe) falla(`«${nombre}» ya está en la base (clave ${r.clave}): actualizalo con esa clave.`, 409);
+            clave = r.clave;
+        } else falla(`Renglón ${n + 1}: falta la clave de buscar_base (o nuevo: true con el nombre del material).`);
+        if (vistas.has(clave)) falla(`La clave ${clave} está repetida en la lista.`);
+        vistas.add(clave);
+        const mb = `base_datos/materiales/${clave}`;
+        const und = texto(x.unidad, 20);
+        if (!previo) { m[`${mb}/n`] = texto(x.material, 120); m[`${mb}/u`] = und || "und"; m[`${mb}/origen`] = "kay"; }
+        else if (und && !previo.u) m[`${mb}/u`] = und;
+        m[`${mb}/p`] = precio; m[`${mb}/fecha_mod`] = ahora; m[`${mb}/falta_precio`] = null;
+        if (provNom) { m[`${mb}/proveedor_ref`] = provNom; m[`base_datos/proveedores/${pv.clave}/materiales/${clave}`] = { precio, und: und || (previo && previo.u) || "und", fecha_act: f, fuente }; }
+        const antes = previo && previo.p != null ? Number(previo.p) : null;
+        m[`base_datos/historial_cambios/${almacen.nuevaClave()}`] = { ruta: mb, que: `kay: precio (${fuente})`, cambios: { p: { antes, despues: precio } },
+            fecha: ahora, por: quien.nombre || quien.rol, via: quien.via || null, proveedor: provNom || null };
+        cambios.push({ clave, material: previo ? previo.n || clave : texto(x.material, 120), antes, despues: precio, nuevo: !previo,
+            variacion_pct: antes > 0 ? Math.round((precio - antes) / antes * 1000) / 10 : null });
+    });
+    await almacen.actualizarVarios(m);
+    return { ok: true, actualizados: cambios.length, proveedor: provNom, cambios };
+}
+
 async function atender(almacen, cuerpo, quien) {
     const b = cuerpo && typeof cuerpo === "object" && !Array.isArray(cuerpo) ? cuerpo : {};
     try {
@@ -381,6 +434,7 @@ async function atender(almacen, cuerpo, quien) {
             case "anular": return { status: 200, cuerpo: await anular(almacen, b, quien) };
             case "balance_mensual": return { status: 200, cuerpo: await balanceMensual(almacen, b) };
             case "funcionamiento": return { status: 200, cuerpo: await funcionamiento(almacen, b) };
+            case "actualizar_precios": return { status: 200, cuerpo: await actualizarPrecios(almacen, b, quien) };
             // balance_proyecto pasó a functions/proyectos/finanzas.js (fórmula única, Sesión 9 Lote 2)
             default: throw new ErrorPedido("Acción desconocida.");
         }

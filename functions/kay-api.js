@@ -477,6 +477,15 @@ const ACCIONES = {
             + "registrado_por: {rol, nombre, telefono} } → { id, repetida, proveedor_id, resumen }",
         ejecutar: (p) => compras("registrar", p),
     },
+    actualizar_precios_base: {
+        soloLectura: false,
+        descripcion: "Actualiza precios de MATERIALES de la base de Rubik con una cotización o lista de precios de un proveedor (sin compra). "
+            + "PEDÍ EL SÍ DEL DUEÑO ANTES, mostrándole antes → después. Primero buscá cada material con buscar_base (usar_conector) para tener su clave: "
+            + "{ precios: [{clave (la de buscar_base, tiene que existir), precio, unidad?} | {nuevo: true, material, unidad, precio} (solo si no está en la base)], "
+            + "proveedor?: {nombre, nit?} (tiene que estar en Proveedores), fuente?: \"cotización WhatsApp\", fecha?: AAAA-MM-DD, registrado_por } "
+            + "→ { actualizados, cambios: [{clave, material, antes, despues, variacion_pct, nuevo}] }. Deja historial de cada cambio.",
+        ejecutar: (p) => compras("actualizar_precios", p),
+    },
     anular_compra: {
         soloLectura: false,
         descripcion: "Anula una compra (no se borra; resta del gasto del proyecto y marca la factura) { id, motivo, registrado_por }.",
