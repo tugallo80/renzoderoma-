@@ -114,3 +114,11 @@ rendición de cuentas, sin ir a un proyecto. Él trabaja por licitación: **no h
   categoría `herramientas` pasa también ahí.
 
 Pruebas: `tools/compras` 10/10.
+
+## Precios de la base desde una cotización (26/11)
+
+`actualizar_precios` (Kay: `actualizar_precios_base`): el dueño le pasa a Kay la cotización o lista de precios de un proveedor y
+Kay actualiza los materiales de la base sin registrar una compra. Solo el dueño. Cada material va por su clave de `buscar_base`
+(tiene que existir, así no se crean repetidos) o `nuevo: true` si no está. Actualiza `p`, `proveedor_ref`, `fecha_mod`, el precio
+del proveedor (`proveedores/{clave}/materiales`) y deja historial antes → después en `base_datos/historial_cambios`, todo en una
+sola escritura. Las compras con ítems ya actualizaban los precios solas (`registrar`).
