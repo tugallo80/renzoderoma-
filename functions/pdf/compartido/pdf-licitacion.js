@@ -78,6 +78,13 @@
 
         var calcTotal = groupOrder.reduce(function (s, k) { return s + groups[k].subtotal; }, 0);
         var totalFinal = parseFloat(lic.precio_propuesto || lic.precio_final || calcTotal);
+        // Extras del contrato (trabajos sumados aparte): salen en la planilla y suman al total, igual que en la liquidación
+        var extrasLic = Object.keys(lic.extras || {}).map(function (k) { return lic.extras[k]; })
+            .filter(function (x) { return x && parseFloat(x.monto) > 0; })
+            .sort(function (a, b) { return String(a.fecha || '').localeCompare(String(b.fecha || '')); });
+        var totalExtras = extrasLic.reduce(function (s2, x) { return s2 + parseFloat(x.monto); }, 0);
+        var totalConExtras = totalFinal + totalExtras;
+        var lblTotal = extrasLic.length ? 'TOTAL (CONTRATO + EXTRAS)' : 'TOTAL';
         var workerName = lic.worker_name || lic.worker_id || '';
 
         // ── Header azul (portada) ──
@@ -101,11 +108,14 @@
                 var fe = g.fechaEntrega ? '   —   Entrega: ' + g.fechaEntrega : '';
                 return [String(i + 1), lbl + fe, fM(g.subtotal) + ' Bs'];
             });
+            extrasLic.forEach(function (x) {
+                rows.push([String(rows.length + 1), 'EXTRA — ' + cleanTxt(x.descripcion || 'Trabajo adicional').substring(0, 80) + (x.fecha ? '   (' + x.fecha + ')' : ''), fM(x.monto) + ' Bs']);
+            });
             doc.autoTable({
                 startY: 44,
                 head: [['#', 'Ítem / Descripción', 'Total']],
                 body: rows,
-                foot: [['', 'TOTAL', fM(totalFinal) + ' Bs']],
+                foot: [['', lblTotal, fM(totalConExtras) + ' Bs']],
                 theme: 'striped',
                 headStyles: { fillColor: [0, 122, 255], textColor: 255, fontStyle: 'bold', fontSize: 10, cellPadding: 4 },
                 footStyles: { fillColor: [20, 20, 20], textColor: 255, fontStyle: 'bold', fontSize: 11, cellPadding: 5 },
@@ -290,13 +300,28 @@
                 y += 4;
             }
 
+            // Extras del contrato
+            if (extrasLic.length) {
+                if (y + 20 + extrasLic.length * 6 > 272) y = hojaCont();
+                doc.setFont('helvetica', 'bold'); doc.setFontSize(7.5); doc.setTextColor(200, 100, 0);
+                doc.text('EXTRAS DEL CONTRATO', mL, y); y += 3; doc.setTextColor(0, 0, 0);
+                doc.autoTable({
+                    startY: y, head: [['Extra', 'Fecha', 'Monto']],
+                    body: extrasLic.map(function (x) { return [cleanTxt(x.descripcion || 'Trabajo adicional').substring(0, 90), x.fecha || '', fM(x.monto) + ' Bs']; }),
+                    theme: 'plain', headStyles: { fillColor: [255, 245, 225], fontSize: 7, cellPadding: 2, fontStyle: 'bold' },
+                    columnStyles: { 0: { cellWidth: 120 }, 1: { cellWidth: 25 }, 2: { cellWidth: 37, halign: 'right' } },
+                    styles: { fontSize: 7.5, cellPadding: 2, overflow: 'linebreak' }, margin: { left: mL, right: mR }, tableWidth: usableW,
+                });
+                y = doc.lastAutoTable.finalY + 6;
+            }
+
             // Pie: llave en mano con desglose MO / Mat; el resto, solo el total contratado
             if (!isLlm) {
                 if (y + 15 > 272) { doc.addPage(); y = 20; }
                 doc.setFillColor(20, 20, 20); doc.rect(mL - 2, y, usableW + 4, 13, 'F');
                 doc.setFont('helvetica', 'bold'); doc.setTextColor(255, 255, 255); doc.setFontSize(12);
-                doc.text('TOTAL CONTRATADO', mL + 2, y + 9.5);
-                doc.text(fM(totalFinal) + ' Bs', W - mR, y + 9.5, { align: 'right' });
+                doc.text(extrasLic.length ? 'TOTAL CONTRATADO + EXTRAS' : 'TOTAL CONTRATADO', mL + 2, y + 9.5);
+                doc.text(fM(totalConExtras) + ' Bs', W - mR, y + 9.5, { align: 'right' });
                 doc.setTextColor(0, 0, 0);
             }
             if (isLlm) {
@@ -316,8 +341,8 @@
             y += 9;
             doc.setFillColor(20, 20, 20); doc.rect(mL - 2, y, usableW + 4, 13, 'F');
             doc.setTextColor(255, 255, 255); doc.setFontSize(12);
-            doc.text('TOTAL GENERAL', mL + 2, y + 9.5);
-            doc.text(fM(totalFinal) + ' Bs', W - mR, y + 9.5, { align: 'right' });
+            doc.text(extrasLic.length ? 'TOTAL GENERAL + EXTRAS' : 'TOTAL GENERAL', mL + 2, y + 9.5);
+            doc.text(fM(totalConExtras) + ' Bs', W - mR, y + 9.5, { align: 'right' });
             doc.setTextColor(0, 0, 0);
             }
         }
