@@ -79,6 +79,21 @@ await prueba('trabajos sueltos: una fila cada uno con su nombre (no "ALCANCE" ni
     await paginasPng(r.base64, 'libres');
 });
 
+await prueba('planilla con extras: salen como renglón y suman al total (general y detalle)', async () => {
+    const d = datos();
+    const L = d.proyectos.cliA.proyA.licitaciones.L1;
+    L.extras = { e1: { monto: 180, descripcion: 'Limpieza de vidrios de fachada para adhesivado', fecha: '2026-11-22' } };
+    const base = parseFloat(L.precio_propuesto || L.precio_final);
+    for (const modo of ['general', 'detalle']) {
+        const r = await D.generar(crearAlmacenMemoria(d, D.RUTAS, D.ARCHIVOS), { tipo: 'licitacion', cid: 'cliA', pid: 'proyA', id: 'L1', modo });
+        const txt = await textoPdf(r.base64);
+        assert.match(txt, /Limpieza de vidrios de fachada/, modo);
+        const tot = (base + 180).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        assert.ok(txt.includes(tot), `${modo}: total con extras ${tot}`);
+        if (modo === 'general') await paginasPng(r.base64, 'extras');
+    }
+});
+
 await prueba('licitación modo detalle: materiales y mano de obra del ítem', async () => {
     const al = crearAlmacenMemoria(datos(), D.RUTAS, D.ARCHIVOS);
     const r = await D.generar(al, { tipo: 'licitacion', cid: 'cliA', pid: 'proyA', id: 'L1', modo: 'detalle' });
